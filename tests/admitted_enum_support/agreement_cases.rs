@@ -24,13 +24,13 @@ mod generated {
             .enums()
             .next()
             .expect("genuine foreign enum");
-        let wire = qsl_replay::WireNodeId::from_digest(*shade.key().as_bytes());
-        let expected = shades.1.context().package_id();
+        let wire = shade.key().clone();
+        let expected = shades.1.context().package_name().clone();
         let mut members = prepared.enum_members.clone();
         let result = rebuild_enum(
             prepared.context,
             &mut members,
-            &wire.to_string(),
+            wire.clone(),
             &["Shade"],
             false,
         );
@@ -41,7 +41,7 @@ mod generated {
         );
         let result = lookup_enum_case(
             prepared.context,
-            wire,
+            &wire,
             &exact::Identifier::new("DARK").expect("identifier"),
         );
         assert!(
@@ -58,16 +58,21 @@ mod generated {
         let (compiled, _) = super::native_values::native_compilation();
         let prepared =
             environment_ordered_same(Some(compiled.context())).expect("genuine prepared");
-        let unknown = qsl_replay::WireNodeId::from_digest([7; 32]);
+        let unknown = exact::NodeKey::new(
+            "unknown",
+            vec![exact::PathSegment::Text("absent".to_owned())],
+            0,
+        )
+        .expect("structural negative key");
         assert!(
-            matches!(prepared.context.expect("genuine retained capability").enum_declaration(unknown),
+            matches!(prepared.context.expect("genuine retained capability").enum_declaration(&unknown),
             Err(qsl_replay::AdmittedLookupRefusal::Unknown { declaration, case: None }) if declaration == unknown)
         );
         let mut members = prepared.enum_members.clone();
         let result = rebuild_enum(
             prepared.context,
             &mut members,
-            &unknown.to_string(),
+            unknown.clone(),
             &["Ordered"],
             true,
         );
@@ -87,9 +92,9 @@ mod generated {
                     .eq(["Ordered"])
             })
             .expect("real ordered enum");
-        let wire = qsl_replay::WireNodeId::from_digest(*ordered.key().as_bytes());
+        let wire = ordered.key().clone();
         let absent = exact::Identifier::new("ABSENT").expect("identifier");
-        let result = lookup_enum_case(prepared.context, wire, &absent);
+        let result = lookup_enum_case(prepared.context, &wire, &absent);
         assert!(
             matches!(result, Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown {
             declaration, case: Some(case),
@@ -111,15 +116,16 @@ mod generated {
                     .eq(["Ordered"])
             })
             .expect("actual nominal declaration");
-        let expected = qsl_replay::WireNodeId::from_digest(*ordered.key().as_bytes());
+        let expected = ordered.key().clone();
         assert!(matches!(environment_ordered_same(None),
             Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == expected));
         let values = super::native_values::enum_data(compiled.context(), "Ordered");
-        let other = super::fixture::compile(super::fixture::SOURCE);
-        assert_ne!(
-            other.context().package_id(),
-            compiled.context().package_id()
-        );
+        let other = super::fixture::compile(&format!(
+            "{}enum Extra {{ X, Y }}\n",
+            super::fixture::SOURCE
+        ));
+        assert_eq!(other.context().package_name(), compiled.context().package_name());
+        assert_ne!(other.context().package_bytes(), compiled.context().package_bytes());
         for fault in ["absent", "wrong-present", "item", "package", "recipe"] {
             let mut prepared =
                 environment_ordered_same(Some(compiled.context())).expect("genuine preparation");
@@ -127,7 +133,7 @@ mod generated {
                 "absent" => prepared.context = None,
                 "wrong-present" => prepared.context = Some(other.context()),
                 "item" => prepared.binding = "wrong-item",
-                "package" => prepared.expected_digest = "wrong-package",
+                "package" => prepared.expected_name = "wrong-package",
                 "recipe" => prepared.requires_context = false,
                 _ => panic!("finite test fixture"),
             }
@@ -338,13 +344,11 @@ fn same_case_of_distinct_genuine_declarations_is_not_an_alias() {
 fn wrong_original_package_and_wrong_prepared_item_stop_before_lookup_or_charge() {
     let (compiled, _) = native_values::native_compilation();
     let changed = fixture::compile(&format!("{}enum Extra {{ X, Y }}\n", fixture::SOURCE));
-    assert_ne!(
-        compiled.context().package_id(),
-        changed.context().package_id()
-    );
+    assert_eq!(compiled.context().package_name(), changed.context().package_name());
+    assert_ne!(compiled.context().package_bytes(), changed.context().package_bytes());
     assert!(matches!(
         generated::environment_ordered_same(Some(changed.context())),
-        Err(generated::EnvironmentError::ContextPackageMismatch { .. })
+        Err(generated::EnvironmentError::ContextPackageContentMismatch)
     ));
     let prepared =
         generated::environment_ordered_same(Some(compiled.context())).expect("real prepared");

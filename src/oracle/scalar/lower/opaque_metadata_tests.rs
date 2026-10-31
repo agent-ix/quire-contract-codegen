@@ -9,19 +9,12 @@ use super::Graph;
 use super::{narrowing, references, Narrowing};
 use crate::core::canonical;
 use ix_trace_rs::trace;
-use quire_canonical::Limits;
 use quire_contract_model::{
-    derive_application_node_id, encode_checked_package_v2, ApplicationIdentityContext,
-    ApplicationNodeDraft, ApplicationOperator, CheckedCapability, CheckedNodeId,
-    CheckedPackageEvidence, CheckedPackageIdentityPreimageRefV2, CheckedPackageIdentityPreimageV2,
-    CheckedPackageReadLimits, CheckedPackageSourceCorrespondenceRef, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedSemanticGraphV2, CheckedSemanticId, CheckedSourceMapEntry,
-    CheckedTerm,
+    ApplicationOperator, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm,
 };
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf};
-
-const BYTES: u64 = 16_777_216;
 
 // Exact full-key substitution in an authored draft; no IDs are fabricated.
 fn replace_key(value: &mut Value, old: &Value, new: &Value) {
@@ -44,17 +37,14 @@ fn replace_key(value: &mut Value, old: &Value, new: &Value) {
     }
 }
 
-// Public owner API only: derive the changed application's key, then replace
-// occurrences of its exact former key in the authored draft.
+// The authored fixture assigns a new structural path when its application body changes.
 fn rekey_application(wire: &mut Value, old: &CheckedNodeId) -> CheckedNodeId {
-    let graph: CheckedSemanticGraphV2 =
-        serde_json::from_value(wire["semantic_graph"].clone()).unwrap();
-    let draft = ApplicationNodeDraft::new(graph.nodes.iter().find(|n| &n.node_id == old).unwrap());
-    let context = ApplicationIdentityContext::try_new(&graph.nodes, draft).unwrap();
-    let key = derive_application_node_id(draft, Some(&context), BYTES)
+    let mut key = serde_json::to_value(old).unwrap();
+    key["path"]
+        .as_array_mut()
         .unwrap()
-        .candidate_node_id()
-        .clone();
+        .push(json!("metadata-change"));
+    let key: CheckedNodeId = serde_json::from_value(key).unwrap();
     replace_key(
         wire,
         &serde_json::to_value(old).unwrap(),
@@ -64,44 +54,7 @@ fn rekey_application(wire: &mut Value, old: &CheckedNodeId) -> CheckedNodeId {
 }
 
 fn encode_draft(wire: &Value) -> Vec<u8> {
-    let graph: CheckedSemanticGraphV2 =
-        serde_json::from_value(wire["semantic_graph"].clone()).unwrap();
-    let preimage: CheckedPackageIdentityPreimageV2 =
-        serde_json::from_value(wire["identity_preimage"].clone()).unwrap();
-    let borrowed = CheckedPackageIdentityPreimageRefV2 {
-        version: &preimage.version,
-        edition: &preimage.edition,
-        profile_selections: &preimage.profile_selections,
-        definition_selections: &preimage.definition_selections,
-        model_selections: &preimage.model_selections,
-        required_features: &preimage.required_features,
-        dependency_selections: &preimage.dependency_selections,
-        identity_projection: &graph.nodes,
-    };
-    let mut id: CheckedSemanticId = serde_json::from_value(wire["package_id"].clone()).unwrap();
-    id.digest = canonical::content_digest_with_limits(&borrowed, Limits::new(BYTES))
-        .unwrap()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
-        .into();
-    let source_map: Vec<CheckedSourceMapEntry> =
-        serde_json::from_value(wire["source_map"].clone()).unwrap();
-    encode_checked_package_v2(
-        &borrowed,
-        &id,
-        &serde_json::from_value(wire["lock"].clone()).unwrap(),
-        &graph,
-        CheckedPackageSourceCorrespondenceRef {
-            source_map: &source_map,
-            refinement_step_rows: None,
-        },
-        &serde_json::from_value::<Vec<CheckedCapability>>(wire["capability_report"].clone())
-            .unwrap(),
-        &serde_json::from_value(wire["diagnostics"].clone()).unwrap(),
-        Limits::new(BYTES),
-    )
-    .unwrap()
+    canonical::content_bytes(wire).unwrap()
 }
 
 fn read(bytes: &[u8], evidence: &CheckedPackageEvidence, label: &str) -> CheckedPackageV2 {
@@ -124,15 +77,6 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     .unwrap();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    for selection in wire["lock"]["model_selections"].as_array().unwrap() {
-        assert_eq!(selection["identity"], "acme/orders");
-        evidence
-            .insert_domain_package_document(
-                selection["digest"].as_str().unwrap(),
-                fs::read(root.join("domain-package-acme-orders.json")).unwrap(),
-            )
-            .unwrap();
-    }
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
     let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
@@ -189,10 +133,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     narrow.dependencies.sort();
     // The source key here is only a provisional selector on a detached draft.
     // A public candidate is installed before the node enters the draft graph.
-    let key = derive_application_node_id(ApplicationNodeDraft::new(&narrow), None, BYTES)
-        .unwrap()
-        .candidate_node_id()
-        .clone();
+    let key: CheckedNodeId = serde_json::from_value(json!({
+        "package": original.name(), "path": ["test", "opaque-narrowing"], "ordinal": 0
+    }))
+    .unwrap();
     narrow.node_id = key.clone();
     assert!(original.graph().nodes.iter().all(|n| n.node_id != key));
     wire["semantic_graph"]["nodes"]

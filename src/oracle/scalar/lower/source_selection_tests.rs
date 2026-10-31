@@ -9,7 +9,9 @@ use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
 };
 use crate::oracle::claim::ClaimDisposition;
-use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
+use qsl_replay::{
+    compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+};
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm,
@@ -36,9 +38,12 @@ fn first_reference(node: &CheckedSemanticNodeV2) -> Option<&CheckedNodeId> {
 
 fn admitted_source(source: &str) -> CheckedPackageV2 {
     let compiled = compile_package(
-        SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-        "package-items.native",
-        source.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+            package_name: "package-items".to_owned(),
+            path: "package-items.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -190,7 +195,10 @@ fn ir_988_scalar_source_selections_use_retained_occurrences() {
                 else {
                     panic!("each genuine selected conversion must generate");
                 };
-                assert_eq!(&claim.contract_package_identity, admitted.identity());
+                assert_eq!(
+                    &claim.contract_package_identity,
+                    &admitted.wire().package.source
+                );
                 assert!(!claim.checked_bounds.is_empty());
                 assert!(!claim.source_map.is_empty());
                 assert!(!claim.oracle_source.is_empty());

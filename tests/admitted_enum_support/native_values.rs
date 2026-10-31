@@ -23,7 +23,7 @@ pub fn enum_data(context: &AdmittedContext, name: &str) -> EnumData {
         })
         .expect("the source declared this enum");
     let declaration = EnumDeclaration::new(
-        admitted.key(),
+        admitted.key().clone(),
         admitted.is_ordered(),
         admitted
             .cases()
@@ -32,7 +32,7 @@ pub fn enum_data(context: &AdmittedContext, name: &str) -> EnumData {
             .collect(),
     )
     .expect("genuine declaration cases reconstruct");
-    let wire = qsl_replay::WireNodeId::from_digest(*admitted.key().as_bytes());
+    let wire = admitted.key();
     let mut index = EnumMemberIndex::default();
     let mut members = Vec::new();
     for case in admitted.cases() {
@@ -40,7 +40,7 @@ pub fn enum_data(context: &AdmittedContext, name: &str) -> EnumData {
             .enum_case(wire, case.case())
             .expect("every declared case resolves");
         let value = declaration
-            .member(selected.case().as_str(), selected.key())
+            .member(selected.case().as_str(), selected.key().clone())
             .expect("the owner case belongs to its declaration");
         index.record(value.clone());
         members.push(value);

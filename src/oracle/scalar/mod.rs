@@ -61,8 +61,8 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 
 use lower::selected_scalar_key;
 use quire_contract_model::{
-    BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId,
-    CheckedSourceMapEntry, ContractFeatureRecordV1, ContractPackageV1, LiteralKind,
+    BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSourceMapEntry,
+    ContractFeatureRecordV1, ContractPackageV1, ContractSourceV1, LiteralKind,
 };
 use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
@@ -516,7 +516,7 @@ pub enum ExactScalarRefusal {
     /// Selected external targets are admitted but have no scalar encoder in this backend.
     SelectedDependencyUnsupported {
         /// Every reader-validated `(package_id, target_node_id)` pair, in reached order.
-        references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+        references: Vec<(Box<str>, CheckedNodeId)>,
     },
     /// The node was requested more than once; every copy is refused.
     DuplicateRequest,
@@ -703,11 +703,11 @@ pub struct GeneratedScalarClaim {
     /// Generated function name.
     pub symbol: String,
     /// Identity of the one Contract IR package that admitted this claim.
-    pub contract_package_identity: CheckedSemanticId,
+    pub contract_package_identity: ContractSourceV1,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
     /// Identity of the originating checked package.
-    pub package_id: CheckedSemanticId,
+    pub package_id: ContractSourceV1,
     /// Expression form.
     pub semantic_form: String,
     /// Semantic type key.
@@ -772,7 +772,7 @@ pub struct ExactScalarOracles {
 /// checked node. Rendering is a separate step and cannot change the plan's disposition.
 #[derive(Clone, Debug)]
 pub struct ExactScalarPlan {
-    package_id: CheckedSemanticId,
+    source: ContractSourceV1,
     claims: Vec<ExactScalarClaim>,
     pending: Vec<PendingOraclePlan>,
 }
@@ -907,18 +907,25 @@ mod tests {
 
     fn node_id(digit: char) -> CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": digit.to_string().repeat(64),
+            "package": "test",
+            "path": [digit.to_string()],
+            "ordinal": 0,
         }))
         .expect("node id")
     }
 
     #[test]
     fn generated_scalar_claim_serializes_package_identity_and_requested_key() {
-        let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha256",
-            "digest": "a".repeat(64),
+        let identity: ContractSourceV1 = serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "lock": {
+                "sources": [],
+                "edition": {"role":"edition", "definition":{"authority":"test", "identity":"edition"}},
+                "profile_selections": [],
+                "definition_selections": [],
+                "required_features": [],
+                "dependency_selections": []
+            }
         }))
         .expect("package identity");
         let generated = GeneratedScalarClaim {

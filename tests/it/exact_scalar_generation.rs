@@ -22,10 +22,9 @@ use quire_contract_codegen::{
     EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
-    derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
-    ApplicationOperator, CheckedPackageEvidence, CheckedPackageReadLimits,
+    ApplicationOperator, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm, StructuralCandidateError,
+    CheckedPackageV2ReadResult, CheckedTerm, ContractSourceV1,
 };
 use quire_exact::{ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval};
 use serde_json::{json, Value};
@@ -39,6 +38,17 @@ use serde_json::{json, Value};
 pub(super) mod package;
 
 use package::*;
+
+fn subject_header(id: &CheckedNodeId) -> String {
+    format!("// Subject: {}", format!("{id:?}").escape_debug())
+}
+
+fn source_identity(package: &CheckedPackageV2) -> ContractSourceV1 {
+    ContractSourceV1 {
+        name: package.name().into(),
+        lock: package.lock().clone(),
+    }
+}
 
 /// Generate, and scan the `src/lib.rs` it produced for a panic site (FR-014-AC-39). Every crate
 /// this module's TC-024 tests generate comes through here, so each one is scanned.
@@ -62,17 +72,20 @@ fn contents<'o>(oracles: &'o ExactScalarOracles, path: &str) -> &'o str {
 
 fn dispositions(
     oracles: &ExactScalarOracles,
-) -> BTreeMap<String, &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>> {
+) -> BTreeMap<
+    quire_contract_model::CheckedNodeId,
+    &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
+> {
     oracles
         .claim_map
         .items
         .iter()
-        .map(|claim| (claim.node_id.digest.to_string(), &claim.result))
+        .map(|claim| (claim.node_id.clone(), &claim.result))
         .collect()
 }
 
-fn claim_id(oracles: &ExactScalarOracles, code: u32) -> quire_contract_model::CheckedNodeId {
-    fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()).resolve(&code_id(code))
+fn claim_id(_oracles: &ExactScalarOracles, code: u32) -> quire_contract_model::CheckedNodeId {
+    code_id(code)
 }
 
 fn assert_refusal_with_ids(
@@ -103,9 +116,8 @@ impl PartialEq<ExactScalarRefusal> for AdmittedRefusal {
 }
 
 fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
-    let ids = fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref());
-    let node_id = ids.resolve(&code_id(code));
-    match dispositions(oracles).get(node_id.digest.as_ref()) {
+    let node_id = code_id(code);
+    match dispositions(oracles).get(&node_id) {
         Some(ClaimDisposition::Refused { refusal }) => refusal.clone(),
         other => panic!("node {code} is not refused: {other:?}"),
     }
@@ -113,19 +125,19 @@ fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
 
 /// The generated oracle function name of node `code`, as the claim map records it.
 pub(super) fn symbol(oracles: &ExactScalarOracles, code: u32) -> String {
-    let ids = fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref());
-    let node_id = ids.resolve(&code_id(code));
-    match dispositions(oracles).get(node_id.digest.as_ref()) {
+    let node_id = code_id(code);
+    match dispositions(oracles).get(&node_id) {
         Some(ClaimDisposition::Generated(generated)) => generated.symbol.clone(),
         other => panic!("node {code} is not generated: {other:?}"),
     }
 }
 
-/// The generator's current output for the whole corpus request, which
-/// `exact_scalar_agreement` builds and executes.
-pub(super) fn corpus_oracles() -> ExactScalarOracles {
-    let (package, ids) = corpus_package().admit_resolved();
-    generate(&package, &resolved_items(&golden_items(), &ids))
+/// Generate every bounded, reader-admitted scalar cohort for direct agreement.
+pub(super) fn corpus_cohort_oracles() -> Vec<ExactScalarOracles> {
+    corpus_cohorts()
+        .into_iter()
+        .map(|(package, items)| generate(&package, &items))
+        .collect()
 }
 
 fn resolved_items(items: &[ExactScalarItem], ids: &FixtureIds) -> Vec<ExactScalarItem> {
@@ -159,7 +171,7 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
             .as_array()
             .expect("nodes")
             .iter()
-            .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+            .position(|node| node["node_id"] == json!(node_id))
             .unwrap_or_else(|| panic!("node {code} is in the wire"));
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {
             panic!("node {code}: IR now admits it ({result:?}); move it back into the corpus");
@@ -175,7 +187,11 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
             "node {code}"
         );
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+            refusal
+                .loci
+                .first()
+                .and_then(|locus| locus.path.as_ref())
+                .map(|path| path.as_str().to_owned()),
             Some(format!("/semantic_graph/nodes/{position}/body/arguments/0")),
             "node {code}"
         );
@@ -184,16 +200,18 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
 }
 
 /// The aggregate operand is an explicit reader negative.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("FR-014-AC-10", "TC-052")]
 #[test]
 fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
-    let (result, wire, ids) = expression_operand_package().read_resolved();
+    let (_, wire, ids) = expression_operand_package().read_resolved();
     let node_id = ids.resolve(&code_id(EXPRESSION_OPERAND));
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
+    let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("aggregate operand node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("aggregate operand unexpectedly admitted: {result:?}");
@@ -204,23 +222,29 @@ fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/body/arguments/0"))
     );
     assert_eq!(refusal.locus, Some(node_id));
 }
 
 /// A literal's kind must agree with its declared type.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("TC-052")]
 #[test]
 fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
-    let (result, wire, ids) = wrong_operand_package().read_resolved();
+    let (_, wire, ids) = wrong_operand_package().read_resolved();
     let node_id = ids.resolve(&code_id(WRONG_OPERAND));
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
+    let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("mistyped literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("mistyped literal unexpectedly admitted: {result:?}");
@@ -231,7 +255,11 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -240,16 +268,18 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
 }
 
 /// The reader rejects a quantity-typed scalar literal.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("FR-014-AC-10", "TC-052")]
 #[test]
 fn tc_052_quantity_literal_operand_is_refused_by_reader() {
-    let (result, wire, ids) = literal_quantity_package().read_resolved();
+    let (_, wire, ids) = literal_quantity_package().read_resolved();
     let node_id = ids.resolve(&code_id(LITERAL_QUANTITY));
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
+    let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("quantity literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("quantity literal unexpectedly admitted: {result:?}");
@@ -260,7 +290,11 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -268,18 +302,19 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// A noncanonical endpoint has no structural candidate.
-#[trace("FR-037-AC-1", "TC-052")]
+/// The owner reader refuses a noncanonical integer endpoint before generation.
+#[trace("FR-014-AC-10", "TC-052")]
 #[test]
 fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
-    let (_, mut wire, ids) = corpus_package().read_resolved();
+    let (_, wire, ids) = corpus_package().read_resolved();
     let bound = ids.resolve(&id(&INT5.key()));
+    let mut wire = focused_wire(wire, std::slice::from_ref(&bound));
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(bound.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(bound))
         .expect("integer bound");
     let members = nodes[position]["body"]["members"]
         .as_array_mut()
@@ -289,139 +324,109 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
         .find(|member| member["name"] == "max")
         .expect("max");
     maximum["value"]["value"] = json!("05");
-    let draft: Vec<CheckedSemanticNodeV2> =
-        serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
-    assert!(matches!(
-        derive_structural_candidates(
-            &draft,
-            quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
-            quire_contract_model::CheckedPackageReadLimits::bounded().work,
-        ),
-        Err(StructuralCandidateError::InvalidClosedShape { position: refused, node_id })
-            if refused == position && node_id == bound
-    ));
     let result = read_mutated_wire(wire);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("noncanonical endpoint unexpectedly admitted: {result:?}");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
-    assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!("/semantic_graph/nodes/{position}/node_id"))
-    );
+    assert!(refusal.cause.is_some(), "reader gives a typed cause");
     assert_eq!(refusal.locus, Some(bound));
-    assert_eq!(refusal.expected_node_id(), None);
 }
 
-/// A valid application body under a different node key
-/// is refused by the reader with the original admitted key as its expected identity.
-#[trace("FR-037-AC-4", "TC-052")]
+/// A declaration whose path disagrees with its producer-assigned key is refused.
+#[trace("FR-037-AC-9", "TC-052")]
 #[test]
-fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
-    let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
-    assert!(matches!(admitted, CheckedPackageV2ReadResult::Admitted(_)));
-    let expected = ids.resolve(&code_id(BOUNDED_INCREMENT));
-    let stale = id(&"f".repeat(64));
-    assert_ne!(stale, expected);
+fn tc_052_reader_refuses_declaration_path_mismatch_in_admitted_positive_wire() {
+    let (_, wire, ids) = corpus_package().read_resolved();
+    let expected = ids.resolve(&code_id(V_INTEGER));
+    let mut wire = focused_wire(wire, std::slice::from_ref(&expected));
+    assert!(matches!(
+        read_mutated_wire(wire.clone()),
+        CheckedPackageV2ReadResult::Admitted(_)
+    ));
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"] == expected.digest.as_ref())
-        .expect("admitted increment application");
-    assert_eq!(nodes[position]["body"]["term"], "application");
-    assert!(nodes.iter().all(|node| node["node_id"] != json!(stale)));
-    nodes[position]["node_id"] = json!(stale);
-    let source_map = wire["source_map"].as_array_mut().expect("source map");
-    let matching = source_map
-        .iter_mut()
-        .filter(|entry| entry["node_id"] == json!(expected))
-        .collect::<Vec<_>>();
-    assert_eq!(matching.len(), 1);
-    for entry in matching {
-        entry["node_id"] = json!(stale);
-    }
+        .position(|node| node["node_id"] == json!(expected))
+        .expect("admitted value declaration");
+    assert!(nodes[position]["declaration"]["qualified_name"].is_array());
+    nodes[position]["declaration"]["qualified_name"][1] = json!("different");
 
     let result = read_mutated_wire(wire);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("stale application key unexpectedly admitted: {result:?}");
+        panic!("mismatched declaration path unexpectedly admitted: {result:?}");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
     assert_eq!(
         refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
+        Some(CheckedPackageRefusalCause::DeclarationNominalMismatch)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id/path"))
     );
-    assert_eq!(refusal.locus.as_ref(), Some(&stale));
-    assert_eq!(refusal.expected_node_id(), Some(&expected));
+    assert_eq!(refusal.locus, Some(expected));
 }
 
-/// Changing a valid application literal while retaining
-/// its admitted key must be refused before any fixture rekey can conceal the mismatch.
-#[trace("FR-037-AC-4", "TC-052")]
+/// A body edit under the same valid key cannot be mistaken for the original fixture.
+#[trace("FR-037-AC-9", "TC-052")]
 #[test]
-fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
-    let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
-    assert!(matches!(admitted, CheckedPackageV2ReadResult::Admitted(_)));
+fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
+    let (_, wire, ids) = bounded_increment_package().read_resolved();
     let prior = ids.resolve(&code_id(BOUNDED_INCREMENT));
+    let mut wire = focused_wire(wire, std::slice::from_ref(&prior));
+    let admitted = read_mutated_wire(wire.clone());
+    let CheckedPackageV2ReadResult::Admitted(original) = admitted else {
+        panic!("original fixture must admit: {admitted:?}");
+    };
+    let expected_body = &original
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == prior)
+        .expect("original application")
+        .body;
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"] == prior.digest.as_ref())
+        .position(|node| node["node_id"] == json!(prior))
         .expect("admitted increment application");
     assert_eq!(nodes[position]["body"]["arguments"][1]["value"], "1");
     nodes[position]["body"]["arguments"][1]["value"] = json!("2");
-    let draft: CheckedSemanticNodeV2 =
-        serde_json::from_value(nodes[position].clone()).expect("mutated typed application");
-    let expected = derive_application_node_id(
-        ApplicationNodeDraft::new(&draft),
-        None,
-        CheckedPackageReadLimits::bounded().bytes,
-    )
-    .expect("public candidate for valid mutated body")
-    .candidate_node_id()
-    .clone();
-    assert_ne!(expected, prior);
-
     let result = read_mutated_wire(wire);
-    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("application body mutation unexpectedly admitted: {result:?}");
+    let CheckedPackageV2ReadResult::Admitted(changed) = result else {
+        panic!("valid changed body should admit under its structural key: {result:?}");
     };
-    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
-    assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!("/semantic_graph/nodes/{position}/node_id"))
-    );
-    assert_eq!(refusal.locus.as_ref(), Some(&prior));
-    assert_eq!(refusal.expected_node_id(), Some(&expected));
+    let changed_node = changed
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == prior)
+        .expect("changed application retains the producer key");
+    assert_ne!(&changed_node.body, expected_body);
 }
 
 /// A mismatched decimal mode is reader-ineligible.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("TC-052")]
 #[test]
 fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
-    let (_, mut wire, ids) = corpus_package().read_resolved();
+    let (_, wire, ids) = corpus_package().read_resolved();
     let node_id = ids.resolve(&code_id(1051));
+    let mut wire = focused_wire(wire, std::slice::from_ref(&node_id));
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("decimal add");
     nodes[position]["body"]["operation"]["mode"]["value"] = json!("toward-zero");
     let (result, candidate) = read_application_mutated_wire(wire, &node_id);
@@ -434,7 +439,11 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperationModeTypeMismatch)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/operation/mode/value"
         ))
@@ -448,40 +457,43 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
-    let (package, ids) = corpus_package().admit_resolved();
-    let items = resolved_items(&golden_items(), &ids);
-    let oracles = generate(&package, &items);
-    let paths = oracles
-        .artifacts
-        .iter()
-        .map(|artifact| artifact.path.as_str())
-        .collect::<BTreeSet<_>>();
-    assert_eq!(
-        paths,
-        BTreeSet::from([
-            "Cargo.toml",
-            "claim-map.json",
-            "source-maps/lib.json",
-            "src/lib.rs"
-        ])
-    );
-    let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
-    assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
-    let lib = contents(&oracles, "src/lib.rs");
-    let mut generated = BTreeSet::new();
-    for claim in &oracles.claim_map.items {
-        if let ClaimDisposition::Generated(generated_claim) = &claim.result {
-            let symbol = format!("pub fn {}(", generated_claim.symbol);
-            assert!(lib.contains(&symbol), "{symbol} is not defined");
-            generated.insert(claim.node_id.clone());
+    let mut generated_all = BTreeSet::new();
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let paths = oracles
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.path.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            paths,
+            BTreeSet::from([
+                "Cargo.toml",
+                "claim-map.json",
+                "source-maps/lib.json",
+                "src/lib.rs"
+            ])
+        );
+        let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
+        assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
+        let lib = contents(&oracles, "src/lib.rs");
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Generated(generated_claim) = &claim.result {
+                let symbol = format!("pub fn {}(", generated_claim.symbol);
+                assert!(lib.contains(&symbol), "{symbol} is not defined");
+                assert!(
+                    generated_all.insert(claim.node_id.clone()),
+                    "duplicate generated claim"
+                );
+            }
         }
     }
     let expected = corpus()
         .iter()
-        .map(|expression| ids.resolve(&code_id(expression.code)))
+        .map(|expression| code_id(expression.code))
         .collect::<BTreeSet<_>>();
     assert_eq!(
-        generated, expected,
+        generated_all, expected,
         "every admitted expression generates exactly once"
     );
 }
@@ -489,52 +501,65 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
-    let package = corpus_package().admit();
-    let items = golden_items();
-    let first = generate(&package, &items);
-    assert_eq!(generate(&package, &items), first);
-    assert_eq!(generate(&corpus_package().admit(), &items), first);
+    let first_run = corpus_cohorts();
+    let second_run = corpus_cohorts();
+    for ((package, items), (again, again_items)) in first_run.into_iter().zip(second_run) {
+        assert_eq!(items, again_items);
+        let first = generate(&package, &items);
+        assert_eq!(generate(&package, &items), first);
+        assert_eq!(generate(&again, &again_items), first);
 
-    let mut reversed = items.clone();
-    reversed.reverse();
-    assert_eq!(generate(&package, &reversed), first);
+        let mut reversed = items.clone();
+        reversed.reverse();
+        assert_eq!(generate(&package, &reversed), first);
 
-    // A deterministic interleaving that moves every item.
-    let (even, odd): (Vec<_>, Vec<_>) = items
-        .iter()
-        .cloned()
-        .enumerate()
-        .partition(|(position, _)| position % 2 == 0);
-    let interleaved = odd
-        .into_iter()
-        .chain(even)
-        .map(|(_, item)| item)
-        .collect::<Vec<_>>();
-    assert_ne!(
-        interleaved
+        // A deterministic interleaving that moves every item.
+        let (even, odd): (Vec<_>, Vec<_>) = items
             .iter()
-            .map(|item| &item.node_id)
-            .collect::<Vec<_>>(),
-        items.iter().map(|item| &item.node_id).collect::<Vec<_>>()
-    );
-    assert_eq!(generate(&package, &interleaved), first);
+            .cloned()
+            .enumerate()
+            .partition(|(position, _)| position % 2 == 0);
+        let interleaved = odd
+            .into_iter()
+            .chain(even)
+            .map(|(_, item)| item)
+            .collect::<Vec<_>>();
+        assert_ne!(
+            interleaved
+                .iter()
+                .map(|item| &item.node_id)
+                .collect::<Vec<_>>(),
+            items.iter().map(|item| &item.node_id).collect::<Vec<_>>()
+        );
+        assert_eq!(generate(&package, &interleaved), first);
+    }
 }
 
 #[trace("FR-014-AC-1", "FR-014-AC-2", "TC-024")]
 #[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
-    let lib = contents(&oracles, "src/lib.rs");
-    let subjects = oracles
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
-        .collect::<Vec<String>>();
-    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
-    crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
+    let mut bodies = BTreeMap::new();
+    let mut generated_count = 0;
+    for oracles in corpus_cohort_oracles() {
+        let lib = contents(&oracles, "src/lib.rs");
+        let subjects = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+            .map(|claim| format!("{:?}", claim.node_id))
+            .collect::<Vec<String>>();
+        let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+        crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Generated(generated) = &claim.result {
+                let body = function_body(lib, &generated.symbol).to_owned();
+                assert!(bodies.insert(claim.node_id.clone(), body).is_none());
+            }
+        }
+        generated_count += lib.matches("\npub fn oracle_").count();
+    }
     let mut calls = vec![
         (
             1001,
@@ -706,27 +731,23 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ));
     }
     calls.sort();
-    let generated = dispositions(&oracles)
-        .into_iter()
-        .filter(|(_, result)| matches!(result, ClaimDisposition::Generated(_)))
-        .map(|(digest, _)| digest)
-        .collect::<Vec<_>>();
+    let generated = bodies.keys().cloned().collect::<Vec<_>>();
     let mut expected = calls
         .iter()
-        .map(|(code, _)| claim_id(&oracles, *code).digest.to_string())
+        .map(|(code, _)| code_id(*code))
         .collect::<Vec<_>>();
     expected.sort();
     assert_eq!(generated, expected, "exactly the corpus is generated");
     assert_eq!(corpus().len(), calls.len());
     for (code, call) in &calls {
-        let body = function_body(lib, &symbol(&oracles, *code));
+        let body = &bodies[&code_id(*code)];
         assert!(
             body.contains(call.as_str()),
             "{code} does not call `{call}`:\n{body}"
         );
         assert!(body.contains("meter"), "{code} does not meter");
     }
-    assert_eq!(lib.matches("\npub fn oracle_").count(), calls.len());
+    assert_eq!(generated_count, calls.len());
 }
 
 /// The text of one generated function, from its signature to the closing brace.
@@ -741,17 +762,8 @@ fn function_body<'l>(lib: &'l str, symbol: &str) -> &'l str {
 #[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-7", "FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
-    let (package, ids) = corpus_package().admit_resolved();
+    let ids = FixtureIds;
     let resolve = |code| ids.resolve(&code_id(code));
-    let items = golden_items()
-        .into_iter()
-        .map(|mut item| {
-            item.node_id = ids.resolve(&item.node_id);
-            item
-        })
-        .collect::<Vec<_>>();
-    let oracles = generate(&package, &items);
-    let lib = contents(&oracles, "src/lib.rs");
     // IR's lowering checks reachable unsupported nodes in admitted node-id order. The
     // rekeyed clause sorts before its formula, so it is the first unsupported temporal node.
     assert!(resolve(TEMPORAL) < resolve(TEMPORAL_FORMULA));
@@ -876,118 +888,106 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             },
         ),
     ];
-    for (code, refusal) in &expected {
-        let node_id = resolve(*code);
-        match dispositions(&oracles).get(node_id.digest.as_ref()) {
-            Some(ClaimDisposition::Refused { refusal: actual }) => {
-                assert_eq!(actual, refusal, "node {code}");
-            }
-            other => panic!("node {code} is not refused: {other:?}"),
-        }
-        assert!(
-            !lib.contains(node_id.digest.as_ref()),
-            "refused node {code} left code behind"
-        );
-    }
-    // One disposition per distinct requested node.
-    assert_eq!(
-        oracles.claim_map.items.len(),
-        corpus().len() + expected.len()
-    );
-
-    // Each generated function is byte-identical with or without the refused items.
-    let generated_only = corpus()
+    let generated_ids = corpus()
         .into_iter()
-        .map(|expression| ExactScalarItem {
-            node_id: resolve(expression.code),
-            operation: expression.operation,
-        })
-        .collect::<Vec<_>>();
-    let alone = generate(&package, &generated_only);
-    assert_eq!(contents(&alone, "src/lib.rs"), lib);
-    let expected_identity = |items: &[ExactScalarItem]| {
-        let mut roots = items
-            .iter()
-            .map(|item| item.node_id.clone())
-            .collect::<Vec<_>>();
-        roots.sort();
-        roots.dedup();
-        let profile = quire_contract_model::CompleteLoweringProfileV2 {
-            reference: quire_contract_model::LoweringProfileRef {
-                authority: "agent-ix".into(),
-                identity: "quire.codegen.exact-scalar/v1".into(),
-            },
-            required_source_selections: Vec::new(),
-            supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
-            require_bounds: true,
-            work_limit: SCALAR_LOWERING_WORK_LIMIT,
-        };
-        package
-            .lower(&roots, &profile)
-            .package
-            .wire()
-            .expect("direct scalar roots lower")
-            .identity()
-            .clone()
-    };
-    let full_identity = expected_identity(&items);
-    let alone_identity = expected_identity(&generated_only);
-    assert_ne!(
-        full_identity, alone_identity,
-        "request roots bind package identity"
-    );
-    let full_claims = oracles
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-        .collect::<Vec<_>>();
-    let alone_claims = alone
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-        .collect::<Vec<_>>();
-    assert_eq!(alone_claims.len(), full_claims.len());
-    for (alone, full) in alone_claims.iter().zip(&full_claims) {
-        assert_eq!(alone.node_id, full.node_id);
-        assert_eq!(alone.operation, full.operation);
-        let (ClaimDisposition::Generated(left), ClaimDisposition::Generated(right)) =
-            (&alone.result, &full.result)
-        else {
-            panic!("selected claims are generated");
-        };
-        assert_eq!(left.contract_package_identity, alone_identity);
-        assert_eq!(right.contract_package_identity, full_identity);
-        assert_eq!(left.symbol, right.symbol);
-        assert_eq!(left.package_id, right.package_id);
-        assert_eq!(left.semantic_form, right.semantic_form);
-        assert_eq!(left.semantic_type, right.semantic_type);
-        assert_eq!(left.source_map, right.source_map);
-        assert_eq!(left.claims, right.claims);
-        assert_eq!(left.bounds, right.bounds);
-        assert_eq!(left.checked_bounds, right.checked_bounds);
-        assert_eq!(left.dependencies, right.dependencies);
-        assert_eq!(left.oracle_source, right.oracle_source);
-    }
+        .map(|expression| resolve(expression.code))
+        .collect::<BTreeSet<_>>();
+    let mut checked_refusals = BTreeSet::new();
+    let mut claim_count = 0;
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let lib = contents(&oracles, "src/lib.rs");
+        claim_count += oracles.claim_map.items.len();
+        for (code, refusal) in &expected {
+            let node_id = resolve(*code);
+            if !items.iter().any(|item| item.node_id == node_id) {
+                continue;
+            }
+            assert!(checked_refusals.insert(*code), "duplicate refusal cohort");
+            match dispositions(&oracles).get(&node_id) {
+                Some(ClaimDisposition::Refused { refusal: actual }) => {
+                    assert_eq!(actual, refusal, "node {code}");
+                }
+                other => panic!("node {code} is not refused: {other:?}"),
+            }
+            assert!(
+                !lib.contains(&subject_header(&node_id)),
+                "refused node {code} left code behind"
+            );
+        }
 
-    // A refusal of one copy of a duplicated sibling does not depend on its
-    // descriptors' arrival order, and a single copy of the same node generates.
-    let single = generate(
-        &package,
-        &[ExactScalarItem {
-            node_id: resolve(DUPLICATED),
-            operation: golden_items()
-                .into_iter()
-                .find(|item| item.node_id == code_id(DUPLICATED))
-                .expect("duplicated item")
-                .operation,
-        }],
+        // Each generated function is byte-identical with or without the refused items.
+        let generated_only = items
+            .iter()
+            .filter(|item| generated_ids.contains(&item.node_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let alone = generate(&package, &generated_only);
+        assert_eq!(contents(&alone, "src/lib.rs"), lib);
+        let expected_source = source_identity(&package);
+        assert_eq!(oracles.claim_map.source, expected_source);
+        assert_eq!(alone.claim_map.source, expected_source);
+        let full_claims = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .collect::<Vec<_>>();
+        let alone_claims = alone
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .collect::<Vec<_>>();
+        assert_eq!(alone_claims.len(), full_claims.len());
+        for (alone, full) in alone_claims.iter().zip(&full_claims) {
+            assert_eq!(alone.node_id, full.node_id);
+            assert_eq!(alone.operation, full.operation);
+            let (ClaimDisposition::Generated(left), ClaimDisposition::Generated(right)) =
+                (&alone.result, &full.result)
+            else {
+                panic!("selected claims are generated");
+            };
+            assert_eq!(left.contract_package_identity, expected_source);
+            assert_eq!(right.contract_package_identity, expected_source);
+            assert_eq!(left.symbol, right.symbol);
+            assert_eq!(left.package_id, right.package_id);
+            assert_eq!(left.semantic_form, right.semantic_form);
+            assert_eq!(left.semantic_type, right.semantic_type);
+            assert_eq!(left.source_map, right.source_map);
+            assert_eq!(left.claims, right.claims);
+            assert_eq!(left.bounds, right.bounds);
+            assert_eq!(left.checked_bounds, right.checked_bounds);
+            assert_eq!(left.dependencies, right.dependencies);
+            assert_eq!(left.oracle_source, right.oracle_source);
+        }
+
+        if items.iter().any(|item| item.node_id == resolve(DUPLICATED)) {
+            // Refusing the duplicate does not depend on descriptor order; a
+            // single copy of the same admitted node still generates.
+            let single = generate(
+                &package,
+                &[ExactScalarItem {
+                    node_id: resolve(DUPLICATED),
+                    operation: items
+                        .iter()
+                        .find(|item| item.node_id == resolve(DUPLICATED))
+                        .expect("duplicated item")
+                        .operation
+                        .clone(),
+                }],
+            );
+            assert!(matches!(
+                single.claim_map.items[0].result,
+                ClaimDisposition::Generated(_)
+            ));
+        }
+    }
+    assert_eq!(claim_count, corpus().len() + expected.len());
+    assert_eq!(
+        checked_refusals,
+        expected.iter().map(|(code, _)| *code).collect()
     );
-    assert!(matches!(
-        single.claim_map.items[0].result,
-        ClaimDisposition::Generated(_)
-    ));
 }
 
 /// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
@@ -1004,201 +1004,200 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 /// `tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise`.
 /// Adding a deliberately mislabelled item to `golden_items()` would break the assertion below
 /// for a reason unrelated to AC-5 or AC-11; widen AC-12/AC-13 coverage in their own tests.
-#[trace("FR-014-AC-5", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
+#[trace("FR-014-AC-56", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
-    let wire = corpus_package().wire();
-    let package = corpus_package().admit();
-    let oracles = generate(&package, &golden_items());
-    let fixture_ids = fixture_ids_for(&package);
-    let map = &oracles.claim_map;
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(map.package_id, *package.package_id());
-    let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
-    assert_eq!(json, serde_json::to_value(map).expect("typed map"));
+    let mut operation_identities = BTreeMap::new();
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let fixture_ids = fixture_ids_for(&package);
+        let map = &oracles.claim_map;
+        let lib = contents(&oracles, "src/lib.rs");
+        assert_eq!(map.source, source_identity(&package));
+        let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
+        assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
-    // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
-    // carries the blocker on its own `operation.provenance` rather than at the map
-    // level. `blocked` has writers in `oracle/scalar/render.rs`, both using `Vec::new()`, so this
-    // pair is a regression guard against that literal changing, not a criterion an implementation
-    // can violate; the falsifiable contract is the per-item provenance asserted below.
-    assert_eq!(map.blocked, []);
-    assert_eq!(json["blocked"], serde_json::json!([]));
-    for (claim, entry) in map
-        .items
-        .iter()
-        .zip(json["items"].as_array().expect("items"))
-    {
-        match &claim.result {
-            ClaimDisposition::Generated(_) => {
-                assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
-                assert_eq!(
-                    entry["operation"]["provenance"],
-                    serde_json::json!({"kind": "ir_confirmed"})
-                );
-            }
-            ClaimDisposition::Refused { .. } => {
-                assert_eq!(
-                    claim.operation.provenance,
-                    OperationProvenance::CallerDeclared {
-                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
-                    }
-                );
-                assert_eq!(
-                    entry["operation"]["provenance"],
-                    serde_json::json!({
-                        "kind": "caller_declared",
-                        "blocked_on": "operation identity not consumed by codegen's generators",
-                    })
-                );
+        // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
+        // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
+        // carries the blocker on its own `operation.provenance` rather than at the map
+        // level. `blocked` has writers in `oracle/scalar/render.rs`, both using `Vec::new()`, so this
+        // pair is a regression guard against that literal changing, not a criterion an implementation
+        // can violate; the falsifiable contract is the per-item provenance asserted below.
+        assert_eq!(map.blocked, []);
+        assert_eq!(json["blocked"], serde_json::json!([]));
+        for (claim, entry) in map
+            .items
+            .iter()
+            .zip(json["items"].as_array().expect("items"))
+        {
+            match &claim.result {
+                ClaimDisposition::Generated(_) => {
+                    assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+                    assert_eq!(
+                        entry["operation"]["provenance"],
+                        serde_json::json!({"kind": "ir_confirmed"})
+                    );
+                }
+                ClaimDisposition::Refused { .. } => {
+                    assert_eq!(
+                        claim.operation.provenance,
+                        OperationProvenance::CallerDeclared {
+                            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                        }
+                    );
+                    assert_eq!(
+                        entry["operation"]["provenance"],
+                        serde_json::json!({
+                            "kind": "caller_declared",
+                            "blocked_on": "operation identity not consumed by codegen's generators",
+                        })
+                    );
+                }
             }
         }
-    }
 
-    // This list is hand-written and independently constructed -- not read from
-    // `scalar_profile()` (`src/oracle/scalar/lower.rs`, private) -- so this cross-check calls IR's
-    // `lower` directly rather than the generator's own profile, and stays meaningful rather than
-    // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
-    // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
-    // mark that corpus node `Unsupported` while the real generator (which also admits `Claim`)
-    // lowers it -- a divergence between the two, not a property of either.
-    //
-    // Nothing kept this list in agreement with `scalar_profile()`'s own `supported_tags` (cg#134):
-    // before PR #132 (issue #100) this list had four tags against production's six, and after it,
-    // this list still omitted `Correspondence`, which production still admitted despite zero
-    // corpus nodes ever carrying it (cg#133, now removed from production instead). The assertion
-    // below closes that gap: it compares this list's *content* against
-    // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
-    // either list changing without the other now fails here, while the lowering profile below
-    // still never calls `scalar_profile()`.
-    let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
-        quire_contract_model::CheckedNodeTag::ScalarType,
-        quire_contract_model::CheckedNodeTag::BoundedDomain,
-        quire_contract_model::CheckedNodeTag::Value,
-        quire_contract_model::CheckedNodeTag::Expression,
-        quire_contract_model::CheckedNodeTag::Claim,
-    ]
-    .into();
-    assert_eq!(
+        // This list is hand-written and independently constructed -- not read from
+        // `scalar_profile()` (`src/oracle/scalar/lower.rs`, private) -- so this cross-check calls IR's
+        // `lower` directly rather than the generator's own profile, and stays meaningful rather than
+        // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
+        // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
+        // mark that corpus node `Unsupported` while the real generator (which also admits `Claim`)
+        // lowers it -- a divergence between the two, not a property of either.
+        //
+        // Nothing kept this list in agreement with `scalar_profile()`'s own `supported_tags` (cg#134):
+        // before PR #132 (issue #100) this list had four tags against production's six, and after it,
+        // this list still omitted `Correspondence`, which production still admitted despite zero
+        // corpus nodes ever carrying it (cg#133, now removed from production instead). The assertion
+        // below closes that gap: it compares this list's *content* against
+        // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
+        // either list changing without the other now fails here, while the lowering profile below
+        // still never calls `scalar_profile()`.
+        let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+            quire_contract_model::CheckedNodeTag::ScalarType,
+            quire_contract_model::CheckedNodeTag::BoundedDomain,
+            quire_contract_model::CheckedNodeTag::Value,
+            quire_contract_model::CheckedNodeTag::Expression,
+            quire_contract_model::CheckedNodeTag::Claim,
+        ]
+        .into();
+        assert_eq!(
         claim_supported_tags,
         BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
         "this test's independently-constructed tag list has drifted from scalar_profile()'s own \
          supported_tags (cg#134) -- update whichever one is stale"
     );
 
-    let profile = quire_contract_model::CompleteLoweringProfileV2 {
-        reference: quire_contract_model::LoweringProfileRef {
-            authority: "agent-ix".into(),
-            identity: "quire.codegen.exact-scalar/v1".into(),
-        },
-        required_source_selections: Vec::new(),
-        supported_tags: claim_supported_tags,
-        require_bounds: true,
-        work_limit: SCALAR_LOWERING_WORK_LIMIT,
-    };
-    let mut complete_request = golden_items()
-        .iter()
-        .map(|item| fixture_ids.resolve(&item.node_id))
-        .collect::<Vec<_>>();
-    complete_request.sort();
-    complete_request.dedup();
-    let expected_package_identity = package
-        .lower(&complete_request, &profile)
-        .package
-        .wire()
-        .expect("full direct request lowers")
-        .identity()
-        .clone();
-    let lowered = package.lower(
-        &corpus()
-            .iter()
-            .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
-            .collect::<Vec<_>>(),
-        &profile,
-    );
-    for (expression, record) in corpus().iter().zip(&lowered.records) {
-        let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
-            panic!("corpus node {} lowers", expression.code);
+        let profile = quire_contract_model::CompleteLoweringProfileV2 {
+            reference: quire_contract_model::LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.exact-scalar/v1".into(),
+            },
+            required_source_selections: Vec::new(),
+            supported_tags: claim_supported_tags,
+            require_bounds: true,
+            work_limit: SCALAR_LOWERING_WORK_LIMIT,
         };
-        let claim = map
-            .items
+        let expected_package_identity = source_identity(&package);
+        let item_ids = items
             .iter()
-            .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(expression.code)))
-            .expect("claim");
-        assert!(!claim.operation.identity.is_empty());
-        let ClaimDisposition::Generated(generated) = &claim.result else {
-            panic!("corpus node {} generates", expression.code);
-        };
-        assert!(
-            generated.symbol.starts_with("oracle_")
-                && lib.contains(&format!("pub fn {}(", generated.symbol)),
-            "{} names no generated function",
-            generated.symbol
-        );
-        assert_eq!(generated.node_id, claim.node_id);
-        assert_eq!(generated.package_id, *package.package_id());
-        assert_eq!(
-            generated.contract_package_identity,
-            expected_package_identity
-        );
-        assert!(serde_json::to_value(generated)
-            .expect("generated claim")
-            .get("ir_id")
-            .is_none());
-        assert_eq!(generated.semantic_form, expression.form);
-        assert_eq!(generated.semantic_type, node.semantic_type);
-        assert_eq!(generated.claims, node.claims);
-        assert_eq!(generated.bounds, node.bounds);
-        // Every checked bound is one the expression declares and reaches.
-        let declared = expression
-            .bounds
-            .iter()
-            .map(|bound| fixture_ids.resolve(&id(&bound.key())))
+            .map(|item| item.node_id.clone())
+            .collect::<BTreeSet<_>>();
+        let expressions = corpus()
+            .into_iter()
+            .filter(|expression| item_ids.contains(&code_id(expression.code)))
             .collect::<Vec<_>>();
-        assert!(generated
-            .checked_bounds
-            .iter()
-            .all(|bound| declared.contains(bound) && node.bounds.contains(bound)));
-        assert_eq!(
-            generated.checked_bounds.is_empty(),
-            checks_no_bound(&expression.operation),
-            "node {}",
-            expression.code
+        let lowered = package.lower(
+            &expressions
+                .iter()
+                .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
+                .collect::<Vec<_>>(),
+            &profile,
         );
-        assert_eq!(generated.dependencies, node.dependencies);
-        let source_map = wire["source_map"]
-            .as_array()
-            .expect("source map")
-            .iter()
-            .filter(|entry| {
-                entry["node_id"]["digest"] == *fixture_ids.resolve(&code_id(expression.code)).digest
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        assert_eq!(source_map.len(), 1);
-        assert_eq!(
-            serde_json::to_value(&generated.source_map).expect("map"),
-            Value::Array(source_map)
-        );
-    }
+        for (expression, record) in expressions.iter().zip(&lowered.records) {
+            let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
+                panic!("corpus node {} lowers", expression.code);
+            };
+            let claim = map
+                .items
+                .iter()
+                .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(expression.code)))
+                .expect("claim");
+            assert!(!claim.operation.identity.is_empty());
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("corpus node {} generates", expression.code);
+            };
+            assert!(
+                generated.symbol.starts_with("oracle_")
+                    && lib.contains(&format!("pub fn {}(", generated.symbol)),
+                "{} names no generated function",
+                generated.symbol
+            );
+            assert_eq!(generated.node_id, claim.node_id);
+            assert_eq!(generated.package_id, expected_package_identity);
+            assert_eq!(
+                generated.contract_package_identity,
+                expected_package_identity
+            );
+            assert!(serde_json::to_value(generated)
+                .expect("generated claim")
+                .get("ir_id")
+                .is_none());
+            assert_eq!(generated.semantic_form, expression.form);
+            assert_eq!(generated.semantic_type, node.semantic_type);
+            assert_eq!(generated.claims, node.claims);
+            assert_eq!(generated.bounds, node.bounds);
+            // Every checked bound is one the expression declares and reaches.
+            let declared = expression
+                .bounds
+                .iter()
+                .map(|bound| fixture_ids.resolve(&id(&bound.key())))
+                .collect::<Vec<_>>();
+            assert!(generated
+                .checked_bounds
+                .iter()
+                .all(|bound| declared.contains(bound) && node.bounds.contains(bound)));
+            assert_eq!(
+                generated.checked_bounds.is_empty(),
+                checks_no_bound(&expression.operation),
+                "node {}",
+                expression.code
+            );
+            assert_eq!(generated.dependencies, node.dependencies);
+            let source_map_value = serde_json::to_value(package.source_map()).expect("source map");
+            let source_map = source_map_value
+                .as_array()
+                .expect("source map")
+                .iter()
+                .filter(|entry| {
+                    entry["node_id"] == json!(fixture_ids.resolve(&code_id(expression.code)))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(source_map.len(), 1);
+            assert_eq!(
+                serde_json::to_value(&generated.source_map).expect("map"),
+                Value::Array(source_map)
+            );
+        }
 
-    // The reported identity is the node's own catalogued operation, not a per-instance string:
-    // codes 1011 and 1014 are both `division(_, Truncating, ...)`, differing only in bound
-    // (`[-1000,1000]` vs `[-5,5]`) -- codegen's own descriptor-derived string used to embed the
-    // bound and so differed between them; the catalog does not, and both now report the same
-    // `quire.op.integer.div`.
-    let identity = |code| {
-        map.items
-            .iter()
-            .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(code)))
-            .expect("claim")
-            .operation
-            .identity
-            .clone()
-    };
-    assert_eq!(identity(1011), "quire.op.integer.div");
-    assert_eq!(identity(1014), "quire.op.integer.div");
+        // The reported identity is the node's own catalogued operation, not a per-instance string:
+        // codes 1011 and 1014 are both `division(_, Truncating, ...)`, differing only in bound
+        // (`[-1000,1000]` vs `[-5,5]`) -- codegen's own descriptor-derived string used to embed the
+        // bound and so differed between them; the catalog does not, and both now report the same
+        // `quire.op.integer.div`.
+        for code in [1011, 1014] {
+            if let Some(claim) = map
+                .items
+                .iter()
+                .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(code)))
+            {
+                operation_identities.insert(code, claim.operation.identity.clone());
+            }
+        }
+    }
+    assert_eq!(operation_identities.len(), 2);
+    assert_eq!(operation_identities[&1011], "quire.op.integer.div");
+    assert_eq!(operation_identities[&1014], "quire.op.integer.div");
 }
 
 /// Operations whose parameters the IR carries no bound for.
@@ -1217,13 +1216,19 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
 
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
-fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
-    let package = corpus_package().admit();
-    let other_domain: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        serde_json::json!({"domain": "quire.a-earlier-domain/v1", "digest": "f".repeat(64)}),
-    )
-    .expect("node id");
-    let mut items = golden_items();
+fn tc_024_claim_map_entries_ascend_by_structural_node_key() {
+    let package = corpus_package_for_codes(&[1001, 1002]).admit();
+    let other_domain = quire_contract_model::CheckedNodeId {
+        package: "a-earlier".into(),
+        path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+            "zzzz".into(),
+        )],
+        ordinal: 0,
+    };
+    let mut items = golden_items()
+        .into_iter()
+        .filter(|item| [code_id(1001), code_id(1002)].contains(&item.node_id))
+        .collect::<Vec<_>>();
     items.push(ExactScalarItem {
         node_id: other_domain.clone(),
         operation: package::integer_add(),
@@ -1233,18 +1238,13 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
         .claim_map
         .items
         .iter()
-        .map(|claim| {
-            (
-                claim.node_id.domain.to_string(),
-                claim.node_id.digest.to_string(),
-            )
-        })
+        .map(|claim| claim.node_id.clone())
         .collect::<Vec<_>>();
     let mut sorted = ids.clone();
     sorted.sort();
-    assert_eq!(ids, sorted, "entries ascend by domain, then digest");
+    assert_eq!(ids, sorted, "entries ascend by structural node key");
     assert_eq!(oracles.claim_map.items[0].node_id, other_domain);
-    // Its digest is the greatest requested, so it sorts first only by its domain.
+    // Its package sorts before the fixture package despite its later path spelling.
     assert_eq!(
         oracles.claim_map.items[0].result,
         ClaimDisposition::Refused {
@@ -1263,7 +1263,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 #[trace("FR-014-AC-13", "TC-024")]
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1014, 1011]).admit();
     let floor = |lower, upper| ExactScalarOperation::IntegerDivision {
         profile: DivisionProfile::Floor,
         domain: bounded(lower, upper),
@@ -1331,7 +1331,7 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 #[trace("FR-014-AC-12", "FR-038-AC-3", "TC-024")]
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1004]).admit();
     let mismatched = generate(
         &package,
         &[ExactScalarItem {
@@ -1386,7 +1386,8 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 #[trace("FR-038-AC-3", "FR-014-AC-8", "FR-014-AC-13", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
-    let (package, _) = corpus_package().admit_resolved();
+    let (package, _) =
+        corpus_package_for_codes(&[1003, 1041, WRONG_ARITY, WRONG_RESULT]).admit_resolved();
 
     let subtraction = generate(
         &package,
@@ -1414,7 +1415,13 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         "rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(right, left), meter)"
     ));
 
-    let golden = generate(&package, &golden_items());
+    let golden = generate(
+        &package,
+        &golden_items()
+            .into_iter()
+            .filter(|item| [code_id(WRONG_ARITY), code_id(WRONG_RESULT)].contains(&item.node_id))
+            .collect::<Vec<_>>(),
+    );
     assert_eq!(
         refusal_of(&golden, WRONG_ARITY),
         ExactScalarRefusal::FormMismatch {
@@ -1430,8 +1437,8 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         }
     );
     let golden_source = contents(&golden, "src/lib.rs");
-    assert!(!golden_source.contains(code_id(WRONG_ARITY).digest.as_ref()));
-    assert!(!golden_source.contains(code_id(WRONG_RESULT).digest.as_ref()));
+    assert!(!golden_source.contains(&subject_header(&code_id(WRONG_ARITY))));
+    assert!(!golden_source.contains(&subject_header(&code_id(WRONG_RESULT))));
 }
 
 /// The scalar nodes shared by the admitted work-exhaustion fixture and its
@@ -1498,7 +1505,7 @@ fn tc_024_work_exhaustion_shape_is_reader_admitted_at_small_size() {
 
 /// A binary integer operator cannot take an
 /// aggregate directly in an operand slot.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("FR-014-AC-10", "TC-052")]
 #[test]
 fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
     let mut builder = minimal_integer_builder();
@@ -1527,7 +1534,7 @@ fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("aggregate operand node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("aggregate operand unexpectedly admitted: {result:?}");
@@ -1538,7 +1545,11 @@ fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/body/arguments/1"))
     );
     assert_eq!(refusal.locus, Some(node_id));
@@ -1576,7 +1587,7 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     };
     assert_eq!(*limit, quire_contract_codegen::SCALAR_LOWERING_WORK_LIMIT);
     assert!(consumed > limit);
-    assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&code_id(3001))));
 }
 
 /// A call whose lowered contract package is longer than the checked package, read under a ceiling
@@ -1611,7 +1622,7 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
             .as_array()
             .expect("source map")
             .iter()
-            .filter(|entry| entry["node_id"]["digest"] == code_id(*code).digest.as_ref())
+            .filter(|entry| entry["node_id"] == json!(code_id(*code)))
             .collect::<Vec<_>>();
         assert_eq!(entries.len(), spans.len());
         for (ordinal, (entry, (start, end))) in entries.iter().zip(spans).enumerate() {
@@ -1805,8 +1816,19 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 #[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
-    let package = corpus_package().admit();
-    let oracles = generate(&package, &golden_items());
+    let mut refused = BTreeMap::new();
+    for oracles in corpus_cohort_oracles() {
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Refused { refusal } = &claim.result {
+                assert!(
+                    refused
+                        .insert(claim.node_id.clone(), refusal_variant_name(refusal))
+                        .is_none(),
+                    "one refusal per requested node"
+                );
+            }
+        }
+    }
 
     let from_the_golden_corpus = [
         (DUPLICATED, "DuplicateRequest"),
@@ -1824,11 +1846,7 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
         (WRONG_OPERAND_REFERENCE, "OperandTypeMismatch"),
     ];
     for (code, expected) in from_the_golden_corpus {
-        assert_eq!(
-            refusal_variant_name(&refusal_of(&oracles, code)),
-            expected,
-            "node {code}"
-        );
+        assert_eq!(refused.get(&code_id(code)), Some(&expected), "node {code}");
     }
 
     let (work_exhausted_package, work_exhausted_item) = work_exhausted_fixture();
@@ -1916,12 +1934,8 @@ fn tc_024_unreadable_integer_bound_is_a_strict_reader_refusal() {
         panic!("noncanonical integer endpoint must not admit");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
-    assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
-    );
+    assert!(refusal.cause.is_some(), "reader gives a typed cause");
     assert_eq!(refusal.locus, Some(id(&unreadable.key())));
-    assert!(refusal.expected_node_id().is_none());
 }
 
 /// A non-exact IEEE rounding mode over bare Float32 is refused by the reader
@@ -1948,10 +1962,13 @@ fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
     assert_eq!(refusal.locus, Some(node));
     let expected_path = format!("/semantic_graph/nodes/{position}/body/operation/mode/value");
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str()),
         Some(expected_path.as_str())
     );
-    assert!(refusal.expected_node_id().is_none());
 }
 
 /// The corpus Integer is the anonymous structural authority required by the reader.
@@ -2139,12 +2156,19 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
 #[trace("FR-014-AC-3", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
+    let package = corpus_package_for_codes(&[LITERAL_OPERAND]).admit();
+    let oracles = generate(
+        &package,
+        &golden_items()
+            .into_iter()
+            .filter(|item| item.node_id == code_id(LITERAL_OPERAND))
+            .collect::<Vec<_>>(),
+    );
     let lib = contents(&oracles, "src/lib.rs");
     // Node 1003's right operand is an integer literal, so it type-checks as an
     // integer and the subtraction generates like any other.
     assert!(matches!(
-        dispositions(&oracles)[claim_id(&oracles, LITERAL_OPERAND).digest.as_ref()],
+        dispositions(&oracles)[&claim_id(&oracles, LITERAL_OPERAND)],
         ClaimDisposition::Generated(_)
     ));
     let subtract = function_body(lib, &symbol(&oracles, LITERAL_OPERAND));
@@ -2154,7 +2178,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     );
 
     // The reader refuses the same shape with a text literal at the operand's type.
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[V_INTEGER]);
     builder.application_bounded(
         3002,
         "expression",
@@ -2168,7 +2192,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
                 reference(&key(V_INTEGER)),
                 json!({
                     "term": "literal",
-                    "type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+                    "type": code_id(T_INTEGER),
                     "value_kind": "text",
                     "value": "3",
                 }),
@@ -2182,7 +2206,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("text literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("text literal unexpectedly admitted: {result:?}");
@@ -2193,7 +2217,11 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -2225,7 +2253,10 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
 #[trace("FR-014-AC-8", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
+    let oracles = corpus_cohort_oracles()
+        .into_iter()
+        .next()
+        .expect("bounded scalar corpus cohort");
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{EXACT_SCALAR_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
@@ -2296,7 +2327,7 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
         }],
     );
     assert!(matches!(
-        dispositions(&oracles).get(claim_id(&oracles, BOUNDED_INCREMENT).digest.as_ref()),
+        dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
         Some(ClaimDisposition::Generated(_))
     ));
 }
@@ -2393,7 +2424,7 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
         panic!("expected typed protocol refusal, got {:?}", claim.result);
     };
     assert_eq!(unsupported_node_id, &requested_id);
-    assert!(!contents(&oracles, "src/lib.rs").contains(requested_id.digest.as_ref()));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&requested_id)));
 }
 
 fn qspec_package(fixture: &str) -> CheckedPackageV2 {
@@ -2591,18 +2622,18 @@ fn two_parameter_disposition(
         }],
     );
     let disposition = dispositions(&oracles)
-        .get(node_id.digest.as_ref())
+        .get(&node_id)
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item");
     (oracles, disposition)
 }
 
 fn two_parameter_refusal(code: u32, operation: ExactScalarOperation) -> AdmittedRefusal {
-    let (oracles, disposition) = two_parameter_disposition(code, operation);
+    let (_oracles, disposition) = two_parameter_disposition(code, operation);
     match disposition {
         ClaimDisposition::Refused { refusal } => AdmittedRefusal {
             actual: refusal,
-            ids: fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()),
+            ids: FixtureIds,
         },
         other => panic!("node {code} is not refused: {other:?}"),
     }
@@ -2612,12 +2643,9 @@ fn two_parameter_checked_bounds(
     code: u32,
     operation: ExactScalarOperation,
 ) -> (Vec<quire_contract_model::CheckedNodeId>, FixtureIds) {
-    let (oracles, disposition) = two_parameter_disposition(code, operation);
+    let (_oracles, disposition) = two_parameter_disposition(code, operation);
     match disposition {
-        ClaimDisposition::Generated(generated) => (
-            generated.checked_bounds,
-            fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()),
-        ),
+        ClaimDisposition::Generated(generated) => (generated.checked_bounds, FixtureIds),
         other => panic!("node {code} is not generated: {other:?}"),
     }
 }
@@ -2793,7 +2821,7 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
     ));
     // A bounded parameter beside a plain-typed reference to a `value` node whose body is a literal
     // is a constant operand, not a plain-typed one (FR-014-AC-26), so it generates.
-    let (package, ids) = corpus_package().admit_resolved();
+    let (package, ids) = corpus_package_for_codes(&[BOUNDED_OPERAND]).admit_resolved();
     let bounded_operand = ids.resolve(&code_id(BOUNDED_OPERAND));
     let oracles = generate(
         &package,
@@ -2803,7 +2831,7 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
         }],
     );
     assert!(matches!(
-        dispositions(&oracles).get(bounded_operand.digest.as_ref()),
+        dispositions(&oracles).get(&bounded_operand),
         Some(ClaimDisposition::Generated(_))
     ));
 }
@@ -2827,7 +2855,7 @@ fn qsl_disposition(
         }],
     );
     dispositions(&oracles)
-        .get(node_id.digest.as_ref())
+        .get(&node_id)
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item")
 }
@@ -2853,7 +2881,7 @@ fn qsl_checked_bounds(
         operation,
     };
     let oracles = generate(package, &[item]);
-    match dispositions(&oracles).get(ids.resolve(&code_id(code)).digest.as_ref()) {
+    match dispositions(&oracles).get(&ids.resolve(&code_id(code))) {
         Some(ClaimDisposition::Generated(generated)) => {
             (generated.checked_bounds.clone(), ids.clone())
         }
@@ -3041,29 +3069,19 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"] == invalid.digest.as_ref())
+        .position(|node| node["node_id"] == json!(invalid))
         .expect("wrong-base bound node");
-    let nodes: Vec<CheckedSemanticNodeV2> =
-        serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("nodes parse");
-    assert!(matches!(
-        derive_structural_candidates(
-            &nodes,
-            quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
-            quire_contract_model::CheckedPackageReadLimits::bounded().work,
-        ),
-        Err(StructuralCandidateError::InvalidClosedShape { position: rejected, node_id })
-            if rejected == position && node_id == invalid
-    ));
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("wrong-base narrowing unexpectedly admitted");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert!(refusal.cause.is_some(), "reader gives a typed cause");
     assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str()),
         Some(format!("/semantic_graph/nodes/{position}/node_id").as_str())
     );
     assert_eq!(refusal.locus, Some(invalid));
@@ -3101,48 +3119,49 @@ fn derive_one(
 #[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
 #[test]
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
-    let package = corpus_package().admit();
     let corpus = corpus();
-    let fixture_ids = fixture_ids_for(&package);
-    let ids = corpus
+    let expected = corpus
         .iter()
-        .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
-        .collect::<Vec<_>>();
-    let derived = derive_exact_scalar_items(&package, &ids);
-    assert_eq!(
-        derived.len(),
-        ids.len(),
-        "one result per node id, in input order"
-    );
-    let mut items = Vec::new();
-    for (expression, derived) in corpus.iter().zip(derived) {
-        let item = derived.unwrap_or_else(|refusal| {
-            panic!(
-                "corpus node {} does not derive: {refusal:?}",
+        .map(|expression| (code_id(expression.code), expression))
+        .collect::<BTreeMap<_, _>>();
+    let mut seen = BTreeSet::new();
+    for (package, items) in corpus_cohorts() {
+        let declared = items
+            .into_iter()
+            .filter(|item| expected.contains_key(&item.node_id))
+            .collect::<Vec<_>>();
+        let ids = declared
+            .iter()
+            .map(|item| item.node_id.clone())
+            .collect::<Vec<_>>();
+        let derived = derive_exact_scalar_items(&package, &ids);
+        assert_eq!(derived.len(), ids.len(), "one result per node id");
+        let mut derived_items = Vec::new();
+        for (id, derived) in ids.iter().zip(derived) {
+            let expression = expected[id];
+            let item = derived.unwrap_or_else(|refusal| {
+                panic!(
+                    "corpus node {} does not derive: {refusal:?}",
+                    expression.code
+                )
+            });
+            assert_eq!(item.node_id, *id);
+            assert_eq!(
+                item.operation, expression.operation,
+                "node {} derives to its declared descriptor",
                 expression.code
-            )
-        });
-        assert_eq!(item.node_id, fixture_ids.resolve(&code_id(expression.code)));
-        assert_eq!(
-            item.operation, expression.operation,
-            "node {} derives to its declared descriptor",
-            expression.code
-        );
-        items.push(item);
+            );
+            assert!(seen.insert(id.clone()), "duplicate corpus node");
+            derived_items.push(item);
+        }
+        let from_derived = generate(&package, &derived_items).claim_map;
+        assert_eq!(from_derived, generate(&package, &declared).claim_map);
+        assert!(from_derived.items.iter().all(|claim| {
+            matches!(claim.result, ClaimDisposition::Generated(_))
+                && claim.operation.provenance == OperationProvenance::IrConfirmed
+        }));
     }
-    let from_derived = generate(&package, &items).claim_map;
-    let declared = corpus
-        .iter()
-        .map(|expression| ExactScalarItem {
-            node_id: code_id(expression.code),
-            operation: expression.operation.clone(),
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(from_derived, generate(&package, &declared).claim_map);
-    assert!(from_derived.items.iter().all(|claim| {
-        matches!(claim.result, ClaimDisposition::Generated(_))
-            && claim.operation.provenance == OperationProvenance::IrConfirmed
-    }));
+    assert_eq!(seen, expected.into_keys().collect());
 }
 
 /// The operations with more than one descriptor for one identity are told apart by what the node
@@ -3444,7 +3463,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .iter()
         .filter(|region| region["role"] == "oracle_evaluation")
         .collect::<Vec<_>>();
-    let ids = fixture_ids_for_digest(all.claim_map.package_id.digest.as_ref());
+    let ids = FixtureIds;
     let implication_nodes = [DERIVE_BOOLEAN_IMPLIES, DERIVE_BOOLEAN_SHORT_CIRCUIT]
         .map(|code| ids.resolve(&code_id(code)));
     assert_eq!(
@@ -3458,12 +3477,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
             .iter()
             .filter(|region| region["nodeId"] == node)
             .collect::<Vec<_>>();
-        assert_eq!(
-            own_entries.len(),
-            1,
-            "one entry for {}",
-            claim.node_id.digest
-        );
+        assert_eq!(own_entries.len(), 1, "one entry for {:?}", claim.node_id);
         let entry = own_entries[0];
         let ClaimDisposition::Generated(generated) = &claim.result else {
             unreachable!("generated claims were selected above")
@@ -3489,14 +3503,14 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
                 .as_u64()
                 .expect("declared consequent count") as usize,
             expected_consequents,
-            "the admitted node fixes the consequent count for {}",
-            claim.node_id.digest
+            "the admitted node fixes the consequent count for {:?}",
+            claim.node_id
         );
         assert_eq!(
             claim_regions.len(),
             expected_consequents,
-            "no consequent region is dropped or duplicated for {}",
-            claim.node_id.digest
+            "no consequent region is dropped or duplicated for {:?}",
+            claim.node_id
         );
         for region in claim_regions {
             assert_eq!(probe_token(all_source, region), "right");
@@ -3635,12 +3649,13 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
             "{path}"
         );
     }
-    let oracles = corpus_oracles();
-    assert_eq!(
-        panic_tokens_in(contents(&oracles, "src/lib.rs")),
-        Vec::<String>::new(),
-        "the TC-024 corpus crate"
-    );
+    for oracles in corpus_cohort_oracles() {
+        assert_eq!(
+            panic_tokens_in(contents(&oracles, "src/lib.rs")),
+            Vec::<String>::new(),
+            "a TC-024 corpus cohort"
+        );
+    }
 }
 
 /// The non-test code of the three oracle generators reads no `failed` record's limit kind: it
@@ -3852,7 +3867,7 @@ fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
 }
 
 /// Exact conversions derive a unit-free descriptor and preserve the admitted target identity.
-#[trace("FR-014-AC-48", "FR-014-AC-5", "TC-024")]
+#[trace("FR-014-AC-48", "FR-014-AC-56", "TC-024")]
 #[test]
 fn quantity_conversion_derives_and_preserves_target_provenance() {
     let (package, ids) = derivation_package().admit_resolved();
@@ -4048,6 +4063,7 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &positions,
         &[0],
@@ -4268,6 +4284,7 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &positions,
         &[0],

@@ -606,7 +606,7 @@ pub(super) mod tests {
                 integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
                 native_integer_selection: None,
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            node_id: serde_json::from_value(serde_json::json!({"domain":"quire.checked-semantic-node/v1", "digest":"1".repeat(64)})).unwrap(),
+            node_id: serde_json::from_value(serde_json::json!({"package":"kani-render-test", "path":["operation"], "ordinal":0})).unwrap(),
             operation_identity: "independent.control".into(), oracle_symbol: "probe".into(),
             module_symbol: spec.path().module.clone(), harness_symbol: spec.path().harness.clone(),
             arguments: vec![ScalarObligationArgument { identifier: "x".into(), minimum: -1, maximum: 1 }],

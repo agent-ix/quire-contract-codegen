@@ -7,12 +7,47 @@ use quire_contract_codegen::{
     OracleGenerationError,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CompleteLoweringProfileV2, ContractDependencies,
-    ContractPackageReadResult, ContractPackageWireV1, LoweringProfileRef,
+    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
+    CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
+    ContractPackageWireV1, LoweringProfileRef,
 };
+use quire_exact::{NodeKey, PathSegment};
 
 use super::admitted_enum_fixture as fixture;
+
+fn node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
+fn foreign_context() -> qsl_replay::AdmittedCompilation {
+    qsl_replay::compile_admitted(
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "foreign-enums.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "foreign-enums".to_owned(),
+            path: "foreign-enums.native",
+            bytes: fixture::SOURCE.as_bytes(),
+        },
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
+        qsl_replay::ReplayLimits::default(),
+    )
+    .expect("independent foreign enum source compiles")
+}
 
 const CASES: [(&str, &str, EqualityOperatorKind); 4] = [
     ("ordered_same", "Ordered", EqualityOperatorKind::Equal),
@@ -126,7 +161,7 @@ fn enum_items(
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id.digest.as_ref() == admitted.key().to_string())
+            .find(|node| &node_key(&node.node_id) == admitted.key())
             .expect("IR retains that exact admitted enum declaration")
             .node_id
             .clone();
@@ -256,7 +291,15 @@ pub(super) fn generate_items_with_libraries(
             .cloned()
             .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
     );
-    generate_composite_equality_oracles(&package, context, &requested, &positions, items, limits)
+    generate_composite_equality_oracles(
+        &package,
+        Some(checked),
+        context,
+        &requested,
+        &positions,
+        items,
+        limits,
+    )
 }
 
 #[trace(
@@ -301,7 +344,7 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             .expect("manifest");
         assert!(manifest.contents.contains("qsl-replay ="));
         assert!(!manifest.contents.contains("test-support"));
-        super::exact_scalar_agreement::run_agreement_cases(
+        super::exact_scalar_agreement::run_enum_agreement_cases(
             &format!("admitted-enum-equality-{mode}"),
             oracles
                 .artifacts
@@ -332,13 +375,13 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("library")
             .contents;
-        let case_lookup = "lookup_enum_case(Some(context), wire, case.case())?";
+        let case_lookup = "lookup_enum_case(Some(context), &key, case.case())?";
         let mutations = [
         ("operator", "environment.check_equality(sv::EqualityOperator::Equal".to_owned(),
             "environment.check_equality(sv::EqualityOperator::NotEqual".to_owned()),
         ("descriptor", descriptor, "let left_source = exact::ValueType::Boolean;".to_owned()),
         ("case", case_lookup.to_owned(),
-            "lookup_enum_case(Some(context), wire, &exact::Identifier::new(\"READY\").map_err(|_| ReconstructionError::Enum)?)?".to_owned()),
+            "lookup_enum_case(Some(context), &key, &exact::Identifier::new(\"READY\").map_err(|_| ReconstructionError::Enum)?)?".to_owned()),
     ];
         for (mutation, from, to) in mutations {
             assert!(
@@ -347,7 +390,7 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             );
             let changed = source.replacen(&from, &to, 1);
             assert_ne!(&changed, source);
-            super::exact_scalar_agreement::run_agreement_mutant(
+            super::exact_scalar_agreement::run_enum_agreement_mutant(
             &format!("admitted-enum-equality-{mode}-{mutation}"),
             oracles.artifacts.iter().map(|artifact| (artifact.path.as_str(),
                 if artifact.path == "src/lib.rs" { changed.as_str() } else { artifact.contents.as_str() })),
@@ -484,28 +527,50 @@ fn assert_no_oracle(oracles: &CompositeEqualityOracles) {
 #[test]
 fn public_generator_rejects_another_authentic_source_context() {
     let compiled = fixture::compile(INTEGER_SOURCE);
-    let other = fixture::compile(fixture::SOURCE);
+    let other = foreign_context();
     let package = checked(&compiled, &[]);
     let (item, _) = integer_item(&package);
-    let expected = compiled.context().package_id().record();
-    let actual = other.context().package_id().record();
+    let expected = compiled.context().package_name();
+    let actual = other.context().package_name();
     assert_ne!(expected, actual, "the two authentic source packages differ");
     let result = generate_items(&package, Some(other.context()), &[item], &[]);
     match result {
         Err(OracleGenerationError::ContextPackageMismatch {
             expected: found_expected,
-            actual_domain,
-            actual_digest,
+            actual: found_actual,
         }) => {
-            assert_eq!(found_expected.domain.as_ref(), expected.domain().as_str());
-            assert_eq!(found_expected.digest.as_ref(), expected.hex());
-            assert_eq!(actual_domain, actual.domain().as_str());
-            assert_eq!(actual_digest, actual.hex());
+            assert_eq!(found_expected.as_ref(), expected.as_str());
+            assert_eq!(found_actual, actual.to_string());
         }
         other => {
             panic!("expected whole-generation context refusal without artifacts, got {other:?}")
         }
     }
+}
+
+#[trace("FR-018-AC-33", "TC-029")]
+#[test]
+fn primitive_only_generation_rejects_same_name_context_with_different_checked_body() {
+    let compiled = fixture::compile(INTEGER_SOURCE);
+    let changed = fixture::compile(&format!(
+        "{INTEGER_SOURCE}\nfunction extra using v(): Boolean pure {{ true }}\n"
+    ));
+    let package = checked(&compiled, &[]);
+    let (item, _) = integer_item(&package);
+    assert_eq!(
+        compiled.context().package_name(),
+        changed.context().package_name(),
+        "the negative control retains the same library name"
+    );
+    assert_ne!(
+        compiled.context().package_bytes(),
+        changed.context().package_bytes(),
+        "the independently emitted checked bodies differ"
+    );
+    assert!(matches!(
+        generate_items(&package, Some(changed.context()), &[item], &[]),
+        Err(OracleGenerationError::ContextPackageContentMismatch)
+    ));
 }
 
 pub(super) fn direct_source_item(

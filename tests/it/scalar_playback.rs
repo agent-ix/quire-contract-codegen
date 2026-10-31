@@ -51,9 +51,12 @@ fn harness(
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n"
     );
     let compiled = compile_package(
-        SourceIdentity::new("test", "scalar-playback.native", "git", "fixture"),
-        "scalar-playback.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "scalar-playback.native", "git", "fixture"),
+            package_name: "scalar-playback".to_owned(),
+            path: "scalar-playback.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

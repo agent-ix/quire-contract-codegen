@@ -11,10 +11,7 @@ use crate::{
             scalar::{execute_with_cleanup, KaniScalarNativeRequest},
             tool::KaniInstallation,
         },
-        test_support::{
-            proof_ceilings::proof_ceilings_with_wall_clock,
-            scalar_native_digest::independent_digest,
-        },
+        test_support::proof_ceilings::proof_ceilings_with_wall_clock,
     },
 };
 use crate::{
@@ -284,19 +281,11 @@ fn cleanup_success_and_failure_preserve_real_receipt_after_snapshot_removal() {
         failure.proof_evidence().outcome
     );
     assert_eq!(success.native_outcome(), failure.native_outcome());
-    assert_eq!(
-        success.proof_content_digest(),
-        failure.proof_content_digest()
-    );
     assert_eq!(success.staged_entries(), failure.staged_entries());
     assert_eq!(success.meter_observation().limits(), &limits());
     assert_eq!(
         success.meter_observation().limits(),
         failure.meter_observation().limits()
-    );
-    assert_eq!(
-        failure.proof_content_digest().as_bytes(),
-        &independent_digest(failure.staged_entries())
     );
 }
 

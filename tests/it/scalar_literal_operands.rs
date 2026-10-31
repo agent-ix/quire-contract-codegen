@@ -26,9 +26,12 @@ fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV
          function subject using v({parameters}): {result} pure {{ {expression} }}\n"
     );
     let compiled = compile_package(
-        SourceIdentity::new("test", "scalar-literals.native", "git", "fixture"),
-        "scalar-literals.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "scalar-literals.native", "git", "fixture"),
+            package_name: "scalar-literals".to_owned(),
+            path: "scalar-literals.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

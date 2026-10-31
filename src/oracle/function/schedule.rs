@@ -1013,8 +1013,11 @@ mod tests {
 
     fn id(value: u8) -> CheckedNodeId {
         CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: format!("{value:064x}").into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                value.to_string().into(),
+            )],
+            ordinal: 0,
         }
     }
 
@@ -1040,8 +1043,11 @@ mod tests {
 
     fn deep_id(value: u32) -> CheckedNodeId {
         CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: format!("{value:064x}").into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                value.to_string().into(),
+            )],
+            ordinal: 0,
         }
     }
 
@@ -1080,7 +1086,6 @@ mod tests {
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
                 recursion_group: None,
-                nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
                 body: CheckedTerm::aggregate(Vec::new()),
@@ -1105,7 +1110,6 @@ mod tests {
                     dependencies: Vec::new(),
                     occurrences: Vec::new(),
                     recursion_group: None,
-                    nominal_identity_preimage: None,
                     declaration: None,
                     owner: None,
                     body: CheckedTerm::aggregate(Vec::new()),

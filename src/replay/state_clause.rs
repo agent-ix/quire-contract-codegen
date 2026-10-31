@@ -29,8 +29,8 @@ use qsl_replay::{
     EmptyQualifiedName, EnvelopeSource, FiniteBound, Integer, MalformedTranscript, OperationName,
     ProofBound, ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
     ReplaySource, ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample,
-    StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessSettlement, WitnessValue,
+    StateClauseReplayResult, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
+    WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
-    core::ir::clause::ClauseGraphView,
+    core::ir::{clause::ClauseGraphView, node_key::checked_node_key},
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         generate::{
@@ -115,7 +115,7 @@ pub struct StateClauseReplayInputs<'a> {
     /// natively over the pre state.
     pub post_state: Vec<(String, i64)>,
     /// The identity of the obligation the counterexample falsified.
-    pub obligation_identity: [u8; 32],
+    pub obligation_identity: qsl_replay::ObligationIdentity,
 }
 
 /// Why the framed model declaration does not supply the requested field list.
@@ -338,11 +338,7 @@ impl fmt::Display for StateClauseReplayError {
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
             Self::ProofBound(cause) => write!(f, "a proof bound was not built: {cause}"),
             Self::ModelFields { object, cause } => {
-                write!(
-                    f,
-                    "model fields of {} are unavailable: {cause:?}",
-                    object.digest
-                )
+                write!(f, "model fields of {object:?} are unavailable: {cause:?}")
             }
             Self::MissingField { field } => {
                 write!(f, "no value is bound for the state field `{field}`")
@@ -600,6 +596,7 @@ impl StateClauseReplay {
         let (run, dependencies) = run.admit().map_err(StateClauseReplayError::Dependencies)?;
         let located = call_site(
             run.source.source_identity(),
+            package.name().to_owned(),
             &run.source.identity,
             &run.source.bytes,
             packages.iter().map(|package| package.bytes.as_slice()),
@@ -607,9 +604,8 @@ impl StateClauseReplay {
             &clause,
         )
         .map_err(StateClauseReplayError::CallSite)?;
-        let package_id = located.package_id;
         let site = located.site;
-        if WireNodeId::from_hex(&clause_node.digest) != Some(site.node) {
+        if checked_node_key(clause_node).as_ref() != Some(&site.node) {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
 
@@ -654,7 +650,7 @@ impl StateClauseReplay {
         };
         let invocation_encoded = encode_document(&invocation_document)
             .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
-        let invocation = invocation_label.reference(invocation_encoded.digest);
+        let invocation = invocation_label.reference();
 
         let selected =
             QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;
@@ -684,10 +680,9 @@ impl StateClauseReplay {
             )
             .collect::<Vec<_>>();
         let wire = run.wire(
-            package_id,
             RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
-            obligation_identity,
+            obligation_identity.clone(),
             &documents,
         );
         let packet = WitnessPacket {
@@ -695,8 +690,6 @@ impl StateClauseReplay {
             occurrence_key: Some(site.occurrence),
             clause_node: Some(site.node),
             replay_target: ReplayTargetMembers::state_clause(selected),
-            package_id: Some(wire.package_id.clone()),
-            source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
             declared_domains: Some(domains),
@@ -772,13 +765,12 @@ pub(crate) fn encode_document<T: Encode + ?Sized>(
 }
 
 impl DocumentLabel {
-    fn reference(&self, digest: [u8; 32]) -> DocumentRef {
+    fn reference(&self) -> DocumentRef {
         DocumentRef {
             authority: self.authority.clone(),
             identity: self.identity.clone(),
             revision_namespace: self.revision_namespace.clone(),
             revision: self.revision.clone(),
-            digest,
         }
     }
 }
@@ -1125,8 +1117,7 @@ fn declared_domains(
     let Some(self_parameter) = shape.parameters.first() else {
         return Err(unreadable(&shape.scope.anchor));
     };
-    let parameter =
-        WireNodeId::from_hex(&self_parameter.digest).ok_or_else(|| unreadable(self_parameter))?;
+    let parameter = checked_node_key(self_parameter).ok_or_else(|| unreadable(self_parameter))?;
     let mut domains = Vec::new();
     for (position, field) in fields.iter().enumerate() {
         let Some((minimum, maximum)) = field.range else {
@@ -1138,7 +1129,7 @@ fn declared_domains(
         domains.push(DeclaredDomain::new(
             ProofBound::new(
                 DomainKey::Node {
-                    node: parameter,
+                    node: parameter.clone(),
                     path: vec![path],
                 },
                 Some(DomainKind::Integer),

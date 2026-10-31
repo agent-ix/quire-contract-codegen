@@ -54,9 +54,12 @@ pub fn compile(case: &str) -> AdmittedCompilation {
 
 pub fn compile_source(source: &str) -> AdmittedCompilation {
     qsl_replay::compile_admitted(
-        SourceIdentity::new("test", "composite-agreement.native", "git", "fixture"),
-        "composite-agreement.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "composite-agreement.native", "git", "fixture"),
+            package_name: "composite-agreement".to_owned(),
+            path: "composite-agreement.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

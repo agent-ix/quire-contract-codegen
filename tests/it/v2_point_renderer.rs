@@ -43,7 +43,7 @@ fn request<'a>(
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
         },
-        process_package_id: None,
+        process_source: None,
     }
 }
 
@@ -117,10 +117,11 @@ fn distinct_pointed_invariants_render_distinct_verdict_points_and_identities() {
         assert!(source.contains(&format!("ExecutionPoint::new({expected:?})")));
         assert!(source.contains("V2_NUMERIC_IDENTITY, V2_NUMERIC_POINT, &observations"));
         assert_eq!(generated.identity.clause, clause);
-        assert_eq!(generated.identity.package_id, *package.package_id());
+        assert_eq!(generated.identity.source.name.as_ref(), package.name());
+        assert_eq!(generated.identity.source.lock, *package.lock());
         results.push((
             clause,
-            package.package_id().clone(),
+            package.lock().clone(),
             generated.identity.execution_point,
         ));
     }

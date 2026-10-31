@@ -156,7 +156,10 @@ pub fn generate_v2_clause_claim_map(
         Err(refusal) => ClaimDisposition::Refused { refusal },
     };
     ClaimMap {
-        package_id: package.package_id().clone(),
+        source: quire_contract_model::ContractSourceV1 {
+            name: package.name().into(),
+            lock: package.lock().clone(),
+        },
         blocked: Vec::new(),
         items: vec![V2ClauseClaim {
             node_id: node_id.clone(),

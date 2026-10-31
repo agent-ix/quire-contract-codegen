@@ -19,8 +19,30 @@ use quire_contract_codegen::{
     FunctionScheduledOperation, GeneratedExactFunctionClaim, OracleGenerationError,
     UpstreamBlocker,
 };
-use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
+use quire_contract_model::CheckedPackageV2;
 use std::ops::Deref;
+
+fn source_path(id: &quire_contract_model::CheckedNodeId) -> String {
+    id.path
+        .iter()
+        .map(|segment| match segment {
+            quire_contract_model::CheckedNodePathSegment::Name(name) if !name.contains('/') => {
+                name.as_ref()
+            }
+            _ => panic!("fixture scalar type needs slash-free authored path segments"),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn fixture_code_id(wire: &serde_json::Value, code: u32) -> quire_contract_model::CheckedNodeId {
+    serde_json::from_value(serde_json::json!({
+        "package": wire["name"],
+        "path": [key(code)],
+        "ordinal": 0,
+    }))
+    .expect("fixture code key")
+}
 
 #[trace(
     "FR-021-AC-28",
@@ -103,11 +125,11 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
             "term": "application",
             "operator": "call",
             "operation": op("quire.op.function.call"),
-            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "result_type": code_id(T_INTEGER),
             "arguments": [
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": callee.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+                {"term": "reference", "target": callee},
+                {"term": "reference", "target": params.0},
+                {"term": "reference", "target": params.1},
             ],
         })
     };
@@ -119,10 +141,10 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
             "term": "application",
             "operator": "binary",
             "operation": op("quire.op.integer.add"),
-            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "result_type": code_id(T_INTEGER),
             "arguments": [
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+                {"term": "reference", "target": params.0},
+                {"term": "reference", "target": params.1},
             ],
         })
     };
@@ -132,7 +154,7 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         let target = code_id(code);
         json!({
             "term": "reference",
-            "target": {"domain": target.domain, "digest": target.digest},
+            "target": target,
         })
     };
     builder.application_node(
@@ -141,13 +163,7 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         &int_type,
         scalar_body(&parameter_ids[terminal as usize]),
     );
-    let mut function_ids = vec![
-        quire_contract_model::CheckedNodeId {
-            domain: NODE_DOMAIN.into(),
-            digest: String::new().into(),
-        };
-        COUNT as usize
-    ];
+    let mut function_ids = vec![code_id(BASE); COUNT as usize];
     let mut body_ids = vec![function_ids[0].clone(); COUNT as usize];
     body_ids[terminal as usize] = code_id(BODY_BASE + terminal);
     builder.code(
@@ -188,11 +204,11 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
             "term": "application",
             "operator": "call",
             "operation": op("quire.op.function.call"),
-            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "result_type": code_id(T_INTEGER),
             "arguments": [
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": callee.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+                {"term": "reference", "target": callee},
+                {"term": "reference", "target": params.0},
+                {"term": "reference", "target": params.1},
             ],
         })
     };
@@ -237,26 +253,23 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("fixture nodes");
-    let mut category_by_digest = std::collections::BTreeMap::new();
+    let mut category_by_node = std::collections::BTreeMap::new();
     let mut wire_bytes = std::collections::BTreeMap::<String, WireBytes>::new();
     for node in nodes {
-        let digest = node["node_id"]["digest"].as_str().expect("node digest");
+        let node_id: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(node["node_id"].clone()).expect("node key");
         let kind = category(node);
-        category_by_digest.insert(digest.to_owned(), kind.to_owned());
+        category_by_node.insert(node_id, kind.to_owned());
         let entry = wire_bytes.entry(kind.to_owned()).or_default();
         entry.node_count += 1;
         entry.nodes += serde_json::to_vec(node).expect("node bytes").len() as u64;
     }
-    assert!(wire["identity_preimage"]
-        .get("identity_projection")
-        .is_none());
     let source_map = wire["source_map"].as_array().expect("source map");
     for source_entry in source_map {
-        let digest = source_entry["node_id"]["digest"]
-            .as_str()
-            .expect("source-map digest");
-        let kind = category_by_digest
-            .get(digest)
+        let node_id: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(source_entry["node_id"].clone()).expect("source-map key");
+        let kind = category_by_node
+            .get(&node_id)
             .expect("source map corresponds to a node");
         let entry = wire_bytes.entry(kind.clone()).or_default();
         entry.source_map_count += 1;
@@ -293,17 +306,12 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     );
     let graph_ids = nodes
         .iter()
-        .map(|node| {
-            node["node_id"]["digest"]
-                .as_str()
-                .expect("node digest")
-                .to_owned()
-        })
+        .map(|node| serde_json::from_value(node["node_id"].clone()).expect("node key"))
         .collect::<std::collections::BTreeSet<_>>();
     fn assert_typed_references_resolve(
         value: &Value,
         path: &str,
-        graph_ids: &std::collections::BTreeSet<String>,
+        graph_ids: &std::collections::BTreeSet<quire_contract_model::CheckedNodeId>,
     ) {
         match value {
             Value::Array(items) => {
@@ -312,14 +320,12 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
                 }
             }
             Value::Object(object) => {
-                if object.get("domain").and_then(Value::as_str) == Some(NODE_DOMAIN) {
-                    let digest = object
-                        .get("digest")
-                        .and_then(Value::as_str)
-                        .expect("typed ref digest");
+                if let Ok(node_id) =
+                    serde_json::from_value::<quire_contract_model::CheckedNodeId>(value.clone())
+                {
                     assert!(
-                        graph_ids.contains(digest),
-                        "dangling typed reference at {path}: {digest}"
+                        graph_ids.contains(&node_id),
+                        "dangling typed reference at {path}: {node_id:?}"
                     );
                     return;
                 }
@@ -381,25 +387,20 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let mut subjects = generated
         .functions
         .iter()
-        .map(|function| {
-            format!(
-                "{}/{}",
-                function.function_node_id.domain, function.function_node_id.digest
-            )
-        })
+        .map(|function| format!("{:?}", function.function_node_id))
         .collect::<Vec<String>>();
-    subjects.extend(generated.claims.iter().map(|claim| {
-        format!(
-            "{}/{}",
-            claim.call_node_id.domain, claim.call_node_id.digest
-        )
-    }));
+    subjects.extend(
+        generated
+            .claims
+            .iter()
+            .map(|claim| format!("{:?}", claim.call_node_id)),
+    );
     subjects.extend(generated.functions.iter().flat_map(|function| {
         function
             .schedule
             .instructions
             .iter()
-            .map(|instruction| format!("{}/{}", instruction.node.domain, instruction.node.digest))
+            .map(|instruction| format!("{:?}", instruction.node))
     }));
     let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
     crate::generated_headers::assert_header("src/lib.rs", &generated.source, &subject_refs);
@@ -720,8 +721,7 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
 )]
 #[test]
 fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack() {
-    use serde_json::{json, Value};
-    use std::collections::BTreeMap;
+    use serde_json::json;
     use std::{fs, process::Command};
     const CALLS: u32 = 100_000;
     const PARAMETER: u32 = 1_100_000;
@@ -742,77 +742,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
         "member": null,
         "leaves": [],
     });
-    fn apply_seeded_ids(wire: &mut Value, replacements: &BTreeMap<String, String>) {
-        fn rewrite(value: &mut Value, replacements: &BTreeMap<String, String>) {
-            match value {
-                Value::Array(items) => {
-                    for item in items {
-                        rewrite(item, replacements);
-                    }
-                }
-                Value::Object(object) => {
-                    if object.get("domain").and_then(Value::as_str)
-                        == Some("quire.checked-semantic-node/v1")
-                    {
-                        if let Some(digest) = object.get("digest").and_then(Value::as_str) {
-                            if let Some(replacement) = replacements.get(digest) {
-                                object.insert("digest".to_owned(), json!(replacement));
-                            }
-                        }
-                        return;
-                    }
-                    for member in object.values_mut() {
-                        rewrite(member, replacements);
-                    }
-                }
-                Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
-            }
-        }
-        rewrite(wire, replacements);
-    }
-    fn preseed_structural_candidates(wire: &mut Value, codes: &[u32]) -> BTreeMap<String, String> {
-        let nodes = wire["semantic_graph"]["nodes"]
-            .as_array()
-            .expect("fixture graph nodes");
-        let selected = codes
-            .iter()
-            .map(|code| {
-                let old = code_id(*code);
-                let node = nodes
-                    .iter()
-                    .find(|node| node["node_id"]["digest"].as_str() == Some(old.digest.as_ref()))
-                    .unwrap_or_else(|| panic!("no structural candidate node for code {code}"));
-                serde_json::from_value::<CheckedSemanticNodeV2>(node.clone())
-                    .expect("fixture node deserializes for candidate derivation")
-            })
-            .collect::<Vec<_>>();
-        let candidates = derive_structural_candidates(&selected, 1 << 20, 1 << 20)
-            .expect("small fixture candidates derive within limits");
-        let replacements = candidates
-            .nodes()
-            .iter()
-            .map(|candidate| {
-                let old = selected[candidate.position() as usize]
-                    .node_id
-                    .digest
-                    .to_string();
-                let new = candidate.candidate_node_id().digest.to_string();
-                (old, new)
-            })
-            .collect::<BTreeMap<_, _>>();
-        apply_seeded_ids(wire, &replacements);
-        replacements
-    }
-    let body_reference = |code: u32, seeded: &BTreeMap<String, String>| {
-        let mut target = code_id(code);
-        if let Some(digest) = seeded.get(target.digest.as_ref()) {
-            target.digest = digest.clone().into_boxed_str();
-        }
-        json!({
-            "term": "reference",
-            "target": {"domain": target.domain, "digest": target.digest},
-        })
-    };
+    let body_reference = |code: u32| json!({"term": "reference", "target": code_id(code)});
     let mut builder = PackageBuilder::default();
     builder
         .code(
@@ -823,20 +753,6 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
             aggregate(vec![]),
         )
         .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(vec![]));
-    let (base_result, base_wire, base_ids) = builder.read_resolved();
-    assert!(matches!(
-        base_result,
-        quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
-    ));
-    builder = PackageBuilder::from_wire(base_wire);
-    let mut seeded_ids = [T_INTEGER, T_TEXT]
-        .into_iter()
-        .filter_map(|code| {
-            let old = code_id(code);
-            let new = base_ids.resolve(&old);
-            (old.digest != new.digest).then(|| (old.digest.to_string(), new.digest.to_string()))
-        })
-        .collect::<BTreeMap<_, _>>();
     builder
         .code(
             PARAMETER,
@@ -859,31 +775,16 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
             ]),
         );
 
-    let mut wire = builder.raw_wire();
-    apply_seeded_ids(&mut wire, &seeded_ids);
-    seeded_ids.extend(preseed_structural_candidates(
-        &mut wire,
-        &[PARAMETER, OUTER_PARAMETER],
-    ));
-    builder = PackageBuilder::from_wire(wire);
     builder.code(
         HELPER,
         "function",
         "pure_function",
         T_INTEGER,
-        body_reference(PARAMETER, &seeded_ids),
+        body_reference(PARAMETER),
     );
 
-    let mut wire = builder.raw_wire();
-    apply_seeded_ids(&mut wire, &seeded_ids);
-    seeded_ids.extend(preseed_structural_candidates(&mut wire, &[HELPER]));
-    builder = PackageBuilder::from_wire(wire);
-
-    let integer_type = seeded_ids
-        .get(code_id(T_INTEGER).digest.as_ref())
-        .cloned()
-        .unwrap_or_else(|| code_id(T_INTEGER).digest.to_string());
-    let helper_reference = body_reference(HELPER, &seeded_ids);
+    let integer_type = key(T_INTEGER);
+    let helper_reference = body_reference(HELPER);
     for ordinal in 0..calls {
         let child = if ordinal == 0 {
             OUTER_PARAMETER
@@ -898,8 +799,8 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 "term": "application",
                 "operator": "call",
                 "operation": operation.clone(),
-                "result_type": {"domain": NODE_DOMAIN, "digest": integer_type},
-                "arguments": [helper_reference.clone(), body_reference(child, &seeded_ids)],
+                "result_type": code_id(T_INTEGER),
+                "arguments": [helper_reference.clone(), body_reference(child)],
             }),
         );
     }
@@ -908,12 +809,8 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
         "function",
         "pure_function",
         T_INTEGER,
-        body_reference(CALL_BASE + calls - 1, &seeded_ids),
+        body_reference(CALL_BASE + calls - 1),
     );
-    let mut wire = builder.raw_wire();
-    apply_seeded_ids(&mut wire, &seeded_ids);
-    seeded_ids.extend(preseed_structural_candidates(&mut wire, &[OUTER]));
-    builder = PackageBuilder::from_wire(wire);
     eprintln!("IR-496 AC7 phase=builder-complete calls={calls}");
 
     let limits = quire_contract_model::CheckedPackageReadLimits {
@@ -930,13 +827,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
         "IR-496 AC7 phase=admission-complete admitted_v2_nodes={}",
         package.graph().nodes.len()
     );
-    let resolved_code_id = |code| {
-        let mut id = code_id(code);
-        if let Some(digest) = seeded_ids.get(id.digest.as_ref()) {
-            id.digest = digest.clone().into_boxed_str();
-        }
-        ids.resolve(&id)
-    };
+    let resolved_code_id = |code| ids.resolve(&code_id(code));
     let parameter = |code| FunctionScheduleParameter {
         value_node_id: resolved_code_id(code),
         type_node_id: resolved_code_id(T_INTEGER),
@@ -1012,12 +903,12 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
             crate::generated_headers::assert_header(
                 "src/lib.rs",
                 &raised.source,
-                &[&format!("{}/{}", helper_function_node_id.domain, helper_function_node_id.digest), &format!("{}/{}", outer_function_node_id.domain, outer_function_node_id.digest)],
+                &[&format!("{helper_function_node_id:?}"), &format!("{outer_function_node_id:?}")],
             );
             let root_header = raised.source.lines().take_while(|line| !line.is_empty())
                 .collect::<std::collections::BTreeSet<_>>();
             for claim in &raised.claims {
-                let subject = format!("// Subject: {}/{}", claim.call_node_id.domain, claim.call_node_id.digest);
+                let subject = format!("// Subject: {:?}", claim.call_node_id);
                 assert!(root_header.contains(subject.as_str()), "split root lacks claim {subject}");
             }
             for module in &raised.modules {
@@ -1027,15 +918,15 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 crate::generated_headers::assert_header(
                     &module.path,
                     &module.contents,
-                    &[&format!("{}/{}", function.function_node_id.domain, function.function_node_id.digest)],
+                    &[&format!("{:?}", function.function_node_id)],
                 );
                 let header_lines = module.contents.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 for instruction in &function.schedule.instructions[*start..*end] {
-                    let expected = format!("// Subject: {}/{}", instruction.node.domain, instruction.node.digest);
-                    assert!(header_lines.contains(expected.as_str()), "{} lacks instruction source node {}", module.path, instruction.node.digest);
+                    let expected = format!("// Subject: {:?}", instruction.node);
+                    assert!(header_lines.contains(expected.as_str()), "{} lacks instruction source node {:?}", module.path, instruction.node);
                 }
                 let first_instruction = &function.schedule.instructions[*start];
-                let removed = format!("// Subject: {}/{}", first_instruction.node.domain, first_instruction.node.digest);
+                let removed = format!("// Subject: {:?}", first_instruction.node);
                 let mutant = module.contents.replace(&format!("{removed}\n"), "");
                 let mutant_header = mutant.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 assert!(!mutant_header.contains(removed.as_str()), "{} accepts an omitted instruction", module.path);
@@ -1137,9 +1028,9 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
         .expect("admitted deep generation fits 512 KiB");
 }
 
-#[trace("FR-021-AC-23", "TC-031")]
+#[trace("TC-031")]
 #[test]
-fn tc_031_application_candidate_repair_admits_parent_after_child_key_changes() {
+fn tc_031_source_assigned_parent_key_survives_child_body_change() {
     use serde_json::json;
 
     const PARAM_LEFT: u32 = 84_001;
@@ -1169,140 +1060,75 @@ fn tc_031_application_candidate_repair_admits_parent_after_child_key_changes() {
             ]),
         );
     }
-    let int_type = key(T_INTEGER);
-    let add_body = |left: &quire_contract_model::CheckedNodeId,
-                    right: &quire_contract_model::CheckedNodeId| {
+    let add_body = |left: u32, right: u32| {
         json!({
             "term": "application",
             "operator": "binary",
             "operation": {
                 "identity": "quire.op.integer.add",
-                "laws": [],
-                "mode": null,
-                "member": null,
-                "leaves": [],
+                "laws": [], "mode": null, "member": null, "leaves": [],
             },
-            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
-            "arguments": [
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": left.digest}},
-                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": right.digest}},
-            ],
+            "result_type": code_id(T_INTEGER),
+            "arguments": [reference(left), reference(right)],
         })
     };
     builder.application_node(
         CHILD,
         "binary",
-        &int_type,
-        add_body(&code_id(PARAM_LEFT), &code_id(PARAM_RIGHT)),
+        &key(T_INTEGER),
+        add_body(PARAM_LEFT, PARAM_RIGHT),
     );
-    let child_id = code_id(CHILD);
     builder.application_node(
         PARENT,
         "binary",
-        &int_type,
-        add_body(&child_id, &code_id(PARAM_RIGHT)),
+        &key(T_INTEGER),
+        add_body(CHILD, PARAM_RIGHT),
     );
-    let parent_reference = code_id(PARENT);
     builder.code(
         FUNCTION,
         "function",
         "pure_function",
         T_INTEGER,
-        json!({
-            "term": "reference",
-            "target": {"domain": NODE_DOMAIN, "digest": parent_reference.digest},
-        }),
+        reference(PARENT),
     );
-    let (initial_outcome, mut wire, ids) = builder.read_resolved();
+    let (initial, mut wire, ids) = builder.read_resolved();
     assert!(matches!(
-        initial_outcome,
+        initial,
         quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
     ));
-    let child_id = ids.resolve(&child_id);
+    let parameter_id = ids.resolve(&code_id(PARAM_LEFT));
     let parent_id = ids.resolve(&code_id(PARENT));
-    let old_child_digest = child_id.digest.to_string();
-    let old_parent_digest = parent_id.digest.to_string();
-    let old_parameter = ids.resolve(&code_id(PARAM_LEFT));
-    let old_parameter_digest = old_parameter.digest.to_string();
-
-    let nodes = wire["semantic_graph"]["nodes"]
+    let parameter = wire["semantic_graph"]["nodes"]
         .as_array_mut()
-        .expect("fixture nodes");
-    let parameter = nodes
+        .expect("fixture nodes")
         .iter_mut()
-        .find(|node| node["node_id"]["digest"].as_str() == Some(&old_parameter_digest))
+        .find(|node| node["node_id"] == json!(parameter_id))
         .expect("left parameter node");
     parameter["body"]["members"][0]["value"]["value"] = json!("renamed_left");
 
-    let (repair_outcome, repaired, repair_ids) = PackageBuilder::from_wire(wire).read_resolved();
+    let (repaired, wire, repaired_ids) = PackageBuilder::from_wire(wire).read_resolved();
     assert!(matches!(
-        repair_outcome,
+        repaired,
         quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
     ));
-    let repaired_nodes = repaired["semantic_graph"]["nodes"]
+    assert_eq!(repaired_ids.resolve(&code_id(PARAM_LEFT)), parameter_id);
+    assert_eq!(repaired_ids.resolve(&code_id(PARENT)), parent_id);
+    let nodes = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("repaired nodes");
-    let repaired_parameter = repaired_nodes
+    let parent = nodes
         .iter()
-        .find(|node| node["body"]["members"][0]["value"]["value"].as_str() == Some("renamed_left"))
-        .expect("repaired parameter node");
-    let repaired_parameter_digest = repaired_parameter["node_id"]["digest"]
-        .as_str()
-        .expect("repaired parameter digest");
-    assert_ne!(repaired_parameter_digest, old_parameter_digest);
-
-    let repaired_child = repaired_nodes
-        .iter()
-        .find(|node| {
-            node["body"]["arguments"][0]["target"]["digest"].as_str()
-                == Some(repaired_parameter_digest)
-        })
-        .expect("repaired child application");
-    let repaired_child_digest = repaired_child["node_id"]["digest"]
-        .as_str()
-        .expect("repaired child digest");
-    assert_ne!(repaired_child_digest, old_child_digest);
-
-    let repaired_parent = repaired_nodes
-        .iter()
-        .find(|node| {
-            node["body"]["arguments"][0]["target"]["digest"].as_str() == Some(repaired_child_digest)
-        })
-        .expect("repaired parent application");
-    let repaired_parent_digest = repaired_parent["node_id"]["digest"]
-        .as_str()
-        .expect("repaired parent digest");
-    assert_ne!(repaired_parent_digest, old_parent_digest);
-    let resolved_parent = repair_ids.resolve(&parent_id);
+        .find(|node| node["node_id"] == json!(parent_id))
+        .expect("parent retains producer key");
     assert_eq!(
-        resolved_parent.digest.as_ref(),
-        repaired_parent_digest,
-        "FixtureIds resolves the old application ID to its admitted candidate ID"
+        parent["body"]["arguments"][0]["target"],
+        json!(code_id(CHILD))
     );
-    let function_id = repair_ids.resolve(&ids.resolve(&code_id(FUNCTION)));
-    let function_node = repaired_nodes
+    let function = nodes
         .iter()
-        .find(|node| node["node_id"]["digest"].as_str() == Some(function_id.digest.as_ref()))
-        .expect("repaired function node");
-    let descriptor = FunctionScheduleDeclaration {
-        function_node_id: function_id,
-        body_node_id: resolved_parent,
-        name: "parent".to_owned(),
-        parameters: vec![],
-        result_type_node_id: repair_ids.resolve(&ids.resolve(&code_id(T_INTEGER))),
-    };
-    let body_target: quire_contract_model::CheckedNodeId =
-        serde_json::from_value(function_node["body"]["target"].clone())
-            .expect("function body target ID");
-    assert_eq!(
-        descriptor.body_node_id, body_target,
-        "the resolved function descriptor binds the admitted body target"
-    );
-    assert_eq!(
-        repaired_parent_digest,
-        body_target.digest.as_ref(),
-        "parent key should be recomputed after its child key changes"
-    );
+        .find(|node| node["node_id"] == json!(code_id(FUNCTION)))
+        .expect("function retains producer key");
+    assert_eq!(function["body"]["target"], json!(parent_id));
 }
 
 // Duplicated per consumer (also `exact_function_agreement.rs`) for structural consistency with
@@ -1645,7 +1471,7 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
             .as_array()
             .expect("source map")
             .iter()
-            .filter(|entry| entry["node_id"]["digest"] == code_id(*code).digest.as_ref())
+            .filter(|entry| entry["node_id"] == serde_json::json!(code_id(*code)))
             .collect::<Vec<_>>();
         assert_eq!(entries.len(), spans.len());
         for (ordinal, (entry, (start, end))) in entries.iter().zip(spans).enumerate() {
@@ -2037,34 +1863,35 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
             .clone(),
     )
     .unwrap();
-    let node_ref =
-        |id: &quire_contract_model::CheckedNodeId| json!({"domain":id.domain, "digest":id.digest});
+    let node_ref = |id: &quire_contract_model::CheckedNodeId| json!(id);
     let body = json!({
         "term":"application", "operator":"binary",
         "operation":{"identity":"quire.op.integer.mul","laws":[],"mode":null,"member":null,"leaves":[]},
         "result_type":node_ref(&integer_id),
         "arguments":[{"term":"reference","target":node_ref(&value_id)},{"term":"reference","target":node_ref(&value_id)}],
     });
+    let inserted_body_id = fixture_code_id(&wire, body_code);
+    let inserted_call_id = fixture_code_id(&wire, call_code);
     let mut builder = PackageBuilder::from_wire(wire);
     builder
         .application_node_tagged(
             body_code,
             "expression",
             "binary",
-            integer_id.digest.as_ref(),
+            &source_path(&integer_id),
             body.clone(),
         )
         .application_node_tagged(
             call_code,
             "expression",
             "call",
-            integer_id.digest.as_ref(),
+            &source_path(&integer_id),
             body,
         );
     let package = admit(builder);
     let requested_id = package.ids.resolve(&requested_id);
-    let body_id = package.ids.resolve(&code_id(body_code));
-    let healthy_call_id = package.ids.resolve(&code_id(call_code));
+    let body_id = package.ids.resolve(&inserted_body_id);
+    let healthy_call_id = package.ids.resolve(&inserted_call_id);
     let integer_id = package.ids.resolve(&integer_id);
     let value_id = package.ids.resolve(&value_id);
     let function = quire_contract_codegen::ExactFunctionDeclaration {
@@ -2167,7 +1994,7 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         contents(&healthy_only, "src/lib.rs")
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
-    assert!(!contents(&combined, "src/lib.rs").contains(requested_id.digest.as_ref()));
+    assert!(!contents(&combined, "src/lib.rs").contains(&format!("{requested_id:?}")));
     let plain_result = generate_exact_function_oracles(
         &plain,
         &requests,
@@ -2249,76 +2076,56 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         "unmodified authoritative QSpec fixture must admit with the same runtime evidence"
     );
 
-    // Indexing an absent operation/laws path adds an invalid member to node 0's aggregate body.
-    // The typed identity encoder cannot mint an identity for that shape, so the reader rejects
-    // the unchanged package identity before reaching graph validation. The candidate below uses
-    // checked object traversal so it never creates that shape.
-    let mut first_bad_mutation = wire.clone();
-    assert!(
-        first_bad_mutation["semantic_graph"]["nodes"][0]["body"]["operation"]["laws"]
-            .as_array_mut()
-            .is_none()
-    );
-    let refusal = read_malformed_body_wire(first_bad_mutation);
-    let refusal = match refusal {
-        quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
-        other => panic!("malformed first mutation unexpectedly admitted: {other:?}"),
-    };
-    assert_eq!(
-        refusal.code,
-        quire_contract_model::CheckedPackageRefusalCode::StaleDependency
-    );
-    assert_eq!(
-        refusal.cause,
-        Some(quire_contract_model::CheckedPackageRefusalCause::ContentMismatch)
-    );
-
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let boolean_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let integer_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let text_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "text")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let model_placeholder = nodes
-        .iter()
-        .find(|node| {
-            node["node_tag"] == "model"
-                && node["semantic_form"] == "object_type"
-                && node["owner"]["kind"] == "model"
-                && node["owner"]["identity"] == "acme/orders"
-                && node["owner"]["node"] == "ix://acme/orders/Order"
-        })
-        .expect("published model-owned object type")["node_id"]["digest"]
-        .as_str()
-        .expect("model node digest")
-        .to_owned();
+    let boolean_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .expect("boolean key");
+    let boolean_type = source_path(&boolean_id);
+    let integer_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .expect("integer key");
+    let integer_type = source_path(&integer_id);
+    let text_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "text")
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .expect("text key");
+    let model_placeholder: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| {
+                node["node_tag"] == "model"
+                    && node["semantic_form"] == "object_type"
+                    && node["owner"]["kind"] == "model"
+                    && node["owner"]["identity"] == "acme/orders"
+                    && node["owner"]["node"] == "ix://acme/orders/Order"
+            })
+            .expect("published model-owned object type")["node_id"]
+            .clone(),
+    )
+    .expect("model key");
 
     let infinite_trace =
         json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
-    for path in ["lock", "identity_preimage"] {
-        let selections = wire[path]["profile_selections"].as_array_mut().unwrap();
-        let temporal = selections
-            .iter_mut()
-            .find(|selection| selection["role"] == "temporal_profile")
-            .expect("published temporal profile selection");
-        temporal["definition"] = infinite_trace.clone();
-    }
+    let selections = wire["lock"]["profile_selections"].as_array_mut().unwrap();
+    let temporal = selections
+        .iter_mut()
+        .find(|selection| selection["role"] == "temporal_profile")
+        .expect("published temporal profile selection");
+    temporal["definition"] = infinite_trace.clone();
     for node in wire["semantic_graph"]["nodes"].as_array_mut().unwrap() {
         let laws = node
             .get_mut("body")
@@ -2336,6 +2143,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         }
     }
 
+    let parameter_id = fixture_code_id(&wire, 992_005);
     let mut builder = PackageBuilder::from_wire(wire);
     let parameter_placeholder = key(992_005);
     builder.node(
@@ -2346,11 +2154,11 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         aggregate(vec![
             bound_member(
                 "name",
-                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":text_type}, "value":"left", "value_kind":"text"}),
+                json!({"term":"literal", "type":text_id, "value":"left", "value_kind":"text"}),
             ),
             bound_member(
                 "level",
-                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":integer_type}, "value":"0", "value_kind":"integer"}),
+                json!({"term":"literal", "type":integer_id, "value":"0", "value_kind":"integer"}),
             ),
         ]),
     );
@@ -2365,16 +2173,16 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
                 "identity":"quire.op.temporal.fair", "laws":[], "mode":null,
                 "member":{
                     "kind":"fairness", "fairness_kind":"weak", "granularity":"each",
-                    "declaration":{"domain":NODE_DOMAIN, "digest":model_placeholder},
+                    "declaration":model_placeholder,
                     "name":"size"
                 },
                 "leaves":[]
             },
-            "result_type":{"domain":NODE_DOMAIN, "digest":boolean_type},
+            "result_type":boolean_id,
             "arguments":[]
         }),
     );
-    let fairness_placeholder = code_id(FAIRNESS_NODE);
+    let fairness_placeholder = fixture_code_id(&builder.raw_wire(), FAIRNESS_NODE);
     let clause = builder.raw_wire()["semantic_graph"]["nodes"]
         .as_array()
         .unwrap()
@@ -2382,31 +2190,30 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .find(|node| node["node_tag"] == "temporal" && node["semantic_form"] == "temporal_clause")
         .expect("published temporal clause")
         .clone();
-    let clause_digest = clause["node_id"]["digest"].as_str().unwrap().to_owned();
+    let clause_id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(clause["node_id"].clone()).expect("clause key");
     let mut wire = builder.raw_wire();
     let clause = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
         .iter_mut()
-        .find(|node| node["node_id"]["digest"] == clause_digest)
+        .find(|node| node["node_id"] == json!(clause_id))
         .expect("temporal clause to update");
     let arguments = clause["body"]["arguments"].as_array_mut().unwrap();
     arguments[4] = json!({
-        "term":"aggregate", "members":[{"term":"reference", "target":{
-            "domain":NODE_DOMAIN, "digest":fairness_placeholder.digest
-        }}]
+        "term":"aggregate", "members":[{"term":"reference", "target":fairness_placeholder}]
     });
     let dependencies = clause["dependencies"].as_array_mut().unwrap();
-    dependencies.push(json!({"domain":NODE_DOMAIN, "digest":fairness_placeholder.digest}));
+    dependencies.push(json!(fairness_placeholder));
     builder = PackageBuilder::from_wire(wire);
 
     let body = json!({
         "term":"application", "operator":"binary",
         "operation":{"identity":"quire.op.integer.add","laws":[],"mode":null,"member":null,"leaves":[]},
-        "result_type":{"domain":NODE_DOMAIN, "digest":integer_type},
+        "result_type":integer_id,
         "arguments":[
-            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}},
-            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}}
+            {"term":"reference", "target":parameter_id},
+            {"term":"reference", "target":parameter_id}
         ]
     });
     builder
@@ -2419,17 +2226,17 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         )
         .application_node_tagged(HEALTHY_CALL, "expression", "call", &integer_type, body);
 
-    let (admission, _resolved_wire, ids) = builder.read_resolved();
+    let (admission, resolved_wire, ids) = builder.read_resolved();
     let package = match admission {
         quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("candidate must be admitted by public CheckedPackageV2::read: {other:?}"),
     };
     let fairness_id = ids.resolve(&fairness_placeholder);
-    let clause_id = ids.resolve(&id(&clause_digest));
-    let model_id = ids.resolve(&id(&model_placeholder));
-    let body_id = ids.resolve(&code_id(FUNCTION_BODY));
-    let call_id = ids.resolve(&code_id(HEALTHY_CALL));
-    let parameter_id = ids.resolve(&id(&parameter_placeholder));
+    let clause_id = ids.resolve(&clause_id);
+    let model_id = ids.resolve(&model_placeholder);
+    let body_id = ids.resolve(&fixture_code_id(&resolved_wire, FUNCTION_BODY));
+    let call_id = ids.resolve(&fixture_code_id(&resolved_wire, HEALTHY_CALL));
+    let parameter_id = ids.resolve(&parameter_id);
     let fairness = package
         .graph()
         .nodes
@@ -2446,14 +2253,14 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         parameters: vec![
             quire_contract_codegen::FunctionParameter {
                 name: "left".into(),
-                type_node_id: ids.resolve(&id(&integer_type)),
+                type_node_id: integer_id.clone(),
             },
             quire_contract_codegen::FunctionParameter {
                 name: "right".into(),
-                type_node_id: ids.resolve(&id(&integer_type)),
+                type_node_id: integer_id.clone(),
             },
         ],
-        result_type: ids.resolve(&id(&integer_type)),
+        result_type: integer_id,
         body: quire_contract_codegen::ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
         },
@@ -2719,7 +2526,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         contents(&healthy_only, "src/lib.rs")
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
-    assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
+    assert!(!contents(&combined, "src/lib.rs").contains(&format!("{fairness_id:?}")));
 
     let mut fairness_body = function.clone();
     fairness_body.name = "fairness_body".into();
@@ -3711,7 +3518,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
         .filter(|function| generated_names.contains(function.name.as_str()))
     {
         let node_id = package.ids.resolve(&function.node_id);
-        let subject = format!("// Subject: {}/{}", node_id.domain, node_id.digest);
+        let subject = format!("// Subject: {node_id:?}");
         assert!(
             header.contains(subject.as_str()),
             "function library lacks declaration {subject}"
@@ -3722,7 +3529,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .map(|claim| format!("{:?}", claim.node_id))
         .collect::<Vec<String>>();
     let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
     for artifact in first

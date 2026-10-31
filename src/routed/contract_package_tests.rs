@@ -189,9 +189,12 @@ mod tests {
             function add using v(a: Integer): Integer pure { a + a }\n";
         let library_source_id = SourceIdentity::new("test", "reader-library", "git", "fixture");
         let library_compiled = compile_package(
-            library_source_id.clone(),
-            "reader-library.native",
-            library_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: library_source_id.clone(),
+                package_name: "test/reader-library".to_owned(),
+                path: "reader-library.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -221,9 +224,12 @@ mod tests {
         }])
         .expect("one imported library");
         let program = compile_package(
-            SourceIdentity::new("test", "reader-program", "git", "fixture"),
-            "reader-program.native",
-            program_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "reader-program", "git", "fixture"),
+                package_name: "reader-program".to_owned(),
+                path: "reader-program.native",
+                bytes: program_source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
@@ -289,7 +295,7 @@ mod tests {
         )
     }
 
-    #[trace("TC-030", "FR-019-AC-48")]
+    #[trace("TC-030", "FR-019-AC-54")]
     #[test]
     fn imported_function_reader_refusal_is_whole_envelope() {
         let (checked, ids, library) = imported_integer_function_case();
@@ -321,16 +327,13 @@ mod tests {
         let ContractPackageReadResult::Refused(stale) = stale else {
             panic!("wrong admitted dependency must refuse: {stale:?}");
         };
-        assert_ne!(wrong.package_id(), library.package_id());
-        assert!(stale.expected.is_some(), "{stale:?}");
-        assert!(stale.actual.is_some());
+        assert_ne!(wrong, library);
+        assert!(!stale.loci.is_empty(), "{stale:?}");
         let projected = crate::routed::capability::project_contract_package_refusal(&stale);
         let wire = serde_json::to_value(projected).expect("serialize dependency mismatch");
-        assert_eq!(
-            wire["expected"],
-            serde_json::to_value(stale.expected).unwrap()
-        );
-        assert_eq!(wire["actual"], serde_json::to_value(stale.actual).unwrap());
+        assert_eq!(wire["loci"], serde_json::to_value(&stale.loci).unwrap());
+        assert!(wire.get("expected").is_none());
+        assert!(wire.get("actual").is_none());
         let item = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
             extent: Some(ExtentClassification {
@@ -366,10 +369,7 @@ mod tests {
             panic!("reader refusal must stop negotiation: {result:?}");
         };
         assert_eq!(refusal.code, expected.code);
-        assert_eq!(
-            refusal.path.as_deref(),
-            expected.path.as_ref().map(|path| path.as_str())
-        );
+        assert_eq!(refusal.loci, expected.loci);
         assert_eq!(refusal.cause, expected.cause);
         assert_eq!(refusal.locus.as_ref(), expected.locus.as_ref());
         assert_eq!(
@@ -380,16 +380,17 @@ mod tests {
             refusal.document_pointer.as_deref(),
             expected.document_pointer.as_ref().map(|path| path.as_str())
         );
-        assert_eq!(refusal.expected.as_ref(), expected.expected.as_ref());
-        assert_eq!(refusal.actual.as_ref(), expected.actual.as_ref());
+        assert_eq!(refusal.extension_detail, expected.extension_detail);
+        assert_eq!(refusal.protocol_detail, expected.protocol_detail);
+        assert_eq!(refusal.terminal_duplicate, expected.terminal_duplicate);
         let serialized = serde_json::to_value(&refusal).expect("serialize reader projection");
         assert_eq!(
             serialized["code"],
             serde_json::to_value(expected.code).unwrap()
         );
         assert_eq!(
-            serialized["path"],
-            serde_json::to_value(&expected.path).unwrap()
+            serialized["loci"],
+            serde_json::to_value(&expected.loci).unwrap()
         );
         assert_eq!(
             serialized["cause"],
@@ -408,13 +409,20 @@ mod tests {
             serde_json::to_value(&expected.document_pointer).unwrap()
         );
         assert_eq!(
-            serialized["expected"],
-            serde_json::to_value(&expected.expected).unwrap()
+            serialized["extension_detail"],
+            serde_json::to_value(&expected.extension_detail).unwrap()
         );
         assert_eq!(
-            serialized["actual"],
-            serde_json::to_value(&expected.actual).unwrap()
+            serialized["protocol_detail"],
+            serde_json::to_value(&expected.protocol_detail).unwrap()
         );
+        assert_eq!(
+            serialized["terminal_duplicate"],
+            serde_json::to_value(&expected.terminal_duplicate).unwrap()
+        );
+        assert!(serialized.get("path").is_none());
+        assert!(serialized.get("expected").is_none());
+        assert!(serialized.get("actual").is_none());
         assert!(serialized.get("expected_node_id").is_none());
     }
 
@@ -424,9 +432,12 @@ mod tests {
 
     fn admitted_source(source: &str) -> CheckedPackageV2 {
         let compiled = compile_package(
-            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-            "package-items.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+                package_name: "package-items".to_owned(),
+                path: "package-items.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -644,6 +655,7 @@ mod tests {
         let (_, admitted, positions, _, excluded) = excluded_fixture();
         let result = generate_composite_equality_oracles(
             &admitted,
+            None,
             None,
             &positions,
             &[1],
@@ -1111,7 +1123,7 @@ mod tests {
 
         let (shared, shared_ids) = source_bound_call_package().admit_resolved();
         let (different, different_ids) = ac11_classifier_package().admit_resolved();
-        assert_ne!(shared.package_id(), different.package_id());
+        assert_ne!(shared.lock(), different.lock());
         assert_eq!(
             shared_ids.resolve(&code_id(SOURCE_CALL)),
             different_ids.resolve(&code_id(SOURCE_CALL)),
@@ -1244,7 +1256,7 @@ mod tests {
         let call = ids.resolve(&code_id(SOURCE_CALL));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
-        assert_ne!(checked.package_id(), other.package_id());
+        assert_ne!(checked.lock(), other.lock());
         assert_eq!(
             call, other_call,
             "distinct packages share a checked node id"
@@ -1396,17 +1408,24 @@ mod tests {
         }
     }
 
-    fn replace_exact_digest(value: &mut serde_json::Value, old: &str, new: &str) {
+    fn replace_exact_node(
+        value: &mut serde_json::Value,
+        old: &serde_json::Value,
+        new: &serde_json::Value,
+    ) {
+        if value == old {
+            *value = new.clone();
+            return;
+        }
         match value {
-            serde_json::Value::String(text) if text == old => *text = new.to_owned(),
             serde_json::Value::Array(items) => {
                 for item in items {
-                    replace_exact_digest(item, old, new);
+                    replace_exact_node(item, old, new);
                 }
             }
             serde_json::Value::Object(members) => {
                 for member in members.values_mut() {
-                    replace_exact_digest(member, old, new);
+                    replace_exact_node(member, old, new);
                 }
             }
             serde_json::Value::Null
@@ -1434,8 +1453,11 @@ mod tests {
             .node_id
             .clone();
         let absent = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: "0".repeat(64).into_boxed_str(),
+            package: source.name().into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "absent".into(),
+            )],
+            ordinal: 0,
         };
         let requested = vec![
             function.clone(),
@@ -1676,7 +1698,7 @@ mod tests {
                 }
                 PackageItem::Refused { record, .. } => panic!("comparison must lower: {record:?}"),
             }
-            identities.push(admitted.identity().clone());
+            identities.push(admitted.wire().package.source.clone());
         }
         assert_ne!(
             identities[0], identities[1],
@@ -1703,8 +1725,11 @@ mod tests {
                 .node_id
                 .clone();
             let absent = CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: "0".repeat(64).into_boxed_str(),
+                package: checked.name().into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    "absent".into(),
+                )],
+                ordinal: 0,
             };
             let requested = vec![expression.clone(), absent.clone()];
             let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
@@ -1801,7 +1826,7 @@ mod tests {
                 source.contents.contains(rendered),
                 "the admitted operation is rendered"
             );
-            emitted.push((admitted.identity().clone(), source.contents));
+            emitted.push((admitted.wire().package.source.clone(), source.contents));
         }
         assert_ne!(emitted[0].0, emitted[1].0, "the source packages differ");
         assert_ne!(
@@ -1868,7 +1893,7 @@ mod tests {
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("contract scalar library");
-        let subject = format!("{}/{}", expression.domain, expression.digest);
+        let subject = format!("{expression:?}");
         let header = lib
             .contents
             .lines()
@@ -2497,7 +2522,7 @@ mod tests {
         );
         assert_eq!(
             generated_claim.contract_package_identity,
-            *admitted.identity()
+            admitted.wire().package.source
         );
         assert!(generated
             .artifacts
@@ -2653,8 +2678,8 @@ mod tests {
             "shared application identity"
         );
         assert_ne!(
-            first.identity(),
-            second.identity(),
+            first.wire().package.source,
+            second.wire().package.source,
             "distinct admitted authorities"
         );
         let generate = |package: &quire_contract_model::ContractPackageV1,
@@ -2665,7 +2690,10 @@ mod tests {
             let ClaimDisposition::Generated(value) = &claim.result else {
                 panic!("package-local scalar must generate: {:?}", claim.result);
             };
-            assert_eq!(&value.contract_package_identity, package.identity());
+            assert_eq!(
+                &value.contract_package_identity,
+                &package.wire().package.source
+            );
             assert_eq!(value.node_id, first_expression);
             assert_eq!(
                 value.source_map,
@@ -2847,7 +2875,10 @@ mod tests {
                 generated.claim_map.items[0].result
             );
         };
-        assert_eq!(claim.contract_package_identity, *admitted.identity());
+        assert_eq!(
+            claim.contract_package_identity,
+            admitted.wire().package.source
+        );
         assert_eq!(claim.node_id, requested[1]);
         let ContractRootViewV1::Lowered(closure) = admitted
             .reached_closure(&requested[1])
@@ -2893,9 +2924,12 @@ mod tests {
             function mixed using v(a: Int[0, 9], p: Integer): Integer pure { a + p }\n";
         let checked = admitted_source(source);
         let genuine = qsl_replay::compile_admitted(
-            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-            "package-items.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+                package_name: "package-items".to_owned(),
+                path: "package-items.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -2916,10 +2950,7 @@ mod tests {
             checked, recompiled,
             "retain the whole unchanged source package"
         );
-        assert!(genuine
-            .context()
-            .package_id()
-            .matches(&genuine.package().package_id()));
+        assert_eq!(genuine.context().package_name().as_str(), checked.name());
 
         let integer = checked
             .graph()
@@ -3026,6 +3057,7 @@ mod tests {
         ));
         let equality = generate_composite_equality_oracles(
             &admitted,
+            Some(&checked),
             Some(genuine.context()),
             &drivers(&requested),
             &[2],
@@ -3135,9 +3167,12 @@ mod tests {
             SOURCE.replace("a = a", "a < 5")
         );
         let library_compiled = compile_package(
-            SourceIdentity::new("test", "geometry", "git", "fixture"),
-            "geometry.native",
-            library_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "geometry", "git", "fixture"),
+                package_name: "test/geometry".to_owned(),
+                path: "geometry.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -3196,9 +3231,12 @@ mod tests {
         }])
         .expect("one supplied library");
         let compiled = compile_package(
-            SourceIdentity::new("test", "program", "git", "fixture"),
-            "program.native",
-            program_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "program", "git", "fixture"),
+                package_name: "program".to_owned(),
+                path: "program.native",
+                bytes: program_source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
@@ -3296,10 +3334,10 @@ mod tests {
         };
         assert_eq!(closure.selected_references.len(), 2);
         assert!(closure.selected_references.iter().any(|selected| {
-            selected.package == *library.package_id() && selected.node == target
+            selected.package.as_ref() == library.name() && selected.node == target
         }));
         assert!(closure.selected_references.iter().any(|selected| {
-            selected.package == *library.package_id() && selected.node == second_target
+            selected.package.as_ref() == library.name() && selected.node == second_target
         }));
         assert!(closure
             .nodes
@@ -3347,7 +3385,7 @@ mod tests {
             &[0],
         )
         .expect("extra unselected package does not redirect CG");
-        assert_eq!(extra.identity(), admitted.identity());
+        assert_eq!(extra.wire().package.source, admitted.wire().package.source);
         assert_eq!(extra_generated, generated);
     }
 
@@ -3382,39 +3420,24 @@ mod tests {
         assert_ne!(local, target);
         let mut collision: serde_json::Value =
             serde_json::from_slice(&checked_bytes).expect("QSL checked wire");
-        replace_exact_digest(&mut collision, &local.digest, &target.digest);
+        replace_exact_node(
+            &mut collision,
+            &serde_json::to_value(&local).expect("local key"),
+            &serde_json::to_value(&target).expect("selected target key"),
+        );
         for pointer in ["/semantic_graph/nodes", "/source_map"] {
             collision
                 .pointer_mut(pointer)
                 .and_then(serde_json::Value::as_array_mut)
                 .expect("checked wire array")
                 .sort_by(|left, right| {
-                    left["node_id"]["digest"]
-                        .as_str()
-                        .cmp(&right["node_id"]["digest"].as_str())
+                    let left: CheckedNodeId =
+                        serde_json::from_value(left["node_id"].clone()).expect("left key");
+                    let right: CheckedNodeId =
+                        serde_json::from_value(right["node_id"].clone()).expect("right key");
+                    left.cmp(&right)
                 });
         }
-        let selections: quire_contract_model::CheckedPackageIdentityPreimageV2 =
-            serde_json::from_value(collision["identity_preimage"].clone())
-                .expect("typed identity selections");
-        let nodes: Vec<quire_contract_model::CheckedSemanticNodeV2> =
-            serde_json::from_value(collision["semantic_graph"]["nodes"].clone())
-                .expect("typed graph nodes");
-        let preimage = quire_contract_model::CheckedPackageIdentityPreimageRefV2 {
-            version: &selections.version,
-            edition: &selections.edition,
-            profile_selections: &selections.profile_selections,
-            definition_selections: &selections.definition_selections,
-            model_selections: &selections.model_selections,
-            required_features: &selections.required_features,
-            dependency_selections: &selections.dependency_selections,
-            identity_projection: &nodes,
-        };
-        collision["package_id"]["digest"] = serde_json::Value::String(
-            quire_canonical::sha256(&preimage, quire_canonical::Limits::new(1 << 24))
-                .expect("identity preimage canonicalizes")
-                .to_string(),
-        );
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))
                 .expect("checked wire canonicalizes");
@@ -3426,15 +3449,13 @@ mod tests {
             CheckedPackageV2ReadResult::Refused(refusal) => refusal,
             other => panic!("forged same-key wire must refuse before CG: {other:?}"),
         };
-        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
         assert_eq!(
-            refusal.cause,
-            Some(quire_contract_model::CheckedPackageRefusalCause::StaleNodeKey)
+            refusal.code,
+            CheckedPackageRefusalCode::InvalidSemanticGraph
         );
-        assert_eq!(refusal.locus, Some(target));
-        assert_eq!(refusal.expected_node_id(), Some(&local));
+        assert_eq!(refusal.cause, None);
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str()),
+            refusal.loci[0].path.as_ref().map(|path| path.as_str()),
             Some("/semantic_graph/nodes/11/node_id")
         );
     }

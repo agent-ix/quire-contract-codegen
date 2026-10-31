@@ -73,8 +73,8 @@ mod request_lookup_work {
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1, StateClauseKind,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
+    CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
 };
 
 use crate::{
@@ -200,11 +200,12 @@ fn checked_lookup<'a, 'lookup>(
         .or_insert_with(|| CheckedLookup::new(package))
 }
 
-/// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
-/// distinct allocations of the same admitted identity.
+/// Reuse admitted scalar graph lookups within one borrowed package instance. The cache key
+/// keeps same-name packages with different locks or graphs separate.
 pub(crate) struct ScalarFormLookups<'a> {
-    checked: BTreeMap<CheckedSemanticId, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
-    contract: BTreeMap<CheckedSemanticId, ContractLookup<'a>>,
+    checked:
+        BTreeMap<*const CheckedPackageV2, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
+    contract: BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
 }
 
 impl<'a> ScalarFormLookups<'a> {
@@ -221,7 +222,7 @@ impl<'a> ScalarFormLookups<'a> {
         node_id: &CheckedNodeId,
     ) -> Option<&CheckedSemanticNodeV2> {
         self.checked
-            .entry(package.package_id().clone())
+            .entry(std::ptr::from_ref(package))
             .or_insert_with(|| {
                 let mut graph = BTreeMap::new();
                 for node in &package.graph().nodes {
@@ -235,7 +236,7 @@ impl<'a> ScalarFormLookups<'a> {
 
     fn contract(&mut self, package: &'a ContractPackageV1) -> &ContractLookup<'a> {
         self.contract
-            .entry(package.identity().clone())
+            .entry(std::ptr::from_ref(package))
             .or_insert_with(|| ContractLookup::new(package))
     }
 }
@@ -461,23 +462,23 @@ struct ItemState {
 #[derive(Clone, Eq, PartialEq)]
 enum ItemIdentity {
     Node {
-        package: String,
+        package: ContractSourceV1,
         node: CheckedNodeId,
         result_selection: ContractDriverResultSelection,
     },
     /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
     StateFrame {
-        package: String,
+        package: ContractSourceV1,
         clause: CheckedNodeId,
         role: StateFrameRole,
     },
     Collection {
-        package: String,
+        package: ContractSourceV1,
         function: CheckedNodeId,
         quantifier: CheckedNodeId,
     },
     V2Clause {
-        package: String,
+        package: ContractSourceV1,
         clause: CheckedNodeId,
     },
 }
@@ -711,7 +712,10 @@ fn classify_v2_clause<'a>(
             source_map: lookup.occurrences(clause),
         },
         identity: Some(ItemIdentity::V2Clause {
-            package: package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
             clause: clause.clone(),
         }),
         outcome,
@@ -766,7 +770,10 @@ fn classify_collection<'a>(
             source_map: lookup.occurrences(node_id),
         },
         identity: Some(ItemIdentity::Collection {
-            package: package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
             function: function_id.clone(),
             quantifier: node_id.clone(),
         }),
@@ -826,7 +833,10 @@ fn classify_state_frame<'a>(
             source_map: lookup.occurrences(request.clause),
         },
         identity: Some(ItemIdentity::StateFrame {
-            package: request.package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: request.package.name().into(),
+                lock: request.package.lock().clone(),
+            },
             clause: request.clause.clone(),
             role,
         }),
@@ -889,11 +899,11 @@ fn classify_node(
         source_map: lookup.occurrences(node_id),
     };
     let identity = Some(ItemIdentity::Node {
-        package: package.identity().digest.to_string(),
+        package: package.wire().package.source.clone(),
         node: node_id.clone(),
         result_selection: result_selection.clone(),
     });
-    let outcome = if claim_map.package_id != package.wire().package.source.package_id {
+    let outcome = if claim_map.source != package.wire().package.source {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
@@ -927,7 +937,9 @@ pub(crate) fn classify_scalar_form<'a>(
     node_id: &CheckedNodeId,
     lookups: &mut ScalarFormLookups<'a>,
 ) -> ScalarFormAssessment {
-    if contract.wire().package.source.package_id != *package.package_id() {
+    if contract.wire().package.source.name.as_ref() != package.name()
+        || contract.wire().package.source.lock != *package.lock()
+    {
         return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarSourceMismatch);
     }
     let items = match crate::core::contract_package::PackageItems::new(contract, positions) {
@@ -1190,7 +1202,7 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
 }
 
 fn reject_duplicates_and_mixtures(states: &mut [ItemState]) {
-    let mut first_state_package: Option<String> = None;
+    let mut first_state_package: Option<ContractSourceV1> = None;
     for index in 0..states.len() {
         let Some(identity) = states[index].identity.clone() else {
             continue;
@@ -1381,6 +1393,7 @@ mod tests {
             }
             let located = qsl_replay::call_site(
                 qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin", "git", "1"),
+                "state-frame-twin".to_owned(),
                 "test:state-frame-twin",
                 source.as_bytes(),
                 [twin.domain.as_slice()],
@@ -1388,13 +1401,9 @@ mod tests {
                 &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
             )
             .expect("distinct authored QSL clauses compile through the owner");
-            let wire: serde_json::Value = serde_json::from_slice(&located.package).unwrap();
-            let digest = wire["lock"]["model_selections"][0]["digest"]
-                .as_str()
-                .unwrap();
             let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
             evidence
-                .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
+                .insert_domain_package_document("test/bank", twin.domain.clone())
                 .unwrap();
             evidence.support_feature("quire.value.complete/v1");
             let package = match CheckedPackageV2::read(
@@ -1498,11 +1507,8 @@ mod tests {
             .unwrap();
         // Author a finite ordered collection over the original [0,1000] integer field type.
         balance["multiplicity"] = json!({"lower": 0, "upper": 3, "ordered": true, "unique": false});
-        let limits = quire_canonical::Limits::new(1 << 20);
-        let domain = quire_canonical::to_vec(&document, limits).unwrap();
-        let digest = quire_canonical::sha256(&document, limits)
-            .unwrap()
-            .to_string();
+        let domain =
+            quire_canonical::to_vec(&document, quire_canonical::Limits::new(1 << 20)).unwrap();
         let body = (0..quantifiers)
             .map(|index| format!("forall(item in deref(input).balance: item >= {index})"))
             .collect::<Vec<_>>()
@@ -1510,20 +1516,17 @@ mod tests {
         let source = format!(
             "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.model.complete/v1\";\n\
-         model Bank = \"test/bank\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n\
+         model Bank = \"test/bank\";\n\
          predicate inspect using v (input: Bank::Account): Boolean {{ {body} }}\n"
         );
         let selection =
             qsl_replay::QualifiedName::new(vec![qsl_replay::Identifier::new("inspect").unwrap()])
                 .unwrap();
+        let package_name = format!("ir276-collection-request-{quantifiers}");
         let located = qsl_replay::call_site(
-            qsl_replay::SourceIdentity::new(
-                "agent-ix",
-                "ir276-collection-request",
-                "git",
-                "fixture",
-            ),
-            "ir276-collection-request",
+            qsl_replay::SourceIdentity::new("agent-ix", package_name.as_str(), "git", "fixture"),
+            package_name.clone(),
+            package_name.as_str(),
             source.as_bytes(),
             [domain.as_slice()],
             &qsl_replay::DependencyInput::default(),
@@ -1532,12 +1535,16 @@ mod tests {
         .expect("public QSL admission of authored finite collection predicate");
         let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(digest, domain)
+            .insert_domain_package_document("test/bank", domain)
             .unwrap();
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
             &located.package,
-            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            quire_contract_model::CheckedPackageReadLimits {
+                // The controlled 32-quantifier QSL output is about 6.2 MiB.
+                bytes: 8 << 20,
+                ..quire_contract_model::CheckedPackageReadLimits::bounded()
+            },
             &evidence,
         ) {
             quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
@@ -1547,7 +1554,10 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id.digest.as_ref() == located.site.function.to_string())
+            .find(|node| {
+                crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                    == Some(&located.site.function)
+            })
             .unwrap()
             .node_id
             .clone();
@@ -1686,7 +1696,7 @@ mod tests {
         use crate::kani::generate::collection::take_collection_graph_builds;
         let (left, left_function, left_nodes) = admitted_collection_request_fixture(8);
         let (right, right_function, right_nodes) = admitted_collection_request_fixture(16);
-        assert_ne!(left.package_id(), right.package_id());
+        assert!(left.name() != right.name() || left.lock() != right.lock());
         let items = [
             ObligationItem::CollectionClaim {
                 package: &left,

@@ -15,118 +15,114 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Mutex, OnceLock};
+use std::collections::BTreeSet;
 
 use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
 use quire_contract_model::{
-    derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CheckedNodeId, CheckedNodePathSegment, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
-pub use rekey::FixtureIds;
+
+/// Resolves the base fixture's authored paths under the imported package's name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FixtureIds {
+    package_name: Box<str>,
+}
+
+impl FixtureIds {
+    fn for_wire(wire: &Value) -> Self {
+        Self {
+            package_name: wire["name"].as_str().expect("fixture package name").into(),
+        }
+    }
+
+    /// Resolve a fixture node while preserving IDs already owned by the imported package.
+    pub fn resolve(&self, node: &CheckedNodeId) -> CheckedNodeId {
+        let mut node = node.clone();
+        if node.package.as_ref() == BASE_PACKAGE_NAME {
+            node.package = self.package_name.clone();
+        }
+        for segment in &mut node.path {
+            if let CheckedNodePathSegment::Node(child) = segment {
+                **child = self.resolve(child);
+            }
+        }
+        node
+    }
+
+    /// Resolve fixture references in a JSON term submitted with the imported wire.
+    pub fn resolve_value(&self, value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                if object.get("package") == Some(&json!(BASE_PACKAGE_NAME))
+                    && object.contains_key("path")
+                    && object.contains_key("ordinal")
+                {
+                    object.insert("package".to_owned(), json!(self.package_name));
+                }
+                for child in object.values_mut() {
+                    self.resolve_value(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    self.resolve_value(child);
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 #[path = "codes.rs"]
 mod codes;
 pub use codes::*;
 
-pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
-
-/// Every code this module ever builds a node for, mapped to its real node
-/// id: the computed application digest for an application-bodied node (see
-/// [`PackageBuilder::application_code`]), or the readable placeholder
-/// [`key`] for a plain node built by [`PackageBuilder::code`]/
-/// [`PackageBuilder::code_in_group`] (`validate_application_keys` never
-/// re-derives those, so `key(code)` really is their id). [`code_id`] reads
-/// it so a caller building `golden_items()`/expected node ids without a
-/// `&mut PackageBuilder` in hand still gets the same id IR would.
-fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
-    static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
-}
-
-/// Registers `code -> digest` once via [`application_registry`]. A second
-/// registration for the same `code` must name the same `digest` -- a
-/// differing one means two distinct fixture nodes accidentally share one
-/// `code`, which silently overwriting would hide: every later [`code_id`]
-/// call for that `code`, and every assertion built on it (including a
-/// negative one like `!lib.contains(code_id(code).digest.as_ref())`), would
-/// then resolve to whichever node happened to register last, without
-/// telling a caller the code it asked for isn't the one it thinks it is.
-fn register_code(code: u32, digest: String) {
-    let mut registry = application_registry().lock().expect("registry lock");
-    match registry.get(&code) {
-        Some(existing) => assert_eq!(
-            *existing, digest,
-            "code {code} is already registered as {existing}, cannot also register it as \
-             {digest} -- two distinct fixture nodes share one code"
-        ),
-        None => {
-            registry.insert(code, digest);
-        }
-    }
-}
-
-/// The base package's enum declaration node key.
-pub fn enum_type_digest() -> String {
+/// The base package's enum declaration path.
+pub fn enum_type_path() -> String {
     base_node_ids().enum_type
 }
 
 pub fn enum_type_id() -> CheckedNodeId {
-    id(&enum_type_digest())
+    id(&enum_type_path())
 }
 
-pub fn id(digest: &str) -> CheckedNodeId {
-    serde_json::from_value(node_ref(digest)).expect("node id")
+pub fn id(path: &str) -> CheckedNodeId {
+    serde_json::from_value(node_ref(path)).expect("fixture node id")
 }
 
-/// The node id IR actually assigns for `code`, read from [`application_registry`].
-/// Ensures the registry is populated by building the corpus once (discarding
-/// the builder) if this is the first call in the process -- `corpus_package`
-/// registers every code this module defines via `code`/`code_in_group`/
-/// `application_code`, so one build is enough for the whole test binary. No
-/// code this module's tests request is ever deliberately left unbuilt, so an
-/// unregistered code here is always a fixture defect -- silently falling
-/// back to a placeholder would hide it behind whichever assertion the wrong
-/// code happened to still satisfy, so this panics instead.
-fn registered_digest(code: u32) -> String {
-    application_registry()
-        .lock()
-        .expect("registry lock")
-        .get(&code)
-        .cloned()
-        .unwrap_or_else(|| panic!("code {code} is not registered yet"))
-}
-
+/// Each fixture code is a producer-assigned source path, independent of its body.
 pub fn code_id(code: u32) -> CheckedNodeId {
-    if !application_registry()
-        .lock()
-        .expect("registry lock")
-        .contains_key(&code)
-    {
-        corpus_package();
-    }
-    let digest = application_registry()
-        .lock()
-        .expect("registry lock")
-        .get(&code)
-        .cloned();
-    match digest {
-        Some(digest) => id(&digest),
-        None => panic!(
-            "code {code} is not registered by any PackageBuilder constructor -- build it via \
-             `code`/`code_in_group`/`application_code` before requesting its id"
-        ),
-    }
+    id(&key(code))
 }
 
-fn node_ref(digest: &str) -> Value {
-    json!({"domain": NODE_DOMAIN, "digest": digest})
+/// Give numeric fixture codes source-name segments accepted by IR's identifier grammar.
+fn authored_path(path: &str) -> Vec<String> {
+    path.split('/')
+        .map(|segment| {
+            if segment.bytes().all(|byte| byte.is_ascii_digit()) {
+                format!("n{segment}")
+            } else {
+                segment.to_owned()
+            }
+        })
+        .collect()
+}
+
+fn node_ref(path: &str) -> Value {
+    if path == key(REFERENCE_MODEL_ROOT) {
+        json!({"package": REFERENCE_MODEL, "path": ["model", "model_root", REFERENCE_MODEL], "ordinal": 0})
+    } else if path == key(REFERENCE_OBJECT_TYPE) {
+        json!({"package": REFERENCE_MODEL, "path": ["model", "object_type", REFERENCE_OBJECT], "ordinal": 0})
+    } else {
+        json!({"package": BASE_PACKAGE_NAME, "path": authored_path(path), "ordinal": 0})
+    }
 }
 
 pub fn reference(code: u32) -> Value {
@@ -314,9 +310,9 @@ fn parameter_body(name: &str) -> Value {
     ])
 }
 
-/// A `reference` term to the node with digest `digest`.
-fn reference_to(digest: &str) -> Value {
-    json!({"term": "reference", "target": node_ref(digest)})
+/// A reference to a node at its producer-assigned path.
+fn reference_to(path: &str) -> Value {
+    json!({"term": "reference", "target": node_ref(path)})
 }
 
 /// A `reference` operand to the parameter typed by `type_code`. QSL keys every operand as its
@@ -367,23 +363,23 @@ fn convert_body(argument: Value, target: u32) -> Value {
 }
 
 /// FR-322's application-node dependency join for `body`: every `reference` target and every
-/// operation member `declaration` of an `application` term, deduplicated and digest-ascending.
+/// operation member `declaration` of an `application` term, deduplicated in ID order.
 /// `result_type` and a `literal`'s own `type` are not dependencies.
-fn application_dependencies(body: &Value) -> Vec<String> {
-    fn walk(value: &Value, targets: &mut BTreeSet<String>) {
+fn application_dependencies(body: &Value) -> Vec<CheckedNodeId> {
+    fn walk(value: &Value, targets: &mut BTreeSet<CheckedNodeId>) {
         match value {
             Value::Object(map) => {
                 match map.get("term").and_then(Value::as_str) {
                     Some("reference") => {
-                        if let Some(digest) = map["target"]["digest"].as_str() {
-                            targets.insert(digest.to_owned());
+                        if let Ok(target) = serde_json::from_value(map["target"].clone()) {
+                            targets.insert(target);
                         }
                     }
                     Some("application") => {
-                        if let Some(digest) =
-                            map["operation"]["member"]["declaration"]["digest"].as_str()
-                        {
-                            targets.insert(digest.to_owned());
+                        if let Ok(target) = serde_json::from_value(
+                            map["operation"]["member"]["declaration"].clone(),
+                        ) {
+                            targets.insert(target);
                         }
                     }
                     _ => {}
@@ -406,11 +402,9 @@ fn application_dependencies(body: &Value) -> Vec<String> {
 /// `correspondence` nodes and on `value`/`enum_value` and `value`/`parameter` nodes (QSL emits a
 /// parameter with no declaration), and otherwise requires it exactly when the node carries a
 /// `declaration`-role occurrence — which every node built by this module does but a parameter,
-/// whose occurrence role is `expression`. The qualified name is not
-/// cross-checked against anything else the reader validates (only that each
-/// segment is a nonempty ASCII identifier), so a name derived from the
-/// node's own digest is sufficient and stays unique by construction.
-fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
+/// whose occurrence role is `expression`. The reader requires each declared
+/// node's assigned path to equal its qualified name segment for segment.
+fn declaration_for(tag: &str, form: &str, path: &str) -> Option<Value> {
     let forbidden = matches!(
         tag,
         "expression" | "relation" | "state" | "temporal" | "correspondence"
@@ -418,7 +412,7 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
     if forbidden {
         None
     } else {
-        Some(json!({"qualified_name": [format!("n{digest}")]}))
+        Some(json!({"qualified_name": authored_path(path)}))
     }
 }
 
@@ -469,20 +463,10 @@ fn reference_model_document() -> Value {
 impl Default for PackageBuilder {
     fn default() -> Self {
         let mut value = base_package();
-        let document = reference_model_document();
-        let digest = quire_canonical::sha256(
-            &document,
-            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-        )
-        .expect("canonical model document")
-        .to_string();
-        let selection = json!({
-            "identity": REFERENCE_MODEL,
-            "digest_domain": "sha256-jcs",
-            "digest": digest.clone(),
-        });
-        value["lock"]["model_selections"] = json!([selection]);
-        value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
+        value["lock"]
+            .as_object_mut()
+            .expect("fixture lock")
+            .remove("model_selections");
         let mut builder = Self { value };
         let root_id = key(REFERENCE_MODEL_ROOT);
         let source = builder.value["lock"]["sources"][0].clone();
@@ -498,7 +482,7 @@ impl Default for PackageBuilder {
                 "dependencies": [],
                 "occurrences": [{"role": "generated", "ordinal": 0}],
                 "body": aggregate(vec![]),
-                "owner": {"kind": "model_root", "identity": REFERENCE_MODEL, "digest": digest},
+                "owner": {"kind": "model_root", "identity": REFERENCE_MODEL},
             }));
         let position = builder.value["source_map"]
             .as_array()
@@ -517,17 +501,47 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    fn node_ref(&self, path: &str) -> Value {
+        let mut node = node_ref(path);
+        if node["package"] == BASE_PACKAGE_NAME {
+            node["package"] = self.value["name"].clone();
+        }
+        node
+    }
+
+    fn repackage(&self, value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                if object.get("package") == Some(&json!(BASE_PACKAGE_NAME))
+                    && object.contains_key("path")
+                    && object.contains_key("ordinal")
+                {
+                    object.insert("package".to_owned(), self.value["name"].clone());
+                }
+                for child in object.values_mut() {
+                    self.repackage(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    self.repackage(child);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn omit_code(&mut self, code: u32) {
-        let digest = code_id(code).digest;
+        let node_id = self.node_ref(&key(code));
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
         let before = nodes.len();
-        nodes.retain(|node| node["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        nodes.retain(|node| node["node_id"] != node_id);
         assert_eq!(nodes.len() + 1, before, "one node for code {code}");
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let before = map.len();
-        map.retain(|entry| entry["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        map.retain(|entry| entry["node_id"] != node_id);
         assert_eq!(map.len() + 1, before, "one source entry for code {code}");
     }
 
@@ -538,21 +552,20 @@ impl PackageBuilder {
     }
 
     /// Add a model-owned object type using the selected QSpec model namespace.
-    /// The placeholder identity is settled by Contract IR's public structural
-    /// candidate API when this fixture is admitted.
+    /// The fixture assigns this model-owned node a stable source path.
     pub fn model_owned_object_type(&mut self, code: u32, identity: &str, node: &str) -> &mut Self {
-        let digest = key(code);
-        register_code(code, digest.clone());
+        let path = key(code);
+        let node_id = self.node_ref(&path);
         let source = self.value["lock"]["sources"][0].clone();
         self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes")
             .push(json!({
-                "node_id": node_ref(&digest),
+                "node_id": node_id,
                 "schema_version": "quire.checked-semantic-graph/v2",
                 "node_tag": "model",
                 "semantic_form": "object_type",
-                "semantic_type": node_ref(&digest),
+                "semantic_type": node_id,
                 "dependencies": [],
                 "occurrences": [{"role": "type", "ordinal": 0}],
                 "body": aggregate(vec![]),
@@ -561,7 +574,7 @@ impl PackageBuilder {
         let source_map = self.value["source_map"].as_array_mut().expect("source map");
         let position = source_map.len();
         source_map.push(json!({
-            "node_id": node_ref(&digest),
+            "node_id": node_id,
             "role": "type",
             "ordinal": 0,
             "regions": [{"source": source, "start": position, "end": position + 1}],
@@ -571,72 +584,61 @@ impl PackageBuilder {
 
     pub fn node(
         &mut self,
-        digest: &str,
+        path: &str,
         tag: &str,
         form: &str,
         semantic_type: &str,
         body: Value,
     ) -> &mut Self {
-        self.node_in_group(digest, tag, form, semantic_type, body, None)
+        self.node_in_group(path, tag, form, semantic_type, body, None)
     }
 
     /// A node whose body-reference cycle needs an explicit `recursion_group`:
     /// every node on one cycle must share the same non-empty group string.
     pub fn node_in_group(
         &mut self,
-        digest: &str,
+        path: &str,
         tag: &str,
         form: &str,
         semantic_type: &str,
         body: Value,
         recursion_group: Option<&str>,
     ) -> &mut Self {
-        self.node_in_group_labeled(
-            digest,
-            digest,
-            tag,
-            form,
-            semantic_type,
-            body,
-            recursion_group,
-        )
+        self.node_in_group_labeled(path, path, tag, form, semantic_type, body, recursion_group)
     }
 
-    /// As [`Self::node_in_group`], but the declaration's qualified name is
-    /// derived from `label` rather than `digest`. Needed for an
-    /// application-bodied node: IR-216's `validate_application_keys`
-    /// re-derives `digest` from a preimage that itself embeds `declaration`,
-    /// so `digest` cannot be known before `declaration` is built from
-    /// something else -- [`Self::application_code`] uses the node's own
-    /// `code` as that something else.
+    /// As [`Self::node_in_group`], with a caller-selected declaration label.
     fn node_in_group_labeled(
         &mut self,
-        digest: &str,
+        path: &str,
         label: &str,
         tag: &str,
         form: &str,
         semantic_type: &str,
-        body: Value,
+        mut body: Value,
         recursion_group: Option<&str>,
     ) -> &mut Self {
         // The schema's `BodyBindingRules` fix a parameter's occurrence role.
-        let role = if digest == key(T_INTEGER) && (tag, form) == ("scalar_type", "integer") {
+        let role = if path == key(T_INTEGER) && (tag, form) == ("scalar_type", "integer") {
             "generated"
         } else if (tag, form) == ("value", "parameter") {
             "expression"
         } else {
             "declaration"
         };
+        self.repackage(&mut body);
+        let node_id = self.node_ref(path);
+        let semantic_type_id = self.node_ref(semantic_type);
         let source = self.value["lock"]["sources"][0].clone();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
         let mut node = json!({
-            "node_id": node_ref(digest),
+            "node_id": node_id,
             "schema_version": "quire.checked-semantic-graph/v2",
             "node_tag": tag,
             "semantic_form": form,
-            "semantic_type": node_ref(semantic_type),
+            "semantic_type": semantic_type_id,
             "dependencies": [],
             "occurrences": [{"role": role, "ordinal": 0}],
             "body": body,
@@ -664,7 +666,7 @@ impl PackageBuilder {
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
-            "node_id": node_ref(digest),
+            "node_id": node_id,
             "role": role,
             "ordinal": 0,
             "regions": [{
@@ -676,14 +678,14 @@ impl PackageBuilder {
         self
     }
 
-    /// Registers an application under Contract IR's candidate identity.
+    /// Registers an application under its producer-assigned source path.
     pub fn application_code(&mut self, code: u32, form: &str, body: Value) -> &mut Self {
         self.application_node(code, form, &key(T_BOOLEAN), body)
     }
 
     /// As [`Self::application_code`], with the node typed by `semantic_type`. FR-322's
     /// application-node dependency join fixes the node's `dependencies`: exactly the unique,
-    /// digest-ascending `reference` targets and operation member declarations of its body.
+    /// ID-ordered `reference` targets and operation member declarations of its body.
     pub fn application_node(
         &mut self,
         code: u32,
@@ -705,29 +707,18 @@ impl PackageBuilder {
         body: Value,
     ) -> &mut Self {
         let label = code.to_string();
-        let dependencies = application_dependencies(&body);
         self.node_in_group_labeled(&key(code), &label, tag, form, semantic_type, body, None);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .and_then(|nodes| nodes.last_mut())
             .expect("the node just added");
-        node["dependencies"] = Value::Array(dependencies.iter().map(|d| node_ref(d)).collect());
-        let draft: CheckedSemanticNodeV2 =
-            serde_json::from_value(node.clone()).expect("complete application draft");
-        let candidate = derive_application_node_id(
-            ApplicationNodeDraft::new(&draft),
-            None,
-            CheckedPackageReadLimits::bounded().bytes,
-        )
-        .expect("application candidate");
-        let digest = candidate.candidate_node_id().digest.to_string();
-        node["node_id"] = node_ref(&digest);
-        self.value["source_map"]
-            .as_array_mut()
-            .expect("fixture source map")
-            .last_mut()
-            .expect("application source map just appended")["node_id"] = node_ref(&digest);
-        register_code(code, digest);
+        let dependencies = application_dependencies(&node["body"]);
+        node["dependencies"] = Value::Array(
+            dependencies
+                .iter()
+                .map(|target| serde_json::to_value(target).expect("dependency ID serializes"))
+                .collect(),
+        );
         self
     }
 
@@ -740,8 +731,8 @@ impl PackageBuilder {
     }
 
     /// As [`Self::boolean_equality_chain`], numbering the chain from `base` and starting it from
-    /// the Boolean literal `seed`. Two chains in one package need different seeds: a node's id is
-    /// derived from its body, and two first nodes over one literal would share an id.
+    /// the Boolean literal `seed`. Distinct seeds make each body's expected meaning inspectable;
+    /// every node keeps its producer-assigned structural ID independently of that body.
     pub fn boolean_equality_chain_from(&mut self, base: u32, count: u32, seed: &str) -> &mut Self {
         let equality = |operand: Value| {
             application(
@@ -753,7 +744,7 @@ impl PackageBuilder {
         };
         self.application_code(base, "binary", equality(literal("boolean", seed)));
         for offset in 1..count {
-            let previous = registered_digest(base + offset - 1);
+            let previous = key(base + offset - 1);
             self.application_code(base + offset, "binary", equality(reference_to(&previous)));
         }
         self
@@ -781,7 +772,7 @@ impl PackageBuilder {
             &key(target),
             convert_body(operand(source), target),
         );
-        let conversion_digest = registered_digest(conversion);
+        let conversion_digest = key(conversion);
         self.application_code(
             code,
             "binary",
@@ -802,7 +793,6 @@ impl PackageBuilder {
         semantic_type: u32,
         body: Value,
     ) -> &mut Self {
-        register_code(code, key(code));
         self.node(&key(code), tag, form, &key(semantic_type), body)
     }
 
@@ -818,7 +808,6 @@ impl PackageBuilder {
         semantic_type: u32,
         body: Value,
     ) -> &mut Self {
-        register_code(code, key(code));
         self.node_in_group_labeled(&key(code), name, tag, form, &key(semantic_type), body, None)
     }
 
@@ -831,7 +820,6 @@ impl PackageBuilder {
         body: Value,
         recursion_group: &str,
     ) -> &mut Self {
-        register_code(code, key(code));
         self.node_in_group(
             &key(code),
             tag,
@@ -842,12 +830,12 @@ impl PackageBuilder {
         )
     }
 
-    /// The wire document with its identity projection and package id refreshed.
+    /// The producer's wire document, submitted unchanged for reader admission.
     pub fn wire(&self) -> Value {
         self.resolved_wire(CheckedPackageReadLimits::bounded()).wire
     }
 
-    /// The authored wire before fixture IDs are repaired, for direct reader negatives.
+    /// The authored wire for direct reader negatives.
     pub fn raw_wire(&self) -> Value {
         self.value.clone()
     }
@@ -867,7 +855,8 @@ impl PackageBuilder {
         &self,
         limits: CheckedPackageReadLimits,
     ) -> (CheckedPackageV2, FixtureIds) {
-        let rekey::ResolvedWire { outcome, ids, .. } = self.resolved_wire(limits);
+        let rekey::ResolvedWire { outcome, wire, .. } = self.resolved_wire(limits);
+        let ids = FixtureIds::for_wire(&wire);
         match outcome {
             CheckedPackageV2ReadResult::Admitted(package) => (*package, ids),
             other => panic!("expected V2 admission, got {other:?}"),
@@ -876,50 +865,48 @@ impl PackageBuilder {
 
     /// Returns the reader result and wire with the IDs used by that wire.
     pub fn read_resolved(&self) -> (CheckedPackageV2ReadResult, Value, FixtureIds) {
-        let rekey::ResolvedWire { wire, outcome, ids } =
+        let rekey::ResolvedWire { wire, outcome, .. } =
             self.resolved_wire(CheckedPackageReadLimits::bounded());
+        let ids = FixtureIds::for_wire(&wire);
         (outcome, wire, ids)
     }
 
-    /// Registers `definition` under `role` in `lock.profile_selections` and the identity
-    /// preimage's copy (deduplicated): IR admits a `temporal_profile` law only when the lock
-    /// selected its definition under that role.
+    /// Registers `definition` under `role` in `lock.profile_selections` (deduplicated): IR
+    /// admits a `temporal_profile` law only when the lock selected that definition.
     pub fn select_profile(&mut self, role: &str, definition: Value) -> &mut Self {
         let selection = json!({"role": role, "definition": definition});
-        for path in ["lock", "identity_preimage"] {
-            let selections = self.value[path]["profile_selections"]
-                .as_array_mut()
-                .expect("profile_selections");
-            if !selections.contains(&selection) {
-                selections.push(selection.clone());
-            }
+        let selections = self.value["lock"]["profile_selections"]
+            .as_array_mut()
+            .expect("profile_selections");
+        if !selections.contains(&selection) {
+            selections.push(selection);
         }
         self
     }
 
-    /// Registers `definition` in `lock.definition_selections` and the identity preimage's copy
-    /// (deduplicated): Contract IR refuses an operation law whose definition the lock did not
-    /// select.
+    /// Registers `definition` in `lock.definition_selections` (deduplicated).
+    /// Contract IR refuses an operation law whose definition the lock did not select.
     pub fn select_definition(&mut self, definition: Value) -> &mut Self {
-        for path in ["lock", "identity_preimage"] {
-            let selections = self.value[path]["definition_selections"]
-                .as_array_mut()
-                .expect("definition_selections");
-            if !selections.contains(&definition) {
-                selections.push(definition.clone());
-            }
+        let selections = self.value["lock"]["definition_selections"]
+            .as_array_mut()
+            .expect("definition_selections");
+        if !selections.contains(&definition) {
+            selections.push(definition);
         }
         self
     }
 
     /// Replaces the body of the node `code` built by [`Self::code`].
     pub fn set_body(&mut self, code: u32, body: Value) -> &mut Self {
-        let digest = key(code);
+        let path = key(code);
+        let node_id = self.node_ref(&path);
+        let mut body = body;
+        self.repackage(&mut body);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes")
             .iter_mut()
-            .find(|node| node["node_id"]["digest"].as_str() == Some(digest.as_str()))
+            .find(|node| node["node_id"] == node_id)
             .unwrap_or_else(|| panic!("no node for code {code}"));
         node["body"] = body;
         self
@@ -944,20 +931,22 @@ impl PackageBuilder {
 fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    if wire["lock"]["model_selections"]
-        .as_array()
-        .is_some_and(|rows| rows.iter().any(|row| row["identity"] == REFERENCE_MODEL))
-    {
+    let selected_model = |identity: &str| {
+        wire["semantic_graph"]["nodes"]
+            .as_array()
+            .is_some_and(|nodes| {
+                nodes.iter().any(|node| {
+                    node["semantic_form"] == "model_root"
+                        && node["owner"]["kind"] == "model_root"
+                        && node["owner"]["identity"] == identity
+                })
+            })
+    };
+    if selected_model(REFERENCE_MODEL) {
         let document = reference_model_document();
-        let digest = quire_canonical::sha256(
-            &document,
-            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-        )
-        .expect("canonical model document")
-        .to_string();
         evidence
             .insert_domain_package_document(
-                digest,
+                REFERENCE_MODEL,
                 serde_json::to_vec(&document).expect("fixture model bytes"),
             )
             .expect("retain fixture model document");
@@ -966,13 +955,10 @@ fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
         let qspec = std::path::PathBuf::from(qspec_dir);
         crate::checked_package_evidence::retain_selected_extensions(&qspec, wire, &mut evidence);
         let root = qspec.join("proposals/checked-package-v2");
-        if let Some(selection) = wire["lock"]["model_selections"]
-            .as_array()
-            .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
-        {
+        if selected_model("acme/orders") {
             evidence
                 .insert_domain_package_document(
-                    selection["digest"].as_str().expect("model digest"),
+                    "acme/orders",
                     std::fs::read(root.join("domain-package-acme-orders.json"))
                         .expect("read published selected QSpec model package"),
                 )
@@ -1074,19 +1060,16 @@ pub fn tuple_members_package(extras: &[u32], members: &[u32]) -> PackageBuilder 
                     bound_member("max", integer_literal(1)),
                 ]),
             ),
-            BD_ENUM => {
-                register_code(BD_ENUM, key(BD_ENUM));
-                builder.node(
-                    &key(BD_ENUM),
-                    "bounded_domain",
-                    "integer_range",
-                    &enum_type_digest(),
-                    aggregate(vec![
-                        bound_member("min", integer_literal(0)),
-                        bound_member("max", integer_literal(1)),
-                    ]),
-                )
-            }
+            BD_ENUM => builder.node(
+                &key(BD_ENUM),
+                "bounded_domain",
+                "integer_range",
+                &enum_type_path(),
+                aggregate(vec![
+                    bound_member("min", integer_literal(0)),
+                    bound_member("max", integer_literal(1)),
+                ]),
+            ),
             BD_OVER_COMPOSITE => builder.code(
                 BD_OVER_COMPOSITE,
                 "bounded_domain",
@@ -1127,14 +1110,14 @@ pub fn nested_conversion_package() -> PackageBuilder {
         &key(T_RATIONAL_WIDE),
         convert_body(operand(T_INTEGER_BOUNDED), T_RATIONAL_WIDE),
     );
-    let inner_operand = reference_to(&registered_digest(inner));
+    let inner_operand = reference_to(&key(inner));
     builder.application_node(
         outer,
         "conversion",
         &key(T_DECIMAL_WIDE),
         convert_body(inner_operand, T_DECIMAL_WIDE),
     );
-    let outer_operand = reference_to(&registered_digest(outer));
+    let outer_operand = reference_to(&key(outer));
     builder.application_code(
         E_NESTED_CONV,
         "binary",
@@ -1171,7 +1154,7 @@ pub fn application_operand_package() -> PackageBuilder {
             vec![operand(T_INTEGER), operand(T_INTEGER)],
         ),
     );
-    let division_operand = reference_to(&registered_digest(division));
+    let division_operand = reference_to(&key(division));
     builder.application_code(
         E_APPLICATION_OPERAND,
         "binary",
@@ -1191,7 +1174,6 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
 
     // The bounded Integer type is the integer_range node itself; its base is
     // the reader's one canonical anonymous Integer scalar node.
-    register_code(T_INTEGER_BOUNDED, key(BD_INTEGER));
 
     builder.select_definition(text_profile_definition());
     for type_code in PARAMETER_TYPES {
@@ -1207,10 +1189,9 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
         &key(ENUM_PARAMETER),
         "value",
         "parameter",
-        &enum_type_digest(),
+        &enum_type_path(),
         parameter_body("phase"),
     );
-    register_code(ENUM_PARAMETER, key(ENUM_PARAMETER));
     builder
         .code(
             T_BOOLEAN,
@@ -1509,7 +1490,7 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
             Vec::new(),
         ),
     );
-    let clause_formula = registered_digest(T_BARE_FORMULA);
+    let clause_formula = key(T_BARE_FORMULA);
     builder.application_node_tagged(
         T_BARE,
         "temporal",
@@ -1679,15 +1660,14 @@ pub fn item(
 pub fn recursive_items_package_from_wire(
     wire: Value,
 ) -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
-    let named_record = |name: &str| {
+    let named_record = |name: &str| -> CheckedNodeId {
         wire["semantic_graph"]["nodes"]
             .as_array()
             .expect("QSpec graph nodes")
             .iter()
             .find(|node| node["declaration"]["qualified_name"] == json!([name]))
-            .and_then(|node| node["node_id"]["digest"].as_str())
+            .map(|node| serde_json::from_value(node["node_id"].clone()).expect("record ID"))
             .expect("QSpec named record")
-            .to_owned()
     };
     let list = named_record("List");
     let tree = named_record("Tree");
@@ -1696,9 +1676,10 @@ pub fn recursive_items_package_from_wire(
         .expect("QSpec graph nodes")
         .iter()
         .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .and_then(|node| node["node_id"]["digest"].as_str())
-        .expect("QSpec integer scalar type")
-        .to_owned();
+        .map(|node| {
+            serde_json::from_value::<CheckedNodeId>(node["node_id"].clone()).expect("integer ID")
+        })
+        .expect("QSpec integer scalar type");
     let mut builder = PackageBuilder::from_wire(wire);
     builder.code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(Vec::new()));
     builder.code(
@@ -1708,27 +1689,32 @@ pub fn recursive_items_package_from_wire(
         T_QSPEC_BOOLEAN,
         aggregate(Vec::new()),
     );
-    for (code, type_digest, name) in [(E_QSPEC_LIST, &list, "list"), (E_QSPEC_TREE, &tree, "tree")]
-    {
+    for (code, type_id, name) in [(E_QSPEC_LIST, &list, "list"), (E_QSPEC_TREE, &tree, "tree")] {
         let parameter = key(3_000 + code);
         builder.node(
             &parameter,
             "value",
             "parameter",
-            type_digest,
+            &key(T_QSPEC_BOOLEAN),
             aggregate(vec![
                 bound_member("name", literal("text", name)),
                 bound_member(
                     "level",
                     json!({
                         "term": "literal",
-                        "type": node_ref(&integer),
+                        "type": integer,
                         "value_kind": "integer",
                         "value": "0",
                     }),
                 ),
             ]),
         );
+        builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture graph")
+            .last_mut()
+            .expect("parameter just appended")["semantic_type"] =
+            serde_json::to_value(type_id).expect("record ID serializes");
         builder.application_node(
             code,
             "binary",
@@ -1742,19 +1728,24 @@ pub fn recursive_items_package_from_wire(
             }),
         );
     }
-    (builder, id(&list), id(&tree))
+    (builder, list, tree)
 }
 
 /// Compile independently authored recursive declarations through QSL's public
 /// replay facade and extend the admitted package with equality items.
 pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
-    use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
+    use qsl_replay::{
+        compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+    };
 
     let source = include_bytes!("recursive.native");
     let compiled = compile_package(
-        SourceIdentity::new("a", "u", "git", "1"),
-        "recursive-items.native",
-        source,
+        CompileUnit {
+            source: SourceIdentity::new("a", "u", "git", "1"),
+            package_name: BASE_PACKAGE_NAME.to_owned(),
+            path: "recursive-items.native",
+            bytes: source,
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -1931,61 +1922,45 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
 #[cfg(test)]
 mod fixture_identity_tests {
     use ix_trace_rs::trace;
+    use quire_contract_model::{CheckedPackageLimit, CheckedPackageRefusalCode, CheckedTerm};
 
     use super::*;
 
-    #[trace("FR-037-AC-1", "FR-037-AC-4", "TC-052")]
-    #[test]
-    fn composite_application_candidate_matches_admitted_node() {
-        let builder = byte_ceiling_package();
-        let raw = builder.raw_wire();
-        let provisional = code_id(BYTE_CHAIN_BASE);
-        let raw_node: CheckedSemanticNodeV2 = serde_json::from_value(
-            raw["semantic_graph"]["nodes"]
-                .as_array()
-                .expect("raw nodes")
-                .iter()
-                .find(|node| node["node_id"] == json!(provisional))
-                .expect("raw equality")
-                .clone(),
-        )
-        .expect("typed raw equality");
-        assert_eq!(
-            derive_application_node_id(
-                ApplicationNodeDraft::new(&raw_node),
-                None,
-                CheckedPackageReadLimits::bounded().bytes,
-            )
-            .expect("raw application candidate")
-            .candidate_node_id(),
-            &provisional,
-        );
-
-        let (admitted, ids) = builder.admit_resolved();
-        let admitted_id = ids.resolve(&provisional);
-        let checked = admitted
-            .graph()
-            .nodes
+    fn node<'a>(wire: &'a Value, id: &CheckedNodeId) -> &'a Value {
+        wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("fixture nodes")
             .iter()
-            .find(|node| node.node_id == admitted_id)
-            .expect("admitted equality");
-        assert_eq!(
-            derive_application_node_id(
-                ApplicationNodeDraft::new(checked),
-                None,
-                CheckedPackageReadLimits::bounded().bytes,
-            )
-            .expect("admitted application candidate")
-            .candidate_node_id(),
-            &admitted_id,
-        );
+            .find(|node| node["node_id"] == json!(id))
+            .expect("producer-assigned node")
     }
 
-    #[trace("FR-037-AC-2", "TC-052")]
+    fn replace_node_id(wire: &mut Value, old: &Value, replacement: &Value) {
+        if wire == old {
+            *wire = replacement.clone();
+            return;
+        }
+        match wire {
+            Value::Array(items) => {
+                for item in items {
+                    replace_node_id(item, old, replacement);
+                }
+            }
+            Value::Object(members) => {
+                for member in members.values_mut() {
+                    replace_node_id(member, old, replacement);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[trace("FR-037-AC-6", "TC-052")]
     #[test]
-    fn grouped_application_candidate_matches_admitted_node() {
+    fn composite_application_keeps_producer_assigned_node_id() {
         let mut builder = byte_ceiling_package();
-        let predecessor = registered_digest(BYTE_CHAIN_BASE);
+        let producer_id = code_id(BYTE_CHAIN_BASE);
+        let dependent_id = code_id(BYTE_CHAIN_BASE + 1);
         builder.application_code(
             BYTE_CHAIN_BASE + 1,
             "binary",
@@ -1993,41 +1968,294 @@ mod fixture_identity_tests {
                 "binary",
                 equality_operation("boolean"),
                 T_BOOLEAN,
-                vec![reference_to(&predecessor), reference_to(&predecessor)],
+                vec![reference_to(&key(BYTE_CHAIN_BASE)); 2],
             ),
         );
+        let raw = builder.raw_wire();
+        assert_eq!(node(&raw, &producer_id)["node_id"], json!(producer_id));
+        assert_eq!(
+            node(&raw, &dependent_id)["dependencies"],
+            json!([producer_id])
+        );
+        assert_eq!(
+            node(&raw, &dependent_id)["body"]["arguments"][0]["target"],
+            json!(producer_id)
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        let admitted_id = ids.resolve(&producer_id);
+        let checked = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == admitted_id)
+            .expect("admitted equality");
+        assert_eq!(checked.node_id, producer_id);
+        let dependent = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == dependent_id)
+            .expect("admitted dependent equality");
+        assert_eq!(dependent.dependencies, vec![producer_id.clone()]);
+        let CheckedTerm::Application { arguments, .. } = &dependent.body else {
+            panic!("dependent body is not an application")
+        };
+        assert!(
+            matches!(arguments.first(), Some(CheckedTerm::Reference { target }) if target == &producer_id)
+        );
+    }
+
+    fn grouped_applications() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+        let mut builder = byte_ceiling_package();
+        let first = code_id(BYTE_CHAIN_BASE);
+        let old_second = code_id(BYTE_CHAIN_BASE + 1);
+        let mut second = first.clone();
+        second.ordinal = 3;
+        // An unrelated application separates the group members in wire order.
+        builder.application_code(
+            BYTE_CHAIN_BASE + 11,
+            "binary",
+            binary_body(T_BOOLEAN, T_BOOLEAN),
+        );
+        builder.application_code(
+            BYTE_CHAIN_BASE + 1,
+            "binary",
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![reference_to(&key(BYTE_CHAIN_BASE)); 2],
+            ),
+        );
+        builder.set_body(
+            BYTE_CHAIN_BASE,
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![reference_to(&key(BYTE_CHAIN_BASE + 1)); 2],
+            ),
+        );
+        let first_node = builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(first))
+            .expect("first group member");
+        first_node["dependencies"] = json!([old_second.clone()]);
+        replace_node_id(&mut builder.value, &json!(old_second), &json!(second));
         for node in builder.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("fixture nodes")
         {
-            if node["node_id"] == node_ref(&predecessor)
-                || node["node_id"] == node_ref(&registered_digest(BYTE_CHAIN_BASE + 1))
-            {
+            if node["node_id"] == json!(first) || node["node_id"] == json!(second) {
                 node["recursion_group"] = json!("draft");
             }
         }
-        let (admitted, ids) = builder.admit_resolved();
-        let grouped = ids.resolve(&code_id(BYTE_CHAIN_BASE + 1));
-        let nodes = &admitted.graph().nodes;
-        let checked = nodes
+        (builder, first, second)
+    }
+
+    #[trace("FR-037-AC-7", "FR-037-AC-9", "TC-052")]
+    #[test]
+    fn grouped_application_keeps_each_structural_member_and_refuses_broken_inputs() {
+        let (builder, first, second) = grouped_applications();
+        let raw = builder.raw_wire();
+        let nodes = raw["semantic_graph"]["nodes"].as_array().expect("nodes");
+        let first_position = nodes
             .iter()
-            .find(|node| node.node_id == grouped)
-            .expect("admitted grouped application");
-        assert!(checked.recursion_group.is_some());
-        let context = quire_contract_model::ApplicationIdentityContext::try_new(
-            nodes,
-            ApplicationNodeDraft::new(checked),
-        )
-        .expect("complete admitted graph context");
-        assert_eq!(
-            derive_application_node_id(
-                ApplicationNodeDraft::new(checked),
-                Some(&context),
-                CheckedPackageReadLimits::bounded().bytes,
-            )
-            .expect("grouped application candidate")
-            .candidate_node_id(),
-            &grouped,
+            .position(|node| node["node_id"] == json!(first))
+            .unwrap();
+        let second_position = nodes
+            .iter()
+            .position(|node| node["node_id"] == json!(second))
+            .unwrap();
+        assert!(
+            second_position > first_position + 1,
+            "group members need not be adjacent"
         );
+        assert_eq!(first.path, second.path);
+        assert_eq!((first.ordinal, second.ordinal), (0, 3));
+        assert_eq!(node(&raw, &first)["dependencies"], json!([second]));
+        assert_eq!(node(&raw, &second)["dependencies"], json!([first]));
+        assert_eq!(
+            node(&raw, &first)["body"]["arguments"][0]["target"],
+            json!(second)
+        );
+        assert_eq!(
+            node(&raw, &second)["body"]["arguments"][0]["target"],
+            json!(first)
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        assert_eq!(ids.resolve(&second), second);
+        let nodes = &admitted.graph().nodes;
+        for (id, target) in [(&first, &second), (&second, &first)] {
+            let checked = nodes
+                .iter()
+                .find(|node| &node.node_id == id)
+                .expect("group member");
+            assert_eq!(checked.recursion_group.as_deref(), Some("draft"));
+            assert_eq!(checked.dependencies, vec![(*target).clone()]);
+            let CheckedTerm::Application { arguments, .. } = &checked.body else {
+                panic!("group member is not an application")
+            };
+            assert!(
+                matches!(arguments.first(), Some(CheckedTerm::Reference { target: actual }) if actual == target)
+            );
+        }
+
+        let mut missing = raw.clone();
+        missing["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|node| node["node_id"] != json!(first));
+        missing["source_map"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|entry| entry["node_id"] != json!(first));
+        let CheckedPackageV2ReadResult::Refused(refusal) = read_mutated_wire(missing) else {
+            panic!("a missing group member must not be admitted")
+        };
+        assert_eq!(
+            refusal.code,
+            CheckedPackageRefusalCode::InvalidSemanticGraph
+        );
+
+        let mut mismatched = raw.clone();
+        let enum_type = enum_type_id();
+        let declaration = mismatched["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(enum_type))
+            .expect("enum declaration");
+        declaration["declaration"]["qualified_name"][1] = json!("Other");
+        let CheckedPackageV2ReadResult::Refused(refusal) = read_mutated_wire(mismatched) else {
+            panic!("a declaration path mismatch must not be admitted")
+        };
+        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+
+        let bytes = serde_json::to_vec(&raw).expect("grouped wire");
+        let limits = CheckedPackageReadLimits {
+            bytes: u64::try_from(bytes.len()).unwrap() - 1,
+            ..CheckedPackageReadLimits::bounded()
+        };
+        let CheckedPackageV2ReadResult::Incomplete(incomplete) =
+            builder.resolved_wire(limits).outcome
+        else {
+            panic!("the complete group exceeds the byte ceiling")
+        };
+        assert_eq!(incomplete.limit_kind, CheckedPackageLimit::Bytes);
+    }
+
+    #[trace("FR-037-AC-8", "TC-052")]
+    #[test]
+    fn enum_member_case_uses_the_producers_structural_id() {
+        let builder = byte_ceiling_package();
+        let open = id(&base_node_ids().enum_member);
+        let (admitted, _) = builder.admit_resolved();
+        let member = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == open)
+            .expect("admitted OPEN member");
+        assert_eq!(member.node_id, open);
+        assert_eq!(
+            serde_json::to_value(&member.body).unwrap()["value"],
+            json!("OPEN")
+        );
+
+        let mut shut = open.clone();
+        shut.path
+            .last_mut()
+            .expect("member case path")
+            .clone_from(&CheckedNodePathSegment::Name("SHUT".into()));
+        let mut wire = builder.raw_wire();
+        replace_node_id(&mut wire, &json!(open), &json!(shut));
+        let changed = wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(shut))
+            .expect("SHUT member");
+        changed["body"]["value"] = json!("SHUT");
+        let CheckedPackageV2ReadResult::Admitted(admitted) = read_mutated_wire(wire) else {
+            panic!("the producer's SHUT member should admit")
+        };
+        let changed = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == shut)
+            .expect("admitted SHUT member");
+        assert_eq!(changed.node_id, shut);
+        assert_eq!(
+            serde_json::to_value(&changed.body).unwrap()["value"],
+            json!("SHUT")
+        );
+        assert!(admitted
+            .graph()
+            .nodes
+            .iter()
+            .all(|node| node.node_id != open));
+    }
+
+    #[trace("FR-037-AC-9", "TC-052")]
+    #[test]
+    fn changed_body_and_unused_ordinal_are_measured_separately_from_identity() {
+        let builder = byte_ceiling_package();
+        let (admitted, _) = builder.admit_resolved();
+        let parameter = code_id(parameter_code(T_BOOLEAN));
+        let expected = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == parameter)
+            .expect("admitted parameter")
+            .body
+            .clone();
+        let mut changed_body = builder.raw_wire();
+        let node = changed_body["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(parameter))
+            .expect("parameter");
+        node["body"] = parameter_body("renamed");
+        let CheckedPackageV2ReadResult::Admitted(changed) = read_mutated_wire(changed_body) else {
+            panic!("a valid body change under the same structural key should admit")
+        };
+        let actual = changed
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == parameter)
+            .expect("same structural parameter");
+        assert_ne!(
+            actual.body, expected,
+            "a changed admitted body is not the original source body"
+        );
+
+        let unused = code_id(T_TEXT);
+        let mut alternate = unused.clone();
+        alternate.ordinal = 4;
+        let mut changed_ordinal = builder.raw_wire();
+        replace_node_id(&mut changed_ordinal, &json!(unused), &json!(alternate));
+        let CheckedPackageV2ReadResult::Admitted(changed) = read_mutated_wire(changed_ordinal)
+        else {
+            panic!("a consistent unused ordinal does not cause a reader refusal")
+        };
+        assert!(changed
+            .graph()
+            .nodes
+            .iter()
+            .any(|node| node.node_id == alternate));
+        assert!(changed
+            .graph()
+            .nodes
+            .iter()
+            .all(|node| node.node_id != unused));
     }
 }

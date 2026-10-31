@@ -8,7 +8,7 @@ use std::{num::NonZeroU64, time::Duration};
 
 use quire_canonical::FixedShape;
 use quire_contract_model::{
-    CheckedNodeId, CheckedSemanticId, ClauseRef, DependencyIdentity, SourceSpan,
+    CheckedNodeId, ClauseRef, ContractSourceV1, DependencyIdentity, SourceSpan,
 };
 use serde::{Deserialize, Serialize};
 
@@ -175,7 +175,7 @@ pub struct V2ClauseObligationIdentity {
     /// Backend resource ceilings.
     pub ceilings: ProofCeilings,
     /// Admitted package identity.
-    pub package: CheckedSemanticId,
+    pub package: ContractSourceV1,
     /// Selected state-clause node.
     pub clause: CheckedNodeId,
     /// Exact selected collection and bound totality check for a collection precondition.
@@ -407,7 +407,7 @@ pub struct CollectionObligationIdentity {
     /// Backend ceilings.
     pub ceilings: ProofCeilings,
     /// Admitted package identity.
-    pub package_digest: String,
+    pub package: ContractSourceV1,
     /// Caller-selected subject label recorded in the harness identity.
     pub subject_path: String,
     /// Selected function or state-clause identity.
@@ -729,6 +729,8 @@ pub struct StateFrameScope {
 pub struct StateFrameIdentity {
     /// Request resource ceilings the backend must run under.
     pub ceilings: ProofCeilings,
+    /// The exact admitted package name and lock of the source clause.
+    pub package: ContractSourceV1,
     /// The `state_clause` node both obligations of a request come from.
     pub clause: CheckedNodeId,
     /// The operation scope.

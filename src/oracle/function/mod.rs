@@ -147,10 +147,10 @@ use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
     ApplicationOperator, CheckedNodeId, CheckedNodeKind, CheckedNodeTag, CheckedPackageIncomplete,
-    CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
+    CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    ContractDependencies, ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, ContractReachedClosureV1, ContractSourceV1,
     ContractUnsupportedSourceKindError, LiteralKind, TemporalForm,
 };
 use quire_contract_runtime::exact as rt;
@@ -1275,7 +1275,7 @@ pub enum ExactFunctionRefusal {
     /// Selected external targets require a separate resolver.
     SelectedDependencyUnsupported {
         /// Ordered `(package_id, target_node_id)` pairs from the admitted closure.
-        references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+        references: Vec<(Box<str>, CheckedNodeId)>,
     },
     /// The item's `(call node id, function, argument node ids)` triple was
     /// requested more than once. The claim map records exactly one
@@ -1494,11 +1494,11 @@ pub struct GeneratedExactFunctionClaim {
     /// Generated oracle function name.
     pub oracle_symbol: String,
     /// Identity of the one Contract IR package that admitted this claim.
-    pub contract_package_identity: CheckedSemanticId,
+    pub contract_package_identity: ContractSourceV1,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
     /// Package id.
-    pub package_id: CheckedSemanticId,
+    pub package_id: ContractSourceV1,
     /// Semantic type key of the `call` expression node.
     pub semantic_type: CheckedNodeId,
     /// Exact source correspondence.
@@ -1593,19 +1593,18 @@ impl<'a, Body: GraphBody + 'a> NodeLookup<'a> for CheckedGraph<'a, Body> {
 pub(crate) struct FunctionPreflightGraph<'a> {
     // Metadata-only private fixtures have no admitted owner; production new() always sets it.
     checked: Option<&'a CheckedPackageV2>,
-    package_id: CheckedSemanticId,
     nodes: BTreeMap<IndexedNodeId, &'a CheckedSemanticNodeV2>,
 }
 
 impl<'a> FunctionPreflightGraph<'a> {
     /// Index the admitted graph once, before classifying its function items.
     pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
-        let mut graph = Self::from_nodes(&checked.graph().nodes, checked.package_id().clone());
+        let mut graph = Self::from_nodes(&checked.graph().nodes);
         graph.checked = Some(checked);
         graph
     }
 
-    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2], package_id: CheckedSemanticId) -> Self {
+    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2]) -> Self {
         let nodes = nodes
             .iter()
             .map(|node| {
@@ -1616,7 +1615,6 @@ impl<'a> FunctionPreflightGraph<'a> {
             .collect();
         Self {
             checked: None,
-            package_id,
             nodes,
         }
     }
@@ -1752,14 +1750,15 @@ mod ir988_source_function_tests {
     use super::*;
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedDeclaration;
-    use serde_json::json;
 
     fn id(value: u64) -> CheckedNodeId {
-        serde_json::from_value(json!({
-            "domain":"quire.checked-semantic-node/v1",
-            "digest":format!("{value:064x}")
-        }))
-        .expect("synthetic node key")
+        CheckedNodeId {
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                value.to_string().into(),
+            )],
+            ordinal: 0,
+        }
     }
 
     fn node(
@@ -1788,7 +1787,6 @@ mod ir988_source_function_tests {
             dependencies: Vec::new(),
             occurrences: Vec::new(),
             recursion_group: None,
-            nominal_identity_preimage: None,
             declaration: name.map(|name| CheckedDeclaration {
                 qualified_name: vec![name.into()],
             }),
@@ -1854,7 +1852,7 @@ mod ir988_admitted_generation_tests {
 
     fn source_reference(code: u32) -> serde_json::Value {
         let id = fixture::code_id(code);
-        json!({"term":"reference","target":{"domain":id.domain,"digest":id.digest}})
+        json!({"term":"reference","target":id})
     }
 
     struct AdmittedCase {
@@ -1915,7 +1913,7 @@ mod ir988_admitted_generation_tests {
                     "term":"application","operator":"call",
                     "operation":{"identity":"quire.op.function.call","laws":[],"mode":null,
                         "member":null,"leaves":[]},
-                    "result_type":{"domain":NODE_DOMAIN,"digest":key(T_INTEGER)},
+                    "result_type":code_id(T_INTEGER),
                     "arguments":[source_reference(SOURCE_FUNCTION),
                         source_reference(left),source_reference(right)]
                 }),
@@ -2125,7 +2123,10 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     argument_node_ids: &[CheckedNodeId],
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
-    if &graph.package_id != checked.package_id() {
+    if !graph
+        .checked
+        .is_some_and(|owner| std::ptr::eq(owner, checked) || owner == checked)
+    {
         return Ok(false);
     }
     #[cfg(test)]
@@ -3186,7 +3187,7 @@ pub fn generate_exact_function_oracles(
     }
 
     let claim_map = ClaimMap {
-        package_id: package.wire().package.source.package_id.clone(),
+        source: package.wire().package.source.clone(),
         blocked: Vec::new(),
         items: claims,
     };
@@ -3425,9 +3426,9 @@ fn item_disposition<'a>(
         stem,
         GeneratedExactFunctionClaim {
             oracle_symbol: String::new(),
-            contract_package_identity: package.identity().clone(),
+            contract_package_identity: package.wire().package.source.clone(),
             node_id: item.call_node_id.clone(),
-            package_id: package.wire().package.source.package_id.clone(),
+            package_id: package.wire().package.source.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: occurrences.to_vec(),
             claims: closure.claims,
@@ -3664,8 +3665,8 @@ mod tests {
     #[test]
     fn selected_imported_call_is_ineligible_for_temporal_body_guard() -> Result<(), String> {
         use qsl_replay::{
-            compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
-            SuppliedLibrary,
+            compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity,
+            StageLimits, SuppliedLibrary,
         };
         use quire_contract_model::{
             CheckedPackageEvidence, CheckedPackageV2ReadResult, ContractDependencyInput,
@@ -3675,9 +3676,12 @@ mod tests {
             profile v = \"quire.value.complete/v1\";\n\
             function f using v(a: Int[0, 9]): Boolean pure { a < 5 }\n";
         let library_compiled = compile_package(
-            SourceIdentity::new("test", "selected-library", "git", "fixture"),
-            "selected-library.native",
-            library_source.as_bytes(),
+            CompileUnit {
+                source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+                package_name: "selected-library".to_owned(),
+                path: "selected-library.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -3706,9 +3710,12 @@ mod tests {
         }])
         .expect("one selected library");
         let compiled = compile_package(
-            SourceIdentity::new("test", "selected-program", "git", "fixture"),
-            "selected-program.native",
-            source.as_bytes(),
+            CompileUnit {
+                source: SourceIdentity::new("test", "selected-program", "git", "fixture"),
+                package_name: "selected-program".to_owned(),
+                path: "selected-program.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
@@ -3792,8 +3799,11 @@ mod tests {
     fn function_preflight_reuses_one_graph_index_across_items() {
         let node = |ordinal: usize| {
             let id = CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: format!("{ordinal:064x}").into(),
+                package: "fixture".into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    ordinal.to_string().into(),
+                )],
+                ordinal: 0,
             };
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
@@ -3805,7 +3815,6 @@ mod tests {
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
                 recursion_group: None,
-                nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
                 body: CheckedTerm::aggregate(Vec::new()),
@@ -3816,14 +3825,7 @@ mod tests {
         nodes[0].semantic_form = "pure_function".into();
         let _ = take_function_preflight_graph_visits();
         let _ = take_function_preflight_graph_lookup_work();
-        let graph = FunctionPreflightGraph::from_nodes(
-            &nodes,
-            CheckedSemanticId {
-                domain: "quire.package.semantic/v2".into(),
-                algorithm: "sha256".into(),
-                digest: "0".repeat(64).into(),
-            },
-        );
+        let graph = FunctionPreflightGraph::from_nodes(&nodes);
         for ordinal in [0, 15, 31, 0, 31] {
             assert_eq!(
                 graph
@@ -3876,12 +3878,18 @@ mod tests {
     #[test]
     fn ac27_inline_scalar_literal_is_retained_with_its_admitted_type() {
         let owner = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: "1".repeat(64).into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "1".into(),
+            )],
+            ordinal: 0,
         };
         let type_node = CheckedNodeId {
-            domain: owner.domain.clone(),
-            digest: "2".repeat(64).into(),
+            package: owner.package.clone(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "2".into(),
+            )],
+            ordinal: 0,
         };
         let literal = CheckedTerm::Literal {
             type_id: type_node.clone(),
@@ -3914,8 +3922,11 @@ mod tests {
         body: Option<quire_contract_model::CheckedTerm>,
     ) -> crate::oracle::checked_graph::fixture::Node {
         let id = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: format!("{ordinal:064x}").into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                ordinal.to_string().into(),
+            )],
+            ordinal: 0,
         };
         crate::oracle::checked_graph::fixture::Node::new(
             CheckedSemanticNodeV2 {
@@ -3928,7 +3939,6 @@ mod tests {
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
                 recursion_group: None,
-                nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
                 body: CheckedTerm::aggregate(Vec::new()),
@@ -4087,7 +4097,7 @@ mod tests {
         );
 
         let mut foreign = body.node_id.clone();
-        foreign.domain = "different-domain".into();
+        foreign.package = "different-package".into();
         let first_dangling = CheckedTerm::Aggregate {
             members: vec![
                 binding(reference(&foreign)),
@@ -4184,15 +4194,22 @@ mod tests {
 
     #[test]
     fn generated_function_claim_serializes_package_identity_and_requested_key() {
-        let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha256",
-            "digest": "a".repeat(64),
+        let identity: ContractSourceV1 = serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "lock": {
+                "sources": [],
+                "edition": {"role":"edition", "definition":{"authority":"test", "identity":"edition"}},
+                "profile_selections": [],
+                "definition_selections": [],
+                "required_features": [],
+                "dependency_selections": []
+            }
         }))
         .expect("package identity");
         let node_id: CheckedNodeId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "b".repeat(64),
+            "package": "test",
+            "path": ["b"],
+            "ordinal": 0,
         }))
         .expect("requested key");
         let generated = GeneratedExactFunctionClaim {

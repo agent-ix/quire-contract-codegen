@@ -17,7 +17,7 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
-use quire_contract_model::{CheckedNodeId, CheckedSemanticId, CheckedTerm, ContractPackageV1};
+use quire_contract_model::{CheckedNodeId, CheckedTerm, ContractPackageV1, ContractSourceV1};
 
 use crate::{
     core::artifact::Artifact,
@@ -54,7 +54,7 @@ pub struct RoutedGenerationItem {
     /// The routed backend's kind.
     kind: BackendKind,
     /// The selection authenticated during scalar capability preflight.
-    scalar_selection: Option<(CheckedSemanticId, ContractDriverResultSelection)>,
+    scalar_selection: Option<(ContractSourceV1, ContractDriverResultSelection)>,
 }
 
 /// A routed item cannot be constructed from a contradictory descriptor.
@@ -109,7 +109,7 @@ impl RoutedGenerationItem {
         package: &ContractPackageV1,
         selection: ContractDriverResultSelection,
     ) -> Self {
-        self.scalar_selection = Some((package.identity().clone(), selection));
+        self.scalar_selection = Some((package.wire().package.source.clone(), selection));
         self
     }
 }
@@ -216,7 +216,7 @@ pub enum RoutedGenerationError {
     /// Request positions or keys disagree with admitted FR-330 accounting.
     Package(PackageRequestError),
     /// Direct generation from the admitted package failed as a whole.
-    ContractScalar(ContractScalarError),
+    ContractScalar(Box<ContractScalarError>),
     /// The routed kind is not the kind the backend's identity converts to.
     BackendKindDisagrees {
         /// The item's request index.
@@ -365,7 +365,7 @@ fn generate_routed_with_integer_policy(
                 || item
                     .scalar_selection
                     .as_ref()
-                    .is_some_and(|(identity, _)| identity != package.identity())
+                    .is_some_and(|(source, _)| source != &package.wire().package.source)
                 || selected.is_some_and(|selection| {
                     matches!(selection, ContractDriverResultSelection::OwnResult { .. })
                         && !crate::oracle::scalar::valid_selected_scalar_result(
@@ -561,7 +561,7 @@ fn generate_kani(
             .map(|item| item.request_index)
             .collect::<Vec<_>>(),
     )
-    .map_err(RoutedGenerationError::ContractScalar)?;
+    .map_err(|error| RoutedGenerationError::ContractScalar(Box::new(error)))?;
     let driver_selections = positions
         .iter()
         .filter_map(|position| match position {
@@ -580,11 +580,13 @@ fn generate_kani(
                 .get(item.request_index)
                 .copied()
                 .flatten()
-                .ok_or(RoutedGenerationError::ContractScalar(
-                    ContractScalarError::Request(PackageRequestError::Position {
-                        request_index: item.request_index,
-                    }),
-                ))?;
+                .ok_or_else(|| {
+                    RoutedGenerationError::ContractScalar(Box::new(ContractScalarError::Request(
+                        PackageRequestError::Position {
+                            request_index: item.request_index,
+                        },
+                    )))
+                })?;
             Ok(ObligationItem::ScalarClaim {
                 package,
                 claim_map: &claim_map,
@@ -641,7 +643,9 @@ fn generate_kani(
                     &selections,
                 )
                 .map_err(|error| {
-                    RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(error))
+                    RoutedGenerationError::ContractScalar(Box::new(ContractScalarError::Oracle(
+                        error,
+                    )))
                 })?;
             }
             (records, index_harnesses(scalar_harnesses)?, false)
@@ -746,8 +750,7 @@ mod tests {
 
     fn node_id() -> quire_contract_model::CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "1".repeat(64),
+            "package": "routed-fixture", "path": ["node"], "ordinal": 0,
         }))
         .expect("a checked node id")
     }
@@ -933,8 +936,7 @@ mod tests {
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {
         let node_id = serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "1".repeat(64),
+            "package": "routed-fixture", "path": ["node"], "ordinal": 0,
         }))
         .expect("a checked node id");
         KaniScalarObligationHarness::generated(

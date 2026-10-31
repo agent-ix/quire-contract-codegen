@@ -7,13 +7,12 @@
 //! its `occurrence_key` are all QSL's own answer for the operation. The envelope names the
 //! payload's frame node and frame occurrence, the pair `replay_frame` requires it to agree with.
 //!
-//! The obligation identity is minted here from that same site and the falsified harness's
-//! `StateFrameIdentity` (`replay::obligation`), never supplied. The witness is the real playback:
+//! The obligation identity comes from QSL's selected producer claim. The witness is the real playback:
 //! decoded against the harness's `state_fields` by the one decoder and rendered by the one adapter
 //! rendering function. The harness is tied to the replay by checks, not by the identity: the
 //! property is a frame over exactly the state fields, the scope names the operation, anchor and
 //! frame the call site names, every decoded value is in its field's range, and the pre snapshot
-//! the invocation names holds the decoded values.
+//! the invocation names holds the decoded values once producer identity is available.
 //!
 //! The envelope's `declared_domains` is empty until QSL-345 settles the declared-domain key and
 //! refuses an empty declaration; no key shape is adopted here before then (FR-024-AC-29).
@@ -21,15 +20,18 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
-    DocumentRef, EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
-    MalformedTranscript, OperationName, OperationSite, ReplayLimits, ReplayRefusal, ReplayRequest,
-    ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire, WireNodeId,
-    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessValue,
+    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DocumentRef,
+    EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
+    MalformedTranscript, ObligationIdentity, OccurrenceKey, OperationName, OperationSite,
+    ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestWire, ReplaySource,
+    ReplayTargetMembers, RequestTargetWire, WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    WitnessValue,
 };
+use quire_exact::NodeKey;
 use serde::Deserialize;
 
 use crate::{
+    core::ir::node_key::checked_node_key,
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
@@ -44,8 +46,8 @@ use crate::{
     },
 };
 
-/// Everything one frame replay needs beyond the proved unit. It names no obligation identity and
-/// no witness transcript: both are built from the harness and its parsed playback.
+/// Everything one frame replay needs beyond the proved unit. It names no obligation identity or
+/// witness transcript: the former must come from QSL, while the latter uses parsed playback.
 #[derive(Clone, Debug)]
 pub struct FrameReplayInputs<'a> {
     /// The proving run's lock. A frame replay selects by the operation, so no function is named.
@@ -77,6 +79,36 @@ pub enum ScopeMember {
     Anchor,
     /// The operation's `frame` node.
     Frame,
+}
+
+/// A frame packet or request member that disagrees with QSL's selected claim.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrameClaimMember {
+    /// The request's obligation identity.
+    RequestIdentity,
+    /// The envelope's obligation identity.
+    EnvelopeIdentity,
+    /// The envelope's frame node.
+    EnvelopeFrame,
+    /// The envelope's frame occurrence.
+    EnvelopeOccurrence,
+    /// The payload's frame node.
+    PayloadFrame,
+    /// The payload's frame occurrence.
+    PayloadOccurrence,
+}
+
+impl fmt::Display for FrameClaimMember {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::RequestIdentity => "request obligation identity",
+            Self::EnvelopeIdentity => "envelope obligation identity",
+            Self::EnvelopeFrame => "envelope frame node",
+            Self::EnvelopeOccurrence => "envelope frame occurrence",
+            Self::PayloadFrame => "payload frame node",
+            Self::PayloadOccurrence => "payload frame occurrence",
+        })
+    }
 }
 
 impl fmt::Display for ScopeMember {
@@ -222,6 +254,8 @@ pub enum FrameReplayError {
     },
     /// The frame obligation has no identity.
     Identity(ObligationIdentityError),
+    /// A request or packet member no longer names QSL's selected frame claim.
+    ClaimMismatch(FrameClaimMember),
 }
 
 impl fmt::Display for FrameReplayError {
@@ -269,6 +303,9 @@ impl fmt::Display for FrameReplayError {
                 "the harness's {member} is `{harness}` and the replay names `{named}`"
             ),
             Self::Identity(cause) => write!(f, "the frame obligation has no identity: {cause}"),
+            Self::ClaimMismatch(member) => {
+                write!(f, "the {member} differs from QSL's selected frame claim")
+            }
         }
     }
 }
@@ -292,7 +329,8 @@ impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
             | FrameReplayError::OutOfDomain { .. }
             | FrameReplayError::PreState(_)
             | FrameReplayError::ScopeMismatch { .. }
-            | FrameReplayError::Identity(_) => Self::CgDefect,
+            | FrameReplayError::Identity(_)
+            | FrameReplayError::ClaimMismatch(_) => Self::CgDefect,
             FrameReplayError::Refused { refusal, .. } => Self::Refused(refusal),
         }
     }
@@ -306,10 +344,18 @@ pub struct FrameReplay {
     /// The envelope's members. `clause_node` is the payload's frame node and `occurrence_key`
     /// its frame occurrence.
     pub packet: WitnessPacket<FrameCounterexample>,
+    /// QSL's independently selected claim, retained against later packet or request changes.
+    selected: SelectedFrameClaim,
     /// The caller's configured replay reader bound.
     replay_limits: ReplayLimits,
     /// Persisted context for QSL refusals; an unranged field is not necessarily their cause.
     unranged: Vec<StateUnrangedField>,
+}
+
+struct SelectedFrameClaim {
+    identity: ObligationIdentity,
+    frame: NodeKey,
+    occurrence: OccurrenceKey,
 }
 
 /// A frame harness is a frame over its state only when its granted and checked fields, taken
@@ -442,6 +488,29 @@ struct InvocationRead {
     pre: SnapshotLink,
 }
 
+#[derive(Deserialize)]
+struct DocumentIdentityRead {
+    identity: DocumentRefRead,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DocumentRefRead {
+    authority: String,
+    identity: String,
+    revision_namespace: String,
+    revision: String,
+}
+
+impl DocumentRefRead {
+    fn matches(&self, reference: &DocumentRef) -> bool {
+        self.authority == reference.authority
+            && self.identity == reference.identity
+            && self.revision_namespace == reference.revision_namespace
+            && self.revision == reference.revision
+    }
+}
+
 /// The members of a snapshot document this check reads, as `state_clause` writes them.
 #[derive(Deserialize)]
 struct SnapshotRead {
@@ -449,16 +518,21 @@ struct SnapshotRead {
 }
 
 /// The fields of the state object the invocation's `self` addresses, in the pre snapshot it
-/// names. A document is read only after QSL's own request decode has checked every provided
-/// document's bytes against its digest (`FrameReplay::new`), so a document whose bytes do not
-/// match its digest is QSL's refusal and never reaches this reader. A document that is absent or
-/// not of the written shape is this check's refusal: it cannot tie a pre state it cannot read.
+/// names. This tie reads provided document values under their declared identities; it does not
+/// compute or compare their digests. A document that is absent or not of the written shape is
+/// this check's refusal: it cannot tie a pre state it cannot read.
 fn pre_fields(
     invocation: &DocumentRef,
     documents: &[ProvidedDocument],
 ) -> Result<BTreeMap<String, IntegerValue>, PreStateFault> {
-    let own = DigestRecord::mint(DigestDomain::Sha256Jcs, invocation.digest).hex();
-    let bytes = provided(documents, &own).ok_or(PreStateFault::InvocationNotProvided)?;
+    let bytes = documents
+        .iter()
+        .find(|document| {
+            serde_json::from_slice::<DocumentIdentityRead>(&document.bytes)
+                .is_ok_and(|read| read.identity.matches(invocation))
+        })
+        .map(|document| document.bytes.as_slice())
+        .ok_or(PreStateFault::InvocationNotProvided)?;
     let InvocationRead {
         self_object: ObjectRef { population, key },
         pre,
@@ -520,14 +594,14 @@ fn tie_pre_state(
 fn same_node(
     member: ScopeMember,
     harness: &quire_contract_model::CheckedNodeId,
-    named: WireNodeId,
+    named: &quire_exact::NodeKey,
 ) -> Result<(), FrameReplayError> {
-    if WireNodeId::from_hex(&harness.digest) == Some(named) {
+    if checked_node_key(harness).as_ref() == Some(named) {
         Ok(())
     } else {
         Err(FrameReplayError::ScopeMismatch {
             member,
-            harness: harness.digest.to_string(),
+            harness: format!("{harness:?}"),
             named: named.to_string(),
         })
     }
@@ -581,6 +655,7 @@ impl FrameReplay {
         let replay_limits = run.replay_limits;
         let located = call_site(
             run.source.source_identity(),
+            run.package_name.clone(),
             &run.source.identity,
             &run.source.bytes,
             packages.iter().map(|package| package.bytes.as_slice()),
@@ -589,11 +664,14 @@ impl FrameReplay {
         )
         .map_err(FrameReplayError::CallSite)?;
         let site = located.site;
-        same_node(ScopeMember::Anchor, &harness.scope.anchor, site.anchor)?;
-        same_node(ScopeMember::Frame, &harness.scope.frame, site.frame)?;
-        let obligation = *frame_identity(&site, kind)
-            .map_err(FrameReplayError::Identity)?
-            .as_bytes();
+        same_node(ScopeMember::Anchor, &harness.scope.anchor, &site.anchor)?;
+        same_node(ScopeMember::Frame, &harness.scope.frame, &site.frame)?;
+        let obligation = frame_identity(&site, kind).map_err(FrameReplayError::Identity)?;
+        let selected = SelectedFrameClaim {
+            identity: obligation.clone(),
+            frame: site.frame.clone(),
+            occurrence: site.frame_occurrence.clone(),
+        };
         let OperationSite {
             frame_operation,
             anchor,
@@ -621,16 +699,14 @@ impl FrameReplay {
             .collect::<Vec<_>>();
         let request = |source: ReplaySource| {
             run.wire(
-                located.package_id,
                 RequestTargetWire::frame_operation(frame_operation.clone()),
                 source,
-                obligation,
+                obligation.clone(),
                 &documents,
             )
         };
-        // QSL's own decode of the request checks every provided document against its digest
-        // and refuses with its own code; the pre-state tie reads those documents only after it
-        // has passed, so a document whose bytes do not match its digest is QSL's refusal.
+        // QSL admits the request's wire shape before the pre-state tie. The tie locates its
+        // documents by their declared identities; replay later performs QSL's document checks.
         let unranged = harness.unranged.clone();
         ReplayRequest::decode(
             request(ReplaySource::Witness(witness.clone())),
@@ -646,10 +722,8 @@ impl FrameReplay {
         let packet = WitnessPacket {
             obligation_identity: Some(obligation),
             occurrence_key: Some(payload.occurrence.clone()),
-            clause_node: Some(payload.frame),
+            clause_node: Some(payload.frame.clone()),
             replay_target: ReplayTargetMembers::frame_operation(frame_operation),
-            package_id: Some(wire.package_id.clone()),
-            source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
             declared_domains: Some(Vec::new()),
@@ -661,6 +735,7 @@ impl FrameReplay {
         Ok(Self {
             wire,
             packet,
+            selected,
             replay_limits,
             unranged,
         })
@@ -670,15 +745,61 @@ impl FrameReplay {
     ///
     /// # Errors
     ///
-    /// [`FrameReplayError::Envelope`] when the packet is no admitted envelope, and
-    /// [`FrameReplayError::Refused`] when QSL refuses the request or the envelope.
+    /// [`FrameReplayError::ClaimMismatch`] when a changed request or packet no longer carries
+    /// QSL's selected frame claim, [`FrameReplayError::Envelope`] when the packet is no admitted
+    /// envelope, and [`FrameReplayError::Refused`] when QSL refuses the request or envelope.
     pub fn replay(self) -> Result<FrameReplayResult, FrameReplayError> {
         let Self {
             wire,
             packet,
+            selected,
             replay_limits,
             unranged,
         } = self;
+        if wire.obligation_identity != selected.identity {
+            return Err(FrameReplayError::ClaimMismatch(
+                FrameClaimMember::RequestIdentity,
+            ));
+        }
+        if packet
+            .obligation_identity
+            .as_ref()
+            .is_some_and(|identity| identity != &selected.identity)
+        {
+            return Err(FrameReplayError::ClaimMismatch(
+                FrameClaimMember::EnvelopeIdentity,
+            ));
+        }
+        if packet
+            .clause_node
+            .as_ref()
+            .is_some_and(|node| node != &selected.frame)
+        {
+            return Err(FrameReplayError::ClaimMismatch(
+                FrameClaimMember::EnvelopeFrame,
+            ));
+        }
+        if packet
+            .occurrence_key
+            .as_ref()
+            .is_some_and(|key| key != &selected.occurrence)
+        {
+            return Err(FrameReplayError::ClaimMismatch(
+                FrameClaimMember::EnvelopeOccurrence,
+            ));
+        }
+        if let Some(payload) = &packet.family_payload {
+            if payload.frame != selected.frame {
+                return Err(FrameReplayError::ClaimMismatch(
+                    FrameClaimMember::PayloadFrame,
+                ));
+            }
+            if payload.occurrence != selected.occurrence {
+                return Err(FrameReplayError::ClaimMismatch(
+                    FrameClaimMember::PayloadOccurrence,
+                ));
+            }
+        }
         let envelope = WitnessEnvelope::reconstruct(packet, replay_limits)
             .map_err(FrameReplayError::Envelope)?;
         replay_frame(wire, &envelope, replay_limits).map_err(|refusal| FrameReplayError::Refused {

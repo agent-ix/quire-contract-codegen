@@ -7,6 +7,7 @@ use super::{
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, GraphBody, ItemCheckError,
     NodeKey, Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };
+use crate::core::ir::node_key::checked_node_key;
 use quire_contract_model::CheckedTerm;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -252,13 +253,13 @@ pub(super) fn resolve_type<Body: GraphBody>(
                                     fields.push((name, wrapped));
                                     children.push(target);
                                 }
-                                closure.in_progress.insert(key);
+                                closure.in_progress.insert(key.clone());
                                 frames.push(Frame::FinishRecord { id, key, fields });
                             } else {
                                 for member in members {
                                     children.push(read_reference(member).ok_or_else(malformed)?);
                                 }
-                                closure.in_progress.insert(key);
+                                closure.in_progress.insert(key.clone());
                                 frames.push(Frame::FinishTuple {
                                     id,
                                     key,
@@ -302,7 +303,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                                 let CheckedTerm::Binding { name, value } = wire else {
                                     return Err(mismatch().into());
                                 };
-                                if name.as_ref() != member.identifier().as_str() {
+                                if name.as_ref() != member.identifier() {
                                     return Err(mismatch().into());
                                 }
                                 let payload =
@@ -314,7 +315,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                                     children.push(read_reference(position).ok_or_else(mismatch)?);
                                 }
                             }
-                            closure.in_progress.insert(key);
+                            closure.in_progress.insert(key.clone());
                             frames.push(Frame::FinishUnion { id, key, members });
                             for child in children.into_iter().rev() {
                                 frames.push(Frame::Enter {
@@ -451,10 +452,14 @@ pub(super) fn resolve_type<Body: GraphBody>(
                 built.reverse();
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
-                        id.digest.to_string(),
+                        key.clone(),
+                        checked_node_key(&id)
+                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
+                                composite: id.clone(),
+                            })?
+                            .to_string(),
                         CompositeShape::Record(built),
                     ),
                 );
@@ -482,17 +487,22 @@ pub(super) fn resolve_type<Body: GraphBody>(
                     }
                     built.push(
                         quire_semantic_value::declaration::UnionMemberDeclaration::resolved(
-                            member.identifier().clone(),
+                            quire_exact::Identifier::new(member.identifier())
+                                .map_err(|_| mismatch())?,
                             payload,
                         ),
                     );
                 }
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
-                        id.digest.to_string(),
+                        key.clone(),
+                        checked_node_key(&id)
+                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
+                                composite: id.clone(),
+                            })?
+                            .to_string(),
                         CompositeShape::Union(built),
                     ),
                 );
@@ -511,10 +521,14 @@ pub(super) fn resolve_type<Body: GraphBody>(
                 built.reverse();
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
-                        id.digest.to_string(),
+                        key.clone(),
+                        checked_node_key(&id)
+                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
+                                composite: id.clone(),
+                            })?
+                            .to_string(),
                         CompositeShape::Tuple(built),
                     ),
                 );

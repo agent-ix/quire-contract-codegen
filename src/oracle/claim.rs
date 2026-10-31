@@ -7,7 +7,7 @@
 //! be blocked on. A new generator returns these with its own type parameters
 //! and does not edit this module.
 
-use quire_contract_model::CheckedSemanticId;
+use quire_contract_model::ContractSourceV1;
 use serde::Serialize;
 
 /// Upstream work an item, or a whole generation, is blocked on.
@@ -50,8 +50,8 @@ pub enum ClaimDisposition<G, R> {
 /// `claim-map.json`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ClaimMap<C> {
-    /// Source package identity.
-    pub package_id: CheckedSemanticId,
+    /// Source package identity and exact admitted lock.
+    pub source: ContractSourceV1,
     /// Upstream gaps every entry is subject to.
     pub blocked: Vec<UpstreamBlocker>,
     /// Entries, in the order the producing generator documents on its
@@ -74,13 +74,19 @@ pub struct ClaimMap<C> {
 pub enum OracleGenerationError {
     /// The supplied owner context belongs to a different original checked package.
     ContextPackageMismatch {
-        /// Original checked-package identity retained by Contract IR.
-        expected: quire_contract_model::CheckedSemanticId,
-        /// Actual owner-issued context's domain.
-        actual_domain: String,
-        /// Actual owner-issued context's digest.
-        actual_digest: String,
+        /// Original checked-package name retained by Contract IR.
+        expected: Box<str>,
+        /// Actual owner-issued context's package name.
+        actual: String,
     },
+    /// The supplied context's exact checked-package bytes differ from the original source.
+    ContextPackageContentMismatch,
+    /// A context was supplied without the original admitted checked package for comparison.
+    MissingOriginalCheckedPackage,
+    /// The lowered contract package names a different original checked package or source lock.
+    ContractSourceMismatch,
+    /// The original checked package could not be canonically re-encoded for an exact comparison.
+    CheckedPackageEncoding,
     /// Genuine enum lookup succeeded but semantic reconstruction did not.
     EnumReconstruction(quire_semantic_value::semantic_node::InvalidSemanticGraph),
     /// Bounded declaration admission failed before an equality plan could be checked.

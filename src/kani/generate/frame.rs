@@ -293,7 +293,7 @@ fn plan_state_frame_role(
                     comparison: condition.comparison,
                     left_is_pre: condition.left == Side::Pre,
                 },
-                module: format!("post_{}", short(&request.clause.digest)),
+                module: format!("post_{}", short(request.package, request.clause)?),
             })
         }
         StateFrameRole::Frame => {
@@ -314,8 +314,8 @@ fn plan_state_frame_role(
                 },
                 module: format!(
                     "frame_{}_{}",
-                    short(&prepared.shape.scope.anchor.digest),
-                    short(&request.clause.digest)
+                    short(request.package, &prepared.shape.scope.anchor)?,
+                    short(request.package, request.clause)?
                 ),
             })
         }
@@ -396,7 +396,7 @@ fn contract_harness(
         &domains,
         &unranged,
         condition.property(),
-        &format!("post_{}", short(&request.clause.digest)),
+        &format!("post_{}", short(request.package, request.clause)?),
     )
 }
 
@@ -430,8 +430,8 @@ fn frame_harness(
         },
         &format!(
             "frame_{}_{}",
-            short(&shape.scope.anchor.digest),
-            short(&request.clause.digest)
+            short(request.package, &shape.scope.anchor)?,
+            short(request.package, request.clause)?
         ),
     )
 }
@@ -464,8 +464,20 @@ fn is_identifier(name: &str) -> bool {
     syn::parse_str::<syn::Ident>(name).is_ok()
 }
 
-fn short(digest: &str) -> &str {
-    digest.get(..12).unwrap_or(digest)
+fn short(package: &CheckedPackageV2, node: &CheckedNodeId) -> Result<String, StateFrameRefusal> {
+    let source = quire_contract_model::ContractSourceV1 {
+        name: package.name().into(),
+        lock: package.lock().clone(),
+    };
+    let node_key = crate::kani::generate::outcome::node_label(node).to_string();
+    let preimage = crate::core::canonical::preimage_value(&(&source, &node_key))
+        .map_err(|_| StateFrameRefusal::RecordSerialization)?;
+    let digest = crate::core::canonical::content_digest(&preimage)
+        .map_err(|_| StateFrameRefusal::RecordSerialization)?;
+    Ok(digest[..6]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal> {
@@ -1038,6 +1050,10 @@ fn render(
     })?;
     let identity = StateFrameIdentity {
         ceilings: request.ceilings,
+        package: quire_contract_model::ContractSourceV1 {
+            name: request.package.name().into(),
+            lock: request.package.lock().clone(),
+        },
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,

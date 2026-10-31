@@ -20,13 +20,13 @@ use quire_contract_codegen::{
     COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    derive_structural_candidates, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
-    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
+    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageLimit,
+    CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
+    ContractPackageReadResult, ContractPackageWireV1,
 };
-use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
+use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth, NodeKey, PathSegment};
 use quire_exact::{CollectionType, Presence, ValueType};
 use quire_semantic_value::declaration::{
     CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
@@ -43,17 +43,31 @@ mod package;
 
 use package::*;
 
+fn runtime_node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(runtime_node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
 /// Structural equality reaching IEEE is reader-ineligible.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("FR-018-AC-6", "TC-029")]
 #[test]
-fn tc_052_nested_ieee_equality_is_refused_by_reader() {
+fn tc_029_nested_ieee_equality_is_refused_by_reader() {
     let (result, wire, ids) = nested_ieee_package().read_resolved();
     let node_id = ids.resolve(&code_id(E_NESTED_IEEE));
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| {
+            node["node_id"] == serde_json::to_value(&node_id).expect("structural node id")
+        })
         .expect("nested IEEE equality");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("nested IEEE equality unexpectedly admitted: {result:?}");
@@ -64,7 +78,10 @@ fn tc_052_nested_ieee_equality_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal.loci[0]
+            .path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/operation/leaves"
         ))
@@ -73,9 +90,9 @@ fn tc_052_nested_ieee_equality_is_refused_by_reader() {
 }
 
 /// A sequence body has one element reference.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("TC-029")]
 #[test]
-fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
+fn tc_029_two_reference_sequence_body_is_refused_by_reader() {
     let (_, mut wire, ids) = corpus_package().read_resolved();
     let node_id = ids.resolve(&code_id(SEQ_R_FLOAT));
     let bound = ids.resolve(&code_id(CB_SMALL));
@@ -84,26 +101,17 @@ fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| {
+            node["node_id"] == serde_json::to_value(&node_id).expect("structural node id")
+        })
         .expect("sequence");
     nodes[position]["body"]["members"]
         .as_array_mut()
         .expect("members")
         .push(json!({
             "term": "reference",
-            "target": {"domain": bound.domain, "digest": bound.digest},
+            "target": bound,
         }));
-    let draft: Vec<CheckedSemanticNodeV2> =
-        serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
-    assert!(matches!(
-        derive_structural_candidates(
-            &draft,
-            quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
-            quire_contract_model::CheckedPackageReadLimits::bounded().work,
-        ),
-        Err(StructuralCandidateError::InvalidClosedShape { position: refused, node_id: invalid })
-            if refused == position && invalid == node_id
-    ));
     let result = read_mutated_wire(wire);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("two-reference sequence unexpectedly admitted: {result:?}");
@@ -111,10 +119,13 @@ fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
     assert_eq!(
         refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
+        Some(CheckedPackageRefusalCause::InvalidDerivedShape)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal.loci[0]
+            .path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/node_id"))
     );
     assert_eq!(refusal.locus, Some(node_id));
@@ -280,6 +291,7 @@ fn generate_with_context(
     // its original positive/precise assertions are intentionally not replaced by Missing.
     let output = generate_composite_equality_oracles(
         &admitted,
+        Some(&package.checked),
         None,
         &roots,
         &positions,
@@ -389,6 +401,7 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     // The invalid setting precedes traversal and needs no identity capability.
     let result = generate_composite_equality_oracles(
         &admitted,
+        Some(&package.checked),
         None,
         &[],
         &[],
@@ -421,7 +434,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     )
     .expect("QSpec fixture JSON");
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let node_ref = |digest: &str| json!({"domain": NODE_DOMAIN, "digest": digest});
+    let node_ref = |path: &str| json!({"package": "cg-fixture", "path": [path], "ordinal": 0});
     let case_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
         nodes
             .iter()
@@ -433,15 +446,13 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     let integer_type = nodes
         .iter()
         .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let integer_literals: Vec<String> = nodes
+        .unwrap()["node_id"]
+        .clone();
+    let integer_literals: Vec<serde_json::Value> = nodes
         .iter()
         .filter(|node| node["node_tag"] == "value" && node["semantic_form"] == "literal")
         .take(2)
-        .map(|node| node["node_id"]["digest"].as_str().unwrap().to_owned())
+        .map(|node| node["node_id"].clone())
         .collect();
     assert_eq!(integer_literals.len(), 2);
 
@@ -463,7 +474,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
                 "term":"application", "operator":"binary",
                 "operation":{"identity":"quire.op.integer.eq","laws":[],"mode":null,"member":null,"leaves":[]},
                 "result_type":node_ref(&key(BOOLEAN)),
-                "arguments":integer_literals.iter().map(|digest| json!({"term":"reference","target":node_ref(digest)})).collect::<Vec<_>>(),
+                "arguments":integer_literals.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>(),
             }),
         );
     let (admission, _, ids) = builder.read_resolved();
@@ -473,7 +484,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     };
     let case_id = ids.resolve(&case_id);
     let equality_id = ids.resolve(&code_id(EQUALITY));
-    let integer_id = ids.resolve(&id(&integer_type));
+    let integer_id = ids.resolve(&serde_json::from_value(integer_type).expect("integer type id"));
     let lowered = package.lower(
         &[case_id.clone(), equality_id.clone()],
         &CompleteLoweringProfileV2 {
@@ -522,6 +533,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         });
     let combined = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &requests,
         &[0, 1],
@@ -531,6 +543,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     .unwrap();
     let equality_only = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &requests,
         &[1],
@@ -569,7 +582,6 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         contents(&combined, "src/lib.rs"),
         contents(&equality_only, "src/lib.rs")
     );
-    assert!(!contents(&combined, "src/lib.rs").contains(case_id.digest.as_ref()));
 }
 
 fn contents<'o>(oracles: &'o CompositeEqualityOracles, path: &str) -> &'o str {
@@ -1103,14 +1115,14 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     };
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
     // as the runtime environment sees it, and confirm the reader refusal
-    // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`
+    // asserted by `tc_029_nested_ieee_equality_is_refused_by_reader`
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.
     let float_record_key = owner_key("FloatRecord");
     let environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
-            float_record_key,
+            float_record_key.clone(),
             "FloatRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
@@ -1121,7 +1133,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
         core::iter::empty::<ObjectTypeDeclaration>(),
     )
     .unwrap();
-    let record_type = ValueType::Composite(float_record_key);
+    let record_type = ValueType::Composite(float_record_key.clone());
     let sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         record_type.clone(),
@@ -1146,7 +1158,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     let not_float_record_key = owner_key("IntegerRecord");
     let not_ieee_environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
-            not_float_record_key,
+            not_float_record_key.clone(),
             "IntegerRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
@@ -1157,7 +1169,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
         core::iter::empty::<ObjectTypeDeclaration>(),
     )
     .unwrap();
-    let not_float_record_type = ValueType::Composite(not_float_record_key);
+    let not_float_record_type = ValueType::Composite(not_float_record_key.clone());
     let not_float_sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         not_float_record_type.clone(),
@@ -1380,7 +1392,9 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| {
+            node["node_id"] == serde_json::to_value(&node_id).expect("structural node id")
+        })
         .expect("the node is in the wire");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("IR admitted an ineligible reference equality: {result:?}");
@@ -1391,7 +1405,10 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal.loci[0]
+            .path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/body/arguments/1"))
     );
     assert_eq!(refusal.locus, Some(node_id));
@@ -1408,9 +1425,17 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
         "function f using v(a: Point,b: Point): Boolean pure { a = b }\n",
     );
     let result = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "duplicate-field.native", "git", "fixture"),
-        "duplicate-field.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "duplicate-field.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "duplicate-field".to_owned(),
+            path: "duplicate-field.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &qsl_replay::DependencyInput::default(),
         qsl_replay::StageLimits::default(),
@@ -1479,7 +1504,7 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
             .iter()
             .map(|claim| {
                 (
-                    claim.node_id.digest.to_string(),
+                    claim.node_id.clone(),
                     generated(claim).descriptor.operator as u8,
                 )
             })
@@ -1507,7 +1532,7 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
             .items
             .iter()
             .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-            .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+            .map(|claim| format!("{:?}", claim.node_id))
             .collect::<Vec<String>>();
         let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
         let declaration_subjects = first
@@ -1519,7 +1544,7 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
                 ClaimDisposition::Refused { .. } => None,
             })
             .flatten()
-            .map(|id| format!("{}/{}", id.domain, id.digest))
+            .map(|id| format!("{id:?}"))
             .collect::<Vec<_>>();
         let declaration_refs = declaration_subjects
             .iter()
@@ -1736,9 +1761,15 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         assert_eq!(declarations.len(), names.len());
         let mut wire = declarations
             .iter()
-            .map(|actual| quire_contract_model::CheckedNodeId {
-                domain: quire_exact::NODE_KEY_DOMAIN.into(),
-                digest: actual.node().to_string().into_boxed_str(),
+            .map(|actual| {
+                package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| runtime_node_key(&node.node_id) == *actual.node())
+                    .expect("actual wire-to-kernel pairing")
+                    .node_id
+                    .clone()
             })
             .collect::<Vec<_>>();
         wire.sort();
@@ -1747,7 +1778,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             .map(|id| {
                 declarations
                     .iter()
-                    .find(|actual| actual.node().to_string() == id.digest.as_ref())
+                    .find(|actual| *actual.node() == runtime_node_key(id))
                     .expect("actual wire-to-kernel pairing")
                     .key()
                     .to_string()
@@ -1755,7 +1786,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             .collect::<Vec<_>>();
         assert_eq!(
             claim.declaration_keys, wire,
-            "wire identities ascend by domain/digest"
+            "wire identities ascend by structural node identity"
         );
         assert_eq!(
             claim.declaration_runtime_keys, runtime,
@@ -1766,7 +1797,6 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         }
         assert_eq!(claim.node_id, item.node_id);
         assert_eq!(claim.schedule, RecordedSchedule::Plan);
-        assert_eq!(claim.package_id, *package.package_id());
         // Independently recompute exact claims and source locations via public IR lowering,
         // without reading the generator's private profile or claim-map to build expectations.
         let profile = CompleteLoweringProfileV2 {
@@ -1780,7 +1810,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             work_limit: 10_000,
         };
         let lowered = package.lower(std::slice::from_ref(&item.node_id), &profile);
-        assert_eq!(*lowered.package.source_package_id(), *package.package_id());
+        assert_eq!(lowered.package.source_package_name(), package.name());
         match &lowered.records[..] {
             [CompleteLoweringRecordV2::Lowered { node }] => {
                 assert_eq!(claim.claims, node.claims);
@@ -1914,13 +1944,13 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
         panic!("wrong-form source wire unexpectedly admitted: {result:?}")
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(refusal.cause, None);
     assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::StaleNodeKey)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+        refusal.loci[0]
+            .path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/body"))
     );
     assert_eq!(refusal.locus, Some(id));
     // Exact CG MissingBound(integer_range) remains a separate private defensive assertion.
@@ -1938,7 +1968,9 @@ fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| {
+            node["node_id"] == serde_json::to_value(&node_id).expect("structural node id")
+        })
         .expect("tuple equality");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("IEEE tuple unexpectedly admitted: {result:?}");
@@ -1949,7 +1981,10 @@ fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal.loci[0]
+            .path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/operation/leaves"
         ))
@@ -1969,7 +2004,7 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
             .as_array()
             .expect("authored nodes")
             .iter()
-            .find(|node| node["node_id"]["digest"] == key(bound))
+            .find(|node| node["node_id"] == serde_json::to_value(code_id(bound)).expect("bound id"))
             .expect("authored bad bound")
             .clone();
         ids.resolve_value(&mut bad);
@@ -1979,17 +2014,6 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
         let position = nodes.len();
         nodes.push(bad);
         let node_id = code_id(bound);
-        let draft: Vec<CheckedSemanticNodeV2> =
-            serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
-        assert!(matches!(
-            derive_structural_candidates(
-                &draft,
-                quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
-                quire_contract_model::CheckedPackageReadLimits::bounded().work,
-            ),
-            Err(StructuralCandidateError::InvalidClosedShape { position: refused, node_id: invalid })
-                if refused == position && invalid == node_id
-        ));
         let result = read_mutated_wire(wire);
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {
             panic!("bound {bound} unexpectedly admitted: {result:?}");
@@ -1997,10 +2021,13 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
         assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
         assert_eq!(
             refusal.cause,
-            Some(CheckedPackageRefusalCause::StaleNodeKey)
+            Some(CheckedPackageRefusalCause::InvalidDerivedShape)
         );
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+            refusal.loci[0]
+                .path
+                .as_ref()
+                .map(|path| path.as_str().to_owned()),
             Some(format!("/semantic_graph/nodes/{position}/node_id"))
         );
         assert_eq!(refusal.locus, Some(node_id));

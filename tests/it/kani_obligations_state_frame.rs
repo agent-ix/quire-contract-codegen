@@ -40,12 +40,12 @@ use native_twin::{
 };
 use package::{
     application, code_id, key, literal, member, op, op_full, parameter_body, reference, Bound,
-    PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
+    PackageBuilder, FUNCTION, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
     CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
-    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue, Verdict,
-    WitnessSettlement,
+    ObligationIdentity, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
+    Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
@@ -69,7 +69,6 @@ use quire_contract_model::{
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 const OBJECT: u32 = 4001;
 const REFERENCE: u32 = 4002;
@@ -170,7 +169,8 @@ fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
     };
     let condition_node = condition_node.clone();
     let map = generate_v2_clause_claim_map(&package, &clause);
-    assert_eq!(&map.package_id, package.package_id());
+    assert_eq!(map.source.name.as_ref(), package.name());
+    assert_eq!(&map.source.lock, package.lock());
     assert_eq!(map.items.len(), 1);
     assert_eq!(map.items[0].node_id, clause);
     let quire_contract_codegen::ClaimDisposition::Generated(generated) = &map.items[0].result
@@ -1455,7 +1455,7 @@ impl Shape {
 }
 
 fn node_ref(digest: &str) -> Value {
-    json!({"domain": NODE_DOMAIN, "digest": digest})
+    serde_json::to_value(package::id(digest)).expect("fixture node id")
 }
 
 /// `project(<deref>, field)` over `object`'s `field`, typed by `bound`.
@@ -1479,7 +1479,7 @@ fn field_read_through(
         ),
         &[deref.to_owned(), object.to_owned()],
     );
-    code_id(code).digest.to_string()
+    key(code)
 }
 
 fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) -> String {
@@ -1496,7 +1496,7 @@ fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) ->
         ),
         &[],
     );
-    code_id(code).digest.to_string()
+    key(code)
 }
 
 fn state_frame_base_package() -> PackageBuilder {
@@ -1588,7 +1588,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
     let object = key(shape.scoped(OBJECT));
     let mut object_dependencies = vec![balance_key.clone(), audit_key.clone()];
     if shape.reaches_function {
-        object_dependencies.push(code_id(FUNCTION).digest.to_string());
+        object_dependencies.push(key(FUNCTION));
     }
     builder.node_with(
         &object,
@@ -1706,7 +1706,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         ),
         &[],
     );
-    let deref = code_id(shape.scoped(DEREF)).digest.to_string();
+    let deref = key(shape.scoped(DEREF));
     builder.application_bounded(
         shape.code(420),
         "expression",
@@ -1741,7 +1741,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         (&object, "audit", &audit_key),
     );
     let pre_audit = pre_read(builder, shape.code(401), &post_audit, &audit_key);
-    let other = code_id(shape.code(420)).digest.to_string();
+    let other = key(shape.code(420));
     let post_other = field_read_through(
         builder,
         shape.code(421),
@@ -1773,7 +1773,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         ),
         &[],
     );
-    let mut condition = code_id(shape.code(200)).digest.to_string();
+    let mut condition = key(shape.code(200));
     if matches!(shape.condition, Condition::Negated) {
         builder.application_bounded(
             shape.code(210),
@@ -1788,7 +1788,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             ),
             &[],
         );
-        condition = code_id(shape.code(210)).digest.to_string();
+        condition = key(shape.code(210));
     }
     if matches!(shape.condition, Condition::Conjunction) {
         builder.application_bounded(
@@ -1804,7 +1804,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             ),
             &[],
         );
-        condition = code_id(shape.code(210)).digest.to_string();
+        condition = key(shape.code(210));
     }
     // FR-341 binder order: `self`, then `result` when present, then the operation's parameters.
     let mut parameters = vec![reference(&key(shape.scoped(SELF)))];
@@ -2036,14 +2036,14 @@ fn generated_from_twin(
 }
 
 /// The healthy twin's frame identity from QSL's emitted checked package.
-fn frame_harness(twin: &Twin) -> StateFrameIdentity {
+pub(crate) fn frame_harness(twin: &Twin) -> StateFrameIdentity {
     generated_from_twin(twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
         .frame
         .identity
 }
 
 /// The run of `harness` whose playback binds `values`, in the harness's draw order.
-fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
+pub(crate) fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
     Run {
         playback: playback_text(harness, FORBIDDEN_CHECK, &values),
         harness: harness.clone(),
@@ -2209,9 +2209,9 @@ fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])
 }
 
-/// The identity the replay of `operation` over `run` puts in the request, the invocation at
-/// `(5, 0)` named for every operation.
-fn minted(twin: &Twin, operation: &str, run: &Run) -> [u8; 32] {
+/// The producer identity the replay of `operation` over `run` carries in the request, with
+/// the invocation at `(5, 0)` named for every operation.
+fn carried_frame_identity(twin: &Twin, operation: &str, run: &Run) -> ObligationIdentity {
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     twin.try_frame_replay(operation, &invocation, "account", "audit", run)
         .unwrap_or_else(|error| panic!("the replay of `{operation}` builds: {error}"))
@@ -2219,19 +2219,10 @@ fn minted(twin: &Twin, operation: &str, run: &Run) -> [u8; 32] {
         .obligation_identity
 }
 
-/// The SHA-256 of the hand-written RFC 8785 text of the frame preimage of `site`: the frame node
-/// as `function`, its occurrence as `declaration`, the `frame` kind and no arguments.
-fn hand_written_identity(site: &OperationSite) -> [u8; 32] {
-    let origin = site.frame_occurrence.origin();
-    let text = format!(
-        "{{\"arguments\":[],\"declaration\":{{\"node\":\"{}\",\"ordinal\":{},\"role\":\"{}\"}},\
-         \"function\":\"{}\",\"kind\":\"frame\"}}",
-        site.frame_occurrence.node(),
-        origin.ordinal(),
-        origin.role(),
-        site.frame,
-    );
-    Sha256::digest(text.as_bytes()).into()
+/// The identity issued with QSL's selected operation-frame claim.
+fn producer_frame_identity(site: &OperationSite) -> ObligationIdentity {
+    assert_eq!(site.frame_occurrence.node(), &site.frame);
+    site.obligation_identity().clone()
 }
 
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
@@ -2252,21 +2243,20 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
         .expect_err("the request must be refused")
 }
 
-/// The admitted frame reaches the same rekeyed object and
-/// integer bound as the authored clause, even when the clause uses a second parameter.
-#[trace("FR-037-AC-1", "TC-052")]
+/// The reader-admitted frame retains the producer-assigned object and integer-bound
+/// references, even when the clause uses a second parameter.
 #[test]
-fn tc_025_state_frame_structural_candidates_settle_through_object_and_bound() {
+fn state_frame_producer_ids_connect_object_and_bound() {
     let shape = Shape {
         variant: 12,
         condition: Condition::BalanceAgainstOther,
         ..Shape::HEALTHY
     };
-    let (package, ids) = package_for(&shape).admit_resolved();
-    let object = ids.resolve(&package::id(&key(shape.scoped(OBJECT))));
-    let frame = ids.resolve(&package::id(&key(shape.scoped(FRAME))));
+    let package = package_for(&shape).admit();
+    let object = package::id(&key(shape.scoped(OBJECT)));
+    let frame = package::id(&key(shape.scoped(FRAME)));
     let (lower, upper) = model::FIELDS[0].1;
-    let bound = ids.resolve(&package::id(&Bound::Integer(lower, upper).key()));
+    let bound = package::id(&Bound::Integer(lower, upper).key());
     let graph = &package.graph().nodes;
     let admitted_frame = graph
         .iter()
@@ -2374,7 +2364,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
             &harness.rust.contents,
             &[
                 "deposit",
-                &format!("{}/{}", fixture.clause.domain, fixture.clause.digest),
+                &format!("{:?}", fixture.clause).escape_debug().to_string(),
             ],
         );
         for node in [
@@ -2385,7 +2375,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
             crate::generated_headers::assert_header(
                 &harness.rust.path,
                 &harness.rust.contents,
-                &[&format!("{}/{}", node.domain, node.digest)],
+                &[&format!("{node:?}").escape_debug().to_string()],
             );
         }
     }
@@ -2454,10 +2444,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
     let record: Value = serde_json::from_str(&generated.frame.record.contents).expect("record");
     assert_eq!(record["identity"]["scope"]["operation"], "deposit");
     assert_eq!(record["identity"]["property"]["kind"], "frame");
-    assert_eq!(
-        record["identity"]["scope"]["frame"]["digest"],
-        json!(fixture.frame.digest)
-    );
+    assert_eq!(record["identity"]["scope"]["frame"], json!(fixture.frame));
 
     // Equal inputs regenerate byte-identically, and the unwind bound is part of the identity.
     assert_eq!(generate(&fixture), generated);
@@ -3069,8 +3056,10 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
     let (package, balance) = twin.emitted_package("BalanceNeverDrops");
     let (audit_package, audit) = twin.emitted_package("AuditNeverDrops");
     let (also_package, also) = twin.emitted_package("BalanceAlso");
-    assert_eq!(package.package_id(), audit_package.package_id());
-    assert_eq!(package.package_id(), also_package.package_id());
+    assert_eq!(package.name(), audit_package.name());
+    assert_eq!(package.lock(), audit_package.lock());
+    assert_eq!(package.name(), also_package.name());
+    assert_eq!(package.lock(), also_package.lock());
     let items = [
         selected_spec(&package, &audit, Contract, &STATE_FIELDS).item(),
         selected_spec(&package, &balance, Contract, &STATE_FIELDS).item(),
@@ -3742,8 +3731,8 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
     let payload = replay.packet.family_payload.as_ref().expect("a payload");
     assert_ne!(payload.anchor, payload.frame);
-    assert_eq!(payload.occurrence.node(), payload.frame);
-    assert_eq!(replay.packet.clause_node, Some(payload.frame));
+    assert_eq!(payload.occurrence.node(), &payload.frame);
+    assert_eq!(replay.packet.clause_node.as_ref(), Some(&payload.frame));
     assert_eq!(
         replay.packet.occurrence_key.as_ref(),
         Some(&payload.occurrence)
@@ -3876,90 +3865,129 @@ fn refused(result: Result<FrameReplay, FrameReplayError>) -> FrameReplayError {
 }
 
 /// The frame replay of `operation` over `run` at the pre state `(5, 0)`.
-fn replay_of(twin: &Twin, operation: &str, run: &Run) -> Result<FrameReplay, FrameReplayError> {
+pub(crate) fn replay_of(
+    twin: &Twin,
+    operation: &str,
+    run: &Run,
+) -> Result<FrameReplay, FrameReplayError> {
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     twin.try_frame_replay(operation, &invocation, "account", "audit", run)
 }
 
-/// The request's and the envelope's obligation identity equal the SHA-256 of the hand-written
-/// preimage of the site `qsl_replay::call_site` returns for the operation, and the envelope's
+/// The request's and the envelope's obligation identity equal the structural identity of the
+/// site `qsl_replay::call_site` returns for the operation, and the envelope's
 /// `clause_node` and `occurrence_key` are the same `function` and `declaration` members.
-#[trace("FR-024-AC-22", "FR-024-AC-24", "TC-035")]
+#[trace("FR-024-AC-47", "FR-024-AC-48", "FR-024-AC-50", "TC-035")]
 #[test]
-fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site() {
+fn tc_035_the_request_and_envelope_carry_the_producer_frame_claim() {
     let twin = Twin::new();
     let site = twin
         .operation_site("deposit")
         .expect("the operation is located");
     let replay = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
-    let expected = hand_written_identity(&site);
+    let expected = producer_frame_identity(&site);
     assert_eq!(replay.wire.obligation_identity, expected);
-    assert_eq!(replay.packet.obligation_identity, Some(expected));
-    assert_eq!(replay.packet.clause_node, Some(site.frame));
+    assert_eq!(replay.packet.obligation_identity, Some(expected.clone()));
+    assert_eq!(expected.model(), site.obligation_identity().model());
+    assert_eq!(expected.ordinal(), site.obligation_identity().ordinal());
+    assert_eq!(replay.packet.clause_node, Some(site.frame.clone()));
     assert_eq!(
         replay.packet.occurrence_key.as_ref(),
         Some(&site.frame_occurrence)
     );
-    assert_ne!(expected, [1; 32], "no stand-in digest reaches the request");
+    assert_eq!(
+        expected.node(),
+        &site.frame,
+        "no stand-in node reaches the request"
+    );
+    assert!(
+        !replay.wire.replay_target.arguments,
+        "a frame has no arguments"
+    );
+    assert!(replay.wire.replay_target.occurrence_key.is_none());
+    let payload = replay
+        .packet
+        .family_payload
+        .as_ref()
+        .expect("frame payload");
+    assert_eq!(payload.frame, site.frame);
+    assert_eq!(payload.occurrence, site.frame_occurrence);
+    replay.replay().expect("equal producer claim replays");
 }
 
-/// A harness whose frame grants nothing, replayed over a unit whose frame grants nothing, gives
-/// a different identity in the request and in the envelope; each is the minted identity of its
-/// own site.
-#[trace("FR-024-AC-24", "TC-035")]
+/// A packet cannot replace the selected frame claim's QSL identity while the request keeps it.
+/// This checks the actual replay entry, after the unmodified pair has settled successfully.
+#[trace("FR-024-AC-47", "TC-035")]
 #[test]
-fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
+fn tc_035_a_changed_envelope_identity_refuses_before_frame_replay() {
     let twin = Twin::new();
-    let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
+    let run = forbidden_run(&twin);
+    let baseline = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    baseline.replay().expect("the matching claim settles");
 
-    let granting_nothing = Twin::build(&[], &CLAUSES, 0);
-    let harness = generated_from_twin(
-        &granting_nothing,
-        "BalanceNeverDrops",
-        &STATE_FIELDS,
-        SUBJECT_PATH,
-    )
-    .frame
-    .identity;
-    let changed =
-        replay_of(&granting_nothing, "deposit", &run_of(&harness, [5, 0])).expect("builds");
+    let mut changed = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    let original = changed.wire.obligation_identity.clone();
+    changed.packet.obligation_identity = Some(ObligationIdentity::new(
+        original.node().clone(),
+        original.model().cloned(),
+        original.ordinal() + 1,
+    ));
+    assert_ne!(changed.packet.obligation_identity, Some(original));
+    assert!(
+        matches!(
+            changed.replay(),
+            Err(FrameReplayError::ClaimMismatch(
+                quire_contract_codegen::FrameClaimMember::EnvelopeIdentity
+            ))
+        ),
+        "a changed envelope identity must refuse before frame execution"
+    );
 
-    assert_ne!(
-        changed.wire.obligation_identity,
-        base.wire.obligation_identity
+    let mut changed = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    let original = changed.wire.obligation_identity.clone();
+    changed.wire.obligation_identity = ObligationIdentity::new(
+        original.node().clone(),
+        original.model().cloned(),
+        original.ordinal() + 1,
     );
-    assert_ne!(
-        changed.packet.obligation_identity,
-        base.packet.obligation_identity
-    );
-    let site = granting_nothing
-        .operation_site("deposit")
-        .expect("the operation is located");
-    assert_eq!(
-        changed.wire.obligation_identity,
-        hand_written_identity(&site)
-    );
-    assert_eq!(
-        changed.packet.obligation_identity,
-        Some(changed.wire.obligation_identity)
-    );
+    assert!(matches!(
+        changed.replay(),
+        Err(FrameReplayError::ClaimMismatch(
+            quire_contract_codegen::FrameClaimMember::RequestIdentity
+        ))
+    ));
+
+    let mut changed = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    let original = changed
+        .packet
+        .occurrence_key
+        .as_ref()
+        .expect("frame occurrence");
+    changed.packet.occurrence_key = Some(qsl_replay::OccurrenceKey::new(
+        original.node().clone(),
+        quire_exact::Origin::new(
+            original.origin().role().clone(),
+            original.origin().ordinal() + 1,
+        ),
+    ));
+    assert!(matches!(
+        changed.replay(),
+        Err(FrameReplayError::ClaimMismatch(
+            quire_contract_codegen::FrameClaimMember::EnvelopeOccurrence
+        ))
+    ));
 }
 
-/// The identity is measured through `qsl_replay::call_site`: it changes with the frame's grants
-/// and between two operations of one object whose frames are equal text, and it does not change
-/// when the unit is shifted by blank lines or when a second clause names the same operation.
-#[trace("FR-024-AC-21", "TC-035")]
+/// The identity is measured through `qsl_replay::call_site`: distinct frame occurrences differ,
+/// while blank lines and unrelated clauses leave the selected claim unchanged.
+#[trace("FR-024-AC-47", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
     let identity = |twin: &Twin, operation: &str| {
-        hand_written_identity(&twin.operation_site(operation).expect("operation site"))
+        producer_frame_identity(&twin.operation_site(operation).expect("operation site"))
     };
     let twin = Twin::new();
     let base = identity(&twin, "deposit");
-
-    // Two units that differ only in the frame's `modifies` grants.
-    let both = Twin::build(&["balance", "audit"], &CLAUSES, 0);
-    assert_ne!(base, identity(&both, "deposit"), "grants");
 
     // Two operations of one object whose frames are equal text.
     let two_operations = Twin::build(
@@ -3967,10 +3995,14 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
         &[CLAUSES[0], ("TransferKeepsBalance", "transfer", "balance")],
         0,
     );
+    let deposit = identity(&two_operations, "deposit");
+    let transfer = identity(&two_operations, "transfer");
+    assert_eq!(deposit.node(), transfer.node(), "equal frame body");
+    assert_eq!(deposit.model(), transfer.model(), "one owning model");
     assert_ne!(
-        identity(&two_operations, "deposit"),
-        identity(&two_operations, "transfer"),
-        "operations with equal frame text"
+        deposit.ordinal(),
+        transfer.ordinal(),
+        "distinct frame claims"
     );
 
     // The same operation in a unit shifted by blank lines.
@@ -3983,7 +4015,10 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
     assert_ne!(first.node, second.node, "the clauses are two nodes");
     let mut harness = frame_harness(&twin);
     harness.clause = harness.scope.object.clone();
-    assert_eq!(base, minted(&twin, "deposit", &run_of(&harness, [5, 0])));
+    assert_eq!(
+        base,
+        carried_frame_identity(&twin, "deposit", &run_of(&harness, [5, 0]))
+    );
 
     // A unit with one postcondition clause on `deposit` and the unit with two mint one identity.
     let one_clause = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);
@@ -3998,16 +4033,21 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// unit's clauses name, so a clause added on an operation that sorts earlier moves this
 /// operation's frame occurrence. The identity of `transfer` is read before and after a clause on
 /// `deposit` is added, and it differs.
-#[trace("FR-024-AC-21", "TC-035")]
+#[trace("FR-024-AC-47", "TC-035")]
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
-    let identity = |twin: &Twin| {
-        hand_written_identity(&twin.operation_site("transfer").expect("operation site"))
-    };
     let transfer = ("TransferKeepsBalance", "transfer", "balance");
     let alone = Twin::build(&model::GRANTED, &[transfer], 0);
     let after = Twin::build(&model::GRANTED, &[CLAUSES[0], transfer], 0);
-    assert_ne!(identity(&alone), identity(&after));
+    let before = producer_frame_identity(&alone.operation_site("transfer").expect("frame site"));
+    let shifted = producer_frame_identity(&after.operation_site("transfer").expect("frame site"));
+    assert_eq!(before.node(), shifted.node(), "same selected frame body");
+    assert_eq!(before.model(), shifted.model(), "same owning model");
+    assert_ne!(
+        before.ordinal(),
+        shifted.ordinal(),
+        "producer occurrence moved"
+    );
 }
 
 /// The identity does not change when any one of the harness's own members changes: its clause
@@ -4015,12 +4055,12 @@ fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() 
 /// ranges of its fields or the order of its state fields. The solver is not edited: `KaniSolver`
 /// has one variant (`Cadical`), so no other solver can be built, and the identity function takes
 /// no solver.
-#[trace("FR-024-AC-21", "TC-035")]
+#[trace("FR-024-AC-47", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
     let twin = Twin::new();
     let harness = frame_harness(&twin);
-    let base = minted(&twin, "deposit", &run_of(&harness, [5, 0]));
+    let base = carried_frame_identity(&twin, "deposit", &run_of(&harness, [5, 0]));
     type Edit = Box<dyn Fn(&mut StateFrameIdentity)>;
     let edits: Vec<(&str, Edit)> = vec![
         (
@@ -4064,7 +4104,7 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
         assert_ne!(edited, harness, "{name} is an edit");
         assert_eq!(
             base,
-            minted(&twin, "deposit", &run_of(&edited, [5, 0])),
+            carried_frame_identity(&twin, "deposit", &run_of(&edited, [5, 0])),
             "{name}"
         );
     }
@@ -4072,7 +4112,7 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
     reordered.state_fields.reverse();
     assert_eq!(
         base,
-        minted(&twin, "deposit", &run_of(&reordered, [0, 5])),
+        carried_frame_identity(&twin, "deposit", &run_of(&reordered, [0, 5])),
         "state field order"
     );
 }
@@ -4082,7 +4122,7 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
 /// neither granted nor checked, granted and checked, or no state field at all. Each is refused
 /// before the call site: the operation the unit does not name would otherwise be a
 /// `CallSite` refusal, as it is for the harness that passes the checks.
-#[trace("FR-024-AC-22", "TC-035")]
+#[trace("FR-024-AC-50", "TC-035")]
 #[test]
 fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_site() {
     let twin = Twin::new();
@@ -4880,13 +4920,12 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
     );
 }
 
-/// A provided document whose bytes do not match the digest it is addressed by is QSL's refusal,
-/// with its own code, and not a pre-state refusal: the tie reads the documents only after QSL's
-/// request decode has checked them. The same replay over documents that hash to their digests
-/// builds.
+/// Replacing the invocation bytes leaves no document with the requested identity. Replacing the
+/// pre snapshot bytes leaves an addressed but unreadable document. The pre-state tie distinguishes
+/// those faults without computing a replacement digest (FR-024-AC-27).
 #[trace("FR-024-AC-27", "TC-035")]
 #[test]
-fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_state_one() {
+fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
     let twin = Twin::new();
     let run = forbidden_run(&twin);
     let base = twin.invocation("account", (5, 0), (6, 1));
@@ -4894,13 +4933,17 @@ fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_st
         let mismatched = base.replaced(index, br#"{"unrelated":true}"#);
         let error =
             refused(twin.try_frame_replay("deposit", &mismatched, "account", "audit", &run));
+        let FrameReplayError::PreState(fault) = error else {
+            panic!("{index}: the pre-state tie must name the missing document: {error}");
+        };
+        let observed = format!("{fault:?}");
         assert!(
             matches!(
-                &error,
-                FrameReplayError::Refused { refusal, .. }
-                    if matches!(**refusal, ReplayRefusal::Request(_))
+                (index, fault),
+                (INVOCATION_DOCUMENT, PreStateFault::InvocationNotProvided)
+                    | (PRE_DOCUMENT, PreStateFault::PreUnreadable)
             ),
-            "{index}: {error}"
+            "{index}: the pre-state tie must distinguish the missing document: {observed}"
         );
     }
     twin.try_frame_replay("deposit", &base, "account", "audit", &run)
@@ -4950,7 +4993,7 @@ fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
 #[test]
 fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_member() {
     let twin = Twin::new();
-    let fixture = emitted_fixture(&Twin::build(&[], &CLAUSES, 0), "BalanceNeverDrops");
+    let fixture = emitted_fixture(&twin, "BalanceNeverDrops");
     let site = twin.operation_site("deposit").expect("located");
     let aligned = frame_harness(&twin);
 
@@ -4964,26 +5007,27 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
         "{error}"
     );
 
-    // A second QSL-selected model with a different frame has different node ids.
-    let unaligned = generate(&fixture).frame.identity;
+    // An admitted object node cannot stand in for the selected anchor.
+    let mut unaligned = aligned.clone();
+    unaligned.scope.anchor = fixture.object.clone();
     let error = refused(replay_of(&twin, "deposit", &run_of(&unaligned, [5, 0])));
     assert!(
         matches!(
             &error,
             FrameReplayError::ScopeMismatch { member: ScopeMember::Anchor, harness, named }
-                if *harness == *fixture.anchor.digest && *named == site.anchor.to_string()
+                if *harness == format!("{:?}", fixture.object) && *named == site.anchor.to_string()
         ),
         "{error}"
     );
 
     let mut other_frame = aligned.clone();
-    other_frame.scope.frame = fixture.frame.clone();
+    other_frame.scope.frame = fixture.anchor.clone();
     let error = refused(replay_of(&twin, "deposit", &run_of(&other_frame, [5, 0])));
     assert!(
         matches!(
             &error,
             FrameReplayError::ScopeMismatch { member: ScopeMember::Frame, harness, named }
-                if *harness == *fixture.frame.digest && *named == site.frame.to_string()
+                if *harness == format!("{:?}", fixture.anchor) && *named == site.frame.to_string()
         ),
         "{error}"
     );
@@ -5015,8 +5059,14 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     };
     let anchor = node_of("operation_anchor");
     let frame = node_of("frame");
-    assert_eq!(*anchor.node_id.digest, *site.anchor.to_string());
-    assert_eq!(*frame.node_id.digest, *site.frame.to_string());
+    assert!(native_twin::node_matches_site(
+        &anchor.node_id,
+        site.anchor.view()
+    ));
+    assert!(native_twin::node_matches_site(
+        &frame.node_id,
+        site.frame.view()
+    ));
     let bound_frame = match &anchor.body {
         CheckedTerm::OperationAnchorBody(body) => {
             body.members.iter().find_map(|member| match member {
@@ -5037,8 +5087,8 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
             .frame
             .identity
             .scope;
-    assert_eq!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
-    assert_eq!(*fixture_scope.frame.digest, *frame.node_id.digest);
+    assert_eq!(fixture_scope.anchor, anchor.node_id);
+    assert_eq!(fixture_scope.frame, frame.node_id);
 }
 
 /// QSL's emitted object body is empty; the admitted model's accessor supplies both ranges,
@@ -5086,12 +5136,24 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     assert!(generated.frame.identity.unranged.is_empty());
     let site = twin.operation_site("deposit").expect("located");
     assert_eq!(
-        *generated.frame.identity.scope.anchor.digest,
-        site.anchor.to_string()
+        generated.frame.identity.scope.anchor,
+        package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| native_twin::node_matches_site(&node.node_id, site.anchor.view()))
+            .expect("anchor node")
+            .node_id
     );
     assert_eq!(
-        *generated.frame.identity.scope.frame.digest,
-        site.frame.to_string()
+        generated.frame.identity.scope.frame,
+        package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| native_twin::node_matches_site(&node.node_id, site.frame.view()))
+            .expect("frame node")
+            .node_id
     );
 
     let balance_only = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);

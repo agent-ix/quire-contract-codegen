@@ -6,7 +6,7 @@
 
 use quire_contract_model::{
     ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, ContractSourceV1, LiteralKind,
     StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
@@ -92,8 +92,7 @@ pub(crate) enum CollectionDomainRefusal {
 /// A completely checked collection claim ready for deterministic rendering.
 pub(super) struct LoweredCollectionClaim {
     pub(super) dependencies: Vec<ProofDependencyEdge>,
-    pub(super) package: CheckedSemanticId,
-    pub(super) package_digest: String,
+    pub(super) package: ContractSourceV1,
     pub(super) field: CollectionFieldDomain,
 }
 
@@ -106,7 +105,6 @@ pub(super) struct CollectionGraph<'a> {
 struct CollectionNodeIndex<'a> {
     package: Option<&'a CheckedPackageV2>,
     by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
-    by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
 }
 
 #[cfg(test)]
@@ -159,24 +157,17 @@ impl<'a> CollectionNodeIndex<'a> {
         #[cfg(test)]
         COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut by_id = FirstMatchIndex::new();
-        let mut by_digest = FirstMatchIndex::new();
         for node in nodes {
             by_id.insert_first(&node.node_id, node);
-            by_digest.insert_first(node.node_id.digest.as_ref(), node);
         }
         Self {
             package: None,
             by_id,
-            by_digest,
         }
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.by_id.get(id).copied()
-    }
-
-    fn declaration(&self, digest: &str) -> Option<&'a CheckedSemanticNodeV2> {
-        self.by_digest.get(digest).copied()
     }
 
     fn term(&self, node: &CheckedSemanticNodeV2) -> Option<&'a CheckedTerm> {
@@ -239,8 +230,10 @@ pub(super) fn lower_collection_claim(
     )?;
     Ok(LoweredCollectionClaim {
         dependencies: Vec::new(),
-        package: graph.package.package_id().clone(),
-        package_digest: graph.package.package_id().digest.to_string(),
+        package: ContractSourceV1 {
+            name: graph.package.name().into(),
+            lock: graph.package.lock().clone(),
+        },
         field,
     })
 }
@@ -276,8 +269,10 @@ pub(super) fn lower_collection_precondition(
     )?;
     Ok(LoweredCollectionClaim {
         dependencies: Vec::new(),
-        package: graph.package.package_id().clone(),
-        package_digest: graph.package.package_id().digest.to_string(),
+        package: ContractSourceV1 {
+            name: graph.package.name().into(),
+            lock: graph.package.lock().clone(),
+        },
         field,
     })
 }
@@ -381,12 +376,12 @@ fn prepare_collection(
     };
     let symbol_material = serde_json::to_vec(&(
         (
-            lowered.package_digest.as_str(),
+            &lowered.package,
             request.subject_path,
-            &field.function,
-            &field.quantifier,
-            &field.projection,
-            &field.declaration,
+            super::outcome::node_label(&field.function).to_string(),
+            super::outcome::node_label(&field.quantifier).to_string(),
+            super::outcome::node_label(&field.projection).to_string(),
+            super::outcome::node_label(&field.declaration).to_string(),
             &field.field_name,
             minimum_length,
             maximum_length,
@@ -394,9 +389,9 @@ fn prepare_collection(
         ),
         (
             &element_domain,
-            &field.element_type,
+            super::outcome::node_label(&field.element_type).to_string(),
             &field.quantifier_operation,
-            &field.predicate_id,
+            super::outcome::node_label(&field.predicate_id).to_string(),
             &field.predicate,
             KaniSolver::Cadical,
             request.unwind,
@@ -420,7 +415,7 @@ fn prepare_collection(
     let length_name = format!("{item_name}_len");
     let identity = CollectionObligationIdentity {
         ceilings: request.ceilings,
-        package_digest: lowered.package_digest.clone(),
+        package: lowered.package.clone(),
         subject_path: request.subject_path.to_owned(),
         function_id: field.function.clone(),
         quantifier_id: field.quantifier.clone(),
@@ -613,10 +608,10 @@ fn declared_field<'a, F, E, T: ?Sized>(
 
 fn admitted_declaration(
     graph: &CollectionNodeIndex<'_>,
-    digest: &str,
+    id: &CheckedNodeId,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
     graph
-        .declaration(digest)
+        .node(id)
         .map(|node| node.node_id.clone())
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
 }
@@ -796,7 +791,7 @@ fn resolve_collection_field(
         .map_err(|_| CollectionDomainRefusal::UnsupportedShape)?
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
-    let declaration = admitted_declaration(graph, &field_declaration.digest)?;
+    let declaration = admitted_declaration(graph, field_declaration)?;
     verify_claim_receiver(graph, claim, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
@@ -1363,20 +1358,24 @@ pub(crate) mod tests {
     fn assert_collection_graph_reuses_one_ordered_walk() {
         COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(0));
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
-            let id = |digit: &str| {
-                serde_json::json!({
-                    "domain": "quire.checked-semantic-node/v1", "digest": digit.repeat(64),
-                })
-            };
-            serde_json::from_value(serde_json::json!({
-                "node_id": id(digit),
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "expression", "semantic_form": "literal",
-                "semantic_type": id("3"), "dependencies": [], "occurrences": [],
-                "body": {"term": "literal", "type": id("3"),
-                         "value_kind": "boolean", "value": true},
-            }))
-            .expect("checked node")
+            CheckedSemanticNodeV2 {
+                node_id: node(digit),
+                schema_version: "quire.checked-semantic-graph/v2".into(),
+                node_tag: "expression".into(),
+                semantic_form: "literal".into(),
+                semantic_type: node("3"),
+                dependencies: Vec::new(),
+                occurrences: Vec::new(),
+                recursion_group: None,
+                declaration: None,
+                owner: None,
+                owner_model: None,
+                body: CheckedTerm::Literal {
+                    type_id: node("3"),
+                    value_kind: LiteralKind::Boolean,
+                    value: serde_json::json!(true),
+                },
+            }
         };
         let preceding = checked_node("1");
         let selected = checked_node("2");
@@ -1398,9 +1397,7 @@ pub(crate) mod tests {
         });
         assert!(
             std::ptr::eq(
-                graph
-                    .declaration(selected.node_id.digest.as_ref())
-                    .expect("declaration"),
+                graph.node(&selected.node_id).expect("declaration"),
                 &selected,
             ),
             "declaration lookup retains the first graph entry"
@@ -1453,20 +1450,39 @@ pub(crate) mod tests {
 
     fn node(label: &str) -> CheckedNodeId {
         CheckedNodeId {
-            domain: "ix://test/domain".into(),
-            digest: label.into(),
+            package: "collection-test".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                label.into(),
+            )],
+            ordinal: 0,
+        }
+    }
+
+    fn package(name: &str) -> ContractSourceV1 {
+        ContractSourceV1 {
+            name: name.into(),
+            lock: quire_contract_model::CheckedPackageLockV2 {
+                sources: Vec::new(),
+                edition: quire_contract_model::CheckedSelection {
+                    role: quire_contract_model::CheckedSelectionRole::Edition,
+                    definition: quire_contract_model::CheckedArtifactRef {
+                        authority: "test".into(),
+                        identity: "edition".into(),
+                    },
+                },
+                profile_selections: Vec::new(),
+                definition_selections: Vec::new(),
+                required_features: Vec::new(),
+                dependency_selections: Vec::new(),
+                refinement_internals: None,
+            },
         }
     }
 
     fn base_claim() -> LoweredCollectionClaim {
         LoweredCollectionClaim {
             dependencies: Vec::new(),
-            package: CheckedSemanticId {
-                domain: "test".into(),
-                algorithm: "sha256".into(),
-                digest: "package-a".into(),
-            },
-            package_digest: "package-a".to_owned(),
+            package: package("package-a"),
             field: CollectionFieldDomain {
                 function: node("function"),
                 quantifier: node("quantifier"),
@@ -1527,8 +1543,8 @@ pub(crate) mod tests {
 
     /// Every component of a collection's semantic identity changes the rendered Rust path, so two
     /// claims that differ only in one component never share a harness. Each variant below
-    /// differs from the base in exactly one field of the digest preimage, holding the package
-    /// digest, ids and ceilings constant where the field is not the one varied: a field dropped
+    /// differs from the base in exactly one field of the identity preimage, holding the package,
+    /// ids and ceilings constant where the field is not the one varied: a field dropped
     /// from the preimage makes its row fail.
     #[trace("FR-015-AC-100", "TC-025")]
     #[test]
@@ -1547,8 +1563,11 @@ pub(crate) mod tests {
             "the path is deterministic"
         );
         type Change = fn(&mut LoweredCollectionClaim);
-        let claim_changes: [(&str, Change); 14] = [
-            ("package digest", |c| c.package_digest = "package-b".into()),
+        let claim_changes: [(&str, Change); 15] = [
+            ("package name", |c| c.package.name = "package-b".into()),
+            ("package lock", |c| {
+                c.package.lock.edition.definition.identity = "other-edition".into()
+            }),
             ("function", |c| c.field.function = node("other-function")),
             ("quantifier", |c| {
                 c.field.quantifier = node("other-quantifier")
@@ -1638,10 +1657,10 @@ pub(crate) mod tests {
     #[trace("FR-015-AC-101", "TC-025")]
     #[test]
     fn domain_representability_failures_keep_the_typed_reason() {
-        let node_id = CheckedNodeId {
-            domain: "ix://test/domain".into(),
-            digest: "test-node".into(),
-        };
+        let node_id = serde_json::from_value(serde_json::json!({
+            "package": "test-package", "path": ["test-node"], "ordinal": 0,
+        }))
+        .expect("structural node id");
         assert!(matches!(
             collection_i64(i128::from(i64::MAX) + 1, &node_id),
             Err(UnsupportedObligation::CollectionClaimNotRendered {
@@ -1691,56 +1710,38 @@ pub(crate) mod tests {
     #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_predicate_is_an_unsupported_shape() {
-        let id = |digest: &str| {
-            serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": digest.repeat(64),
-            })
-        };
-        let node = |form: &str, operator: &str, identity: &str| -> CheckedSemanticNodeV2 {
-            serde_json::from_value(serde_json::json!({
-                "node_id": id("1"),
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "expression",
-                "semantic_form": form,
-                "semantic_type": id("2"),
-                "dependencies": [],
-                "occurrences": [],
-                "body": {
-                    "term": "application",
-                    "operator": operator,
-                    "operation": {"identity": identity, "laws": [], "mode": null,
-                                  "member": null, "leaves": []},
-                    "result_type": id("2"),
-                    "arguments": [],
-                },
-            }))
-            .expect("a checked expression node")
-        };
         let term = |operator, identity| CheckedTerm::Application {
             operator,
             operation: serde_json::from_value(serde_json::json!({"identity": identity}))
                 .expect("fixture operation"),
-            result_type: CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: "2".repeat(64).into(),
-            },
+            result_type: node("2"),
             arguments: Vec::new(),
+        };
+        let expression = |form: &str, body: CheckedTerm| CheckedSemanticNodeV2 {
+            node_id: node("1"),
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: "expression".into(),
+            semantic_form: form.into(),
+            semantic_type: node("2"),
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            declaration: None,
+            owner: None,
+            owner_model: None,
+            body,
         };
         let conversion = term(ApplicationOperator::Convert, "quire.op.quantity.convert");
         let binary = term(ApplicationOperator::Binary, "quire.op.integer.ge");
         assert_eq!(
             binary_predicate_operation(
-                &node("conversion", "convert", "quire.op.quantity.convert"),
+                &expression("conversion", conversion.clone()),
                 Some(&conversion),
             ),
             Err(CollectionDomainRefusal::UnsupportedShape)
         );
         assert_eq!(
-            binary_predicate_operation(
-                &node("binary", "binary", "quire.op.integer.ge"),
-                Some(&binary),
-            ),
+            binary_predicate_operation(&expression("binary", binary.clone()), Some(&binary),),
             Ok("quire.op.integer.ge")
         );
     }
@@ -1779,7 +1780,13 @@ pub(crate) mod tests {
     fn unresolved_projection_declaration_is_field_not_admitted() {
         let graph = CollectionNodeIndex::from_nodes(std::iter::empty());
         assert_eq!(
-            admitted_declaration(&graph, "missing-declaration"),
+            admitted_declaration(
+                &graph,
+                &serde_json::from_value(serde_json::json!({
+                    "package": "test-package", "path": ["missing-declaration"], "ordinal": 0,
+                }))
+                .expect("structural node id"),
+            ),
             Err(CollectionDomainRefusal::FieldNotAdmitted),
         );
     }

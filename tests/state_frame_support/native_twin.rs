@@ -8,7 +8,7 @@
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
 //! counterexample names. The frame replay is given the falsified harness's identity and its
-//! playback and mints the obligation identity itself, so the twin supplies none.
+//! playback and carries the selected QSL obligation identity, so the twin supplies none.
 
 use super::model;
 
@@ -25,22 +25,39 @@ use quire_contract_codegen::{
     StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
+    CheckedNodeId, CheckedNodePathSegment, CheckedOccurrenceRole, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-#[path = "../checked_package_support/rekey.rs"]
-// The native twin is included by several test modules that also use this fixture helper.
-#[allow(dead_code, clippy::duplicate_mod)]
-mod rekey;
-
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:state-frame-twin";
 const PACKAGE: &str = "test/bank";
-const PLACEHOLDER_DIGEST: &str =
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+pub(crate) fn node_matches_site(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
+    if id.package.as_ref() != key.package() || id.ordinal != key.ordinal() {
+        return false;
+    }
+    let mut path = key.path();
+    for segment in &id.path {
+        let matches = match (segment, path.next()) {
+            (
+                CheckedNodePathSegment::Name(left),
+                Some(quire_exact::PathSegmentView::Text(right)),
+            ) => left.as_ref() == right,
+            (
+                CheckedNodePathSegment::Node(left),
+                Some(quire_exact::PathSegmentView::Node(right)),
+            ) => node_matches_site(left, right),
+            _ => false,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    path.next().is_none()
+}
 
 const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
     quire_contract_codegen::WitnessDecodeLimits {
@@ -111,7 +128,6 @@ fn construct(name: &str, meaning: &str) -> Value {
     json!({
         "kind": {"module": PACKAGE, "name": name},
         "moduleVersion": "1.0.0",
-        "manifestDigest": PLACEHOLDER_DIGEST,
         "construct": {
             "identity": "none", "shape": "record", "members": {}, "meaning": meaning,
         },
@@ -200,20 +216,17 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
     }));
     json!({
         "contractVersion": "2.0.0",
-        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
+        "canonicalization": {"algorithm": "rfc8785-v1"},
         "source": {
             "identity": format!("ix://{PACKAGE}/spec"),
             "version": "1.0.0",
             "dialect": "spec-bundle",
-            "digest": PLACEHOLDER_DIGEST,
         },
         "package": {
             "identity": PACKAGE,
             "version": "1.0.0",
-            "manifestDigest": PLACEHOLDER_DIGEST,
             "mappingVersions": [],
             "profileVersions": [],
-            "lockDigest": PLACEHOLDER_DIGEST,
         },
         "occurrences": [],
         "extensions": [],
@@ -243,11 +256,11 @@ pub const CLAUSES: [(&str, &str, &str); 2] = [
     ("AuditNeverDrops", "deposit", "audit"),
 ];
 
-fn unit_source(model_digest: &str, clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
+fn unit_source(clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
     let header = format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
-         model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n"
+         model Bank = {PACKAGE:?};\n"
     );
     let clauses = clauses
         .iter()
@@ -323,7 +336,7 @@ pub struct Twin {
 /// One invocation of `deposit` on account `account`, with its pre and post snapshots.
 pub struct Invocation {
     reference: DocumentRef,
-    documents: Vec<(DocumentRef, Vec<u8>)>,
+    documents: Vec<(DocumentRef, [u8; 32], Vec<u8>)>,
 }
 
 /// The position of the invocation document in [`Invocation`]'s documents.
@@ -334,24 +347,22 @@ pub const PRE_DOCUMENT: usize = 1;
 impl Invocation {
     /// This invocation with the document at `index` edited as JSON and addressed by the digest
     /// of its new bytes. An edited pre snapshot is re-linked from the invocation, which is
-    /// re-addressed in turn, so every provided document still hashes to its digest and the
+    /// re-digested in turn, so every provided document still hashes to its digest and the
     /// edit is what the replay reads.
     pub fn edited(&self, index: usize, edit: impl FnOnce(&mut Value)) -> Self {
         let mut documents = self.documents.clone();
         let mut value: Value =
-            serde_json::from_slice(&documents[index].1).expect("a JSON document");
+            serde_json::from_slice(&documents[index].2).expect("a JSON document");
         edit(&mut value);
-        documents[index].1 = value.to_string().into_bytes();
-        documents[index].0.digest = jcs_digest(&documents[index].1);
+        documents[index].2 = value.to_string().into_bytes();
+        documents[index].1 = jcs_digest(&documents[index].2);
         if index == PRE_DOCUMENT {
             let mut invocation: Value =
-                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].1).expect("JSON");
-            invocation["pre"]["digest"] = json!(format!(
-                "sha256-jcs:{}",
-                hex(&documents[PRE_DOCUMENT].0.digest)
-            ));
-            documents[INVOCATION_DOCUMENT].1 = invocation.to_string().into_bytes();
-            documents[INVOCATION_DOCUMENT].0.digest = jcs_digest(&documents[INVOCATION_DOCUMENT].1);
+                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].2).expect("JSON");
+            invocation["pre"]["digest"] =
+                json!(format!("sha256-jcs:{}", hex(&documents[PRE_DOCUMENT].1)));
+            documents[INVOCATION_DOCUMENT].2 = invocation.to_string().into_bytes();
+            documents[INVOCATION_DOCUMENT].1 = jcs_digest(&documents[INVOCATION_DOCUMENT].2);
         }
         Self {
             reference: documents[INVOCATION_DOCUMENT].0.clone(),
@@ -363,7 +374,7 @@ impl Invocation {
     /// as it was: a provided document whose bytes do not match the digest it is addressed by.
     pub fn replaced(&self, index: usize, bytes: &[u8]) -> Self {
         let mut documents = self.documents.clone();
-        documents[index].1 = bytes.to_vec();
+        documents[index].2 = bytes.to_vec();
         Self {
             reference: self.reference.clone(),
             documents,
@@ -396,9 +407,9 @@ fn limits(seed: u64) -> ScalarLimits {
     }
 }
 
-fn document(reference: &DocumentRef, bytes: &[u8]) -> ProvidedDocument {
+fn document(digest: [u8; 32], bytes: &[u8]) -> ProvidedDocument {
     ProvidedDocument {
-        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, reference.digest),
+        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, digest),
         bytes: bytes.to_vec(),
     }
 }
@@ -432,7 +443,7 @@ impl Twin {
             .expect("deposit operation");
         deposit["params"][0]["typeRef"] = json!(range_type("balance"));
         twin.domain = domain.to_string().into_bytes();
-        let source = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0);
+        let source = unit_source(&[CLAUSES[0]], 0);
         twin.unit = source
             .replace("self.balance >= pre(self.balance)", "self.balance >= other")
             .into_bytes();
@@ -474,7 +485,7 @@ impl Twin {
         deposit["params"][0]["name"] = json!("amount");
         deposit["params"][0]["identity"] = json!(format!("{}/deposit/amount", account_type()));
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+        twin.unit = unit_source(&[CLAUSES[0]], 0)
             .replace("self.balance >= pre(self.balance)", condition)
             .into_bytes();
         twin
@@ -526,7 +537,7 @@ impl Twin {
             });
         }
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin.unit = unit_source(&CLAUSES, 0).into_bytes();
         twin
     }
 
@@ -547,7 +558,7 @@ impl Twin {
             .expect("field");
         field["typeRef"] = json!(type_ref);
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin.unit = unit_source(&[CLAUSES[0]], 0).into_bytes();
         twin
     }
 
@@ -565,7 +576,6 @@ impl Twin {
     pub fn with_unbounded_audit_clause() -> Self {
         let mut twin = Self::with_field_native_type("audit", "ix://quire/native/Integer");
         twin.unit = unit_source(
-            &hex(&jcs_digest(&twin.domain)),
             &[
                 CLAUSES[0],
                 CLAUSES[1],
@@ -696,7 +706,7 @@ impl Twin {
             }
         }
         twin.domain = document.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin.unit = unit_source(&[CLAUSES[0]], 0).into_bytes();
         twin
     }
 
@@ -720,14 +730,21 @@ impl Twin {
             .find(|constraint| constraint["keyword"] == "max")
             .expect("maximum bound");
         maximum["operands"]["value"] = json!("9223372036854775808");
-        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+        // QSL rejects an authored integer operand above 2^53. The clause graph is
+        // unchanged; IR reads this selected model document to test the wider bound.
+        self.admit_emitted_package(
+            clause,
+            &self.unit,
+            &self.domain,
+            document.to_string().into_bytes(),
+        )
     }
 
     /// A twin whose operations' frames modify `granted`, whose unit holds `clauses` and has
     /// `blank_lines` empty lines before the first of them.
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
         let domain = domain_document(granted);
-        let unit = unit_source(&hex(&jcs_digest(&domain)), clauses, blank_lines).into_bytes();
+        let unit = unit_source(clauses, blank_lines).into_bytes();
         Self { unit, domain }
     }
 
@@ -761,6 +778,7 @@ impl Twin {
     pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
         call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY.to_owned(),
             IDENTITY,
             &self.unit,
             [self.domain.as_slice()],
@@ -792,6 +810,7 @@ impl Twin {
             .collect();
         let compiled = compile_package_with_execution_points(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY.to_owned(),
             IDENTITY,
             &self.unit,
             [self.domain.as_slice()],
@@ -803,7 +822,7 @@ impl Twin {
         .expect("QSL accepts the authored clause points");
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .insert_domain_package_document(PACKAGE, self.domain.clone())
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
@@ -865,9 +884,7 @@ impl Twin {
         (package, clauses)
     }
 
-    /// Start with QSL's emitted graph and replace its selected model document. IR's public
-    /// candidate API rederives the model-root and affected clause/node identities before
-    /// admission. This negative fixture reaches a field type QSL cannot currently emit.
+    /// Compile the twin with an unread model field changed in its selected source document.
     pub fn emitted_package_with_unread_string_audit(
         &self,
         clause: &str,
@@ -922,12 +939,8 @@ impl Twin {
             })
         }));
         let domain = document.to_string().into_bytes();
-        let previous = hex(&jcs_digest(&self.domain));
-        let selected = hex(&jcs_digest(&domain));
-        let source = String::from_utf8(self.unit.clone()).expect("native unit");
-        assert_eq!(source.matches(&previous).count(), 1, "one model selection");
         let twin = Self {
-            unit: source.replacen(&previous, &selected, 1).into_bytes(),
+            unit: self.unit.clone(),
             domain,
         };
         twin.emitted_package(clause)
@@ -938,62 +951,49 @@ impl Twin {
         clause: &str,
         model_override: Option<Vec<u8>>,
     ) -> (CheckedPackageV2, CheckedNodeId) {
+        let document = model_override.unwrap_or_else(|| self.domain.clone());
+        self.admit_emitted_package(clause, &self.unit, &document, document.clone())
+    }
+
+    fn admit_emitted_package(
+        &self,
+        clause: &str,
+        unit: &[u8],
+        qsl_document: &[u8],
+        selected_document: Vec<u8>,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY.to_owned(),
             IDENTITY,
-            &self.unit,
-            [self.domain.as_slice()],
+            unit,
+            [qsl_document],
             &DependencyInput::default(),
             &name,
         )
         .expect("the clause is located");
-        let overridden = model_override.is_some();
-        let document = model_override.unwrap_or_else(|| self.domain.clone());
-        let mut wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
-        if document != self.domain {
-            let digest = hex(&jcs_digest(&document));
-            wire["lock"]["model_selections"][0]["digest"] = json!(digest);
-            wire["identity_preimage"]["model_selections"] =
-                wire["lock"]["model_selections"].clone();
-            for node in wire["semantic_graph"]["nodes"]
-                .as_array_mut()
-                .expect("emitted graph nodes")
-            {
-                if node["owner"]["kind"] == "model_root" {
-                    node["owner"]["digest"] = json!(digest);
-                }
-            }
-        }
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&document)), document)
+            .insert_domain_package_document(PACKAGE, selected_document)
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
-        let (outcome, ids) = if overridden {
-            // A changed model selection also changes its generated model-root
-            // identity and every node that refers to it. Ask IR's public
-            // candidate API to settle those fixture identities before read.
-            let resolved =
-                rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
-            (resolved.outcome, Some(resolved.ids))
-        } else {
-            let bytes = wire.to_string().into_bytes();
-            (
-                CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence),
-                None,
-            )
-        };
-        let package = match outcome {
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("QSL's emitted package is admitted: {other:?}"),
         };
-        let clause_node: CheckedNodeId = serde_json::from_value(json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": located.site.node.to_string(),
-        }))
-        .expect("a node id");
-        let clause_node = ids.map_or(clause_node.clone(), |ids| ids.resolve(&clause_node));
+        let clause_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node_matches_site(&node.node_id, located.site.node.view()))
+            .expect("QSL clause site names an admitted structural node")
+            .node_id
+            .clone();
         (package, clause_node)
     }
 
@@ -1023,8 +1023,8 @@ impl Twin {
             .into_bytes();
             stamped(label, bytes)
         };
-        let (pre_ref, pre_bytes) = snapshot("twin-pre", "pre", pre);
-        let (post_ref, post_bytes) = snapshot("twin-post", "post", post);
+        let (pre_ref, pre_digest, pre_bytes) = snapshot("twin-pre", "pre", pre);
+        let (post_ref, post_digest, post_bytes) = snapshot("twin-post", "post", post);
         let invocation_label = label("twin-invocation");
         let invocation_bytes = json!({
             "format": "quire.state.invocation/v1",
@@ -1035,11 +1035,11 @@ impl Twin {
             "self": {"population": population(), "key": account},
             "pre": {
                 "identity": identity_json(&pre_ref),
-                "digest": format!("sha256-jcs:{}", hex(&pre_ref.digest)),
+                "digest": format!("sha256-jcs:{}", hex(&pre_digest)),
             },
             "post": {
                 "identity": identity_json(&post_ref),
-                "digest": format!("sha256-jcs:{}", hex(&post_ref.digest)),
+                "digest": format!("sha256-jcs:{}", hex(&post_digest)),
             },
             "parameters": {},
             "result": null,
@@ -1048,12 +1048,12 @@ impl Twin {
         })
         .to_string()
         .into_bytes();
-        let (reference, bytes) = stamped(invocation_label, invocation_bytes);
+        let (reference, digest, bytes) = stamped(invocation_label, invocation_bytes);
         Invocation {
             documents: vec![
-                (reference.clone(), bytes),
-                (pre_ref, pre_bytes),
-                (post_ref, post_bytes),
+                (reference.clone(), digest, bytes),
+                (pre_ref, pre_digest, pre_bytes),
+                (post_ref, post_digest, post_bytes),
             ],
             reference,
         }
@@ -1143,7 +1143,7 @@ impl Twin {
             state_documents: invocation
                 .documents
                 .iter()
-                .map(|(reference, bytes)| document(reference, bytes))
+                .map(|(_, digest, bytes)| document(*digest, bytes))
                 .collect(),
             operation: self.operation(operation),
             invocation: invocation.reference.clone(),
@@ -1164,6 +1164,7 @@ impl Twin {
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
             decode_limits: unbounded_decode_limits(),
+            package_name: IDENTITY.to_owned(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),
@@ -1196,6 +1197,7 @@ impl Twin {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY.to_owned(),
             IDENTITY,
             &self.unit,
             [self.domain.as_slice()],
@@ -1252,7 +1254,14 @@ impl Twin {
             post_label: label("twin-post"),
             playback: vec![(balance.clone(), playback.0), (audit.clone(), playback.1)],
             post_state: vec![(balance, post.0), (audit, post.1)],
-            obligation_identity: [1; 32],
+            obligation_identity: {
+                let site = self.clause_site(clause).expect("QSL clause site");
+                qsl_replay::ObligationIdentity::new(
+                    site.node,
+                    None,
+                    u32::try_from(site.occurrence.origin().ordinal()).expect("claim ordinal"),
+                )
+            },
         }
     }
 
@@ -1285,7 +1294,7 @@ impl Twin {
             .as_ref()
             .expect("the payload is built");
         // The anchor node stands in for any node other than the frame.
-        let other = payload.anchor;
+        let other = payload.anchor.clone();
         match tamper {
             Tamper::Nothing => {}
             Tamper::ClauseNode => packet.clause_node = Some(other),
@@ -1309,7 +1318,6 @@ fn label(name: &str) -> DocumentRef {
         identity: name.to_owned(),
         revision_namespace: "ns".to_owned(),
         revision: "1".to_owned(),
-        digest: [0; 32],
     }
 }
 
@@ -1322,7 +1330,7 @@ fn identity_json(reference: &DocumentRef) -> Value {
     })
 }
 
-fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, Vec<u8>) {
+fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, [u8; 32], Vec<u8>) {
     let digest = jcs_digest(&bytes);
-    (DocumentRef { digest, ..label }, bytes)
+    (label, digest, bytes)
 }

@@ -8,20 +8,33 @@ use std::collections::BTreeMap;
 use ix_trace_rs::trace;
 use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
+    DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer, NodeKey,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
     ReplayRequest, ReplayTarget, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
-    SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
+    SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult,
 };
 use quire_contract_codegen::{
     CompositeBuildError, CompositePacketMember, DependencyLock, LockedSource,
     OriginalCompositeEqContext, OriginalCompositeEqRequest, ReplayInputs,
 };
 use quire_contract_model::{
-    CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId, CheckedOccurrence,
-    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
-    CheckedScalarOperandChild, CheckedTerm,
+    CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId,
+    CheckedNodePathSegment, CheckedOccurrence, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedTerm,
 };
+use quire_exact::PathSegment;
+
+fn node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
 
 fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
@@ -62,6 +75,7 @@ fn limits() -> ScalarLimits {
 fn inputs(source: &str) -> ReplayInputs {
     ReplayInputs {
         decode_limits: crate::unbounded_decode_limits(),
+        package_name: "original-eq".to_owned(),
         source: LockedSource {
             authority: "test".to_owned(),
             identity: "original-eq.native".to_owned(),
@@ -97,9 +111,12 @@ fn checked_with_dependencies(
 
 fn compiled(source: &str, dependencies: &DependencyInput) -> qsl_replay::CompiledPackage {
     compile_package(
-        SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
-        "original-eq.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
+            package_name: "original-eq".to_owned(),
+            path: "original-eq.native",
+            bytes: source.as_bytes(),
+        },
         [],
         dependencies,
         StageLimits::default(),
@@ -251,7 +268,7 @@ fn parameter_bounds(
                 let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                     panic!("graph child")
                 };
-                Some(WireNodeId::from_hex(&child.digest).unwrap())
+                Some(node_key(child))
             } else {
                 None
             }
@@ -261,7 +278,10 @@ fn parameter_bounds(
         .flat_map(|node| {
             [
                 ProofBound::new(
-                    DomainKey::Node { node, path: vec![] },
+                    DomainKey::Node {
+                        node: node.clone(),
+                        path: vec![],
+                    },
                     Some(DomainKind::Collection),
                     FiniteBound::cardinality(3),
                 )
@@ -292,7 +312,7 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     supplied_bounds.push(
         ProofBound::new(
             DomainKey::Population {
-                member_type: WireNodeId::from_hex(&node.digest).unwrap(),
+                member_type: node_key(&node),
                 ordinal: 0,
             },
             Some(DomainKind::Population),
@@ -320,13 +340,13 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
         };
         assert_eq!(
             argument.identity,
-            OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+            OperandIdentity::GraphChild(node_key(child))
         );
         let Domain::Bounds(entries) = &argument.domain else {
             panic!("composite bounds")
         };
         assert_eq!(entries.entries().len(), 2);
-        assert!(entries.entries().iter().all(|entry| matches!(entry.domain(), DomainKey::Node { node, .. } if node.to_string() == child.digest.as_ref())));
+        assert!(entries.entries().iter().all(|entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == node_key(child))));
     }
     let obligation = parity_obligation(request.preimage()).unwrap();
     let verified = VerifiedShadow {
@@ -365,7 +385,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 ProofBound::new(
                     DomainKey::Node {
-                        node: WireNodeId::from_hex(&child.digest).unwrap(),
+                        node: node_key(child),
                         path: vec![0],
                     },
                     Some(DomainKind::Integer),
@@ -397,14 +417,14 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 assert_eq!(
                     argument.identity,
-                    OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+                    OperandIdentity::GraphChild(node_key(child))
                 );
                 let Domain::Bounds(entries) = &argument.domain else {
                     panic!("literal bounds")
                 };
                 assert!(entries.entries().is_empty());
             } else {
-                let OperandIdentity::GraphChild(child) = argument.identity else {
+                let OperandIdentity::GraphChild(ref child) = argument.identity else {
                     panic!("parameter graph child")
                 };
                 let Domain::Bounds(entries) = &argument.domain else {
@@ -412,7 +432,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 assert_eq!(entries.entries().len(), 1);
                 assert!(entries.entries().iter().all(
-                    |entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == child)
+                    |entry| matches!(entry.domain(), DomainKey::Node { node, .. } if node == child)
                 ));
             }
         }
@@ -457,7 +477,7 @@ fn original_ne_parameter_operands_keep_order_and_operator() {
         };
         assert_eq!(
             argument.identity,
-            OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+            OperandIdentity::GraphChild(node_key(child))
         );
     }
     assert_ne!(
@@ -499,7 +519,7 @@ fn original_ne_literal_operand_keeps_empty_bounds() {
     };
     assert_eq!(
         request.preimage().arguments[1].identity,
-        OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+        OperandIdentity::GraphChild(node_key(child))
     );
     let Domain::Bounds(entries) = &request.preimage().arguments[1].domain else {
         panic!("literal bounds")
@@ -570,14 +590,8 @@ fn repeated_requests_keep_each_nodes_original_operation() {
         )
         .unwrap();
 
-    assert_eq!(
-        equal.preimage().node,
-        WireNodeId::from_hex(&equal_node.digest).unwrap()
-    );
-    assert_eq!(
-        not_equal.preimage().node,
-        WireNodeId::from_hex(&not_equal_node.digest).unwrap()
-    );
+    assert_eq!(equal.preimage().node, node_key(&equal_node));
+    assert_eq!(not_equal.preimage().node, node_key(&not_equal_node));
     assert!(matches!(
         context.request(
             &not_equal_node,
@@ -656,7 +670,7 @@ fn different_semantic_package_refuses_before_invocation() {
     let original = checked(SOURCE);
     let changed_source = SOURCE.replace("Int[0, 9]", "Int[0, 8]");
     let changed = checked_with_extra_source(&changed_source, &original.lock().sources[0]);
-    assert_ne!(changed.package_id(), original.package_id());
+    assert_ne!(changed.lock(), original.lock());
     let (node, occurrence) = application(&changed, "f");
     assert!(matches!(
         context(changed, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
@@ -672,7 +686,6 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let mut retained = inputs(SOURCE);
     retained.dependencies.push(DependencyLock {
         identity: "test/extra".to_owned(),
-        package_id: compiled(SOURCE, &DependencyInput::default()).package_id(),
         source: retained.source.clone(),
     });
     assert!(matches!(
@@ -687,7 +700,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     ));
     let extra = checked(&format!("{SOURCE}\n"));
     let changed = checked_with_extra_source(SOURCE, &extra.lock().sources[0]);
-    assert_eq!(changed.package_id(), checked(SOURCE).package_id());
+    assert_ne!(changed.lock(), checked(SOURCE).lock());
     let (node, occurrence) = application(&changed, "f");
     assert!(matches!(
         context(changed, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
@@ -703,7 +716,9 @@ fn wrong_node_and_occurrence_refuse_before_invocation() {
     let (node, occurrence) = application(&package, "f");
     let context = context(package, "f");
     let mut absent = node.clone();
-    absent.digest = "ff".repeat(32).into_boxed_str();
+    absent
+        .path
+        .push(CheckedNodePathSegment::Name("absent".into()));
     assert!(
         matches!(context.request(&absent, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::UnknownNode { .. }))
     );
@@ -766,31 +781,17 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
         ))
     ));
 
-    let mut wrong_package = packet;
-    wrong_package
-        .package_id
-        .as_mut()
-        .expect("the producer supplied package identity")
-        .1 = "ab".repeat(32);
-    assert!(matches!(
-        context.request_from_packet(
-            wrong_package,
-            &node,
-            &occurrence,
-            EqualityOperator::Equal,
-            &[],
-            100_000,
-        ),
-        Err(CompositeBuildError::PacketMismatch(
-            CompositePacketMember::Package
-        ))
-    ));
-
     let mut wrong_subject = context
         .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .expect("the checked claim supplies another packet");
-    wrong_subject.clause_node =
-        Some(WireNodeId::from_hex(&"44".repeat(32)).expect("the test node id is valid"));
+    wrong_subject.clause_node = Some(
+        NodeKey::new(
+            "original-eq",
+            vec![PathSegment::Text("other".to_owned())],
+            0,
+        )
+        .unwrap(),
+    );
     assert!(matches!(
         context.request_from_packet(
             wrong_subject,
@@ -809,7 +810,7 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
         .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .expect("the checked claim supplies another packet");
     wrong_occurrence.occurrence_key = Some(qsl_replay::OccurrenceKey::new(
-        WireNodeId::from_hex(&node.digest).expect("the checked node id is valid"),
+        node_key(&node),
         qsl_replay::Origin::new(qsl_replay::Role::new("expression"), u64::MAX),
     ));
     assert!(matches!(
@@ -852,7 +853,11 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
     let mut wrong_obligation = context
         .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .expect("the checked claim supplies another packet");
-    wrong_obligation.obligation_identity = Some([0x55; 32]);
+    wrong_obligation.obligation_identity = Some(qsl_replay::ObligationIdentity::new(
+        node_key(&node),
+        None,
+        1,
+    ));
     assert!(matches!(
         context.request_from_packet(
             wrong_obligation,
@@ -978,7 +983,7 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
         panic!("QSL membership refusal: {:?}", settlement.result())
     };
     assert!(
-        matches!(&**refusal, ReplayRefusal::ScalarIdentity(cause) if matches!(&**cause, ScalarIdentityMismatch::Function { node: refused, .. } if *refused == WireNodeId::from_hex(&node.digest).unwrap()))
+        matches!(&**refusal, ReplayRefusal::ScalarIdentity(cause) if matches!(&**cause, ScalarIdentityMismatch::Function { node: refused, .. } if *refused == node_key(&node)))
     );
     assert_eq!(
         settlement.terminal_value(),
@@ -1010,7 +1015,7 @@ fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
         panic!("parameter graph child")
     };
     let key = DomainKey::Node {
-        node: WireNodeId::from_hex(&child.digest).unwrap(),
+        node: node_key(child),
         path: vec![0],
     };
     let mut bounds = parameter_bounds(&package, &node, &occurrence);
@@ -1124,9 +1129,12 @@ fn original_imported_context_refuses_before_invocation() {
             bytes,
         };
         let compiled = compile_package(
-            SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
-            "eq-library.native",
-            &source.bytes,
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
+                package_name: "test/eq-library".to_owned(),
+                path: "eq-library.native",
+                bytes: &source.bytes,
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -1144,7 +1152,6 @@ fn original_imported_context_refuses_before_invocation() {
         (
             DependencyLock {
                 identity: "test/eq-library".to_owned(),
-                package_id: compiled.package_id(),
                 source,
             },
             admitted,
@@ -1183,13 +1190,14 @@ fn original_imported_context_refuses_before_invocation() {
 fn original_request_retains_the_actual_compilation_context() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
-    let expected = package.package_id().clone();
+    let expected_name = package.name().to_owned();
     let request = context(package, "f")
         .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .expect("authentic original request");
-    let actual = request.admitted_context().package_id().record();
-    assert_eq!(actual.domain().as_str(), expected.domain.as_ref());
-    assert_eq!(actual.hex(), expected.digest.as_ref());
+    assert_eq!(
+        request.admitted_context().package_name().to_string(),
+        expected_name
+    );
 }
 
 /// A later IR re-read ceiling remains distinct from source compiler limits.
@@ -1255,7 +1263,7 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
         for requests in [2, 4, 8] {
             let package = checked(&source);
             let graph_nodes = package.graph().nodes.len();
-            let original_package_id = package.package_id().clone();
+            let original_package_name = package.name().to_owned();
             let (equal_node, equal_occurrence) = application(&package, "f");
             let (not_equal_node, not_equal_occurrence) =
                 application_with_operator(&package, "n", "quire.op.structural.ne");
@@ -1288,12 +1296,10 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
                     )
                     .expect("not-equal request retains its original operation");
                 for request in [&equal, &not_equal] {
-                    let actual = request.admitted_context().package_id().record();
                     assert_eq!(
-                        actual.domain().as_str(),
-                        original_package_id.domain.as_ref()
+                        request.admitted_context().package_name().to_string(),
+                        original_package_name
                     );
-                    assert_eq!(actual.hex(), original_package_id.digest.as_ref());
                 }
                 let refusal = retained
                     .request(

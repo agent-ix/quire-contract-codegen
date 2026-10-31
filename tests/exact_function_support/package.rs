@@ -176,7 +176,7 @@ fn source_reference(code: u32) -> serde_json::Value {
     let id = code_id(code);
     serde_json::json!({
         "term": "reference",
-        "target": {"domain": id.domain, "digest": id.digest}
+        "target": id
     })
 }
 
@@ -198,7 +198,7 @@ pub fn item_argument_code(item_code: u32, index: usize) -> u32 {
 }
 
 fn reference_code(code: u32) -> serde_json::Value {
-    serde_json::json!({"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": key(code)}})
+    serde_json::json!({"term": "reference", "target": code_id(code)})
 }
 
 fn application(
@@ -211,7 +211,7 @@ fn application(
         "term": "application",
         "operator": operator,
         "operation": operation,
-        "result_type": {"domain": NODE_DOMAIN, "digest": key(result_type)},
+        "result_type": code_id(result_type),
         "arguments": arguments,
     })
 }
@@ -369,8 +369,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         body["arguments"][0] = reference_code(parameter);
         let result_type = if integer_result {
             body["operation"]["identity"] = serde_json::json!("quire.op.integer.add");
-            body["result_type"] =
-                serde_json::json!({"domain": NODE_DOMAIN, "digest": key(T_INTEGER)});
+            body["result_type"] = serde_json::json!(code_id(T_INTEGER));
             T_INTEGER
         } else {
             T_BOOLEAN
@@ -426,14 +425,14 @@ pub fn source_bound_call_package() -> PackageBuilder {
     });
     let body = serde_json::json!({
         "term": "application", "operator": "binary", "operation": add_op,
-        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "result_type": code_id(T_INTEGER),
         "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
     });
     let other_body = serde_json::json!({
         "term": "application", "operator": "binary",
         "operation": {"identity": "quire.op.integer.sub", "laws": [], "mode": null,
         "member": null, "leaves": []},
-        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "result_type": code_id(T_INTEGER),
         "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
     });
     builder.application_node(SOURCE_BODY, "binary", &key(T_INTEGER), body);
@@ -469,7 +468,7 @@ pub fn source_bound_call_package() -> PackageBuilder {
         &key(T_INTEGER),
         serde_json::json!({
             "term": "application", "operator": "call", "operation": call_op,
-            "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+            "result_type": code_id(T_INTEGER),
             "arguments": [source_reference(SOURCE_FUNCTION), source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
         }),
     );
@@ -786,12 +785,12 @@ pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> Pack
     let mut replaced = std::collections::BTreeSet::new();
     for (code, spans) in sites {
         let node_id = code_id(code);
-        replaced.insert(node_id.digest.to_string());
+        replaced.insert(node_id.clone());
         let node = wire["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("graph nodes")
             .iter_mut()
-            .find(|node| node["node_id"]["digest"] == node_id.digest.as_ref())
+            .find(|node| node["node_id"] == serde_json::json!(node_id))
             .expect("source-backed chain node");
         node["occurrences"] = serde_json::Value::Array(
             spans
@@ -807,7 +806,7 @@ pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> Pack
         );
         for (ordinal, (start, end)) in spans.into_iter().enumerate() {
             entries.push(serde_json::json!({
-                "node_id": node_id,
+                "node_id": node_id.clone(),
                 "role": if ordinal == 0 { "declaration" } else { "expression" },
                 "ordinal": ordinal,
                 "regions": [{"source": source_ref, "start": start, "end": end}],
@@ -816,11 +815,8 @@ pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> Pack
     }
     let map = wire["source_map"].as_array_mut().expect("source map");
     map.retain(|entry| {
-        !replaced.contains(
-            entry["node_id"]["digest"]
-                .as_str()
-                .expect("source node digest"),
-        )
+        !replaced
+            .contains(&serde_json::from_value(entry["node_id"].clone()).expect("source node key"))
     });
     map.extend(entries);
     PackageBuilder::from_wire(wire)

@@ -30,8 +30,9 @@ pub(crate) fn named_state_frame_harness(
 ) -> StateFrameHarness {
     let id = |digit: &str| -> quire_contract_model::CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": digit.repeat(64),
+            "package": "test-kani-harness",
+            "path": [digit],
+            "ordinal": 0,
         }))
         .expect("a node id")
     };
@@ -40,6 +41,18 @@ pub(crate) fn named_state_frame_harness(
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
                 std::time::Duration::from_secs(30),
             ),
+            package: serde_json::from_value(serde_json::json!({
+                "name": "test-kani-harness",
+                "lock": {
+                    "sources": [],
+                    "edition": {"role": "edition", "definition": {"authority": "test", "identity": "edition"}},
+                    "profile_selections": [],
+                    "definition_selections": [],
+                    "required_features": [],
+                    "dependency_selections": []
+                }
+            }))
+            .expect("test package source"),
             clause: id("1"),
             scope: StateFrameScope {
                 operation: "deposit".to_owned(),
@@ -196,10 +209,6 @@ impl<T> No for &Probe<T> {
     }
 }
 
-// Shared with the integration binary; this oracle never calls production canonicalization.
-#[path = "../../tests/it/kani_scalar_native_digest.rs"]
-pub(crate) mod scalar_native_digest;
-
 /// Literal source and identity for runner-only host checks; no generator is invoked.
 pub(crate) fn scalar_source_fixture(
     wall_clock: std::time::Duration,
@@ -210,14 +219,17 @@ pub(crate) fn scalar_source_fixture(
     use crate::kani::identity::{
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     };
+    let package_name = "quire-exact-scalar-oracles";
     let identity = ScalarObligationIdentity {
         integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
         native_integer_selection: None,
         ceilings: proof_ceilings::proof_ceilings_with_wall_clock(wall_clock),
         node_id: serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64),
+            "package": package_name,
+            "path": ["host_scalar", "oracle"],
+            "ordinal": 0,
         }))
-        .unwrap(),
+        .expect("generated host_scalar::oracle structural node id"),
         operation_identity: "quire.op.integer.add".into(),
         oracle_symbol: "oracle".into(),
         module_symbol: ModuleSymbol::try_from("host_scalar").unwrap(),
@@ -252,7 +264,7 @@ pub(crate) fn scalar_source_fixture(
     let artifacts = vec![
         Artifact::new(
             "Cargo.toml",
-            crate::core::profile::oracle_crate_manifest("quire-exact-scalar-oracles"),
+            crate::core::profile::oracle_crate_manifest(package_name),
         ),
         Artifact::new("src/lib.rs", source),
         Artifact::new("claim-map.json", "{}"),

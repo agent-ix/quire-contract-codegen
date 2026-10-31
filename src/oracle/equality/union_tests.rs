@@ -44,14 +44,16 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == root.node().to_string())
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref() == Some(root.node())
+        })
         .expect("original Union node")
         .node_id
         .clone();
     let mut closure = TypeClosure::default();
     assert!(
         matches!(resolve_type(Some(context), &graph, &BTreeMap::new(), &mut closure, &id),
-        Ok(ValueType::Composite(key)) if key == root.key())
+        Ok(ValueType::Composite(ref key)) if key == root.key())
     );
     closure
 }
@@ -96,7 +98,7 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     let payload = declaration(&context, "Payload");
     let record = environment
         .record(
-            payload.key(),
+            payload.key().clone(),
             vec![(
                 "flag",
                 exact::FieldValue::Present(exact::Value::Boolean(true)),
@@ -111,18 +113,21 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
             actual.node(),
             "type handle and settled node differ"
         );
-        assert_eq!(environment.union_key(actual.key()), Some(actual.node()));
+        assert_eq!(
+            environment.union_key(actual.key().clone()),
+            Some(actual.node().clone())
+        );
         let members = actual.union_members().expect("owner Union");
         assert_eq!(
-            members
-                .iter()
-                .map(|m| m.identifier().as_str())
-                .collect::<Vec<_>>(),
+            members.iter().map(|m| m.identifier()).collect::<Vec<_>>(),
             ["Empty", "Flag", "Boxed"]
         );
-        assert_eq!(members[2].payload(), [ValueType::Composite(payload.key())]);
+        assert_eq!(
+            members[2].payload(),
+            [ValueType::Composite(payload.key().clone())]
+        );
         let CompositeShape::Union(rebuilt) = environment
-            .composite(actual.key())
+            .composite(actual.key().clone())
             .expect("closure")
             .shape()
         else {
@@ -139,13 +144,13 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
             vec![record.clone()],
         ]) {
             let value = environment
-                .union(actual.key(), member.variant(), values.clone())
+                .union(actual.key().clone(), member.variant(), values.clone())
                 .expect("every member constructs");
             let independent = exact::UnionValue::from_admitted(member.member().clone(), values);
             assert!(environment
-                .admits(&ValueType::Composite(actual.key()), &independent)
+                .admits(&ValueType::Composite(actual.key().clone()), &independent)
                 .expect("owner binding admitted"));
-            let operand = EqualityOperand::typed(ValueType::Composite(actual.key()));
+            let operand = EqualityOperand::typed(ValueType::Composite(actual.key().clone()));
             let checked = environment
                 .check_equality(
                     sv::EqualityOperator::Equal,
@@ -171,15 +176,15 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     assert_ne!(shape.key(), other.key());
     assert_ne!(shape.node(), other.node());
     assert!(!environment
-        .admits(&ValueType::Composite(other.key()), &nested[0])
+        .admits(&ValueType::Composite(other.key().clone()), &nested[0])
         .expect("membership runs"));
     let wrap = declaration(&context, "Wrap");
     let members = wrap.union_members().expect("Wrap members");
     assert_eq!(
         members[2].payload(),
         [
-            ValueType::Composite(shape.key()),
-            ValueType::Composite(other.key())
+            ValueType::Composite(shape.key().clone()),
+            ValueType::Composite(other.key().clone())
         ]
     );
     for (member, values) in members.iter().zip([
@@ -188,10 +193,10 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
         vec![nested[2].clone(), nested[5].clone()],
     ]) {
         let value = environment
-            .union(wrap.key(), member.variant(), values)
+            .union(wrap.key().clone(), member.variant(), values)
             .expect("nested Union payload");
         assert!(environment
-            .admits(&ValueType::Composite(wrap.key()), &value)
+            .admits(&ValueType::Composite(wrap.key().clone()), &value)
             .expect("nested membership"));
     }
     let unsealed = TypeEnvironment::new(closure.composites.values().cloned(), [])
@@ -199,7 +204,7 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     assert!(
         unsealed
             .union(
-                shape.key(),
+                shape.key().clone(),
                 shape.union_members().unwrap()[0].variant(),
                 vec![]
             )
@@ -218,9 +223,12 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == shape.node().to_string())
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                == Some(shape.node())
+        })
         .unwrap();
-    let unchanged = environment(&healthy).union_key(shape.key());
+    let unchanged = environment(&healthy).union_key(shape.key().clone());
     for form in ["record", "tuple"] {
         let mut node = original.clone();
         node.semantic_form = form.into();
@@ -238,16 +246,33 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         Err(CompositeEqualityRefusal::CompositeContextMismatch { .. })
     ));
     let mut unknown = original.clone();
-    unknown.node_id.digest = "07".repeat(32).into();
+    unknown
+        .node_id
+        .path
+        .push(quire_contract_model::CheckedNodePathSegment::Name(
+            "unknown".into(),
+        ));
+    let unknown_key = crate::core::ir::node_key::checked_node_key(&unknown.node_id)
+        .expect("structural unknown key");
     assert_eq!(
         admitted::resolve_composite(&context, &mut TypeClosure::default(), &unknown),
         Err(CompositeEqualityRefusal::UnknownComposite {
-            declaration: "07".repeat(32)
+            declaration: unknown_key.to_string()
         })
     );
     let mut wrong_kind = original.clone();
     let marker = context.enums().next().expect("genuine enum");
-    wrong_kind.node_id.digest = marker.key().to_string().into();
+    wrong_kind.node_id = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                == Some(marker.key())
+        })
+        .expect("genuine enum key")
+        .node_id
+        .clone();
     assert_eq!(
         admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
         Err(CompositeEqualityRefusal::WrongAdmittedKind {
@@ -267,30 +292,38 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     };
     let dependencies = qsl_replay::DependencyInput::new([library]).unwrap();
     let importer = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "union-importer.native", "git", "fixture"),
-        "union-importer.native",
-        br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "union-importer.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "union-importer".to_owned(),
+            path: "union-importer.native",
+            bytes:
+                br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
         import "test/union" as u;
         function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }"#,
+        },
         [],
         &dependencies,
         Default::default(),
         Default::default(),
     )
     .expect("distinct authentic importer source");
-    let owner = context.package_id().record();
+    let owner = context.package_name();
     assert_eq!(
         admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
         Err(CompositeEqualityRefusal::ForeignComposite {
             declaration: shape.node().to_string(),
-            package_domain: owner.domain().as_str().to_owned(),
-            package_digest: owner.hex(),
+            package_name: owner.as_str().to_owned(),
         })
     );
     // Swap a genuine owner declaration under a different handle: no forged member/key.
     let mut bindings = healthy.composite_bindings.clone();
-    bindings.get_mut(&shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
-    bindings.remove(&declaration(&context, "Wrap").key());
+    bindings.get_mut(shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
+    bindings.remove(declaration(&context, "Wrap").key());
     let failure = admit_environment(
         None,
         healthy.composites.values().cloned().collect(),
@@ -308,7 +341,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         ))
     ));
     assert_eq!(
-        environment(&healthy).union_key(shape.key()),
+        environment(&healthy).union_key(shape.key().clone()),
         unchanged,
         "failed item leaves healthy closure unchanged"
     );

@@ -1,6 +1,8 @@
 //! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedSemanticId};
+use std::fmt::Write as _;
+
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
 use quote::ToTokens;
 
 use crate::{
@@ -9,7 +11,7 @@ use crate::{
         abi::{KaniPrimitiveType, KaniSolver},
         census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
-            outcome::{KaniObligationRequest, UnsupportedObligation},
+            outcome::{node_label, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
             render,
             spec::{
@@ -29,7 +31,7 @@ use crate::{
 
 pub(in crate::kani::generate) struct LoweredV2Clause {
     dependencies: Vec<ProofDependencyEdge>,
-    pub(super) package: CheckedSemanticId,
+    pub(super) package: ContractSourceV1,
     pub(super) node_id: CheckedNodeId,
     kind: ObligationKind,
     oracle: V2ClauseOracle,
@@ -39,6 +41,26 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     symbolic_name: Option<String>,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
+}
+
+/// Encode the complete structural key for a generated message. Escaping `%` keeps
+/// this reversible even when a source name itself contains an escape-looking span.
+pub(in crate::kani::generate) fn message_safe_node_label(node: &CheckedNodeId) -> String {
+    escape_message_label(&node_label(node).to_string())
+}
+
+fn escape_message_label(raw: &str) -> String {
+    let mut label = String::new();
+    for character in raw.chars() {
+        match character {
+            '%' | '"' | '\\' | '{' | '}' | '\n' | '\r' => {
+                write!(&mut label, "%{:02X}", u32::from(character))
+                    .expect("writing to a String cannot fail");
+            }
+            other => label.push(other),
+        }
+    }
+    label
 }
 
 pub(in crate::kani::generate) fn lower(
@@ -75,7 +97,12 @@ pub(in crate::kani::generate) fn lower(
     };
     // Kani includes the module in generated filenames. Use the full admitted pair so two
     // revisions of one declaration cannot collide on a readable clause name.
-    let preimage = crate::core::canonical::preimage_value(&(package.package_id(), clause))
+    let package_identity = ContractSourceV1 {
+        name: package.name().into(),
+        lock: package.lock().clone(),
+    };
+    let node_key = node_label(clause).to_string();
+    let preimage = crate::core::canonical::preimage_value(&(&package_identity, &node_key))
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
     let digest = crate::core::canonical::content_digest(&preimage)
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
@@ -93,7 +120,7 @@ pub(in crate::kani::generate) fn lower(
     );
     Ok(LoweredV2Clause {
         dependencies: Vec::new(),
-        package: package.package_id().clone(),
+        package: package_identity,
         node_id: clause.clone(),
         kind,
         oracle,
@@ -184,8 +211,8 @@ pub(in crate::kani::generate) fn render_clause(
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
         format!(
-            "V2 precondition {}/{}",
-            lowered.node_id.domain, lowered.node_id.digest
+            "V2 precondition {}",
+            message_safe_node_label(&lowered.node_id)
         ),
         path,
         lowered.oracle.source.clone(),
@@ -465,8 +492,8 @@ fn render_postcondition(
     ]);
     let spec = HarnessSpec::new(
         format!(
-            "V2 postcondition {}/{}",
-            lowered.node_id.domain, lowered.node_id.digest
+            "V2 postcondition {}",
+            message_safe_node_label(&lowered.node_id)
         ),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
         lowered.oracle.source.clone(),
@@ -831,20 +858,29 @@ impl NativeTerm {
 
 #[cfg(test)]
 mod native_probe_tests {
-    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
+    use super::{bind_native_arithmetic_probes, escape_message_label, ArithmeticProbe};
     use crate::core::native_integer::{
         NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
         NativeIntegerSelection,
     };
     use ix_trace_rs::trace;
 
+    #[test]
+    fn structural_message_label_escapes_delimiters_and_percent_injectively() {
+        let label = escape_message_label("p%7B{\"q\"}\\\n\r");
+        assert_eq!(label, "p%257B%7B%22q%22%7D%5C%0A%0D");
+        assert_ne!(escape_message_label("%7B"), escape_message_label("{"));
+        assert!(!label.contains(['"', '\\', '{', '}', '\n', '\r']));
+    }
+
     #[trace("FR-015-AC-125", "TC-025")]
     #[test]
     fn bounded_add_feeding_multiply_uses_the_typed_completed_interval() {
         let node_id: quire_contract_model::CheckedNodeId =
             serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "2".repeat(64),
+                "package": "kani-clause-v2-test",
+                "path": ["bounded-add"],
+                "ordinal": 0,
             }))
             .expect("checked clause key");
         let interval = |lower: i128, upper: i128| Interval {

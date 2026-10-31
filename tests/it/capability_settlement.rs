@@ -4,8 +4,8 @@
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, ProofBound,
-    ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
+    compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, NodeKey,
+    ProofBound, ReplayLimits, SourceIdentity, StageLimits,
 };
 use quire_contract_codegen::{
     negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
@@ -20,6 +20,7 @@ use quire_contract_model::{
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm, ContractDependencies,
     ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
 };
+use quire_exact::PathSegment;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -61,7 +62,7 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     }
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn reader_refusal_projection_preserves_every_public_field() {
     let reader = ContractPackageWireV1::read(
@@ -80,7 +81,7 @@ fn reader_refusal_projection_preserves_every_public_field() {
     assert_eq!(wire["code"], "contract_package_read_refused");
     let fields = &wire["cause"]["refusal"];
     assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
-    assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
+    assert_eq!(fields["loci"], serde_json::to_value(refusal.loci).unwrap());
     assert_eq!(
         fields["cause"],
         serde_json::to_value(refusal.cause).unwrap()
@@ -98,17 +99,24 @@ fn reader_refusal_projection_preserves_every_public_field() {
         serde_json::to_value(refusal.document_pointer).unwrap()
     );
     assert_eq!(
-        fields["expected"],
-        serde_json::to_value(refusal.expected).unwrap()
+        fields["extension_detail"],
+        serde_json::to_value(refusal.extension_detail).unwrap()
     );
     assert_eq!(
-        fields["actual"],
-        serde_json::to_value(refusal.actual).unwrap()
+        fields["protocol_detail"],
+        serde_json::to_value(refusal.protocol_detail).unwrap()
     );
+    assert_eq!(
+        fields["terminal_duplicate"],
+        serde_json::to_value(refusal.terminal_duplicate).unwrap()
+    );
+    assert!(fields.get("path").is_none());
+    assert!(fields.get("expected").is_none());
+    assert!(fields.get("actual").is_none());
     assert!(fields.get("expected_node_id").is_none());
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn named_refusal_adapter_preserves_unknown_version() {
     let reader = ContractPackageWireV1::read(
@@ -123,26 +131,18 @@ fn named_refusal_adapter_preserves_unknown_version() {
     assert_eq!(projected.contract_version.as_deref(), Some("unknown"));
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn refusal_adapter_preserves_selected_document_pointer() {
     use exact_function_fixture::{source_bound_call_package, PackageBuilder};
     use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
-    let digest = "ab".repeat(32);
-    let selection = serde_json::json!([{
-        "identity": "acme/orders",
-        "digest_domain": "sha256-jcs",
-        "digest": digest,
-    }]);
-    let mut wire = source_bound_call_package().wire();
-    wire["lock"]["model_selections"] = selection.clone();
-    wire["identity_preimage"]["model_selections"] = selection;
+    let wire = source_bound_call_package().wire();
     let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
         .insert_domain_package_document(
-            digest,
+            "test/cg-exact-scalar".to_owned(),
             br#"{"package":{"count":9007199254740993}}"#.to_vec(),
         )
         .expect("selected document evidence");
@@ -167,7 +167,7 @@ fn refusal_adapter_preserves_selected_document_pointer() {
     );
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn refusal_adapter_preserves_reader_node_locus() {
     use exact_function_fixture::{source_bound_call_package, PackageBuilder};
@@ -553,9 +553,12 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
              profile v = \"quire.value.complete/v1\";\n\
              function f using v(a: Int[0, 9]): Int[0, 18] pure { a + a }\n";
         let compiled = compile_package(
-            SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
-            "selected-add.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
+                package_name: "selected-add".to_owned(),
+                path: "selected-add.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -623,6 +626,31 @@ fn process(id: &str, modes: &[Mode], domains: &[DomainKind]) -> BackendDescripto
     }
 }
 
+fn fixture_node(seed: u8) -> NodeKey {
+    NodeKey::new(
+        "fixture",
+        vec![PathSegment::Text(format!("bound-{seed}"))],
+        0,
+    )
+    .expect("fixture structural node")
+}
+
+fn checked_node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            quire_contract_model::CheckedNodePathSegment::Name(name) => {
+                PathSegment::Text(name.to_string())
+            }
+            quire_contract_model::CheckedNodePathSegment::Node(node) => {
+                PathSegment::Node(checked_node_key(node))
+            }
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
 fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
     let bound = match kind {
         DomainKind::Integer => {
@@ -635,23 +663,13 @@ fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
     };
     ProofBound::new(
         DomainKey::Node {
-            node: WireNodeId::from_digest([1; 32]),
+            node: fixture_node(1),
             path: Vec::new(),
         },
         Some(kind),
         bound,
     )
     .unwrap()
-}
-
-fn wire_node_id_from_hex(digest: &str) -> WireNodeId {
-    assert_eq!(digest.len(), 64, "checked node digest is SHA-256 hex");
-    let mut bytes = [0_u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&digest[index * 2..index * 2 + 2], 16)
-            .expect("checked node digest is canonical hex");
-    }
-    WireNodeId::from_digest(bytes)
 }
 
 /// A bounded Kani request retains its caller-supplied source bound in the borrowed request
@@ -687,7 +705,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .expect("integer addition has one source-derived bound");
     let source_bound = ProofBound::new(
         DomainKey::Node {
-            node: wire_node_id_from_hex(&checked_bound.digest),
+            node: checked_node_key(checked_bound),
             path: Vec::new(),
         },
         Some(DomainKind::Integer),
@@ -743,7 +761,7 @@ fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
         };
         ProofBound::new(
             DomainKey::Node {
-                node: WireNodeId::from_digest([seed; 32]),
+                node: fixture_node(seed),
                 path,
             },
             Some(kind),
@@ -798,7 +816,7 @@ fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
 fn extent_domain(kind: DomainKind) -> ExtentDomain {
     ExtentDomain {
         domain: DomainKey::Node {
-            node: WireNodeId::from_digest([1; 32]),
+            node: fixture_node(1),
             path: Vec::new(),
         },
         kind,
@@ -2117,11 +2135,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         &[],
     );
     let division_bound = builder.bound(&package::Bound::Integer(0, 10));
-    builder.narrow(
-        DIVISION_NARROW,
-        &package::code_id(DIVISION).digest,
-        &division_bound,
-    );
+    builder.narrow(DIVISION_NARROW, &package::key(DIVISION), &division_bound);
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
     let plain_source = checked.clone();
