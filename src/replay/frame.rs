@@ -706,9 +706,8 @@ impl FrameReplay {
                 &documents,
             )
         };
-        // QSL's own decode of the request checks every provided document against its digest
-        // and refuses with its own code; the pre-state tie reads those documents only after it
-        // has passed, so a document whose bytes do not match its digest is QSL's refusal.
+        // QSL admits the request's wire shape before the pre-state tie. The tie locates its
+        // documents by their declared identities; replay later performs QSL's document checks.
         let unranged = harness.unranged.clone();
         ReplayRequest::decode(
             request(ReplaySource::Witness(witness.clone())),

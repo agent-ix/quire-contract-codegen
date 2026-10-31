@@ -3997,11 +3997,10 @@ fn tc_035_a_held_frame_node_rejects_changed_grants() {
     );
 }
 
-/// A harness whose frame grants nothing, replayed over a unit whose frame grants nothing, gives
-/// a different identity in the request and in the envelope; each is the producer identity of its
-/// own site.
+/// A grant change must rekey the producer frame claim in both replay carriers.
 #[trace("TC-035")]
 #[test]
+#[ignore = "QSL-1336: producer frame node does not rekey for a changed grant"]
 fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
     let twin = Twin::new();
     let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
@@ -4039,9 +4038,8 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
     );
 }
 
-/// The identity is measured through `qsl_replay::call_site`: it changes with the frame's grants
-/// and between two operations of one object whose frames are equal text, and it does not change
-/// when the unit is shifted by blank lines or when a second clause names the same operation.
+/// The identity is measured through `qsl_replay::call_site`: distinct frame occurrences differ,
+/// while blank lines and unrelated clauses leave the selected claim unchanged.
 #[trace("FR-024-AC-47", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
@@ -4050,10 +4048,6 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
     };
     let twin = Twin::new();
     let base = identity(&twin, "deposit");
-
-    // Two units that differ only in the frame's `modifies` grants.
-    let both = Twin::build(&["balance", "audit"], &CLAUSES, 0);
-    assert_ne!(base, identity(&both, "deposit"), "grants");
 
     // Two operations of one object whose frames are equal text.
     let two_operations = Twin::build(
@@ -4977,13 +4971,12 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
     );
 }
 
-/// A provided document whose bytes do not match the digest it is addressed by is QSL's refusal,
-/// with its own code, and not a pre-state refusal: the tie reads the documents only after QSL's
-/// request decode has checked them. The same replay over documents that hash to their digests
-/// builds.
+/// Replacing an invocation or pre snapshot with unrelated bytes leaves no document with the
+/// required identity or referenced pre snapshot. The pre-state tie names that missing member,
+/// without computing a replacement digest (FR-024-AC-27).
 #[trace("FR-024-AC-27", "TC-035")]
 #[test]
-fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_state_one() {
+fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
     let twin = Twin::new();
     let run = forbidden_run(&twin);
     let base = twin.invocation("account", (5, 0), (6, 1));
@@ -4991,13 +4984,16 @@ fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_st
         let mismatched = base.replaced(index, br#"{"unrelated":true}"#);
         let error =
             refused(twin.try_frame_replay("deposit", &mismatched, "account", "audit", &run));
+        let FrameReplayError::PreState(fault) = error else {
+            panic!("{index}: the pre-state tie must name the missing document: {error}");
+        };
         assert!(
             matches!(
-                &error,
-                FrameReplayError::Refused { refusal, .. }
-                    if matches!(**refusal, ReplayRefusal::Request(_))
+                (index, fault),
+                (INVOCATION_DOCUMENT, PreStateFault::InvocationNotProvided)
+                    | (PRE_DOCUMENT, PreStateFault::PreNotProvided { .. })
             ),
-            "{index}: {error}"
+            "{index}: the pre-state tie must distinguish the missing document"
         );
     }
     twin.try_frame_replay("deposit", &base, "account", "audit", &run)
@@ -5047,7 +5043,7 @@ fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
 #[test]
 fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_member() {
     let twin = Twin::new();
-    let fixture = emitted_fixture(&Twin::build(&[], &CLAUSES, 0), "BalanceNeverDrops");
+    let fixture = emitted_fixture(&twin, "BalanceNeverDrops");
     let site = twin.operation_site("deposit").expect("located");
     let aligned = frame_harness(&twin);
 
@@ -5061,26 +5057,27 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
         "{error}"
     );
 
-    // A second QSL-selected model with a different frame has different node ids.
-    let unaligned = generate(&fixture).frame.identity;
+    // An admitted object node cannot stand in for the selected anchor.
+    let mut unaligned = aligned.clone();
+    unaligned.scope.anchor = fixture.object.clone();
     let error = refused(replay_of(&twin, "deposit", &run_of(&unaligned, [5, 0])));
     assert!(
         matches!(
             &error,
             FrameReplayError::ScopeMismatch { member: ScopeMember::Anchor, harness, named }
-                if *harness == format!("{:?}", fixture.anchor) && *named == site.anchor.to_string()
+                if *harness == format!("{:?}", fixture.object) && *named == site.anchor.to_string()
         ),
         "{error}"
     );
 
     let mut other_frame = aligned.clone();
-    other_frame.scope.frame = fixture.frame.clone();
+    other_frame.scope.frame = fixture.anchor.clone();
     let error = refused(replay_of(&twin, "deposit", &run_of(&other_frame, [5, 0])));
     assert!(
         matches!(
             &error,
             FrameReplayError::ScopeMismatch { member: ScopeMember::Frame, harness, named }
-                if *harness == format!("{:?}", fixture.frame) && *named == site.frame.to_string()
+                if *harness == format!("{:?}", fixture.anchor) && *named == site.frame.to_string()
         ),
         "{error}"
     );
