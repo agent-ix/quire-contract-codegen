@@ -1540,7 +1540,11 @@ mod tests {
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
             &located.package,
-            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            quire_contract_model::CheckedPackageReadLimits {
+                // The controlled 32-quantifier QSL output is about 6.2 MiB.
+                bytes: 8 << 20,
+                ..quire_contract_model::CheckedPackageReadLimits::bounded()
+            },
             &evidence,
         ) {
             quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
