@@ -291,19 +291,20 @@ unsuccessfully exited process, and the success report with no cover property are
 inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
-with the vacuous-proof reason (FR-017-AC-13), unless it is a non-collection precondition harness with no assertion, which its
+with the vacuous-proof reason (FR-017-AC-61), unless it is a non-collection precondition harness with no assertion, which its
 cover summary decides. For a collection precondition identified by its typed V2 clause identity's
-precondition kind and admitted collection-quantifier marker, bind the generated
-source digest and the unique artifact-relative line of its FR-015-AC-99
-Boolean-completion assertion. Delete or replace that assertion at the same line
+precondition kind and admitted collection-quantifier marker, retain the unique
+artifact-relative line of its FR-015-AC-99 Boolean-completion assertion without
+a source digest or equivalent fingerprint. Delete or replace that assertion at the same line
 while preserving the cover: an unchanged seal gives `HarnessNotInCrate` for
 zero byte-identical occurrences; a mutated retained seal gives
 `HarnessProvenanceMismatch`. Embed the intact artifact twice and require
 `BoundTotalityAssertionMismatch`. Through the in-crate generated-harness seam,
-construct two valid-seal cases with one byte-identical crate occurrence:
-one binds the wrong source digest while retaining the right assertion line,
-and the other binds the wrong assertion line while retaining the right digest.
-Each case returns `BoundTotalityAssertionMismatch` before launch. Exercise all
+construct a valid-seal case whose generated source differs from the crate's sole
+original occurrence while retaining the right assertion line: it returns
+`HarnessNotInCrate` before launch. Construct another valid-seal case whose
+original source occurs once but whose bound assertion line is wrong: it returns
+`BoundTotalityAssertionMismatch` before launch. Exercise all
 these refusals through the single-run, readonly and batch entries before
 launch; the batch refuses the whole call. With intact source, compute the
 line offset of its sole occurrence in `src/lib.rs`. A satisfied cover and zero
@@ -518,7 +519,7 @@ final reviewed-head gate evidence remain pending.
 
 `src/kani/classify.rs` unit tests for classification, including
 `a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied` for
-FR-017-AC-13, and the launcher tests in `src/kani/run/launch.rs` (`a_capture_thread_*`,
+FR-017-AC-61, and the launcher tests in `src/kani/run/launch.rs` (`a_capture_thread_*`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
 `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-15
 through FR-017-AC-17. The two tests that asserted the silent tail an over-long stream used to
