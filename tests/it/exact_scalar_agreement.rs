@@ -107,24 +107,6 @@ pub(super) fn run_enum_agreement_mutant<'a>(
     );
 }
 
-/// Require a named native assertion failure, never a setup or compiler failure.
-pub(super) fn run_agreement_mutant<'a>(
-    label: &str,
-    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
-    extra_files: &[(&'a str, &'a str)],
-    cases: &str,
-    failed_test: &str,
-) {
-    run_agreement_cases_with_expectation(
-        label,
-        artifacts,
-        extra_files,
-        cases,
-        Some(failed_test),
-        None,
-    );
-}
-
 fn run_agreement_cases_with_expectation<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
