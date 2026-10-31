@@ -6,32 +6,53 @@ mod generated {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 
-    #[ix_trace_rs::trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "TC-029")]
+    fn wire(key: &exact::NodeKey) -> quire_contract_model::CheckedNodeId {
+        quire_contract_model::CheckedNodeId {
+            package: key.package().into(),
+            path: key.path().into_iter().map(|segment| match segment {
+                exact::PathSegment::Text(name) =>
+                    quire_contract_model::CheckedNodePathSegment::Name(name.into()),
+                exact::PathSegment::Node(child) =>
+                    quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child))),
+            }).collect(),
+            ordinal: key.ordinal(),
+        }
+    }
+
+    #[ix_trace_rs::trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "FR-018-AC-46", "TC-029")]
     #[test]
     fn real_lookup_refusals_and_retained_metadata_remain_distinct() {
         let (compiled, libraries) = super::compilation();
         let prepared = environment_holder_same(Some(compiled.context())).expect("bound original package");
-        let lookup = |wire: qsl_replay::WireNodeId, name: &[&str], form| lookup_composite_key(prepared.context, &wire.to_string(), name, form);
-        let unknown = qsl_replay::WireNodeId::from_digest([7;32]);
-        assert!(matches!(lookup(unknown, &["Absent"], qsl_replay::AdmittedCompositeForm::Record), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown { declaration, case: None })) if declaration == unknown));
+        let lookup = |id, name: &[&str], form| lookup_composite_key(prepared.context, id, name, form);
+        let unknown = exact::NodeKey::new("unknown", vec![exact::PathSegment::Text("absent".to_owned())], 0)
+            .expect("structural unknown key");
+        assert!(matches!(lookup(wire(&unknown), &["Absent"], qsl_replay::AdmittedCompositeForm::Record),
+            Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown { declaration, case: None })) if declaration == unknown));
         let marker = compiled.context().enums().next().expect("actual own enum");
-        let wrong = qsl_replay::WireNodeId::from_digest(*marker.key().as_bytes());
-        assert!(matches!(lookup(wrong, &["Marker"], qsl_replay::AdmittedCompositeForm::Record), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::WrongKind { declaration })) if declaration == wrong));
+        let wrong = marker.key().clone();
+        assert!(matches!(lookup(wire(&wrong), &["Marker"], qsl_replay::AdmittedCompositeForm::Record),
+            Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::WrongKind { declaration })) if declaration == wrong));
         let leaf = &libraries.iter().find(|(name,_)| name == "test/composites").expect("real leaf").1;
         for declaration in leaf.context().composites() {
-            let wire = qsl_replay::WireNodeId::from_digest(*declaration.node().as_bytes());
+            let key = declaration.node().clone();
             let names = declaration.qualified_name().iter().map(|part| part.as_str()).collect::<Vec<_>>();
-            assert!(matches!(lookup(wire, &names, declaration.form()), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Foreign { declaration: actual, package })) if actual == wire && package == leaf.context().package_id()));
+            assert!(matches!(lookup(wire(&key), &names, declaration.form()),
+                Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Foreign { declaration: actual, package }))
+                if actual == key && package == leaf.context().package_name().clone()));
         }
         let pair = super::declaration(compiled.context(), "Pair");
-        let wire = qsl_replay::WireNodeId::from_digest(*pair.node().as_bytes());
-        assert_ne!(pair.node(), pair.key());
-        assert_eq!(lookup(wire, &["Pair"], pair.form()).expect("real wire resolves kernel key"), pair.key());
-        let kernel_as_wire = qsl_replay::WireNodeId::from_digest(*pair.key().as_bytes());
-        assert!(matches!(lookup(kernel_as_wire, &["Pair"], pair.form()), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown { declaration, case: None })) if declaration == kernel_as_wire));
-        assert!(matches!(lookup(wire, &["WrongName"], pair.form()), Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
-        assert!(matches!(lookup(wire, &["Pair"], qsl_replay::AdmittedCompositeForm::Record), Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
-        assert!(matches!(lookup_composite_key(None, &wire.to_string(), &["Pair"], pair.form()), Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == wire));
+        let key = pair.node().clone();
+        assert_eq!(lookup(wire(&key), &["Pair"], pair.form()).expect("real wire resolves kernel key"), pair.key().clone());
+        assert!(matches!(lookup(wire(&key), &["WrongName"], pair.form()),
+            Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
+        assert!(matches!(lookup(wire(&key), &["Pair"], qsl_replay::AdmittedCompositeForm::Record),
+            Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
+        assert!(matches!(lookup_composite_key(None, wire(&key), &["Pair"], pair.form()),
+            Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == wire(&key)));
+        let malformed = quire_contract_model::CheckedNodeId { package: "admitted-composites".into(), path: Vec::new(), ordinal: 0 };
+        assert!(matches!(lookup(malformed, &["Pair"], pair.form()),
+            Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::MalformedWire { .. }))));
     }
 
     #[ix_trace_rs::trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "TC-029")]
@@ -49,7 +70,7 @@ mod generated {
                 "absent" => prepared.context = None,
                 "wrong" => prepared.context = Some(other.context()),
                 "item" => prepared.binding = "other-item",
-                "package" => prepared.expected_digest = "other-package",
+                "package" => prepared.expected_name = "other-package",
                 "recipe" => prepared.requires_context = false,
                 _ => panic!("finite private mutation"),
             }
