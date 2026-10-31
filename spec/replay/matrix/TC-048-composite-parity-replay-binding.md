@@ -32,9 +32,9 @@ operator differs from the original node. The QSL controls supply Disagreed and m
 common-step precedence; CG structural refusals occur before evidence is accepted.
 Imported contexts refuse with typed `ImportedContextUnsupported`; admitting them remains PLANNED
 until CG retains the original compile's admitted dependency packages. These are partial AC-1/AC-11
-Eq/Ne and AC-9/AC-12 constructor controls, not generated backend verification or same-artifact
+Eq/Ne and AC-20/AC-12 constructor controls, not generated backend verification or same-artifact
 native authentication. AC-8's
-complete coverage/refusal matrix, AC-6/AC-7/AC-10 production controls and FR-029 strengths remain
+complete coverage/refusal matrix, AC-19/AC-7/AC-10 production controls and FR-029 strengths remain
 planned. Literal positives are one-field `Integer` records; bounded-field narrowing literals
 (IR-691) and collection-constructor literals remain gated by IR operand projection. IR-666
 tests the delivered QSL #645 facade through CG's report converter, including F-1 to F-7,
@@ -48,11 +48,12 @@ and never replace positive QSL evaluation with a verdict double.
    package identity and actual recompiled occurrence membership. Exercise parameter/parameter,
    repeated/self parameter, parameter/literal and literal/literal forms, retaining positional
    graph-child nodes and actual literal singleton values.
-   Retain the actual generated harness, native refinement, original limits and canonical identity of
-   the same proved artifact. Assert the original nodes, operand declarations and literal singleton
+   Retain the actual generated harness, native refinement, original limits and proved artifact bytes;
+   authenticate the native observation against that retained artifact and original context under
+   FR-033-AC-19. Assert the original nodes, operand declarations and literal singleton
    values. For the Ne forms still PLANNED under IR-814 (FR-033-AC-14 literal/literal and
    FR-033-AC-15 self-comparison), require NotEqual and two positional arguments, then
-   apply the AC-9 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
+   apply the AC-20 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
    admitted one-field `Integer` records; IR-691 bounded-field narrowing literals and
    collection-constructor literals stay gated. For inline operands (FR-033-AC-16, FR-033-AC-17),
    require the owning projection's `InlineInteger` or `InlineNonInteger` refusal to surface as
@@ -118,7 +119,7 @@ and never replace positive QSL evaluation with a verdict double.
    separately; it cannot enter the completed sampled path.
 8. Feed each QSL result/record through the public converter and terminal map. Read actual record
    category/cause for Proved0. Cross-bind another run/result and alter node, operation, operand,
-   domain, limits or proof-content identity; each CG precheck or failed report binding returns no
+   domain or limits; separately replace the retained proved artifact; each CG precheck or failed report binding returns no
    report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Assert that `run_terminal_value` has no
    proof-subject or proof-strength input and `TerminalPairError` has no bounded-shadow variant
    (FR-029-AC-21); the permanent exclusion of shadow outcomes from `run_terminal_value` and their routing
@@ -133,8 +134,9 @@ and never replace positive QSL evaluation with a verdict double.
    Before any outcome projection, including refusal/generated fault/incomplete, compare the genuine
    public QSL report's `claim()` with it. With that genuine report held fixed, independently change
    each CG-owned retained sent-identity member: node, occurrence, operation/kind, operand/domain,
-   harness bounds, ScalarLimits, content identity, native cause/result/count, shadow result/pair
-   count, refinement and verified SUCCESS count where present. Each mismatch returns no terminal
+   harness bounds, ScalarLimits, native cause/result/count, shadow result/pair
+   count, refinement and verified SUCCESS count where present. Separately replace the actual proved
+   artifact while keeping the QSL claim and report fixed: the CG pre-invocation check must refuse. Each mismatch returns no terminal
    value. Separately cross-bind another run's genuine report and require the same refusal. Do not
    mutate or fabricate QSL's private report representation or introduce a report decode seam.
    As a separate positive control, change a valid request before send, retain that actual changed
@@ -181,9 +183,9 @@ and never replace positive QSL evaluation with a verdict double.
     a valid `prepare` and an operand that would fail admission with Disagreed; F-1 wins because
     admission follows it. Inspect QSL's public `terminal_value` mapping and CG's pass-through for
     any actual `Fault` or `Admission(Fault)` report: each maps to Failed, but no invariant-fault
-    report or public triggering input is fabricated. Change each full
-    `CompositeIdentity` member independently in a returned report: obligation, node, occurrence,
-    operator, obligation kind, harness bounds, limits, content identity, falsified operands,
+    report or public triggering input is fabricated. With a genuine report fixed, independently
+    change each retained sent `CompositeIdentity` member: obligation, node, occurrence,
+    operator, obligation kind, harness bounds, limits, falsified operands,
     shadow verdict and pair count, native observation/cause and refinement, then verified SUCCESS
     count and refinement. Every mismatched or missing report returns a typed CG refusal with no
     terminal value; the matching report binds. On the same valid claim, combine Disagreed with
@@ -215,17 +217,17 @@ and never replace positive QSL evaluation with a verdict double.
 | Authority | Planned observation | Mutation that must fail |
 |---|---|---|
 | FR-033-AC-1 | Original-package node-selected parity and actual literal singleton domains | Replace the claim with a source predicate or manufacture a Boolean function |
-| FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-9 binding and AC-1 operator refusal still apply | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator |
+| FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-20 report binding and AC-1 operator refusal still apply; AC-19 authenticates the retained proved artifact independently | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator or substitute another artifact while retaining the claim |
 | FR-033-AC-16 (Inspection); FR-033-AC-17 (Test) | The owning projection's inline-literal refusal reaches CG as `CompositeBuildError::Operands` with no report or terminal value | Build an inline argument, add a CG-local variant, or return a report |
 | FR-025-AC-9; FR-033-AC-5 | Original-node/path/domain bindings reconstruct the actual ordered draws | Swap operands/paths, omit a required leaf or unpin a literal |
 | FR-033-AC-2/3 | All canonical families preserve exact values and typed shape; malformed cases refuse | Round IEEE or quantity, collapse absence/null, lose order/multiplicity or use byte equality for set admission |
 | FR-033-AC-4 | Public encoded-byte guard and checked counts/work; iterative admitted lifecycle | Apply capture-only guard, add a depth cap, recurse during drop or allow arithmetic overflow |
-| FR-033-AC-6/7/10 | Actual same-artifact QSL parity: divergence Failed/CgDefect, assertion-only agreement Inconclusive; real generated verify/falsify controls | Supply a canned native verdict, regenerate away the mutation, ignore pair count or label parity Refuted |
+| FR-033-AC-19/7/10 | Actual same-artifact QSL parity: divergence Failed/CgDefect, assertion-only agreement Inconclusive; real generated verify/falsify controls | Supply a canned native verdict, regenerate away the mutation, ignore pair count or label parity Refuted |
 | FR-033-AC-8 | QSL derives complete declared-key coverage and literal singleton bounds | Treat empty/omitted/unbounded keys as covered, accept duplicate/unknown key or enum undeclared variant/DeclaredDomain |
 | FR-029-AC-17 and AC-19 to AC-27; FR-028-AC-17/24 | Closed strengths; cross-outcome disagreement wins, then verified refinement ceiling, ordinary vacuous record, exhausted+covered, completed Tested; all shadow-inconclusive rows and actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
 | FR-033-AC-11 | Positional O-09 includes repeated/self operands and literal graph nodes with empty Bounds; canonical encoded-key byte ordering and typed encoder refusal; full record extras and independent same-artifact content tie remain separate | Deduplicate self-comparison, omit literal arguments, sort DomainKey Ord, admit duplicate key within an argument, add a top-level operator/native/content member or substitute echo equality for artifact authentication |
 | FR-033-AC-12/13 | CG precheck yields no report value; QSL `prepare` Refused report precedes Disagreed, while later admission refusal follows it; shared Refinement and ordered F rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
-| FR-033-AC-9; FR-029-AC-28 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings; QSL public terminal mapping and CG pass-through inspected for invariant faults | Accept one changed observation member; drop QSL Refused report's terminal value; label an actual bound Fault report ReplayRefused; invent a fault report, QSL code/cause or predicate replay route |
+| FR-033-AC-20; FR-029-AC-28 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings; QSL public terminal mapping and CG pass-through inspected for invariant faults | Accept one changed observation member; drop QSL Refused report's terminal value; label an actual bound Fault report ReplayRefused; invent a fault report, QSL code/cause or predicate replay route |
 
 Unimplemented canonical conversions, family harnesses or legal cause representations remain reported
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning
