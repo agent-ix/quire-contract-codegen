@@ -6,17 +6,38 @@
 use super::model;
 use qsl_replay::{call_site, ClauseName, DependencyInput, Identifier, SourceIdentity};
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedNodePathSegment, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:state-frame-twin";
 const PACKAGE: &str = "test/bank";
-const PLACEHOLDER_DIGEST: &str =
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+fn matches_site(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
+    if id.package.as_ref() != key.package() || id.ordinal != key.ordinal() {
+        return false;
+    }
+    let mut path = key.path();
+    for segment in &id.path {
+        let matches = match (segment, path.next()) {
+            (
+                CheckedNodePathSegment::Name(left),
+                Some(quire_exact::PathSegmentView::Text(right)),
+            ) => left.as_ref() == right,
+            (
+                CheckedNodePathSegment::Node(left),
+                Some(quire_exact::PathSegmentView::Node(right)),
+            ) => matches_site(left, right),
+            _ => false,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    path.next().is_none()
+}
 
 fn account_type() -> String {
     format!("ix://{PACKAGE}/Account")
@@ -28,34 +49,6 @@ fn population() -> String {
 
 fn range_type(field: &str) -> String {
     format!("ix://{PACKAGE}/{field}_range")
-}
-
-fn canonical(value: &Value) -> String {
-    match value {
-        Value::Object(members) => {
-            let mut ordered = members.iter().collect::<Vec<_>>();
-            ordered.sort_by(|a, b| a.0.cmp(b.0));
-            let members = ordered
-                .iter()
-                .map(|(name, member)| format!("{}:{}", json!(name), canonical(member)))
-                .collect::<Vec<_>>();
-            format!("{{{}}}", members.join(","))
-        }
-        Value::Array(items) => {
-            let items = items.iter().map(canonical).collect::<Vec<_>>();
-            format!("[{}]", items.join(","))
-        }
-        scalar => scalar.to_string(),
-    }
-}
-
-fn jcs_digest(bytes: &[u8]) -> [u8; 32] {
-    let value: Value = serde_json::from_slice(bytes).expect("the document is JSON");
-    Sha256::digest(canonical(&value).as_bytes()).into()
-}
-
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn generated(identity: &str) -> Value {
@@ -70,7 +63,6 @@ fn construct(name: &str, meaning: &str) -> Value {
     json!({
         "kind": {"module": PACKAGE, "name": name},
         "moduleVersion": "1.0.0",
-        "manifestDigest": PLACEHOLDER_DIGEST,
         "construct": {
             "identity": "none", "shape": "record", "members": {}, "meaning": meaning,
         },
@@ -155,20 +147,17 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
     }));
     json!({
         "contractVersion": "2.0.0",
-        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
+        "canonicalization": {"algorithm": "rfc8785-v1"},
         "source": {
             "identity": format!("ix://{PACKAGE}/spec"),
             "version": "1.0.0",
             "dialect": "spec-bundle",
-            "digest": PLACEHOLDER_DIGEST,
         },
         "package": {
             "identity": PACKAGE,
             "version": "1.0.0",
-            "manifestDigest": PLACEHOLDER_DIGEST,
             "mappingVersions": [],
             "profileVersions": [],
-            "lockDigest": PLACEHOLDER_DIGEST,
         },
         "occurrences": [],
         "extensions": [],
@@ -196,11 +185,11 @@ pub const CLAUSES: [(&str, &str, &str); 2] = [
     ("AuditNeverDrops", "deposit", "audit"),
 ];
 
-fn unit_source(model_digest: &str, clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
+fn unit_source(clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
     let header = format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
-         model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n"
+         model Bank = {PACKAGE:?};\n"
     );
     let clauses = clauses
         .iter()
@@ -245,7 +234,7 @@ impl Twin {
             .expect("deposit operation");
         deposit["params"][0]["typeRef"] = json!(range_type("balance"));
         twin.domain = domain.to_string().into_bytes();
-        let source = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0);
+        let source = unit_source(&[CLAUSES[0]], 0);
         twin.unit = source
             .replace("self.balance >= pre(self.balance)", "self.balance >= other")
             .into_bytes();
@@ -303,7 +292,7 @@ impl Twin {
             });
         }
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin.unit = unit_source(&CLAUSES, 0).into_bytes();
         twin
     }
 
@@ -374,7 +363,7 @@ impl Twin {
 
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
         let domain = domain_document(granted);
-        let unit = unit_source(&hex(&jcs_digest(&domain)), clauses, blank_lines).into_bytes();
+        let unit = unit_source(clauses, blank_lines).into_bytes();
         Self { unit, domain }
     }
 
@@ -391,7 +380,7 @@ impl Twin {
         .expect("authored clause is located");
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .insert_domain_package_document(PACKAGE, self.domain.clone())
             .expect("retain authored domain document");
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
@@ -402,8 +391,14 @@ impl Twin {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("QSL emitted package is admitted: {other:?}"),
         };
-        let node = serde_json::from_value(json!({"domain": "quire.checked-semantic-node/v1", "digest": located.site.node.to_string()}))
-            .expect("owner clause identity");
+        let node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| matches_site(&node.node_id, located.site.node.view()))
+            .expect("QSL clause site names an admitted structural node")
+            .node_id
+            .clone();
         (package, node)
     }
 }

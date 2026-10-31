@@ -2445,7 +2445,9 @@ mod tests {
     type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
     use crate::oracle::checked_graph::fixture::Node as FixtureNode;
     use ix_trace_rs::trace;
-    use quire_contract_model::LiteralKind;
+    use quire_contract_model::{
+        CheckedApplicationOperation, CheckedApplicationOperationFixture, LiteralKind,
+    };
     use serde_json::json;
 
     #[trace("FR-018-AC-1")]
@@ -3238,37 +3240,38 @@ mod tests {
                 })
                 .expect("synthetic parameter")
             };
-            let expression: CheckedSemanticNodeV2 = serde_json::from_value(json!({
-                "node_id": expression_id,
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "expression",
-                "semantic_form": "binary",
-                "semantic_type": left.source_type,
-                "dependencies": [],
-                "occurrences": [],
-                "body": {"term": "application", "operator": "binary",
-                         "operation": {}, "result_type": left.source_type,
-                         "arguments": [
-                    {"term": "reference", "target": left_id},
-                    {"term": "reference", "target": right_id}
-                ]},
-            }))
-            .unwrap();
+            let body = CheckedTerm::Application {
+                operator: ApplicationOperator::Binary,
+                operation: CheckedApplicationOperation::from_test_fixture(
+                    CheckedApplicationOperationFixture::default(),
+                )
+                .expect("synthetic equality operation"),
+                result_type: left.source_type.clone(),
+                arguments: vec![
+                    CheckedTerm::Reference {
+                        target: left_id.clone(),
+                    },
+                    CheckedTerm::Reference {
+                        target: right_id.clone(),
+                    },
+                ],
+            };
             let expression = FixtureNode::new(
-                expression,
-                Some(CheckedTerm::Application {
-                    operator: ApplicationOperator::Binary,
-                    operation: serde_json::from_value(json!({})).expect("fixture operation"),
-                    result_type: left.source_type.clone(),
-                    arguments: vec![
-                        CheckedTerm::Reference {
-                            target: left_id.clone(),
-                        },
-                        CheckedTerm::Reference {
-                            target: right_id.clone(),
-                        },
-                    ],
-                }),
+                CheckedSemanticNodeV2 {
+                    node_id: expression_id.clone(),
+                    owner: None,
+                    owner_model: None,
+                    schema_version: "quire.checked-semantic-graph/v2".into(),
+                    node_tag: "expression".into(),
+                    semantic_form: "binary".into(),
+                    semantic_type: left.source_type.clone(),
+                    dependencies: vec![],
+                    occurrences: vec![],
+                    recursion_group: None,
+                    declaration: None,
+                    body: body.clone(),
+                },
+                Some(body),
             );
             items.push(CompositeEqualityItem {
                 node_id: expression_id,
@@ -3552,17 +3555,20 @@ mod tests {
                         },
                     )
                 };
-                let metadata = serde_json::from_value::<CheckedSemanticNodeV2>(json!({
-                    "node_id": ids[index],
-                    "schema_version": "quire.checked-semantic-graph/v2",
-                    "node_tag": tag,
-                    "semantic_form": form,
-                    "semantic_type": ids[index],
-                    "dependencies": [],
-                    "occurrences": [],
-                    "body": body,
-                }))
-                .expect("synthetic deep Option node");
+                let metadata = CheckedSemanticNodeV2 {
+                    node_id: ids[index].clone(),
+                    owner: None,
+                    owner_model: None,
+                    schema_version: "quire.checked-semantic-graph/v2".into(),
+                    node_tag: tag.into(),
+                    semantic_form: form.into(),
+                    semantic_type: ids[index].clone(),
+                    dependencies: vec![],
+                    occurrences: vec![],
+                    recursion_group: None,
+                    declaration: None,
+                    body: body.clone(),
+                };
                 FixtureNode::new(metadata, Some(body))
             })
             .collect();

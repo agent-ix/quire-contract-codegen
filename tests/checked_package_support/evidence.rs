@@ -74,24 +74,28 @@ mod tests {
         (root, wire, bytes)
     }
 
-    fn model_evidence(root: &Path, wire: &Value) -> CheckedPackageEvidence {
+    fn model_evidence(root: &Path, _wire: &Value) -> CheckedPackageEvidence {
         let mut evidence = CheckedPackageEvidence::new();
         evidence.support_feature("quire.value.complete/v1");
-        for selected in wire["lock"]["model_selections"]
-            .as_array()
-            .expect("model selections")
-        {
-            assert_eq!(selected["identity"], "acme/orders");
-            evidence
-                .insert_domain_package_document(
-                    selected["digest"].as_str().expect("selected model digest"),
-                    fs::read(
-                        root.join("proposals/checked-package-v2/domain-package-acme-orders.json"),
-                    )
-                    .expect("published selected model document"),
-                )
-                .expect("retain selected model document");
-        }
+        let directory = root.join("proposals/checked-package-v2");
+        let selections: Value = serde_json::from_slice(
+            &fs::read(directory.join("selected-documents.json"))
+                .expect("published fixture document selections"),
+        )
+        .expect("published selection JSON");
+        let document = selections["selected_documents"]["fixtures/positive-all-families.json"]
+            .as_str()
+            .expect("all-families selected domain document");
+        let bytes = fs::read(directory.join(document)).expect("published selected domain document");
+        let selected: Value = serde_json::from_slice(&bytes).expect("selected domain JSON");
+        evidence
+            .insert_domain_package_document(
+                selected["package"]["identity"]
+                    .as_str()
+                    .expect("selected domain identity"),
+                bytes,
+            )
+            .expect("retain selected model document");
         evidence
     }
 

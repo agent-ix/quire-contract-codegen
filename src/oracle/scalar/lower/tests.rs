@@ -5,14 +5,6 @@
 
 use super::super::*;
 use super::*;
-pub(in crate::oracle::scalar) fn app_term(operation: Value) -> CheckedTerm {
-    CheckedTerm::Application {
-        operator: ApplicationOperator::Binary,
-        operation: serde_json::from_value(operation).expect("fixture operation"),
-        result_type: node_id('1'),
-        arguments: Vec::new(),
-    }
-}
 
 type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
 use crate::oracle::checked_graph::fixture::Node as FixtureNode;
@@ -474,36 +466,25 @@ fn tc_024_a_failed_record_is_refused_by_its_limit_kind() {
 #[trace("FR-014-AC-3", "TC-024")]
 #[test]
 fn tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity() {
-    let inner: CheckedSemanticNodeV2 = serde_json::from_value(serde_json::json!({
-        "node_id": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "d".repeat(64),
+    use quire_contract_model::{CheckedApplicationOperation, CheckedApplicationOperationFixture};
+    let operation = CheckedApplicationOperation::from_test_fixture(
+        CheckedApplicationOperationFixture::default(),
+    )
+    .expect("test operation without an identity");
+    let fixture = inference_node(
+        node_id('d'),
+        "expression",
+        "application",
+        node_id('e'),
+        CheckedTerm::Application {
+            operator: ApplicationOperator::Binary,
+            operation,
+            result_type: node_id('e'),
+            arguments: vec![],
         },
-        "schema_version": "quire.checked-semantic-graph/v2",
-        "node_tag": "expression",
-        "semantic_form": "application",
-        "semantic_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "e".repeat(64),
-        },
-        "dependencies": [],
-        "occurrences": [],
-        // `operation` present, `operation.identity` absent: the exact shape
-        // admission is supposed to make impossible.
-        "body": {
-            "term": "application",
-            "operator": "binary",
-            "operation": { "mode": { "kind": "rounding", "value": "truncate" } },
-            "result_type": {
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "e".repeat(64),
-            },
-            "arguments": [],
-        },
-    }))
-    .expect("a node whose operation carries no identity");
+    );
     let node = CompleteContractNodeV2 {
-        node: inner,
+        node: fixture.metadata.clone(),
         node_tag: CheckedNodeTag::Expression,
         source_map: vec![],
         semantic_type: node_id('e'),
@@ -512,12 +493,6 @@ fn tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_id
         claims: vec![],
     };
 
-    let fixture = FixtureNode::new(
-        node.node.clone(),
-        Some(app_term(serde_json::json!({
-            "mode": { "kind": "rounding", "value": "truncate" }
-        }))),
-    );
     let key = fixture.node_id.clone();
     let graph: Graph<'_> = [(&key, &fixture)].into_iter().collect();
     assert_eq!(
@@ -544,12 +519,26 @@ pub(in crate::oracle::scalar) fn v2_node(
 /// A `{term: binding, name, value: <literal>}` member, the shape QSL emits and IR reads;
 /// the literal carries `type` as FR-322 requires.
 fn binding_member(name: &str, value: &str) -> CheckedTerm {
-    CheckedTerm::Binding { name: (name).into(), value: Box::new(CheckedTerm::Literal { type_id: serde_json::from_value(serde_json::json!({"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)})).expect("fixture type key"), value_kind: LiteralKind::Integer, value: serde_json::json!(value) }) }
+    CheckedTerm::Binding {
+        name: (name).into(),
+        value: Box::new(CheckedTerm::Literal {
+            type_id: node_id('1'),
+            value_kind: LiteralKind::Integer,
+            value: serde_json::json!(value),
+        }),
+    }
 }
 
 /// A `text`-kind binding member.
 fn text_member(name: &str, value: &str) -> CheckedTerm {
-    CheckedTerm::Binding { name: (name).into(), value: Box::new(CheckedTerm::Literal { type_id: serde_json::from_value(serde_json::json!({"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)})).expect("fixture type key"), value_kind: LiteralKind::Text, value: serde_json::json!(value) }) }
+    CheckedTerm::Binding {
+        name: (name).into(),
+        value: Box::new(CheckedTerm::Literal {
+            type_id: node_id('1'),
+            value_kind: LiteralKind::Text,
+            value: serde_json::json!(value),
+        }),
+    }
 }
 
 fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
@@ -592,10 +581,7 @@ fn bounded_parameter_nodes() -> Vec<FixtureNode> {
 
 fn reference_to(digit: char) -> CheckedTerm {
     CheckedTerm::Reference {
-        target: serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64),
-        }))
-        .expect("fixture type key"),
+        target: node_id(digit),
     }
 }
 

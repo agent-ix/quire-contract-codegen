@@ -750,8 +750,7 @@ mod tests {
 
     fn node_id() -> quire_contract_model::CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "1".repeat(64),
+            "package": "routed-fixture", "path": ["node"], "ordinal": 0,
         }))
         .expect("a checked node id")
     }
@@ -937,8 +936,7 @@ mod tests {
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {
         let node_id = serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "1".repeat(64),
+            "package": "routed-fixture", "path": ["node"], "ordinal": 0,
         }))
         .expect("a checked node id");
         KaniScalarObligationHarness::generated(

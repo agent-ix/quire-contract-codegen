@@ -22,19 +22,22 @@ fn published_package(fixture: &str) -> CheckedPackageV2 {
     let document: serde_json::Value = serde_json::from_slice(&bytes).expect("published JSON");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    for selection in document["lock"]["model_selections"]
-        .as_array()
-        .expect("published model selections")
-    {
-        let identity = selection["identity"].as_str().expect("model identity");
-        let document = match identity {
-            "acme/orders" => "domain-package-acme-orders.json",
-            other => panic!("no published evidence document for {other}"),
-        };
+    let selections: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("selected-documents.json"))
+            .expect("published fixture document selections"),
+    )
+    .expect("published selection JSON");
+    let fixture_path = format!("fixtures/{fixture}");
+    if let Some(selected_path) = selections["selected_documents"][fixture_path.as_str()].as_str() {
+        let bytes = fs::read(root.join(selected_path)).expect("published selected domain document");
+        let selected: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("selected domain JSON");
         evidence
             .insert_domain_package_document(
-                selection["digest"].as_str().expect("selected model digest"),
-                fs::read(root.join(document)).expect("published domain package bytes"),
+                selected["package"]["identity"]
+                    .as_str()
+                    .expect("selected domain identity"),
+                bytes,
             )
             .expect("retain published evidence");
     }
@@ -261,16 +264,11 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
             .expect("published owner B has a represented key absent from owner A");
         assert_eq!(graph_a.node(&foreign.node_id), None);
         assert_eq!(graph_a.term(&foreign.node_id), None);
-        let shared = graph_a
-            .nodes()
-            .find(|node| graph_b.node(&node.node_id).is_some())
-            .expect("two owners share genuine content-keyed nodes");
-        let a = graph_a.node(&shared.node_id).expect("owner A shared node");
-        let b = graph_b.node(&shared.node_id).expect("owner B shared node");
-        assert_eq!(a, b);
         assert!(
-            !ptr::eq(a, b),
-            "each graph borrows its own package even for equal keys"
+            graph_a
+                .nodes()
+                .all(|node| graph_b.node(&node.node_id).is_none()),
+            "structural package names keep every owner A key outside owner B"
         );
     }
 
