@@ -1541,8 +1541,8 @@ mod tests {
         let package = match CheckedPackageV2::read(
             &located.package,
             quire_contract_model::CheckedPackageReadLimits {
-                // The controlled QSL outputs through 32 quantifiers exceed the 1 MiB default.
-                bytes: 4 << 20,
+                // The controlled 32-quantifier QSL output is about 6.2 MiB.
+                bytes: 8 << 20,
                 ..quire_contract_model::CheckedPackageReadLimits::bounded()
             },
             &evidence,
