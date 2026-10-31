@@ -37,7 +37,7 @@ pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
 /// The equality ABI alone needs the public admitted-context facade.
 pub(crate) fn equality_oracle_crate_manifest(crate_name: &str) -> String {
     let manifest = oracle_crate_manifest(crate_name);
-    manifest.replacen("[dependencies]\n", "[dependencies]\nqsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n", 1)
+    manifest.replacen("[dependencies]\n", "[dependencies]\nquire-contract-model = { git = \"https://github.com/agent-ix/quire-contract-ir\", branch = \"main\" }\nqsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n", 1)
 }
 
 /// The isolated observer workspace; only its dev dependencies enable charge logging.

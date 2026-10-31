@@ -7,7 +7,6 @@ use super::{
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, GraphBody, ItemCheckError,
     NodeKey, Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };
-use crate::core::ir::node_key::checked_node_key;
 use quire_contract_model::CheckedTerm;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -455,11 +454,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                     key.clone(),
                     CompositeDeclaration::new(
                         key.clone(),
-                        checked_node_key(&id)
-                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
-                                composite: id.clone(),
-                            })?
-                            .to_string(),
+                        key.to_string(),
                         CompositeShape::Record(built),
                     ),
                 );
@@ -498,11 +493,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                     key.clone(),
                     CompositeDeclaration::new(
                         key.clone(),
-                        checked_node_key(&id)
-                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
-                                composite: id.clone(),
-                            })?
-                            .to_string(),
+                        key.to_string(),
                         CompositeShape::Union(built),
                     ),
                 );
@@ -524,11 +515,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                     key.clone(),
                     CompositeDeclaration::new(
                         key.clone(),
-                        checked_node_key(&id)
-                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
-                                composite: id.clone(),
-                            })?
-                            .to_string(),
+                        key.to_string(),
                         CompositeShape::Tuple(built),
                     ),
                 );
