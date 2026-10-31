@@ -3936,7 +3936,12 @@ fn tc_035_a_changed_envelope_identity_refuses_before_frame_replay() {
     ));
     assert_ne!(changed.packet.obligation_identity, Some(original));
     assert!(
-        matches!(changed.replay(), Err(FrameReplayError::Refused { .. })),
+        matches!(
+            changed.replay(),
+            Err(FrameReplayError::ClaimMismatch(
+                quire_contract_codegen::FrameClaimMember::EnvelopeIdentity
+            ))
+        ),
         "a changed envelope identity must refuse before frame execution"
     );
 }
