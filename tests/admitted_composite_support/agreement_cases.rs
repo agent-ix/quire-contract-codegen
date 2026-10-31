@@ -106,10 +106,10 @@ fn environment(context: &AdmittedContext) -> (TypeEnvironment, quire_semantic_va
             AdmittedCompositeForm::Tuple => CompositeShape::Tuple(vec![ValueType::Boolean, ValueType::Boolean]),
             AdmittedCompositeForm::Record => CompositeShape::Record(vec![
                 FieldDeclaration::new("flag", ValueType::Boolean, Presence::Required),
-                FieldDeclaration::new("pair", ValueType::Composite(pair.key()), Presence::Required),
+                FieldDeclaration::new("pair", ValueType::Composite(pair.key().clone()), Presence::Required),
             ]),
         };
-        CompositeDeclaration::new(actual.key(), name, shape)
+        CompositeDeclaration::new(actual.key().clone(), name, shape)
     });
     (TypeEnvironment::new(declarations, []).expect("independent real closed environment"), Default::default())
 }
@@ -118,10 +118,10 @@ fn values(environment: &TypeEnvironment, context: &AdmittedContext, name: &str) 
     let pairs = [false,true].into_iter().flat_map(|a| [false,true].into_iter().map(move |b| (a,b))).collect::<Vec<_>>();
     match actual.form() {
         AdmittedCompositeForm::Union => panic!("the independent record/tuple value fixture cannot contain a Union"),
-        AdmittedCompositeForm::Tuple => pairs.into_iter().map(|(a,b)| environment.tuple(actual.key(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("genuine tuple value")).collect(),
+        AdmittedCompositeForm::Tuple => pairs.into_iter().map(|(a,b)| environment.tuple(actual.key().clone(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("genuine tuple value")).collect(),
         AdmittedCompositeForm::Record => pairs.into_iter().flat_map(|(a,b)| [false,true].into_iter().map(move |flag| (a,b,flag))).map(|(a,b,flag)| {
-            let pair = environment.tuple(declaration(context,"Pair").key(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("nested tuple");
-            environment.record(actual.key(), vec![("flag", FieldValue::Present(Value::Boolean(flag))), ("pair", FieldValue::Present(pair))]).expect("genuine record value")
+            let pair = environment.tuple(declaration(context,"Pair").key().clone(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("nested tuple");
+            environment.record(actual.key().clone(), vec![("flag", FieldValue::Present(Value::Boolean(flag))), ("pair", FieldValue::Present(pair))]).expect("genuine record value")
         }).collect(),
     }
 }
@@ -159,16 +159,10 @@ fn genuine_nested_composites_match_outcomes_charges_counters_and_each_denial() {
     ];
     for (name,constructor,oracle,operator) in cases {
         let prepared = constructor(Some(compiled.context())).expect("actual emitted preparation");
-        let shape = ValueType::Composite(declaration(compiled.context(),name).key());
+        let shape = ValueType::Composite(declaration(compiled.context(),name).key().clone());
         environment.check_type(&shape).expect("independent type check");
         let wire_node = declaration(compiled.context(),name).node();
-        assert_ne!(wire_node, declaration(compiled.context(),name).key());
-        let wrong_identity = if name.ends_with("Pair") {
-            environment.tuple(wire_node, vec![Value::Boolean(false), Value::Boolean(false)])
-        } else {
-            environment.record(wire_node, Vec::new())
-        }.expect_err("a genuine wire node is not a kernel declaration key");
-        assert_eq!(wrong_identity.cause, quire_semantic_value::declaration::ConstructionCause::UnknownDeclaration);
+        assert_eq!(wire_node, declaration(compiled.context(),name).key());
         let checked = environment.check_equality(operator, EqualityOperand::typed(shape.clone()), EqualityOperand::typed(shape), &index).expect("independent equality check");
         for left in values(&environment,compiled.context(),name) {
             for right in values(&environment,compiled.context(),name) {

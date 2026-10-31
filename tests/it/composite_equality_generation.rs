@@ -2309,6 +2309,7 @@ fn tc_029_nominal_owner_lookups_use_only_structural_wire_identities() {
     let oracles = genuine_host_case("mixed", false);
     let lib = contents(&oracles, "src/lib.rs");
     let generated = oracles
+        .artifacts
         .iter()
         .filter(|artifact| artifact.path.starts_with("src/"))
         .map(|artifact| artifact.contents.as_str())
