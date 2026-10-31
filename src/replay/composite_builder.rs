@@ -4,8 +4,11 @@
 //! Original-package construction of verified structural equality requests (FR-033).
 //!
 //! This boundary authenticates the retained source and checked package and constructs positional
-//! O-09 arguments. It binds the caller's retained proof-content identity; it does not authenticate
-//! a generated artifact, run a native observation, or establish a backend proof strength.
+//! parity arguments. QSL mints the structural obligation identity from the checked application
+//! node and occurrence; the argument and domain body remains available for exact comparison.
+//! It retains the caller's proof-content identity outside QSL's parity claim; it does not
+//! authenticate a generated artifact, run a native observation, or establish a backend proof
+//! strength.
 
 use std::fmt;
 
@@ -77,7 +80,7 @@ pub enum CompositeBuildError {
     UnsupportedNodeOperation,
     /// The accessor returned a shape outside this graph-child constructor.
     OperandShape,
-    /// The owning O-09 encoder refused the preimage.
+    /// The owning parity identity or bound construction refused the claim.
     Identity(IdentityEncodeError),
     /// QSL refused the producer packet before request construction.
     PacketAdmission(Box<WitnessRefusal>),
@@ -173,8 +176,9 @@ impl std::error::Error for CompositeBuildError {}
 /// Immutable original proving context for admitted graph-child structural equality routes.
 ///
 /// The caller supplies the original admitted package and retained source, dependencies, limits
-/// and canonical proof-content identity. The content identity is a binding input, not independent
-/// authentication of a generated artifact. No native/falsified production route is exposed here.
+/// and canonical proof-content identity. The content identity remains separate proving-record
+/// metadata, not independent authentication of a generated artifact. No native/falsified
+/// production route is exposed here.
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
     original: CheckedPackageV2,
@@ -261,7 +265,7 @@ impl OriginalCompositeEqContext {
         })
     }
 
-    /// Build O-09 from the original Eq or Ne application's two authentic positional operands.
+    /// Build the retained body from the original Eq or Ne application's two positional operands.
     ///
     /// Parameter positions retain only their Node bounds. Population metadata is excluded from
     /// this request. Literal graph children retain empty Bounds and hence singleton source values;
@@ -328,6 +332,8 @@ impl OriginalCompositeEqContext {
             obligation_kind: "bounded_shadow".to_owned(),
             arguments,
         };
+        // QSL owns the structural NodeKey/model/ordinal mint. The retained operand/domain
+        // body is complete, but changing it does not change this obligation identity.
         let obligation = parity_obligation(&preimage).map_err(CompositeBuildError::Identity)?;
         let claim = CompositeParityClaim {
             node,
@@ -340,7 +346,6 @@ impl OriginalCompositeEqContext {
                 .cloned()
                 .collect(),
             limits: self.inputs.accounting_limits,
-            content_identity: self.content_identity,
         };
         Ok(SelectedParityClaim {
             operands,
@@ -472,6 +477,7 @@ impl OriginalCompositeEqContext {
             claim: selected.claim,
             operands: selected.operands,
             preimage: selected.preimage,
+            content_identity: self.content_identity,
             replay_limits: self.inputs.replay_limits,
         })
     }
@@ -593,6 +599,7 @@ pub struct OriginalCompositeEqRequest {
     claim: CompositeParityClaim,
     operands: CheckedCompositeOperands,
     preimage: ParityPreimage,
+    content_identity: DigestRecord,
     replay_limits: qsl_replay::ReplayLimits,
 }
 
@@ -602,6 +609,7 @@ impl fmt::Debug for OriginalCompositeEqRequest {
             .field("claim", &self.claim)
             .field("operands", &self.operands)
             .field("preimage", &self.preimage)
+            .field("content_identity", &self.content_identity)
             .field("replay_limits", &self.replay_limits)
             .finish_non_exhaustive()
     }
@@ -623,9 +631,14 @@ impl OriginalCompositeEqRequest {
         &self.operands
     }
 
-    /// The actual typed positional O-09 preimage passed to the owning encoder.
+    /// The retained positional operand/domain body supplied to QSL's identity owner.
     pub fn preimage(&self) -> &ParityPreimage {
         &self.preimage
+    }
+
+    /// The retained proof-content identity, separate from QSL's structural parity claim.
+    pub fn content_identity(&self) -> DigestRecord {
+        self.content_identity
     }
 
     /// Invoke QSL's public verified-shadow facade with retained verified-run evidence.

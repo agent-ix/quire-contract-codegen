@@ -302,7 +302,7 @@ fn parameter_bounds(
 
 /// Original parameter/parameter construction reaches a genuine QSL verified report and converter.
 /// This is a constructor control with supplied verified evidence, not a generated-family proof.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-11", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-18", "TC-048")]
 #[test]
 fn original_parameter_operands_build_positional_identity_and_public_verified_report() {
     let package = checked(SOURCE);
@@ -333,6 +333,7 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
         )
         .unwrap();
     assert_eq!(request.operands(), &original);
+    assert_eq!(request.content_identity(), content_identity());
     assert_eq!(request.preimage().arguments.len(), 2);
     for (argument, operand) in request.preimage().arguments.iter().zip(&original.operands) {
         let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
@@ -349,6 +350,18 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
         assert!(entries.entries().iter().all(|entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == node_key(child))));
     }
     let obligation = parity_obligation(request.preimage()).unwrap();
+    assert_eq!(
+        obligation,
+        qsl_replay::ObligationIdentity::new(
+            node_key(&node),
+            None,
+            u32::try_from(occurrence.ordinal).expect("admitted occurrence ordinal fits"),
+        )
+    );
+    let mut changed_body = request.preimage().clone();
+    changed_body.obligation_kind = "other_kind".to_owned();
+    assert_ne!(changed_body, *request.preimage());
+    assert_eq!(parity_obligation(&changed_body).unwrap(), obligation);
     let verified = VerifiedShadow {
         success_checks: 1,
         refinement: Refinement::NotExhausted,
@@ -357,7 +370,6 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     assert_eq!(report.sent().obligation, obligation);
     assert_eq!(report.sent().harness_bounds, bounds);
     assert_eq!(report.sent().limits, limits());
-    assert_eq!(report.sent().content_identity, content_identity());
     assert_eq!(report.report().claim(), report.sent());
     let settlement = report.settlement().unwrap();
     assert!(matches!(settlement.result(), VerifiedShadowResult::Tested));

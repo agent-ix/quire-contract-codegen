@@ -3,8 +3,8 @@
 use ix_trace_rs::trace;
 use qsl_replay::{
     replay_composite_parity, settle_verified_shadow, Certification, CompositeEvidence,
-    CompositeIdentity, CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord,
-    EqualityOperator, EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
+    CompositeIdentity, CompositeParityClaim, CompositeParityResult, EqualityOperator,
+    EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
     NativeParityObservation, NodeKey, ObligationIdentity, OccurrenceKey, Origin, ProofBasis,
     Refinement, ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestRefusal,
     ReplayRequestWire, ReplaySource, RequestTargetWire, Role, ScalarLimits, StateEnvironment,
@@ -194,7 +194,6 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         obligation_kind: "bounded_shadow".to_owned(),
         harness_bounds: bounds.clone(),
         limits: limits(),
-        content_identity: DigestRecord::mint(DigestDomain::Sha256Jcs, [3; 32]),
     };
     let preimage = ParityPreimage {
         node: node.clone(),
@@ -591,9 +590,32 @@ fn tc_041_bound_prepare_refusal_precedes_disagreed() {
     assert_eq!(bound.terminal_value(), report.terminal_value());
 }
 
+/// A changed claim body keeps its structural obligation but QSL refuses the wrong operation.
+#[trace("FR-033-AC-18", "TC-048")]
+#[test]
+fn structural_obligation_does_not_admit_a_changed_operator_body() {
+    let fixture = public_composite_fixture();
+    let wire = fixture.wire;
+    let mut claim = fixture.claim;
+    assert_eq!(wire.obligation_identity.node(), &claim.node);
+    assert_eq!(wire.obligation_identity.model(), None);
+    assert_eq!(
+        wire.obligation_identity.ordinal(),
+        u32::try_from(claim.occurrence.ordinal()).expect("admitted occurrence ordinal fits")
+    );
+    claim.operator = EqualityOperator::NotEqual;
+    let (sent, report) = public_report(wire, claim, falsified_evidence(), ReplayLimits::default());
+    let bound = composite_parity_terminal_value(&sent, Some(&report)).unwrap();
+    assert!(matches!(
+        bound.result(),
+        CompositeParityResult::Refused(refusal)
+            if matches!(&**refusal, ReplayRefusal::ScalarIdentity(_))
+    ));
+}
+
 /// Each retained identity member is checked against the real QSL report, including the native
 /// cause and refinement. A missing report has no terminal value.
-#[trace("FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-9", "FR-033-AC-18", "TC-048")]
 #[test]
 fn tc_048_falsified_report_requires_every_sent_identity_member() {
     let fixture = public_composite_fixture();
@@ -632,6 +654,7 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
     changed.push(other);
     let mut other = sent.clone();
     other.operator = EqualityOperator::NotEqual;
+    assert_eq!(other.obligation, sent.obligation);
     changed.push(other);
     let mut other = sent.clone();
     other.obligation_kind = "other".to_owned();
@@ -654,9 +677,6 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
     changed.push(other);
     let mut other = sent.clone();
     other.limits.work_units += 1;
-    changed.push(other);
-    let mut other = sent.clone();
-    other.content_identity = DigestRecord::mint(DigestDomain::Sha256Jcs, [8; 32]);
     changed.push(other);
     let CompositeEvidence::Falsified(_) = &sent.evidence else {
         panic!("fixture is falsified");
