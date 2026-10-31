@@ -4920,9 +4920,9 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
     );
 }
 
-/// Replacing an invocation or pre snapshot with unrelated bytes leaves no document with the
-/// required identity or referenced pre snapshot. The pre-state tie names that missing member,
-/// without computing a replacement digest (FR-024-AC-27).
+/// Replacing the invocation bytes leaves no document with the requested identity. Replacing the
+/// pre snapshot bytes leaves an addressed but unreadable document. The pre-state tie distinguishes
+/// those faults without computing a replacement digest (FR-024-AC-27).
 #[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
@@ -4936,13 +4936,14 @@ fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
         let FrameReplayError::PreState(fault) = error else {
             panic!("{index}: the pre-state tie must name the missing document: {error}");
         };
+        let observed = format!("{fault:?}");
         assert!(
             matches!(
                 (index, fault),
                 (INVOCATION_DOCUMENT, PreStateFault::InvocationNotProvided)
-                    | (PRE_DOCUMENT, PreStateFault::PreNotProvided { .. })
+                    | (PRE_DOCUMENT, PreStateFault::PreUnreadable)
             ),
-            "{index}: the pre-state tie must distinguish the missing document"
+            "{index}: the pre-state tie must distinguish the missing document: {observed}"
         );
     }
     twin.try_frame_replay("deposit", &base, "account", "audit", &run)
