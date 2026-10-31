@@ -1176,7 +1176,7 @@ fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<Ve
     let mut matches = lock
         .split("[[package]]")
         .skip(1)
-        .filter_map(|entry| (lock_field(entry, "name") == Some(package)).then_some(entry));
+        .filter(|entry| lock_field(entry, "name") == Some(package));
     let entry = matches.next()?;
     if matches.next().is_some() {
         return None;
