@@ -1358,20 +1358,24 @@ pub(crate) mod tests {
     fn assert_collection_graph_reuses_one_ordered_walk() {
         COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(0));
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
-            let id = |digit: &str| {
-                serde_json::json!({
-                    "package": "collection-test", "path": [digit], "ordinal": 0,
-                })
-            };
-            serde_json::from_value(serde_json::json!({
-                "node_id": id(digit),
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "expression", "semantic_form": "literal",
-                "semantic_type": id("3"), "dependencies": [], "occurrences": [],
-                "body": {"term": "literal", "type": id("3"),
-                         "value_kind": "boolean", "value": true},
-            }))
-            .expect("checked node")
+            CheckedSemanticNodeV2 {
+                node_id: node(digit),
+                schema_version: "quire.checked-semantic-graph/v2".into(),
+                node_tag: "expression".into(),
+                semantic_form: "literal".into(),
+                semantic_type: node("3"),
+                dependencies: Vec::new(),
+                occurrences: Vec::new(),
+                recursion_group: None,
+                declaration: None,
+                owner: None,
+                owner_model: None,
+                body: CheckedTerm::Literal {
+                    type_id: node("3"),
+                    value_kind: LiteralKind::Boolean,
+                    value: serde_json::json!(true),
+                },
+            }
         };
         let preceding = checked_node("1");
         let selected = checked_node("2");
@@ -1706,54 +1710,38 @@ pub(crate) mod tests {
     #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_predicate_is_an_unsupported_shape() {
-        let id = |name: &str| {
-            serde_json::json!({
-                "package": "test-package",
-                "path": [name],
-                "ordinal": 0,
-            })
-        };
-        let node = |form: &str, operator: &str, identity: &str| -> CheckedSemanticNodeV2 {
-            serde_json::from_value(serde_json::json!({
-                "node_id": id("1"),
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "expression",
-                "semantic_form": form,
-                "semantic_type": id("2"),
-                "dependencies": [],
-                "occurrences": [],
-                "body": {
-                    "term": "application",
-                    "operator": operator,
-                    "operation": {"identity": identity, "laws": [], "mode": null,
-                                  "member": null, "leaves": []},
-                    "result_type": id("2"),
-                    "arguments": [],
-                },
-            }))
-            .expect("a checked expression node")
-        };
         let term = |operator, identity| CheckedTerm::Application {
             operator,
             operation: serde_json::from_value(serde_json::json!({"identity": identity}))
                 .expect("fixture operation"),
-            result_type: serde_json::from_value(id("2")).expect("structural result type"),
+            result_type: node("2"),
             arguments: Vec::new(),
+        };
+        let expression = |form: &str, body: CheckedTerm| CheckedSemanticNodeV2 {
+            node_id: node("1"),
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: "expression".into(),
+            semantic_form: form.into(),
+            semantic_type: node("2"),
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            declaration: None,
+            owner: None,
+            owner_model: None,
+            body,
         };
         let conversion = term(ApplicationOperator::Convert, "quire.op.quantity.convert");
         let binary = term(ApplicationOperator::Binary, "quire.op.integer.ge");
         assert_eq!(
             binary_predicate_operation(
-                &node("conversion", "convert", "quire.op.quantity.convert"),
+                &expression("conversion", conversion.clone()),
                 Some(&conversion),
             ),
             Err(CollectionDomainRefusal::UnsupportedShape)
         );
         assert_eq!(
-            binary_predicate_operation(
-                &node("binary", "binary", "quire.op.integer.ge"),
-                Some(&binary),
-            ),
+            binary_predicate_operation(&expression("binary", binary.clone()), Some(&binary),),
             Ok("quire.op.integer.ge")
         );
     }
