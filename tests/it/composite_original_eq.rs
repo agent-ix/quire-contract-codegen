@@ -293,7 +293,7 @@ fn parameter_bounds(
 
 /// Original parameter/parameter construction reaches a genuine QSL verified report and converter.
 /// This is a constructor control with supplied verified evidence, not a generated-family proof.
-#[trace("FR-033-AC-1", "FR-033-AC-20", "FR-033-AC-11", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_parameter_operands_build_positional_identity_and_public_verified_report() {
     let package = checked(SOURCE);
@@ -954,7 +954,7 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
 }
 
 /// QSL owns body membership and refuses an admitted node from another function before Disagreed.
-#[trace("FR-033-AC-1", "FR-033-AC-20", "FR-033-AC-12", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-12", "TC-048")]
 #[test]
 fn another_functions_node_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
@@ -985,7 +985,7 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
 }
 
 /// An actual nonoperand Node bound survives CG's filter and QSL refuses it before Disagreed.
-#[trace("FR-033-AC-20", "FR-033-AC-11", "FR-033-AC-12", "TC-048")]
+#[trace("FR-033-AC-11", "FR-033-AC-12", "TC-048")]
 #[test]
 fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
