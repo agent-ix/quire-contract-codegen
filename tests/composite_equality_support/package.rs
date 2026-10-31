@@ -864,13 +864,11 @@ impl PackageBuilder {
     /// admits a `temporal_profile` law only when the lock selected that definition.
     pub fn select_profile(&mut self, role: &str, definition: Value) -> &mut Self {
         let selection = json!({"role": role, "definition": definition});
-        for path in ["lock"] {
-            let selections = self.value[path]["profile_selections"]
-                .as_array_mut()
-                .expect("profile_selections");
-            if !selections.contains(&selection) {
-                selections.push(selection.clone());
-            }
+        let selections = self.value["lock"]["profile_selections"]
+            .as_array_mut()
+            .expect("profile_selections");
+        if !selections.contains(&selection) {
+            selections.push(selection);
         }
         self
     }
@@ -878,13 +876,11 @@ impl PackageBuilder {
     /// Registers `definition` in `lock.definition_selections` (deduplicated).
     /// Contract IR refuses an operation law whose definition the lock did not select.
     pub fn select_definition(&mut self, definition: Value) -> &mut Self {
-        for path in ["lock"] {
-            let selections = self.value[path]["definition_selections"]
-                .as_array_mut()
-                .expect("definition_selections");
-            if !selections.contains(&definition) {
-                selections.push(definition.clone());
-            }
+        let selections = self.value["lock"]["definition_selections"]
+            .as_array_mut()
+            .expect("definition_selections");
+        if !selections.contains(&definition) {
+            selections.push(definition);
         }
         self
     }
