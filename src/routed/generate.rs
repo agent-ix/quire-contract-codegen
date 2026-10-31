@@ -580,11 +580,13 @@ fn generate_kani(
                 .get(item.request_index)
                 .copied()
                 .flatten()
-                .ok_or(RoutedGenerationError::ContractScalar(Box::new(
-                    ContractScalarError::Request(PackageRequestError::Position {
-                        request_index: item.request_index,
-                    }),
-                )))?;
+                .ok_or_else(|| {
+                    RoutedGenerationError::ContractScalar(Box::new(ContractScalarError::Request(
+                        PackageRequestError::Position {
+                            request_index: item.request_index,
+                        },
+                    )))
+                })?;
             Ok(ObligationItem::ScalarClaim {
                 package,
                 claim_map: &claim_map,
