@@ -1401,13 +1401,9 @@ mod tests {
                 &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
             )
             .expect("distinct authored QSL clauses compile through the owner");
-            let wire: serde_json::Value = serde_json::from_slice(&located.package).unwrap();
-            let digest = wire["lock"]["model_selections"][0]["digest"]
-                .as_str()
-                .unwrap();
             let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
             evidence
-                .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
+                .insert_domain_package_document("test/bank", twin.domain.clone())
                 .unwrap();
             evidence.support_feature("quire.value.complete/v1");
             let package = match CheckedPackageV2::read(
@@ -1511,11 +1507,8 @@ mod tests {
             .unwrap();
         // Author a finite ordered collection over the original [0,1000] integer field type.
         balance["multiplicity"] = json!({"lower": 0, "upper": 3, "ordered": true, "unique": false});
-        let limits = quire_canonical::Limits::new(1 << 20);
-        let domain = quire_canonical::to_vec(&document, limits).unwrap();
-        let digest = quire_canonical::sha256(&document, limits)
-            .unwrap()
-            .to_string();
+        let domain =
+            quire_canonical::to_vec(&document, quire_canonical::Limits::new(1 << 20)).unwrap();
         let body = (0..quantifiers)
             .map(|index| format!("forall(item in deref(input).balance: item >= {index})"))
             .collect::<Vec<_>>()
@@ -1523,7 +1516,7 @@ mod tests {
         let source = format!(
             "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.model.complete/v1\";\n\
-         model Bank = \"test/bank\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n\
+         model Bank = \"test/bank\";\n\
          predicate inspect using v (input: Bank::Account): Boolean {{ {body} }}\n"
         );
         let selection =
@@ -1542,7 +1535,7 @@ mod tests {
         .expect("public QSL admission of authored finite collection predicate");
         let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(digest, domain)
+            .insert_domain_package_document("test/bank", domain)
             .unwrap();
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
