@@ -3778,7 +3778,7 @@ mod tests {
 
     #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
     #[test]
-    #[ignore = "deep fixture lacks its generated claim subject after 50,000-record intake; IR-1079"]
+    #[ignore = "50,000-record intake and generated crate compile pass; runtime deep.rs:33 ContextPackageContentMismatch in deep genuine prepared environment, then deep.rs:58 512 KiB stack join panic; IR-1079"]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
         let (original_source, original, context, ids, leaf) = admitted_record_chain(RECORDS, true);
