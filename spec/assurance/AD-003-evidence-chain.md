@@ -89,16 +89,13 @@ success.
 ### Versioned contracts and how identity is asserted
 
 - For scalar and composite parity, CG carries the admitted IR reader's structural application identity and retains the complete checked claim body for comparison (E-1). The identity names the application; the body comparison binds the claim and harness domains. Neither alone binds every byte or evidence field of the generated artifact. The full CG identity/evidence record remains a separate record.
-- Planned composite parity also requires the separate canonical proved-content tie of
-  [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md): the driver's actual
-  observation must belong to the same proved generated artifact and original context. Structural node identity alone
-  cannot establish that tie. QSL's supplied content-identity API is delivered; CG's retained
-  proving-record representation, driver authentication and consumer conformance remain CODE-gated
-  under the repository's canonical proof-content exception. This AD does not
-  require another CG-minted tracking digest or manually maintained fingerprint. If the owning
-  representation requires a second CG-minted digest, that concrete design decision must be resolved
-  before implementation, while retaining artifact-replacement refusal. No source/tool tracking hash,
-  version pin or digest label is introduced.
+- Planned composite parity separately authenticates the actual native observation against the
+  retained proved generated artifact, original context, operands and limits under
+  [FR-033-AC-19](../replay/functional/FR-033-composite-parity-replay-binding.md). Structural node
+  identity and a matching QSL report cannot establish this tie. QSL FR-358 has no
+  `CompositeParityClaim.content_identity` member; CG performs the same-artifact check before QSL
+  invocation and adds no digest, substitute identity or tracking member. Driver authentication and
+  consumer conformance remain CODE-gated.
 - The other digests on the chain already exist and bind content, not tools or versions:
   `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source and
   the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that the function path
@@ -154,9 +151,9 @@ retain their route's authentic identity/domain. Function/frame preimages remain 
 
 Full sent-claim comparison on every outcome uses the actual retained claim sent by the driver.
 The owning requirements also retain the original replay wire/context and proving limits for
-independent source/package/proved-content checks and actual same-artifact native observation
-where required. An identity echo alone does not authenticate an artifact. Canonical proved-content,
-O-09 and refinement-certificate identities retain their distinct roles. Public transport
+independent source/package/context checks and actual same-artifact native observation
+where required. An identity echo alone does not authenticate an artifact. Structural application
+identity, native same-artifact authentication and refinement evidence retain distinct roles. Public transport
 `ReplayLimits` remains a separate final facade argument, rather than a claim-identity member.
 
 These CG producer, metadata, observation and consumer checks remain PLANNED/UNRUN and CODE-gated
@@ -249,8 +246,8 @@ authored).
   positions are not duplicate keys in one argument. Population-keyed metadata remains in
   the full CG proving record and a QSL claim carrying it refuses as `HarnessUnknownKey` during
   prepare, before structural identity/body comparison. CG pre-invocation refusal has no QSL
-  report or terminal value. Full report-claim comparison and independent proved-content,
-  original-context and same-artifact authentication remain required on every outcome.
+  report or terminal value. Full report-claim comparison and independent original-context/same-artifact
+  authentication remain required on every outcome.
   A package/path/producer-ordinal change changes the structural identity; an included body
   change under the same identity refuses by full body comparison. No CG or QSL parity
   preimage mint or obligation digest is needed. [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md)
