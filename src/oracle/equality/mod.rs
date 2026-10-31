@@ -3412,6 +3412,7 @@ mod tests {
             let outcome = std::process::Command::new(std::env::current_exe().unwrap())
                 .arg("--exact")
                 .arg(TEST_NAME)
+                .arg("--include-ignored")
                 .env("QUIRE_CG_TC029_WORK_CHILD", "1")
                 .output()
                 .expect("work-bound subprocess starts");
