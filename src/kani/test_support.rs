@@ -219,14 +219,17 @@ pub(crate) fn scalar_source_fixture(
     use crate::kani::identity::{
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     };
+    let package_name = "quire-exact-scalar-oracles";
     let identity = ScalarObligationIdentity {
         integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
         native_integer_selection: None,
         ceilings: proof_ceilings::proof_ceilings_with_wall_clock(wall_clock),
         node_id: serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64),
+            "package": package_name,
+            "path": ["host_scalar", "oracle"],
+            "ordinal": 0,
         }))
-        .unwrap(),
+        .expect("generated host_scalar::oracle structural node id"),
         operation_identity: "quire.op.integer.add".into(),
         oracle_symbol: "oracle".into(),
         module_symbol: ModuleSymbol::try_from("host_scalar").unwrap(),
@@ -261,7 +264,7 @@ pub(crate) fn scalar_source_fixture(
     let artifacts = vec![
         Artifact::new(
             "Cargo.toml",
-            crate::core::profile::oracle_crate_manifest("quire-exact-scalar-oracles"),
+            crate::core::profile::oracle_crate_manifest(package_name),
         ),
         Artifact::new("src/lib.rs", source),
         Artifact::new("claim-map.json", "{}"),
