@@ -518,10 +518,9 @@ struct SnapshotRead {
 }
 
 /// The fields of the state object the invocation's `self` addresses, in the pre snapshot it
-/// names. A document is read only after QSL's own request decode has checked every provided
-/// document's bytes against its digest (`FrameReplay::new`), so a document whose bytes do not
-/// match its digest is QSL's refusal and never reaches this reader. A document that is absent or
-/// not of the written shape is this check's refusal: it cannot tie a pre state it cannot read.
+/// names. This tie reads provided document values under their declared identities; it does not
+/// compute or compare their digests. A document that is absent or not of the written shape is
+/// this check's refusal: it cannot tie a pre state it cannot read.
 fn pre_fields(
     invocation: &DocumentRef,
     documents: &[ProvidedDocument],
