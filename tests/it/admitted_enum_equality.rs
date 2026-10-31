@@ -344,7 +344,7 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             .expect("manifest");
         assert!(manifest.contents.contains("qsl-replay ="));
         assert!(!manifest.contents.contains("test-support"));
-        super::exact_scalar_agreement::run_agreement_cases(
+        super::exact_scalar_agreement::run_enum_agreement_cases(
             &format!("admitted-enum-equality-{mode}"),
             oracles
                 .artifacts
@@ -390,7 +390,7 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             );
             let changed = source.replacen(&from, &to, 1);
             assert_ne!(&changed, source);
-            super::exact_scalar_agreement::run_agreement_mutant(
+            super::exact_scalar_agreement::run_enum_agreement_mutant(
             &format!("admitted-enum-equality-{mode}-{mutation}"),
             oracles.artifacts.iter().map(|artifact| (artifact.path.as_str(),
                 if artifact.path == "src/lib.rs" { changed.as_str() } else { artifact.contents.as_str() })),

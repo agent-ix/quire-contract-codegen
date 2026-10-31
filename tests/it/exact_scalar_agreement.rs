@@ -48,6 +48,11 @@ pub(super) fn run_agreement_cases<'a>(
     run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, None);
 }
 
+enum SharedTarget<'a> {
+    Composite(&'a str),
+    AdmittedEnum(&'a str),
+}
+
 /// Composite equality's fixed corpus uses `label` as each scratch crate's test-only package
 /// identity. The labels must be distinct valid Cargo package names; each generated manifest
 /// retains its original identity in `artifacts`, while these test copies reuse one target dir.
@@ -57,7 +62,49 @@ pub(super) fn run_composite_agreement_cases<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, Some(label));
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        None,
+        Some(SharedTarget::Composite(label)),
+    );
+}
+
+/// Keep generated enum variants in distinct scratch packages while reusing their
+/// dependency build. The library name stays the emitted name used by the cases.
+pub(super) fn run_enum_agreement_cases<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+) {
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        None,
+        Some(SharedTarget::AdmittedEnum(label)),
+    );
+}
+
+pub(super) fn run_enum_agreement_mutant<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+    failed_test: &str,
+) {
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        Some(failed_test),
+        Some(SharedTarget::AdmittedEnum(label)),
+    );
 }
 
 /// Require a named native assertion failure, never a setup or compiler failure.
@@ -84,7 +131,7 @@ fn run_agreement_cases_with_expectation<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
     failed_test: Option<&str>,
-    composite_package: Option<&str>,
+    shared_target: Option<SharedTarget<'_>>,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
@@ -103,14 +150,21 @@ fn run_agreement_cases_with_expectation<'a>(
     let cases_path = repository.join(cases);
     let manifest_path = root.join("Cargo.toml");
     let mut manifest = fs::read_to_string(&manifest_path).expect("read generated manifest");
-    let target_dir = if let Some(package_name) = composite_package {
-        manifest = composite_manifest_for_shared_target(&manifest, package_name);
-        scratch.join("composite-equality-agreement-target")
-    } else {
-        // Keep each generated crate's own target across repeated runs. The crate
-        // directory is cleared to replace its artifacts, but rebuilding every
-        // dependency from scratch masks the generated agreement result.
-        scratch.join(format!("{label}-target"))
+    let target_dir = match shared_target {
+        Some(SharedTarget::Composite(package_name)) => {
+            manifest = composite_manifest_for_shared_target(&manifest, package_name);
+            scratch.join("composite-equality-agreement-target")
+        }
+        Some(SharedTarget::AdmittedEnum(package_name)) => {
+            manifest = enum_manifest_for_shared_target(&manifest, package_name);
+            scratch.join("admitted-enum-equality-target")
+        }
+        None => {
+            // Keep each generated crate's own target across repeated runs. The crate
+            // directory is cleared to replace its artifacts, but rebuilding every
+            // dependency from scratch masks the generated agreement result.
+            scratch.join(format!("{label}-target"))
+        }
     };
     write!(
         manifest,
@@ -196,6 +250,20 @@ fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> S
     manifest.replacen(
         &original,
         &format!("[package]\nname = \"{package_name}\"\n"),
+        1,
+    )
+}
+
+fn enum_manifest_for_shared_target(manifest: &str, package_name: &str) -> String {
+    let manifest = composite_manifest_for_shared_target(manifest, package_name);
+    let original = "[lib]\npath = \"src/lib.rs\"\n";
+    assert_eq!(manifest.matches(original).count(), 1);
+    manifest.replacen(
+        original,
+        &format!(
+            "[lib]\nname = \"{}\"\npath = \"src/lib.rs\"\n",
+            quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME.replace('-', "_")
+        ),
         1,
     )
 }
