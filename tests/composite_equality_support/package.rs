@@ -389,10 +389,8 @@ fn application_dependencies(body: &Value) -> Vec<CheckedNodeId> {
 /// `correspondence` nodes and on `value`/`enum_value` and `value`/`parameter` nodes (QSL emits a
 /// parameter with no declaration), and otherwise requires it exactly when the node carries a
 /// `declaration`-role occurrence — which every node built by this module does but a parameter,
-/// whose occurrence role is `expression`. The qualified name is not
-/// cross-checked against anything else the reader validates (only that each
-/// segment is a nonempty ASCII identifier), so a name derived from the
-/// node's source path is sufficient and stays unique by construction.
+/// whose occurrence role is `expression`. The reader requires each declared
+/// node's assigned path to equal its qualified name segment for segment.
 fn declaration_for(tag: &str, form: &str, path: &str) -> Option<Value> {
     let forbidden = matches!(
         tag,
@@ -401,7 +399,7 @@ fn declaration_for(tag: &str, form: &str, path: &str) -> Option<Value> {
     if forbidden {
         None
     } else {
-        Some(json!({"qualified_name": [format!("n{path}")]}))
+        Some(json!({"qualified_name": path.split('/').collect::<Vec<_>>()}))
     }
 }
 
