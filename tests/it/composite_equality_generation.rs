@@ -2302,6 +2302,36 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
     }
 }
 
+/// Generated nominal lookups retain structural wire identities until the owner returns keys.
+#[trace("FR-018-AC-36", "FR-018-AC-46", "TC-029")]
+#[test]
+fn tc_029_nominal_owner_lookups_use_only_structural_wire_identities() {
+    let oracles = genuine_host_case("mixed", false);
+    let lib = contents(&oracles, "src/lib.rs");
+    let generated = oracles
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.path.starts_with("src/"))
+        .map(|artifact| artifact.contents.as_str())
+        .collect::<String>();
+    assert!(lib.contains("composite_declaration_by_wire("));
+    assert!(generated.contains("quire_contract_model::CheckedNodeId {"));
+    for forbidden in [
+        "NodeKey::new(",
+        "node_key_of_wire(",
+        "checked_node_key(",
+        "composite_declaration(&",
+        "enum_declaration(&",
+        "enum_case(&",
+    ] {
+        assert!(
+            !generated.contains(forbidden),
+            "generated nominal lookup contains {forbidden}"
+        );
+    }
+    assert!(contents(&oracles, "Cargo.toml").contains("quire-contract-model ="));
+}
+
 /// Numeric reconstruction retains its exact errors; context preparation preserves lookup and
 /// environment causes. Every failure propagates or refuses, with no hidden constructor/parse,
 /// and both error enums retain the exact merged ABI variants.
