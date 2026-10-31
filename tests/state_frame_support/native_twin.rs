@@ -8,7 +8,7 @@
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
 //! counterexample names. The frame replay is given the falsified harness's identity and its
-//! playback and mints the obligation identity itself, so the twin supplies none.
+//! playback and carries the selected QSL obligation identity, so the twin supplies none.
 
 use super::model;
 
@@ -1164,7 +1164,7 @@ impl Twin {
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
             decode_limits: unbounded_decode_limits(),
-            package_name: "state-frame-twin".to_owned(),
+            package_name: IDENTITY.to_owned(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),
