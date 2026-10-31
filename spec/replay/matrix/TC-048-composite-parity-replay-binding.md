@@ -48,11 +48,12 @@ and never replace positive QSL evaluation with a verdict double.
    package identity and actual recompiled occurrence membership. Exercise parameter/parameter,
    repeated/self parameter, parameter/literal and literal/literal forms, retaining positional
    graph-child nodes and actual literal singleton values.
-   Retain the actual generated harness, native refinement, original limits and canonical identity of
-   the same proved artifact. Assert the original nodes, operand declarations and literal singleton
+   Retain the actual generated harness, native refinement, original limits and proved artifact bytes;
+   authenticate the native observation against that retained artifact and original context under
+   FR-033-AC-19. Assert the original nodes, operand declarations and literal singleton
    values. For the Ne forms still PLANNED under IR-814 (FR-033-AC-14 literal/literal and
    FR-033-AC-15 self-comparison), require NotEqual and two positional arguments, then
-   apply the AC-9 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
+   apply the AC-20 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
    admitted one-field `Integer` records; IR-691 bounded-field narrowing literals and
    collection-constructor literals stay gated. For inline operands (FR-033-AC-16, FR-033-AC-17),
    require the owning projection's `InlineInteger` or `InlineNonInteger` refusal to surface as
@@ -216,7 +217,7 @@ and never replace positive QSL evaluation with a verdict double.
 | Authority | Planned observation | Mutation that must fail |
 |---|---|---|
 | FR-033-AC-1 | Original-package node-selected parity and actual literal singleton domains | Replace the claim with a source predicate or manufacture a Boolean function |
-| FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-9 binding and AC-1 operator refusal still apply | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator |
+| FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-20 report binding and AC-1 operator refusal still apply; AC-19 authenticates the retained proved artifact independently | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator or substitute another artifact while retaining the claim |
 | FR-033-AC-16 (Inspection); FR-033-AC-17 (Test) | The owning projection's inline-literal refusal reaches CG as `CompositeBuildError::Operands` with no report or terminal value | Build an inline argument, add a CG-local variant, or return a report |
 | FR-025-AC-9; FR-033-AC-5 | Original-node/path/domain bindings reconstruct the actual ordered draws | Swap operands/paths, omit a required leaf or unpin a literal |
 | FR-033-AC-2/3 | All canonical families preserve exact values and typed shape; malformed cases refuse | Round IEEE or quantity, collapse absence/null, lose order/multiplicity or use byte equality for set admission |
