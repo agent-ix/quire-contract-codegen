@@ -6,7 +6,7 @@
 # =============================================================================
 
 override CARGO := cargo
-override MSRV := 1.98.1
+override MSRV := $(shell sed -n 's/^rust-version = "\([^"]*\)"/\1/p' Cargo.toml)
 QUIRE ?= quire
 # --locked only when no local patch is active: a patch rewrites the resolution.
 LOCKED ?= $(if $(wildcard .cargo/config.toml),,--locked)
@@ -127,6 +127,7 @@ build:
 
 .PHONY: msrv
 msrv:
+	rustup toolchain install $(MSRV) --profile minimal
 	rustup run $(MSRV) cargo check $(LOCKED) --all-targets
 
 .PHONY: spec
