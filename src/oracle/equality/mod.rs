@@ -3992,7 +3992,7 @@ mod tests {
                     },
                 );
                 assert_eq!(outcomes, vec![Ok(())]);
-                source.expected_package_bytes = Some(original_bytes);
+                source.expected_package_bytes = Some(original_bytes.clone());
                 let all = source.finish(usize::MAX).expect("complete source");
                 let bytes: usize = all.iter().map(|artifact| artifact.contents.len()).sum();
                 assert!(bytes > MAX_GENERATED_SOURCE_BYTES);
