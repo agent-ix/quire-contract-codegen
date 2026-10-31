@@ -532,7 +532,7 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
     let other = fixture::compile(fixture::SOURCE, &Default::default());
     assert!(matches!(
         generate_items(&package, Some(other.context()), &batch, &[]),
-        Err(OracleGenerationError::ContextPackageMismatch { .. })
+        Err(OracleGenerationError::ContextPackageContentMismatch)
     ));
     let limited = super::admitted_enum_equality::generate_items_with_limits(
         &package,
@@ -585,7 +585,7 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
         .unwrap()
         .contents;
     syn::parse_file(lib).expect("emitted Union preparation is valid Rust syntax");
-    assert!(lib.contains("environment.seal_union_verified(key, declaration.node(), members.iter().map(|member| member.member().clone()).collect())"));
+    assert!(lib.contains("environment.seal_union_verified(key, declaration.node().clone(), members.iter().map(|member| member.member().clone()).collect())"));
     assert!(
         lib.contains("lookup_composite_key(_context,")
             && lib.contains("qsl_replay::AdmittedCompositeForm::Union")

@@ -52,7 +52,7 @@ mod generated {
             Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == wire(&key)));
         let malformed = quire_contract_model::CheckedNodeId { package: "admitted-composites".into(), path: Vec::new(), ordinal: 0 };
         assert!(matches!(lookup(malformed, &["Pair"], pair.form()),
-            Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::MalformedWire { .. }))));
+            Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
     }
 
     #[ix_trace_rs::trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "TC-029")]
@@ -61,7 +61,7 @@ mod generated {
         let (compiled,_) = super::compilation();
         assert!(matches!(environment_holder_same(None), Err(EnvironmentError::MissingAdmittedContext { .. })));
         let other = super::fixture::compile(super::fixture::SOURCE, &qsl_replay::DependencyInput::default());
-        assert!(matches!(environment_holder_same(Some(other.context())), Err(EnvironmentError::ContextPackageMismatch { .. })));
+        assert!(matches!(environment_holder_same(Some(other.context())), Err(EnvironmentError::ContextPackageContentMismatch)));
         let (environment,_) = super::environment(compiled.context());
         let value = super::values(&environment, compiled.context(), "Holder").remove(0);
         for fault in ["absent", "wrong", "item", "package", "recipe"] {

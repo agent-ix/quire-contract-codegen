@@ -2314,13 +2314,7 @@ fn tc_029_nominal_owner_lookups_use_only_structural_wire_identities() {
         .filter(|artifact| artifact.path.starts_with("src/"))
         .map(|artifact| artifact.contents.as_str())
         .collect::<String>();
-    for lookup in [
-        "composite_declaration_by_wire(",
-        "enum_declaration_by_wire(",
-        "enum_case_by_wire(",
-    ] {
-        assert!(lib.contains(lookup), "owner lookup missing {lookup}");
-    }
+    assert!(lib.contains("composite_declaration_by_wire("));
     assert!(generated.contains("quire_contract_model::CheckedNodeId {"));
     for forbidden in [
         "NodeKey::new(",

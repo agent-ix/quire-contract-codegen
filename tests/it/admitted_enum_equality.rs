@@ -696,7 +696,7 @@ pub(super) fn authentic_text_oracles() -> CompositeEqualityOracles {
 }
 
 /// Independent enum/primitive slice; the legacy record/tuple golden corpus remains separate.
-#[trace("FR-018-AC-10", "FR-018-AC-11", "TC-029")]
+#[trace("FR-018-AC-10", "FR-018-AC-11", "FR-018-AC-36", "TC-029")]
 #[test]
 fn authentic_enum_request_order_repeatability_and_dual_operator_symbols() {
     let compiled = fixture::compile(fixture::SOURCE);
@@ -706,6 +706,15 @@ fn authentic_enum_request_order_repeatability_and_dual_operator_symbols() {
     dual.operator = EqualityOperatorKind::NotEqual;
     items.push(dual);
     let forward = generate_items(&package, Some(compiled.context()), &items, &[]).expect("forward");
+    let generated = forward
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("generated enum source")
+        .contents
+        .as_str();
+    assert!(generated.contains("enum_declaration_by_wire("));
+    assert!(generated.contains("enum_case_by_wire("));
     items.reverse();
     let reverse = generate_items(&package, Some(compiled.context()), &items, &[]).expect("reverse");
     assert_eq!(
@@ -925,7 +934,7 @@ fn optional_capability_absence_is_typed_and_wrong_presence_is_global() {
         assert!(
             matches!(
                 wrong,
-                Err(OracleGenerationError::ContextPackageMismatch { .. })
+                Err(OracleGenerationError::ContextPackageContentMismatch)
             ),
             "Some(wrong) cannot become None, including empty requests: {wrong:?}"
         );

@@ -314,6 +314,15 @@ mod tests {
             assert_eq!(
                 composite_lookup_refusal(cause, &malformed),
                 CompositeEqualityRefusal::MalformedAdmittedWire {
+                    declaration: malformed.clone()
+                }
+            );
+            let cause = context
+                .enum_declaration_by_wire(&malformed)
+                .expect_err("empty enum wire path is malformed");
+            assert_eq!(
+                lookup_refusal(cause, &malformed),
+                CompositeEqualityRefusal::MalformedAdmittedWire {
                     declaration: malformed
                 }
             );
