@@ -273,11 +273,12 @@ mod tests {
                 0,
             )
             .expect("structural unknown key");
+            let unknown_wire = wire(&unknown);
             let cause = context
-                .composite_declaration_by_wire(&wire(&unknown))
+                .composite_declaration_by_wire(&unknown_wire)
                 .expect_err("not an admitted declaration");
             assert_eq!(
-                composite_lookup_refusal(cause, &requested),
+                composite_lookup_refusal(cause, &unknown_wire),
                 CompositeEqualityRefusal::UnknownComposite {
                     declaration: unknown.to_string(),
                 }
