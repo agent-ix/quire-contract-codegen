@@ -33,7 +33,6 @@ use quire_contract_model::{
     CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
     ContractPackageWireV1, LoweringProfileRef,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Lower all function bodies and call items once, then admit the one FR-330 value.
@@ -769,12 +768,10 @@ pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> Pack
         )
         .boolean_equality_chain_from(BYTE_BODY_BASE, body_count, "true");
 
-    let (source, sites) = byte_ceiling_source(body_count, call_count);
+    let (_, sites) = byte_ceiling_source(body_count, call_count);
     let source_ref = serde_json::json!({
         "authority": "agent-ix",
         "identity": "ir764-ac23-source",
-        "digest_domain": "quire.source.bytes/v1",
-        "digest": format!("{:x}", Sha256::digest(source.as_bytes())),
     });
     let mut wire = builder.raw_wire();
     wire["lock"]["sources"]
