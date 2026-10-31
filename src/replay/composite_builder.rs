@@ -4,20 +4,19 @@
 //! Original-package construction of verified structural equality requests (FR-033).
 //!
 //! This boundary authenticates the retained source and checked package and constructs positional
-//! O-09 arguments. It binds the caller's retained proof-content identity; it does not authenticate
-//! a generated artifact, run a native observation, or establish a backend proof strength.
+//! O-09 arguments. It does not authenticate a generated artifact, run a native observation, or
+//! establish a backend proof strength.
 
 use std::fmt;
 
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
     AdmittedContext, AdmittedRefusal, BoundEntries, CompileUnit, CompositeEvidence,
-    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestRecord, Domain, DomainKey,
-    EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey,
-    OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName,
-    ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget, ReplayTargetMembers,
-    RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal,
+    CompositeIdentity, CompositeParityClaim, DependencyInput, Domain, DomainKey, EnvelopeSource,
+    EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey, OperandIdentity,
+    Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName, ReplayRequest,
+    ReplayRequestRefusal, ReplayRequestWire, ReplayTarget, ReplayTargetMembers, RequestTargetWire,
+    Role, VerifiedShadow, VerifiedShadowReport, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -172,16 +171,14 @@ impl std::error::Error for CompositeBuildError {}
 
 /// Immutable original proving context for admitted graph-child structural equality routes.
 ///
-/// The caller supplies the original admitted package and retained source, dependencies, limits
-/// and canonical proof-content identity. The content identity is a binding input, not independent
-/// authentication of a generated artifact. No native/falsified production route is exposed here.
+/// The caller supplies the original admitted package and retained source, dependencies and limits.
+/// No native/falsified production route is exposed here.
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
     original: CheckedPackageV2,
     inputs: ReplayInputs,
     dependencies: DependencyInput,
     selection: QualifiedName,
-    content_identity: DigestRecord,
     read_limits: CheckedPackageReadLimits,
 }
 
@@ -210,7 +207,6 @@ impl OriginalCompositeEqContext {
         original: CheckedPackageV2,
         inputs: ReplayInputs,
         function: &str,
-        content_identity: DigestRecord,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, CompositeBuildError> {
         let identifier =
@@ -256,7 +252,6 @@ impl OriginalCompositeEqContext {
             inputs,
             dependencies,
             selection,
-            content_identity,
             read_limits,
         })
     }
@@ -340,7 +335,6 @@ impl OriginalCompositeEqContext {
                 .cloned()
                 .collect(),
             limits: self.inputs.accounting_limits,
-            content_identity: self.content_identity,
         };
         Ok(SelectedParityClaim {
             operands,
