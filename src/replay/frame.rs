@@ -20,12 +20,11 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DocumentRef,
-    EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
-    MalformedTranscript, ObligationIdentity, OccurrenceKey, OperationName, OperationSite,
-    ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestWire, ReplaySource,
-    ReplayTargetMembers, RequestTargetWire, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessValue,
+    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DocumentRef, EmptyQualifiedName,
+    EnvelopeSource, FrameCounterexample, FrameReplayResult, MalformedTranscript,
+    ObligationIdentity, OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal,
+    ReplayRequest, ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessValue,
 };
 use quire_exact::NodeKey;
 use serde::Deserialize;
@@ -129,11 +128,10 @@ pub enum PreStateFault {
     /// The invocation document is not JSON of the shape `state_clause` writes, or does not
     /// address its state object by population and key or name its pre snapshot.
     InvocationUnreadable,
-    /// The pre snapshot the invocation names, by a `sha256-jcs` digest, is not among the provided
-    /// documents.
+    /// The pre snapshot the invocation names is not among the provided documents.
     PreNotProvided {
-        /// The digest the invocation names, as lowercase hexadecimal.
-        digest: String,
+        /// The four labels the invocation names.
+        reference: DocumentRef,
     },
     /// The pre snapshot is not JSON.
     PreUnreadable,
@@ -172,8 +170,11 @@ impl fmt::Display for PreStateFault {
             Self::InvocationUnreadable => {
                 f.write_str("the invocation is not a readable invocation document")
             }
-            Self::PreNotProvided { digest } => {
-                write!(f, "the pre snapshot `{digest}` is not a provided document")
+            Self::PreNotProvided { reference } => {
+                write!(
+                    f,
+                    "the pre snapshot {reference:?} is not a provided document"
+                )
             }
             Self::PreUnreadable => f.write_str("the pre snapshot is not readable JSON"),
             Self::ObjectMissing { population, key } => {
@@ -470,12 +471,13 @@ fn decoded_state(
     }
 }
 
-/// The provided document addressed by the `sha256-jcs` digest `hex`.
-fn provided<'a>(documents: &'a [ProvidedDocument], hex: &str) -> Option<&'a [u8]> {
+/// The provided document declaring the requested four identity labels.
+fn provided<'a>(documents: &'a [ProvidedDocument], reference: &DocumentRef) -> Option<&'a [u8]> {
     documents
         .iter()
         .find(|document| {
-            document.digest.domain() == DigestDomain::Sha256Jcs && document.digest.hex() == hex
+            serde_json::from_slice::<DocumentIdentityRead>(&document.bytes)
+                .is_ok_and(|read| read.identity.matches(reference))
         })
         .map(|document| document.bytes.as_slice())
 }
@@ -537,15 +539,9 @@ fn pre_fields(
         self_object: ObjectRef { population, key },
         pre,
     } = serde_json::from_slice(bytes).map_err(|_| PreStateFault::InvocationUnreadable)?;
-    let digest =
-        pre.digest
-            .strip_prefix("sha256-jcs:")
-            .ok_or_else(|| PreStateFault::PreNotProvided {
-                digest: pre.digest.clone(),
-            })?;
-    let snapshot = provided(documents, digest).ok_or_else(|| PreStateFault::PreNotProvided {
-        digest: digest.to_owned(),
-    })?;
+    let reference = pre.reference();
+    let snapshot = provided(documents, &reference)
+        .ok_or_else(|| PreStateFault::PreNotProvided { reference })?;
     let SnapshotRead { populations } =
         serde_json::from_slice(snapshot).map_err(|_| PreStateFault::PreUnreadable)?;
     populations
@@ -695,7 +691,7 @@ impl FrameReplay {
         let documents = packages
             .iter()
             .chain(&state_documents)
-            .map(|document| (document.digest, document.bytes.as_slice()))
+            .map(|document| document.bytes.as_slice())
             .collect::<Vec<_>>();
         let request = |source: ReplaySource| {
             run.wire(

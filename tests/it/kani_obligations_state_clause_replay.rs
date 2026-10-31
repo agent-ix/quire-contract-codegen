@@ -26,7 +26,6 @@ use quire_contract_codegen::{
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
     emitted_fixture, falsified, model,
@@ -794,30 +793,23 @@ fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
 
 /// The documents of a request, by what each is.
 struct Documents {
-    invocation: (String, Value),
-    pre: (String, Value),
-    post: (String, Value),
+    invocation: Value,
+    pre: Value,
+    post: Value,
 }
 
-/// Reads the invocation and the two snapshots from `wire`'s documents, with each digest
-/// computed from the canonical bytes the request provides.
+/// Reads the invocation and two snapshots from the raw documents the request provides.
 fn documents(wire: &ReplayRequestWire) -> Documents {
     let mut found = (None, None, None);
     for bytes in &wire.documents {
         let Ok(document) = serde_json::from_slice::<Value>(bytes) else {
             continue;
         };
-        let digest = Sha256::digest(bytes);
-        let hex = digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let entry = (hex, document.clone());
         match document.get("format").and_then(Value::as_str) {
-            Some("quire.state.invocation/v1") => found.0 = Some(entry),
+            Some("quire.state.invocation/v1") => found.0 = Some(document),
             Some("quire.state.snapshot/v1") => match document.get("observation") {
-                Some(Value::String(role)) if role == "pre" => found.1 = Some(entry),
-                Some(Value::String(role)) if role == "post" => found.2 = Some(entry),
+                Some(Value::String(role)) if role == "pre" => found.1 = Some(document),
+                Some(Value::String(role)) if role == "post" => found.2 = Some(document),
                 other => panic!("an unknown snapshot role: {other:?}"),
             },
             _ => continue,
@@ -865,8 +857,8 @@ fn assert_documents(
     } = documents;
     let [invocation_label, pre_label, post_label] = labels;
     for (document, observation, label, balance, audit) in [
-        (&pre.1, "pre", pre_label, pre_balance, pre_audit),
-        (&post.1, "post", post_label, post_balance, post_audit),
+        (pre, "pre", pre_label, pre_balance, pre_audit),
+        (post, "post", post_label, post_balance, post_audit),
     ] {
         assert_eq!(document["observation"], observation);
         assert_eq!(document["identity"], identity_member(label));
@@ -885,32 +877,31 @@ fn assert_documents(
         );
     }
 
-    assert_eq!(invocation.1["identity"], identity_member(invocation_label));
-    assert_eq!(invocation.1["model"], pre.1["model"]);
-    assert_eq!(invocation.1["context"], address.object_type.as_str());
-    assert_eq!(invocation.1["operation"], "deposit");
+    assert_eq!(invocation["identity"], identity_member(invocation_label));
+    assert_eq!(invocation["model"], pre["model"]);
+    assert_eq!(invocation["context"], address.object_type.as_str());
+    assert_eq!(invocation["operation"], "deposit");
     assert_eq!(
-        invocation.1["self"],
+        invocation["self"],
         json!({"population": address.population, "key": address.key})
     );
-    assert_eq!(invocation.1["parameters"], json!({}));
-    assert_eq!(invocation.1["result"], Value::Null);
-    assert_eq!(invocation.1["created"], json!([]));
-    assert_eq!(invocation.1["deleted"], json!([]));
-    for (link, snapshot, label) in [("pre", pre, pre_label), ("post", post, post_label)] {
-        assert_eq!(invocation.1[link]["identity"], identity_member(label));
+    assert_eq!(invocation["parameters"], json!({}));
+    assert_eq!(invocation["result"], Value::Null);
+    assert_eq!(invocation["created"], json!([]));
+    assert_eq!(invocation["deleted"], json!([]));
+    for (link, label) in [("pre", pre_label), ("post", post_label)] {
         assert_eq!(
-            invocation.1[link]["digest"],
-            format!("sha256-jcs:{}", snapshot.0)
+            invocation[link],
+            json!({"identity": identity_member(label)})
         );
     }
 }
 
 /// The snapshots hold the playback's and the supplied values, the invocation holds the stated
-/// members with both digests, and a changed value changes only its own snapshot.
-#[trace("FR-024-AC-13", "TC-035")]
+/// members with identity links, and a changed value changes only its own snapshot.
+#[trace("FR-024-AC-52", "TC-035")]
 #[test]
-fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
+fn tc_035_the_documents_hold_the_playback_and_post_state() {
     let (twin, fixture) = (Twin::new(), healthy());
     let default = inputs(&twin, &fixture, (5, 7), (4, 8));
     let (address, labels) = (
@@ -971,14 +962,92 @@ fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
 
     // One changed playback value changes the pre snapshot and nothing of the post snapshot.
     let changed_pre = documents(&built(&twin, &fixture, BALANCE, (6, 7), (4, 8)).wire);
-    assert_ne!(changed_pre.pre.0, pre.0);
-    assert_ne!(changed_pre.pre.1, pre.1);
-    assert_eq!(changed_pre.post.0, post.0);
+    assert_ne!(changed_pre.pre, pre);
+    assert_eq!(changed_pre.post, post);
     // One changed post-state value changes the post snapshot and nothing of the pre snapshot.
     let changed_post = documents(&built(&twin, &fixture, BALANCE, (5, 7), (4, 9)).wire);
-    assert_ne!(changed_post.post.0, post.0);
-    assert_ne!(changed_post.post.1, post.1);
-    assert_eq!(changed_post.pre.0, pre.0);
+    assert_ne!(changed_post.post, post);
+    assert_eq!(changed_post.pre, pre);
+}
+
+/// The same document identities select changed values, so the actual QSL verdict follows the
+/// changed pre or post state rather than a stale document address.
+#[trace("FR-024-AC-52", "TC-035")]
+#[test]
+fn tc_035_changed_document_values_change_the_replay_verdict() {
+    let twin = Twin::new();
+    let fixture = healthy();
+    let cases = [
+        (
+            (10, 0),
+            (9, 0),
+            WitnessSettlement::ReproducedWithEvaluatedWitness,
+        ),
+        ((9, 0), (9, 0), WitnessSettlement::Inconclusive),
+        ((10, 0), (10, 0), WitnessSettlement::Inconclusive),
+    ];
+    let mut identities = Vec::new();
+    for (pre, post, expected) in cases {
+        let replay = built(&twin, &fixture, BALANCE, pre, post);
+        let docs = documents(&replay.wire);
+        identities.push((
+            docs.invocation["identity"].clone(),
+            docs.pre["identity"].clone(),
+            docs.post["identity"].clone(),
+        ));
+        let result = replay
+            .replay()
+            .expect("QSL settles changed document values");
+        assert_eq!(witness_arm(&result).settlement(), expected);
+    }
+    assert!(identities.windows(2).all(|pair| pair[0] == pair[1]));
+}
+
+/// QSL accepts a differently formatted raw document under the same self-declared identity.
+#[trace("FR-024-AC-53", "TC-035")]
+#[test]
+fn tc_035_qsl_reads_reformatted_raw_documents_by_identity() {
+    let twin = Twin::new();
+    let fixture = healthy();
+    let original = built(&twin, &fixture, BALANCE, (10, 0), (9, 0));
+    let expected = direct(original);
+    let mut reformatted = built(&twin, &fixture, BALANCE, (10, 0), (9, 0));
+    let mut changed = 0;
+    for bytes in &mut reformatted.wire.documents {
+        let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+            continue;
+        };
+        if value.get("format").is_some() {
+            let pretty = serde_json::to_vec_pretty(&value).expect("JSON encodes");
+            assert_ne!(*bytes, pretty, "the raw bytes really change");
+            *bytes = pretty;
+            changed += 1;
+        }
+    }
+    assert_eq!(
+        changed, 3,
+        "the invocation and both snapshots were reformatted"
+    );
+    assert_eq!(direct(reformatted), expected);
+
+    let mut edited = built(&twin, &fixture, BALANCE, (10, 0), (9, 0));
+    let pre = edited
+        .wire
+        .documents
+        .iter_mut()
+        .find(|bytes| {
+            serde_json::from_slice::<Value>(bytes)
+                .is_ok_and(|document| document["observation"] == "pre")
+        })
+        .expect("the raw pre snapshot is provided");
+    let mut value: Value = serde_json::from_slice(pre).expect("the pre snapshot is JSON");
+    value["populations"][0]["objects"][0]["fields"]["balance"]["integer"] = json!("9");
+    *pre = serde_json::to_vec(&value).expect("edited JSON encodes");
+    let changed_result = direct(edited);
+    assert_eq!(
+        witness_arm(&changed_result).settlement(),
+        WitnessSettlement::Inconclusive
+    );
 }
 
 /// The debit at the declared floor leaves an exact out-of-range post-state observation. QSL
@@ -990,8 +1059,8 @@ fn tc_040_out_of_range_debit_post_state_is_exact_and_refuted() {
     let fixture = emitted_fixture(&twin, BALANCE);
     let replay = built(&twin, &fixture, BALANCE, (0, 0), (-1, 0));
     let docs = documents(&replay.wire);
-    assert_eq!(integers(&docs.pre.1)["balance"]["integer"], "0");
-    assert_eq!(integers(&docs.post.1)["balance"]["integer"], "-1");
+    assert_eq!(integers(&docs.pre)["balance"]["integer"], "0");
+    assert_eq!(integers(&docs.post)["balance"]["integer"], "-1");
     let result = replay
         .replay()
         .expect("QSL replays the observed post state");
@@ -1483,8 +1552,8 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
     ];
     let replay = StateClauseReplay::new(inputs).expect("exact post state builds");
     let docs = documents(&replay.wire);
-    assert_eq!(integers(&docs.pre.1)["balance"]["integer"], "0");
-    assert_eq!(integers(&docs.post.1)["balance"]["integer"], "-1");
+    assert_eq!(integers(&docs.pre)["balance"]["integer"], "0");
+    assert_eq!(integers(&docs.post)["balance"]["integer"], "-1");
     let result = replay.replay().expect("QSL replays the exact post state");
     let arm = witness_arm(&result);
     assert_eq!(
