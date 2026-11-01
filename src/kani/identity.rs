@@ -161,14 +161,29 @@ pub struct KaniObligationHarness {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ProofDependencySnapshot {
     /// Validated declared dependencies, sorted by proof identity.
-    pub(crate) dependencies: Vec<ProofDependencyEdge>,
+    dependencies: Vec<ProofDependencyEdge>,
     /// Readiness derived from the declared dependencies.
-    pub(crate) readiness: ProofReadiness,
+    readiness: ProofReadiness,
     /// Generation records no backend execution.
-    pub(crate) proof_execution_state: ProofExecutionState,
+    proof_execution_state: ProofExecutionState,
 }
 
 impl ProofDependencySnapshot {
+    /// The validated declared dependencies, sorted by proof identity.
+    pub(crate) fn dependencies(&self) -> &[ProofDependencyEdge] {
+        &self.dependencies
+    }
+
+    /// The readiness derived from the declared dependencies.
+    pub(crate) fn readiness(&self) -> ProofReadiness {
+        self.readiness
+    }
+
+    /// The execution state recorded at generation.
+    pub(crate) fn proof_execution_state(&self) -> ProofExecutionState {
+        self.proof_execution_state
+    }
+
     /// The snapshot of a proof with these dependencies that no backend has run.
     pub(crate) fn not_run(dependencies: Vec<ProofDependencyEdge>) -> Self {
         let readiness = crate::kani::census::dependency_readiness(&dependencies);

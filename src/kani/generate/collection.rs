@@ -527,9 +527,9 @@ pub(super) fn render_collection_precondition(
         return Err(UnsupportedObligation::RenderFailed);
     };
     let identity = V2ClauseObligationIdentity {
-        dependencies: lowered.dependencies.dependencies.clone(),
-        readiness: lowered.dependencies.readiness,
-        proof_execution_state: lowered.dependencies.proof_execution_state,
+        dependencies: lowered.dependencies.dependencies().to_vec(),
+        readiness: lowered.dependencies.readiness(),
+        proof_execution_state: lowered.dependencies.proof_execution_state(),
         integer_representation: ScalarIntegerRepresentation::General,
         native_integer_selection: None,
         ceilings: request.ceilings,
@@ -1220,6 +1220,14 @@ pub(crate) mod tests {
     #[test]
     fn unique_capacity_includes_the_full_i64_interval() {
         assert_eq!(unique_element_capacity(CollectionElement::Boolean), 2);
+        assert_eq!(
+            unique_capacity_exceeded(CollectionElement::Boolean, 3),
+            Some(2)
+        );
+        assert_eq!(
+            unique_capacity_exceeded(CollectionElement::Boolean, 2),
+            None
+        );
         assert_eq!(
             unique_element_capacity(CollectionElement::Integer {
                 minimum: i64::MIN,
