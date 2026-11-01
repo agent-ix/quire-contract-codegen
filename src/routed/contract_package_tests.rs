@@ -89,7 +89,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: Box::new(package),
+                package: std::sync::Arc::new(package),
                 function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
                 call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
                 argument_node_ids: vec![
@@ -117,7 +117,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: checked,
+                package: checked.into(),
                 function_node_id: ids[0].clone(),
                 call_node_id: ids[2].clone(),
                 argument_node_ids: vec![ids[3].clone()],
@@ -347,7 +347,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: checked,
+                package: checked.into(),
                 function_node_id: ids[0].clone(),
                 call_node_id: ids[2].clone(),
                 argument_node_ids: vec![ids[3].clone()],
@@ -936,7 +936,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: Box::new(checked),
+                package: std::sync::Arc::new(checked),
                 function_node_id: function.clone(),
                 call_node_id: call,
                 argument_node_ids: vec![
@@ -1087,7 +1087,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: Box::new(checked),
+                package: std::sync::Arc::new(checked),
                 function_node_id: function.clone(),
                 call_node_id: call,
                 argument_node_ids: vec![
@@ -1165,10 +1165,9 @@ mod tests {
         ));
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
         let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
-        // The envelope's lookups are keyed by admitted package instance (a same-name package may
-        // hold different contents), so `first`, its clone `second` and `wrong_callee` are each
-        // indexed once, and `third` is indexed once.
-        let expected_visits = 3 * shared.graph().nodes.len() + different.graph().nodes.len();
+        // Cloned requests share the admitted instance; independently admitted packages with
+        // overlapping identities remain separate.
+        let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
         let max_graph_nodes = shared
             .graph()
             .nodes
@@ -1187,7 +1186,7 @@ mod tests {
                 identity: "kani".to_owned(),
             }]),
             kani_form: KaniForm::V2FunctionApplication {
-                package: Box::new(shared),
+                package: std::sync::Arc::new(shared),
                 function_node_id: shared_ids.resolve(&code_id(SOURCE_FUNCTION)),
                 call_node_id: shared_ids.resolve(&code_id(SOURCE_CALL)),
                 argument_node_ids: vec![
@@ -1207,7 +1206,7 @@ mod tests {
         *function_node_id = shared_ids.resolve(&code_id(SOURCE_OTHER_FUNCTION));
         let third = RequestItem {
             kani_form: KaniForm::V2FunctionApplication {
-                package: Box::new(different),
+                package: std::sync::Arc::new(different),
                 function_node_id: different_ids.resolve(&code_id(SOURCE_FUNCTION)),
                 call_node_id: different_ids.resolve(&code_id(SOURCE_CALL)),
                 argument_node_ids: vec![
@@ -1246,7 +1245,7 @@ mod tests {
         assert_eq!(
             crate::oracle::function::take_function_preflight_graph_visits(),
             expected_visits,
-            "each admitted package instance is indexed once; clones are distinct instances"
+            "cloned requests share one index; independently admitted packages remain separate"
         );
         let lookup_work = crate::oracle::function::take_function_preflight_graph_lookup_work();
         assert_eq!(
@@ -1262,7 +1261,7 @@ mod tests {
         );
     }
 
-    /// Each outside form's package instance is walked once for checked-node and scalar-derivation work.
+    /// Shared outside-form packages are walked once for graph and scalar derivation.
     #[trace("TC-030")]
     #[test]
     fn routed_forms_batch_graph_lookup_and_scalar_family_derivation() {
@@ -1274,9 +1273,9 @@ mod tests {
 
         let (checked, ids) = source_bound_call_package().admit_resolved();
         let (other, other_ids) = ac11_classifier_package().admit_resolved();
-        // Each item owns a clone of its package, and lookups are keyed by admitted package
-        // instance: four items over `checked` and one over `other` index five graphs.
-        let node_count = 4 * checked.graph().nodes.len() + other.graph().nodes.len();
+        let checked = std::sync::Arc::new(checked);
+        let other = std::sync::Arc::new(other);
+        let node_count = checked.graph().nodes.len() + other.graph().nodes.len();
         let call = ids.resolve(&code_id(SOURCE_CALL));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
@@ -1285,23 +1284,24 @@ mod tests {
             call, other_call,
             "distinct packages share a checked node id"
         );
-        let item = |package: &CheckedPackageV2, node_id: CheckedNodeId| RequestItem {
-            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
-            extent: Some(ExtentClassification {
-                extent: Mode::Bounded,
-                finite_bound_available: true,
-                domains: Vec::new(),
-                bounds: Vec::new(),
-            }),
-            named_backend: None,
-            candidates: Candidates::Set(vec![Candidate {
-                identity: "kani".to_owned(),
-            }]),
-            kani_form: KaniForm::OutsideSet {
-                package: Box::new(package.clone()),
-                node_id,
-            },
-        };
+        let item =
+            |package: &std::sync::Arc<CheckedPackageV2>, node_id: CheckedNodeId| RequestItem {
+                kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+                extent: Some(ExtentClassification {
+                    extent: Mode::Bounded,
+                    finite_bound_available: true,
+                    domains: Vec::new(),
+                    bounds: Vec::new(),
+                }),
+                named_backend: None,
+                candidates: Candidates::Set(vec![Candidate {
+                    identity: "kani".to_owned(),
+                }]),
+                kani_form: KaniForm::OutsideSet {
+                    package: std::sync::Arc::clone(package),
+                    node_id,
+                },
+            };
         let envelope = BackendProviderEnvelope {
             contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
             capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
@@ -1424,7 +1424,7 @@ mod tests {
                     named_backend: None,
                     candidates: Candidates::Set(Vec::new()),
                     kani_form: crate::routed::capability::KaniForm::OutsideSet {
-                        package: Box::new(package.clone()),
+                        package: std::sync::Arc::new(package.clone()),
                         node_id: node_id.clone(),
                     },
                 })
@@ -2150,7 +2150,7 @@ mod tests {
                         identity: "kani".to_owned(),
                     }]),
                     kani_form: crate::routed::capability::KaniForm::V2ScalarClaim {
-                        package: Box::new(source.clone()),
+                        package: std::sync::Arc::new(source.clone()),
                         contract: admitted.clone(),
                         positions,
                         request_index,

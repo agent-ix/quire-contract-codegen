@@ -12,6 +12,7 @@
 //! on the far side of the FR-331 envelope.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::{ApplicationOperator, CheckedTerm};
@@ -408,7 +409,9 @@ pub enum Candidates {
 /// A typed identity for a Kani lowering form.
 ///
 /// This is CG's in-process projection of the admitted IR form. It is not a
-/// wire member and its identity is never reconstructed from `Debug` or
+/// Cloning a form shares its immutable admitted package, so envelope lookups index
+/// that instance once. Independently admitted packages retain separate allocations.
+/// This is not a wire member; identity is never reconstructed from `Debug` or
 /// display output.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum KaniForm {
@@ -418,7 +421,7 @@ pub enum KaniForm {
     /// claim entry and checked graph; callers cannot assert them independently.
     V2ScalarClaim {
         /// The checked source package containing the source node.
-        package: Box<quire_contract_model::CheckedPackageV2>,
+        package: Arc<quire_contract_model::CheckedPackageV2>,
         /// The admitted lowering of the full driver request.
         contract: Box<ContractPackageV1>,
         /// The full typed lowering positions, including context-only roots.
@@ -431,7 +434,7 @@ pub enum KaniForm {
     /// A V2 state-clause/frame role handled by the state-frame path.
     V2StateFrame {
         /// The admitted package containing the state clause.
-        package: Box<quire_contract_model::CheckedPackageV2>,
+        package: Arc<quire_contract_model::CheckedPackageV2>,
         /// The checked state-clause node.
         clause: quire_contract_model::CheckedNodeId,
         /// The harness role requested from the checked state-clause node.
@@ -448,7 +451,7 @@ pub enum KaniForm {
     /// it is byte-for-byte the ordered reference list in the call node.
     V2FunctionApplication {
         /// The admitted package containing both nodes.
-        package: Box<quire_contract_model::CheckedPackageV2>,
+        package: Arc<quire_contract_model::CheckedPackageV2>,
         /// The checked `function/pure_function` declaration being applied.
         function_node_id: quire_contract_model::CheckedNodeId,
         /// The checked local `expression/call` node.
@@ -459,7 +462,7 @@ pub enum KaniForm {
     /// A typed form outside the normative V1/V2 Kani set.
     OutsideSet {
         /// The admitted package containing the typed node.
-        package: Box<quire_contract_model::CheckedPackageV2>,
+        package: Arc<quire_contract_model::CheckedPackageV2>,
         /// The checked node outside Kani's normative form set.
         node_id: quire_contract_model::CheckedNodeId,
     },
