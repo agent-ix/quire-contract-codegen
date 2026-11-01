@@ -256,6 +256,30 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
         generate_v2_clause_native_oracle(&f.package, &f.constraints[0])
             .expect("native constraint condition");
         let method = emit_method_with_unwind(&provisions, 3).unwrap();
+        // Independently evaluate every state in this admitted domain, including every
+        // possible initial/successor/boundary state of either complete-census operation.
+        for n in 0..=1 {
+            for flag in [false, true] {
+                for aux in 0..=1 {
+                    for (function, expression) in
+                        [("EvalSafety", safety), ("EvalConstraint0", constraint)]
+                    {
+                        let original = owner_evaluation(
+                            &f,
+                            function,
+                            n,
+                            flag,
+                            aux,
+                            provisions.evaluator_limits,
+                        );
+                        assert!(
+                            matches!(original, qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(value)) if value == (expression == "true" || flag)),
+                            "{name}: {function} at ({n},{flag},{aux})"
+                        );
+                    }
+                }
+            }
+        }
         let evidence = run_installed(&method);
         let safety = owner_evaluation(
             &f,
