@@ -927,7 +927,7 @@ fn identity_binds_nonquantifier_conjuncts_and_assumed_precondition_meaning() {
 
 #[test]
 #[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
-fn inline_boolean_conjuncts_preserve_the_complete_collection_clause() {
+fn boolean_literal_conjuncts_preserve_the_complete_collection_clause() {
     for body in [
         "true and forall(item in self.z_items: item >= 0)",
         "forall(item in self.z_items: item >= 0) and true",

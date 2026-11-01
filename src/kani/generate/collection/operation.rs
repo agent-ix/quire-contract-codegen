@@ -503,11 +503,7 @@ fn scalar_condition(
             value_kind: LiteralKind::Boolean,
             value,
             ..
-        } => match value.as_str()? {
-            "true" => Some("true".into()),
-            "false" => Some("false".into()),
-            _ => None,
-        },
+        } => Some(value.as_bool()?.to_string()),
         CheckedTerm::Literal {
             value_kind: LiteralKind::Integer,
             value,
