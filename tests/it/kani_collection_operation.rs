@@ -943,3 +943,32 @@ fn boolean_literal_conjuncts_preserve_the_complete_collection_clause() {
         );
     }
 }
+
+/// Real operation-clause emissions driven by the global proof/cover inspection.
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let package = fixture(
+        &document(),
+        "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 0) }",
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = negotiate(&package, &clauses(&package))
+    else {
+        panic!("valid whole-object inspection request")
+    };
+    assert_eq!(v2_clause_harnesses.len(), 2);
+    v2_clause_harnesses
+        .into_iter()
+        .map(|harness| {
+            let family = match harness.identity.kind {
+                quire_contract_codegen::ObligationKind::Precondition => "whole-object precondition",
+                quire_contract_codegen::ObligationKind::Postcondition => {
+                    "whole-object postcondition"
+                }
+                _ => panic!("only the source-authored operation clauses are emitted"),
+            };
+            (family, harness.rust.contents)
+        })
+        .collect()
+}

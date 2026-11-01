@@ -20,7 +20,7 @@ use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
-const FAMILIES: [(&str, &str); 6] = [
+const FAMILIES: [(&str, &str); 8] = [
     ("scalar", "kani/generate/render.rs"),
     ("v2 precondition", "kani/generate/render.rs"),
     ("state clause", "kani/generate/render.rs"),
@@ -30,6 +30,14 @@ const FAMILIES: [(&str, &str); 6] = [
         "kani/generate/corpus/bounded_kani_corpus.rs",
     ),
     ("symbolic collection", "kani/generate/render.rs"),
+    (
+        "whole-object precondition",
+        "kani/generate/render/collection_operation.rs",
+    ),
+    (
+        "whole-object postcondition",
+        "kani/generate/render/collection_operation.rs",
+    ),
 ];
 
 /// Test code the scan skips whole: `kani/test_support.rs` has no `#[cfg(test)]` of its own, its
@@ -131,6 +139,7 @@ fn emitted() -> Vec<(&'static str, String)> {
         crate::kani_obligations_state_frame::guard_sources(),
         crate::bounded_kani_corpus::guard_sources(),
         crate::kani_obligations_symbolic_domains::guard_sources(),
+        crate::kani_collection_operation::guard_sources(),
     ]
     .concat()
 }
@@ -178,8 +187,9 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
 /// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
 /// driven file with more spellings than this has a template no entry point above drives; raise
 /// the count only together with a driver and a family in `FAMILIES`.
-const PROOF_TEMPLATES: [(&str, usize); 2] = [
+const PROOF_TEMPLATES: [(&str, usize); 3] = [
     ("kani/generate/render.rs", 3),
+    ("kani/generate/render/collection_operation.rs", 1),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),
 ];
 
@@ -319,6 +329,7 @@ fn tc_025_frame_renderer_owns_every_non_corpus_kani_spelling() {
     for (file, text) in source_files() {
         if TEST_CODE_FILES.contains(&file.as_str())
             || file == "kani/generate/render.rs"
+            || file == "kani/generate/render/collection_operation.rs"
             || file == "kani/generate/corpus/bounded_kani_corpus.rs"
         {
             continue;
