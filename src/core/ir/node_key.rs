@@ -67,3 +67,68 @@ pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> 
         .collect::<Option<Vec<_>>>()?;
     qsl_replay::WireGraph::new(ids.iter()).ok()
 }
+
+/// Emit a typed IR identity without recursion or a digest adaptation.
+pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
+    enum Step<'a> {
+        Visit(&'a CheckedNodeId, bool),
+        Text(&'a str),
+        Index(u64),
+        Finish {
+            package: &'a str,
+            ordinal: u64,
+            len: usize,
+            root: bool,
+        },
+    }
+
+    let mut pending = vec![Step::Visit(key, true)];
+    let mut rendered = Vec::new();
+    while let Some(step) = pending.pop() {
+        match step {
+            Step::Visit(key, root) => {
+                let segments = &key.path;
+                pending.push(Step::Finish {
+                    package: &key.package,
+                    ordinal: key.ordinal,
+                    len: segments.len(),
+                    root,
+                });
+                for segment in segments.iter().rev() {
+                    match segment {
+                        quire_contract_model::CheckedNodePathSegment::Name(text) => {
+                            pending.push(Step::Text(text))
+                        }
+                        quire_contract_model::CheckedNodePathSegment::Node(child) => {
+                            pending.push(Step::Visit(child, false))
+                        }
+                        quire_contract_model::CheckedNodePathSegment::Index(index) => {
+                            pending.push(Step::Index(*index))
+                        }
+                    }
+                }
+            }
+            Step::Text(text) => rendered.push(format!(
+                "quire_contract_model::CheckedNodePathSegment::Name({text:?}.into())"
+            )),
+            Step::Index(index) => rendered.push(format!(
+                "quire_contract_model::CheckedNodePathSegment::Index({index})"
+            )),
+            Step::Finish {
+                package,
+                ordinal,
+                len,
+                root,
+            } => {
+                let start = rendered.len().checked_sub(len)?;
+                let path = rendered.split_off(start).join(", ");
+                let expression = format!("quire_contract_model::CheckedNodeId {{ package: {package:?}.into(), path: vec![{path}], ordinal: {ordinal} }}");
+                rendered.push(if root { expression } else { format!("quire_contract_model::CheckedNodePathSegment::Node(std::sync::Arc::new({expression}))") });
+            }
+        }
+    }
+    match rendered.pop() {
+        Some(value) if rendered.is_empty() => Some(value),
+        _ => None,
+    }
+}

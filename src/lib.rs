@@ -105,6 +105,12 @@ pub use oracle::equality::{
     COMPOSITE_EQUALITY_CRATE_NAME, COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
 };
 
+pub use oracle::function::owner_path::{
+    apply_checked_function, checked_function_key, select_checked_callable,
+    selected_nested_call_site, CheckedFunctionError, CheckedFunctionErrorCode,
+    CheckedFunctionSource,
+};
+
 pub use oracle::function::{
     generate_exact_function_oracles, generate_function_schedules,
     generate_function_schedules_with_limits, CallPointKind, ExactFunctionBody, ExactFunctionClaim,

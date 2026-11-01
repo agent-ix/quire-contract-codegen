@@ -73,6 +73,7 @@ use crate::core::contract_package::{
     ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 use crate::core::ir::checked_term::{aggregate_members, bound_members, literal_count};
+use crate::core::ir::node_key::render_checked_node_id;
 use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_integer_range, read_rational_range, read_text_bounds,
     COLLECTION_BOUNDS_MEMBERS,
@@ -1692,73 +1693,6 @@ fn resolve_scalar<Body: GraphBody>(
     }
 }
 
-fn render_wire_node_id(key: &CheckedNodeId) -> Result<String, RenderError> {
-    enum Step<'a> {
-        Visit(&'a CheckedNodeId, bool),
-        Text(&'a str),
-        Index(u64),
-        Finish {
-            package: &'a str,
-            ordinal: u64,
-            len: usize,
-            root: bool,
-        },
-    }
-
-    let mut pending = vec![Step::Visit(key, true)];
-    let mut rendered = Vec::new();
-    while let Some(step) = pending.pop() {
-        match step {
-            Step::Visit(key, root) => {
-                let segments = &key.path;
-                pending.push(Step::Finish {
-                    package: &key.package,
-                    ordinal: key.ordinal,
-                    len: segments.len(),
-                    root,
-                });
-                for segment in segments.iter().rev() {
-                    match segment {
-                        quire_contract_model::CheckedNodePathSegment::Name(text) => {
-                            pending.push(Step::Text(text))
-                        }
-                        quire_contract_model::CheckedNodePathSegment::Node(child) => {
-                            pending.push(Step::Visit(child, false))
-                        }
-                        quire_contract_model::CheckedNodePathSegment::Index(index) => {
-                            pending.push(Step::Index(*index))
-                        }
-                    }
-                }
-            }
-            Step::Text(text) => rendered.push(format!(
-                "quire_contract_model::CheckedNodePathSegment::Name({text:?}.into())"
-            )),
-            Step::Index(index) => rendered.push(format!(
-                "quire_contract_model::CheckedNodePathSegment::Index({index})"
-            )),
-            Step::Finish {
-                package,
-                ordinal,
-                len,
-                root,
-            } => {
-                let start = rendered
-                    .len()
-                    .checked_sub(len)
-                    .ok_or(OracleGenerationError::InvalidPlanState)?;
-                let path = rendered.split_off(start).join(", ");
-                let expression = format!("quire_contract_model::CheckedNodeId {{ package: {package:?}.into(), path: vec![{path}], ordinal: {ordinal} }}");
-                rendered.push(if root { expression } else { format!("quire_contract_model::CheckedNodePathSegment::Node(std::sync::Arc::new({expression}))") });
-            }
-        }
-    }
-    match rendered.pop() {
-        Some(value) if rendered.is_empty() => Ok(value),
-        _ => Err(OracleGenerationError::InvalidPlanState.into()),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -1956,7 +1890,8 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     for (key, binding) in &generated.composite_bindings {
         if binding.form == qsl_replay::AdmittedCompositeForm::Union {
             let handle = render_composite_key(key, &generated.composite_bindings)?;
-            let declaration = render_wire_node_id(&binding.node)?;
+            let declaration = render_checked_node_id(&binding.node)
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
             union_seals.push_str(&format!(
                 "    seal_union(context, &mut environment, {handle}, {declaration})?;\n",
             ));
@@ -2366,7 +2301,8 @@ fn render_composite_declaration(
                 })
                 .collect::<Result<Vec<_>, RenderError>>()?
                 .join(", ");
-            let node = render_wire_node_id(&binding.node)?;
+            let node = render_checked_node_id(&binding.node)
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
             format!("rebuild_union(_context, {node}, &[{qualified}], vec![{payloads}])?")
         }
     };
@@ -2479,7 +2415,8 @@ fn render_value_type(
                         .map(|part| format!("{part:?}"))
                         .collect::<Vec<_>>()
                         .join(", ");
-                    let node = render_wire_node_id(&binding.node)?;
+                    let node = render_checked_node_id(&binding.node)
+                        .ok_or(OracleGenerationError::InvalidPlanState)?;
                     format!(
                         "rebuild_enum(_context, _enum_members, {node}, &[{qualified}], {})?",
                         binding.ordered
@@ -2562,7 +2499,8 @@ fn render_composite_key(
         qsl_replay::AdmittedCompositeForm::Tuple => "qsl_replay::AdmittedCompositeForm::Tuple",
         qsl_replay::AdmittedCompositeForm::Union => "qsl_replay::AdmittedCompositeForm::Union",
     };
-    let node = render_wire_node_id(&binding.node)?;
+    let node =
+        render_checked_node_id(&binding.node).ok_or(OracleGenerationError::InvalidPlanState)?;
     Ok(format!(
         "lookup_composite_key(_context, {node}, &[{qualified}], {form})?"
     ))
@@ -4084,7 +4022,7 @@ mod tests {
                 }
                 // Genuine owner keys determine declaration order. Locate the module
                 // that actually reconstructs Chain0, rather than assuming its key sorts first.
-                let root_expr = render_wire_node_id(&root).expect("rendered structural identity");
+                let root_expr = render_checked_node_id(&root).expect("rendered structural identity");
                 let root_lookup = format!(
                     "sv::CompositeDeclaration::new(lookup_composite_key(_context, {root_expr}, &[\"Chain0\"], qsl_replay::AdmittedCompositeForm::Record)?"
                 );
