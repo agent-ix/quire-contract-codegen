@@ -126,6 +126,15 @@ pub(crate) fn clause_scalar_operation(
         Family::Ordering(operator, operands) if operands == OrderingOperandKind::Integer => {
             Some(ExactScalarOperation::Ordering { operator, operands })
         }
+        Family::IntegerModulo => {
+            let domain = match result_bound {
+                Some((lower, upper)) => {
+                    IntegerDomain::Bounded(IntegerInterval::new(lower.into(), upper.into()).ok()?)
+                }
+                None => IntegerDomain::Mathematical,
+            };
+            Some(ExactScalarOperation::IntegerModulo { domain })
+        }
         Family::IntegerArithmetic(operator) => {
             let domain = match result_bound {
                 Some((lower, upper)) => {

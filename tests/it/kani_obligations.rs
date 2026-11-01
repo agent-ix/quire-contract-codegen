@@ -983,10 +983,12 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         state_frame_harnesses,
         collection_harnesses,
         v2_clause_harnesses,
+        constrained_harnesses,
     } = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()
     else {
         panic!("a refused claim settles per item");
     };
+    assert!(constrained_harnesses.is_empty());
     // The whole artifact set is empty: no harness of any family is emitted for the obligations.
     assert!(scalar_harnesses.is_empty(), "scalar harnesses");
     assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");

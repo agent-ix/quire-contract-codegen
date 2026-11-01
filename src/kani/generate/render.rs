@@ -1,6 +1,7 @@
 //! Pure ordered emission of validated harness descriptions (FR-015).
 
 mod collection_operation;
+pub(super) mod constrained;
 
 use super::{
     outcome::UnsupportedObligation,
@@ -91,6 +92,11 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
             operation,
         } => collection_operation::render(spec, collection, operation),
         HarnessShape::Frame(frame) => render_frame(spec, frame),
+        HarnessShape::Constrained {
+            identity,
+            conditions,
+        } => constrained::render(identity, conditions)
+            .map_err(|reason| UnsupportedObligation::ConstrainedMethod { reason }),
     }
 }
 

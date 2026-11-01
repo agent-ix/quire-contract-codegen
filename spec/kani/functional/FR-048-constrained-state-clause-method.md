@@ -25,9 +25,8 @@ CG SHALL retain the constraint as a method input rather than a proof obligation.
 When that method reaches a state outside the constraint, CG SHALL evaluate
 that state's safety obligations before stopping expansion from it.
 
-This requirement specifies the constrained-method slice of IR-1157. Every
-criterion below is PLANNED: the current request, generator, classifier and
-terminal map do not implement this method. A standalone constraint collection
+This requirement specifies the constrained-method slice of IR-1157.
+A standalone constraint collection
 claim remains unsupported without a harness under
 [FR-015-AC-128](./FR-015-bounded-kani-obligations.md).
 This requirement neither turns that refusal into proof evidence nor changes
@@ -40,6 +39,11 @@ unconstrained Kani outcomes.
 - A typed optional method selection naming one checked constraint-clause node
   in that same package and its checked state context. The selection is not a
   Boolean expression, display name or caller-provided assertion.
+- The complete initial object snapshot using QSL's existing snapshot value types,
+  the complete canonical field and effective-operation census, and an explicit
+  implementation binding for every effective operation. Each initial field and
+  every operation binder/result must belong to its admitted domain; no unread
+  field or uncalled declaration may disappear from that census.
 - The finite state and transition domains, ordinary proof ceilings, ordered
   backend options, unwind and caller-owned cancellation handle.
 - For classification, the original installed-backend evidence, including
@@ -63,6 +67,20 @@ unconstrained Kani outcomes.
   A method-qualified proof is never presented as an unconditional proof.
 
 ## Behavior
+
+### Public method family
+
+The constrained family SHALL have a typed request arm in the one
+negotiate_kani_obligations generation entry, and typed execution and result
+conversion entries. Its execution entry SHALL share the bounded launcher and
+strict report reader with FR-017 while preventing its raw backend success from
+escaping through an ordinary proof execution or terminal entry. The public result
+retains the original backend checks and typed QSL/kernel observations under the
+same method identity. Initial snapshot values are retained through QSL's writer,
+without a private value wire format. Native integer oracle plans are used only
+where the owner admits complete operand capacity; otherwise the same checked
+condition uses the owner's general integer oracle, without finite enumeration
+or narrowing the admitted domain.
 
 ### Selection and identity
 

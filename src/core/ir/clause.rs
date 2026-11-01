@@ -21,6 +21,7 @@ pub(crate) enum ClauseInputSide {
 pub(crate) struct ClauseInput {
     pub(crate) name: String,
     pub(crate) side: ClauseInputSide,
+    pub(crate) boolean: bool,
     pub(crate) lower: i128,
     pub(crate) upper: i128,
 }
@@ -129,7 +130,15 @@ impl Reader<'_, '_> {
                 }
                 let node = self.node(&id)?;
                 if &*node.node_tag == "value" && &*node.semantic_form == "parameter" {
-                    let bound = self.bound(&node.semantic_type)?;
+                    let boolean = self.nodes.kind(&node.semantic_type)
+                        == Some(CheckedNodeKind::ScalarType(
+                            quire_contract_model::ScalarTypeForm::Boolean,
+                        ));
+                    let bound = if boolean {
+                        (0, 1)
+                    } else {
+                        self.bound(&node.semantic_type)?
+                    };
                     let declaration = self.package.parameter_declaration(&id).ok()?;
                     if side != ClauseInputSide::Current || !self.allowed_parameters.contains(&id) {
                         return None;
@@ -137,6 +146,7 @@ impl Reader<'_, '_> {
                     let input = ClauseInput {
                         name: declaration.name.to_string(),
                         side: ClauseInputSide::Parameter,
+                        boolean,
                         lower: bound.0,
                         upper: bound.1,
                     };
@@ -188,11 +198,7 @@ impl Reader<'_, '_> {
             CheckedTerm::Literal {
                 value_kind, value, ..
             } => match value_kind {
-                LiteralKind::Boolean => match value.as_str()? {
-                    "true" => Some(ClauseTerm::Boolean(true)),
-                    "false" => Some(ClauseTerm::Boolean(false)),
-                    _ => None,
-                },
+                LiteralKind::Boolean => Some(ClauseTerm::Boolean(value.as_bool()?)),
                 LiteralKind::Integer => Some(ClauseTerm::Integer(value.as_str()?.to_owned())),
                 _ => None,
             },
@@ -270,14 +276,17 @@ impl Reader<'_, '_> {
         }
         let fields = self.package.model_object_fields(declaration).ok()?;
         let field = fields.field(name)?;
-        let Some(CheckedMemberType::IntRange { lower, upper }) = field.member_type() else {
-            return None;
+        let (boolean, lower, upper) = match field.member_type()? {
+            CheckedMemberType::Boolean => (true, 0, 1),
+            CheckedMemberType::IntRange { lower, upper } => (false, *lower, *upper),
+            _ => return None,
         };
         let input = ClauseInput {
             name: name.to_owned(),
             side,
-            lower: *lower,
-            upper: *upper,
+            boolean,
+            lower,
+            upper,
         };
         self.inputs.insert(input.clone());
         Some(ClauseTerm::Input(input))

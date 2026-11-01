@@ -74,6 +74,8 @@ pub struct KaniExecutionRequest<'a> {
 /// Why a harness was not run.
 #[derive(Debug)]
 pub enum KaniExecutionRefusal {
+    /// An ordinary and a constrained harness must use their respective execution entries.
+    WrongMethodExecutionRoute,
     /// A multi-harness launcher stopped on its retained cancellation source.
     BatchCancelled {
         /// The source observed before owned teardown.
@@ -167,7 +169,8 @@ impl KaniExecutionRefusal {
         match self {
             Self::OutputOverLimit { .. } => Some(OUTPUT_OVER_LIMIT_CODE),
             Self::OutputUnread { .. } => Some(OUTPUT_UNREAD_CODE),
-            Self::BatchCancelled { .. }
+            Self::WrongMethodExecutionRoute
+            | Self::BatchCancelled { .. }
             | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
             | Self::HarnessProvenanceMismatch { .. }
@@ -185,6 +188,9 @@ impl KaniExecutionRefusal {
 impl fmt::Display for KaniExecutionRefusal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::WrongMethodExecutionRoute => formatter.write_str(
+                "ordinary and constrained harnesses require their respective execution entries",
+            ),
             Self::BatchCancelled { source, members } => write!(
                 formatter,
                 "the {members}-harness group was cancelled by {source:?}"
@@ -382,6 +388,19 @@ pub struct KaniBatchInvocation {
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    if matches!(request.harness, KaniExecutableHarness::Constrained(_)) {
+        return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
+    }
+    let totality_line = require_in_crate(request)?;
+    run_single(request, None, totality_line)
+}
+
+pub(in crate::kani) fn execute_constrained_raw(
+    request: &KaniExecutionRequest<'_>,
+) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    if !matches!(request.harness, KaniExecutableHarness::Constrained(_)) {
+        return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
+    }
     let totality_line = require_in_crate(request)?;
     run_single(request, None, totality_line)
 }
@@ -391,6 +410,12 @@ pub(crate) fn execute_kani_obligation_readonly(
     request: &KaniExecutionRequest<'_>,
     source_directory: &Path,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    if matches!(
+        request.harness,
+        super::harness::KaniExecutableHarness::Constrained(_)
+    ) {
+        return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
+    }
     let totality_line = require_in_crate(request)?;
     run_single(request, Some(source_directory), totality_line)
 }
@@ -749,6 +774,12 @@ pub struct KaniGroupRun {
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
+    if requests
+        .iter()
+        .any(|request| matches!(request.harness, KaniExecutableHarness::Constrained(_)))
+    {
+        return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
+    }
     let totality_lines = requests
         .iter()
         .map(require_in_crate)

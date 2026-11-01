@@ -269,12 +269,13 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
     );
     assert!(generated.descriptor.inputs.is_empty());
     assert_eq!(generated.source_map[0].expected_consequents, Some(0));
-    assert!(generated.source.contains("Ok(true)"));
+    assert!(generated.descriptor.operation_identities.is_empty());
+    assert!(generated.source.contains("pub fn oracle_clause() -> bool"));
     let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-inline-clause");
     fs::write(
         scratch.path.join("src/lib.rs"),
         format!(
-            "{}\n#[test]\nfn inline_condition() {{\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1, decimal_digits: 1, scale_expansion: 1, text_input_bytes: 1, text_scalars: 1, normalized_scalars: 1, unit_edges: 1, value_occurrences: 1, work_units: 1, result_units: 1 }});\n    assert!(matches!(oracle_clause(&mut meter), Ok(rt::Outcome::Completed(true))));\n}}\n",
+            "{}\n#[test]\nfn inline_condition() {{\n    assert!(oracle_clause());\n}}\n",
             generated.source
         ),
     )
@@ -1499,6 +1500,12 @@ fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) ->
     key(code)
 }
 
+fn boolean_literal(value: bool) -> serde_json::Value {
+    let mut term = literal("boolean", "");
+    term["value"] = json!(value);
+    term
+}
+
 fn state_frame_base_package() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
     for (code, form) in [
@@ -1533,7 +1540,7 @@ fn state_frame_base_package() -> PackageBuilder {
             "unary",
             op("quire.op.boolean.not"),
             &boolean,
-            vec![literal("boolean", "true")],
+            vec![boolean_literal(true)],
         ),
     );
     builder
@@ -1832,7 +1839,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
                 json!({"term": "aggregate", "members": parameters}),
                 reference(&anchor),
                 if matches!(shape.condition, Condition::InlineTrue) {
-                    literal("boolean", "true")
+                    boolean_literal(true)
                 } else {
                     reference(&condition)
                 },

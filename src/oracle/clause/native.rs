@@ -81,6 +81,7 @@ pub(super) fn helpers(
                         .map_err(|_| V2ClauseRefusal::Render)?,
                 )
             }
+            StepTerm::Input(input) if input.boolean => None,
             StepTerm::Input(input) => Some(
                 NativeIntegerInterval::new(input.lower, input.upper)
                     .map_err(|_| V2ClauseRefusal::Render)?,

@@ -211,6 +211,7 @@ src/
     abi.rs                    binding roles, primitive types, integer bounds, KaniSolver, options
     census.rs                 the proof-dependency census types (the FR-015 census input)
     identity.rs               the harness and identity record types, ObligationKind, ObligationBinding
+    identity/constrained.rs   sealed constrained harness and complete method identity
     generate/                 the one generator
       spec.rs                 HarnessSpec and its one constructor (step 4b; shape decided in "The
                               HarnessSpec and render contract"; not created by 2f)
@@ -222,6 +223,9 @@ src/
       outcome.rs              the request and result vocabulary the entry and every family speak
                               (ObligationItem, UnsupportedObligation, ObligationRecord, ...); a leaf
                               inside generate/: it imports no family
+      constrained.rs          complete model/census lowering through HarnessSpec
+      outcome/constrained.rs  method request and typed refusal vocabulary
+      render/constrained.rs   constrained template under the shared renderer
       scalar.rs  frame.rs       scalar and frame render through HarnessSpec and render.rs. The
                               separate IR-1084 frame port is step 4i. The former V1 precondition.rs and
                               contract.rs were deleted by 4f; V2 clauses live in clause/v2.rs
@@ -280,6 +284,10 @@ src/
 is reserved the same way but no step creates it: nothing in this crate is the adapter trait today,
 so step 2g does not create it and the layout test (L-1) does not require it. Directory names equal the registry's subsystem names, which makes ADR-0056
 rule 3 (one module maps to exactly one subsystem) true by construction.
+
+The constrained method runner lives in `kani/run/constrained.rs`; its owner and
+terminal conversion lives above it in `kani/terminal/constrained.rs`. Neither
+runner nor shared identity imports a family generator or terminal mapper.
 
 ### Module-to-subsystem map
 

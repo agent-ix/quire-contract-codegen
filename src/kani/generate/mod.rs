@@ -7,6 +7,8 @@ pub(crate) mod census_validation;
 pub(crate) mod clause;
 // Bounded collection claims over admitted V2 model fields.
 pub(crate) mod collection;
+// The finite state-method family.
+pub(crate) mod constrained;
 // The bounded-Kani corpus family.
 pub(crate) mod corpus;
 // The state-frame family.

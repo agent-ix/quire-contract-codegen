@@ -360,11 +360,21 @@ fn negotiate_integer_policy(
     let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
         Vec::new();
     let mut v2_clause_harnesses = Vec::new();
+    let mut constrained_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness(request)
         } else {
             match state.outcome {
+                Outcome::LoweredConstrained(lowered) => {
+                    match super::constrained::render(&lowered) {
+                        Ok(harness) => {
+                            constrained_harnesses.push(harness);
+                            supported_without_harness("search")
+                        }
+                        Err(reason) => ObligationDisposition::Unsupported { reason },
+                    }
+                }
                 Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
                     Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
@@ -479,6 +489,7 @@ fn negotiate_integer_policy(
             state_frame_harnesses,
             collection_harnesses,
             v2_clause_harnesses,
+            constrained_harnesses,
         }
     })
 }
@@ -516,6 +527,9 @@ struct ItemState {
 
 #[derive(Clone, Eq, PartialEq)]
 enum ItemIdentity {
+    ConstrainedMethod {
+        module_symbol: String,
+    },
     Node {
         package: ContractSourceV1,
         node: CheckedNodeId,
@@ -539,6 +553,7 @@ enum ItemIdentity {
 }
 
 enum Outcome {
+    LoweredConstrained(Box<super::constrained::LoweredConstrainedMethod>),
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
     LoweredCollectionOperation(Box<LoweredCollectionClaim>),
@@ -562,7 +577,8 @@ impl Outcome {
                 state_frame_disposition(refusal.clone()),
                 ObligationDisposition::InvalidRequest { .. }
             ),
-            Self::LoweredScalar(_)
+            Self::LoweredConstrained(_)
+            | Self::LoweredScalar(_)
             | Self::LoweredCollection(_)
             | Self::LoweredCollectionOperation(_)
             | Self::LoweredV2Clause(_)
@@ -577,6 +593,7 @@ impl Outcome {
         request: &KaniObligationRequest<'_>,
     ) -> ObligationDisposition {
         match self {
+            Self::LoweredConstrained(_) => supported_without_harness("search"),
             // A lowered item in a rejected request is accounted but not emitted.
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
             Self::LoweredCollection(lowered) => match render_collection(request, &lowered) {
@@ -634,6 +651,55 @@ fn classify<'a>(
     native: bool,
 ) -> ItemState {
     match *item {
+        ObligationItem::ConstrainedMethod { request: method } => {
+            let lookup = checked_lookup(checked_lookups, method.safety.package);
+            let source_map = lookup.occurrences(method.safety.clause);
+            let (identity, outcome) = match super::constrained::lower(
+                method,
+                ceilings,
+                unwind,
+                native,
+                lookup.clause(),
+            ) {
+                Ok(lowered) => (
+                    Some(ItemIdentity::ConstrainedMethod {
+                        module_symbol: lowered.identity.module_symbol.clone(),
+                    }),
+                    Outcome::LoweredConstrained(Box::new(lowered)),
+                ),
+                Err(reason) => {
+                    use super::outcome::constrained::ConstrainedMethodRefusal as R;
+                    let outcome = match reason {
+                        R::UnsupportedDomain | R::Census { .. } | R::Condition | R::Render => {
+                            Outcome::Unsupported(UnsupportedObligation::ConstrainedMethod {
+                                reason,
+                            })
+                        }
+                        R::WrongPackage
+                        | R::MissingConstraint
+                        | R::AmbiguousConstraint
+                        | R::NotConstraint
+                        | R::WrongContext
+                        | R::UnsupportedSafety
+                        | R::OperationBindings
+                        | R::InitialState
+                        | R::Provision => {
+                            Outcome::Invalid(InvalidObligationItem::ConstrainedMethod { reason })
+                        }
+                    };
+                    (None, outcome)
+                }
+            };
+            ItemState {
+                kind: Some(ObligationKind::Invariant),
+                subject: ObligationSubject::CheckedNode {
+                    node_id: method.safety.clause.clone(),
+                    source_map,
+                },
+                identity,
+                outcome,
+            }
+        }
         ObligationItem::V2Clause {
             package,
             clause,
@@ -1050,7 +1116,8 @@ pub(crate) fn classify_scalar_form<'a>(
         Outcome::Unsupported(refusal) => ScalarFormAssessment::Unsupported(refusal),
         Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
-        Outcome::LoweredCollection(_)
+        Outcome::LoweredConstrained(_)
+        | Outcome::LoweredCollection(_)
         | Outcome::LoweredCollectionOperation(_)
         | Outcome::LoweredV2Clause(_)
         | Outcome::StateFrame(_)

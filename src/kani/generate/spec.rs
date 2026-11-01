@@ -1,6 +1,7 @@
 //! Validated, private harness descriptions (FR-015).
 
 use super::outcome::{UnsupportedObligation, MAX_OBLIGATION_UNWIND};
+use crate::oracle::clause::V2ClauseOracle;
 use crate::{
     core::identity::HarnessPath,
     kani::abi::{adapter_options, KaniPrimitiveType, KaniSolver},
@@ -341,6 +342,10 @@ pub(super) enum HarnessShape {
         operation: Box<CollectionOperationSpec>,
     },
     Frame(FrameSpec),
+    Constrained {
+        identity: Box<crate::kani::identity::constrained::ConstrainedMethodIdentity>,
+        conditions: Box<ConstrainedConditionsSpec>,
+    },
 }
 fn identifier_identity(identifier: &syn::Ident) -> String {
     identifier.unraw().to_string()
@@ -1247,5 +1252,63 @@ mod tests {
                 HarnessSpecError::DuplicateBinding(name.into())
             );
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ConstrainedConditionsSpec {
+    pub(super) safety: ConstrainedConditionSpec,
+    pub(super) constraint: Option<ConstrainedConditionSpec>,
+    pub(super) preconditions: Vec<Vec<ConstrainedConditionSpec>>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ConstrainedConditionSpec {
+    pub(super) oracle: V2ClauseOracle,
+    pub(super) inputs: Vec<crate::core::ir::clause::ClauseInput>,
+}
+
+impl HarnessSpec {
+    pub(super) fn new_constrained(
+        identity: crate::kani::identity::constrained::ConstrainedMethodIdentity,
+        conditions: ConstrainedConditionsSpec,
+    ) -> Result<Self, HarnessSpecError> {
+        use crate::core::identity::{HarnessSymbol, ModuleSymbol};
+        if identity.unwind <= identity.maximum_steps
+            || !(1..=MAX_OBLIGATION_UNWIND).contains(&identity.unwind)
+            || conditions.preconditions.len() != identity.operations.len()
+        {
+            return Err(HarnessSpecError::InvalidDomain);
+        }
+        let path = HarnessPath {
+            module: ModuleSymbol::try_from(identity.module_symbol.clone())
+                .map_err(|_| HarnessSpecError::InvalidIdentifier(identity.module_symbol.clone()))?,
+            harness: HarnessSymbol::try_from("search")
+                .map_err(|_| HarnessSpecError::InvalidIdentifier("search".into()))?,
+        };
+        let options = adapter_options(
+            &path.to_string(),
+            identity.unwind,
+            KaniSolver::Cadical,
+            false,
+        );
+        if options != identity.options {
+            return Err(HarnessSpecError::InvalidExpression);
+        }
+        let unwind = identity.unwind;
+        Ok(Self {
+            path,
+            shape: HarnessShape::Constrained {
+                identity: Box::new(identity),
+                conditions: Box::new(conditions),
+            },
+            cover: Cover {
+                condition: ExprText::new("method_reached")?,
+                message: "constrained ordinary nonvacuity".into(),
+            },
+            unwind,
+            solver: KaniSolver::Cadical,
+            options,
+        })
     }
 }

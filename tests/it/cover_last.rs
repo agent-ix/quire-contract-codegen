@@ -187,8 +187,9 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
 /// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
 /// driven file with more spellings than this has a template no entry point above drives; raise
 /// the count only together with a driver and a family in `FAMILIES`.
-const PROOF_TEMPLATES: [(&str, usize); 3] = [
+const PROOF_TEMPLATES: [(&str, usize); 4] = [
     ("kani/generate/render.rs", 3),
+    ("kani/generate/render/constrained.rs", 1),
     ("kani/generate/render/collection_operation.rs", 1),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),
 ];
@@ -307,7 +308,11 @@ fn tc_025_no_proof_attribute_is_spelled_outside_what_the_inspection_drives() {
         spelled, expected,
         "the proof attributes spelled in src/ are exactly the templates the inspection drives"
     );
-    let driven: BTreeSet<&str> = FAMILIES.iter().map(|(_, file)| *file).collect();
+    let driven: BTreeSet<&str> = FAMILIES
+        .iter()
+        .map(|(_, file)| *file)
+        .chain(["kani/generate/render/constrained.rs"])
+        .collect();
     let counted: BTreeSet<&str> = PROOF_TEMPLATES.iter().map(|(file, _)| *file).collect();
     assert_eq!(driven, counted, "every counted file has a driven family");
 }
@@ -330,6 +335,7 @@ fn tc_025_frame_renderer_owns_every_non_corpus_kani_spelling() {
         if TEST_CODE_FILES.contains(&file.as_str())
             || file == "kani/generate/render.rs"
             || file == "kani/generate/render/collection_operation.rs"
+            || file == "kani/generate/render/constrained.rs"
             || file == "kani/generate/corpus/bounded_kani_corpus.rs"
         {
             continue;
@@ -346,4 +352,43 @@ fn tc_025_frame_renderer_owns_every_non_corpus_kani_spelling() {
         outside.is_empty(),
         "Kani spelling outside renderer: {outside:?}"
     );
+}
+
+/// FR-048 alone adds a second, separately named boundary cover; ordinary families retain
+/// their exact-one-cover rule above.
+#[trace("TC-062", "FR-048-AC-4", "FR-048-AC-5")]
+#[test]
+fn constrained_method_covers_have_distinct_purposes_and_the_boundary_is_last() {
+    for (family, source) in crate::constrained_method::guard_sources() {
+        let parsed = syn::parse_file(&source).unwrap();
+        let mut count = 0;
+        fn check(items: &[syn::Item], family: &str, count: &mut usize) {
+            for item in items {
+                match item {
+                    syn::Item::Mod(module) => {
+                        if let Some((_, items)) = &module.content {
+                            check(items, family, count);
+                        }
+                    }
+                    syn::Item::Fn(function) if is_proof(&function.attrs) => {
+                        *count += 1;
+                        let mut covers = Covers::default();
+                        covers.visit_block(&function.block);
+                        assert_eq!(covers.0, if family == "constrained method" { 2 } else { 1 });
+                        assert!(
+                            matches!(function.block.stmts.last(),Some(Stmt::Macro(statement)) if is_cover(&statement.mac))
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+        check(&parsed.items, family, &mut count);
+        assert_eq!(count, 1);
+        assert_eq!(source.matches("constrained ordinary nonvacuity").count(), 1);
+        assert_eq!(
+            source.matches("constrained boundary reachability").count(),
+            usize::from(family == "constrained method")
+        );
+    }
 }
