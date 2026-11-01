@@ -881,7 +881,6 @@ fn tc_031_reordered_source_call_refuses_positional_nested_body() {
 }
 
 /// A checked call to `add` cannot render a
-
 /// request-named, same-arity call to `unrelated`.
 #[trace("FR-021-AC-2", "TC-031")]
 #[test]
@@ -1144,7 +1143,6 @@ fn meter() -> Meter {
 }
 
 /// This leg uses QSL's own
-
 /// interpreter through an unregistered facade registry.
 #[trace("FR-021-AC-2", "FR-021-AC-35", "TC-031")]
 #[test]
@@ -1212,7 +1210,6 @@ fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registrati
 }
 
 /// The static request origin is checked against
-
 /// a QSL-issued site in the retained source body, not emitted Rust text.
 #[trace("FR-021-AC-17", "TC-031")]
 #[test]
@@ -1270,7 +1267,6 @@ fn tc_031_nested_static_origin_matches_the_qsl_checked_call_site() {
 }
 
 /// The imported owner's static root-call origin
-
 /// is compared with the QSL-issued site from that same locked library.
 #[trace("FR-021-AC-17", "TC-031")]
 #[test]
@@ -1395,7 +1391,6 @@ fn tc_031_generated_function_crate_matches_independent_fr485_session() {
 }
 
 /// The generated body is owned
-
 /// by the locked library and selected from a separately admitted importer.
 #[trace("FR-021-AC-35", "FR-021-AC-36", "TC-031")]
 #[test]
