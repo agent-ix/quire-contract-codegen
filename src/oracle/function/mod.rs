@@ -3083,6 +3083,7 @@ pub fn generate_exact_function_oracles(
         by_key.entry(key).or_insert((position, item));
     }
 
+    let original_graph = Graph::from_checked(source);
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
     let mut unauthenticated_root: Option<(usize, CheckedNodeId)> = None;
@@ -3090,20 +3091,20 @@ pub fn generate_exact_function_oracles(
     // every generated function is named.
     let mut pending = Vec::new();
     for (key, (position, item)) in by_key {
+        let direct_tag = original_graph.node(&item.call_node_id).and_then(|node| {
+            direct_unsupported_form(node, original_graph.term(&item.call_node_id))
+        });
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let duplicate_node = names.duplicate_node_refusal(&item.function);
         // An item naming a refused duplicate-node function carries that
         // refusal even when it was also requested more than once (AC-22).
-        let result = if let Some(refusal) = duplicate_node {
+        let mut result = if let Some(refusal) = duplicate_node {
             ClaimDisposition::Refused { refusal }
         } else if duplicate {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
-        } else if let Some(node_tag) = graph
-            .node(&item.call_node_id)
-            .and_then(|node| direct_unsupported_form(node, graph.term(&item.call_node_id)))
-        {
+        } else if let Some(node_tag) = direct_tag {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::Unsupported {
                     unsupported_node_id: item.call_node_id.clone(),
@@ -3173,6 +3174,21 @@ pub fn generate_exact_function_oracles(
                 }
             }
         };
+        if let ClaimDisposition::Refused {
+            refusal:
+                ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id,
+                    ..
+                },
+        } = &mut result
+        {
+            // This cause is retained in FR-330's source-accounting frame.
+            if direct_tag.is_none() {
+                if let Some(original) = accounting.original_node(unsupported_node_id) {
+                    *unsupported_node_id = original.clone();
+                }
+            }
+        }
         claims.push(ExactFunctionClaim {
             node_id: item.call_node_id.clone(),
             result,

@@ -54,3 +54,16 @@ pub(crate) fn checked_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
         _ => None,
     }
 }
+
+/// Resolve identities in the node table of an already checked producer document.
+pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> {
+    let document: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let ids = document
+        .get("semantic_graph")?
+        .get("nodes")?
+        .as_array()?
+        .iter()
+        .map(|node| serde_json::from_value::<CheckedNodeId>(node.get("node_id")?.clone()).ok())
+        .collect::<Option<Vec<_>>>()?;
+    qsl_replay::WireGraph::new(ids.iter()).ok()
+}

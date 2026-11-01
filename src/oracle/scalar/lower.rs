@@ -45,7 +45,7 @@ use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
     read_text_bounds,
 };
-use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2, ContractRootViewError};
+use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2};
 
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
@@ -2209,25 +2209,6 @@ pub(super) fn plan_contract_scalar_oracles(
                 },
             ),
             PackageItem::Lowered { closure, .. } => {
-                let admitted_node = items.admitted_node(node_id).ok_or_else(|| {
-                    super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
-                        request_index,
-                        node_id: node_id.clone(),
-                        cause: Box::new(ContractRootViewError::Inconsistent),
-                    })
-                })?;
-                let root_sources = closure
-                    .nodes
-                    .iter()
-                    .find(|entry| entry.node.node_id == *admitted_node)
-                    .map(|entry| entry.sources)
-                    .ok_or_else(|| {
-                        super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
-                            request_index,
-                            node_id: node_id.clone(),
-                            cause: Box::new(ContractRootViewError::Inconsistent),
-                        })
-                    })?;
                 let identity = scalar_ir::identity(graph.term(&closure.root.node_id))
                     .unwrap_or_default()
                     .to_owned();
@@ -2277,7 +2258,7 @@ pub(super) fn plan_contract_scalar_oracles(
                             let dependencies = closure
                                 .nodes
                                 .iter()
-                                .filter(|entry| entry.node.node_id != *admitted_node)
+                                .filter(|entry| entry.node.node_id != closure.root.node_id)
                                 .map(|entry| entry.node.node_id.clone())
                                 .collect();
                             pending.push((
@@ -2302,7 +2283,12 @@ pub(super) fn plan_contract_scalar_oracles(
                                         &graph,
                                         closure.root,
                                     ),
-                                    source_map: root_sources.to_vec(),
+                                    source_map: source
+                                        .source_map()
+                                        .iter()
+                                        .filter(|entry| entry.node_id == *node_id)
+                                        .cloned()
+                                        .collect(),
                                     claims: closure.claims,
                                     bounds: closure.bounds,
                                     checked_bounds,

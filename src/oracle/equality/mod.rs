@@ -562,6 +562,68 @@ pub enum CompositeEqualityRefusal {
     },
 }
 
+fn map_refusal_nodes(
+    refusal: &mut CompositeEqualityRefusal,
+    source: &BTreeMap<CheckedNodeId, CheckedNodeId>,
+) {
+    let remap = |id: &mut CheckedNodeId| {
+        if let Some(original) = source.get(id) {
+            *id = original.clone();
+        }
+    };
+    use CompositeEqualityRefusal::*;
+    match refusal {
+        MissingAdmittedContext { type_node_id } => remap(type_node_id),
+        MalformedAdmittedWire { declaration }
+        | EnumContextMismatch { declaration }
+        | CompositeContextMismatch { declaration } => remap(declaration),
+        InvalidBody { body_node_id } | BodyIncomplete { body_node_id } => remap(body_node_id),
+        TypeResolutionCycle {
+            repeated_type_node_id,
+        } => remap(repeated_type_node_id),
+        Unsupported {
+            unsupported_node_id,
+            ..
+        }
+        | BlockedOnUpstream {
+            unsupported_node_id,
+            ..
+        } => remap(unsupported_node_id),
+        MissingBound { bounded_type, .. } | AmbiguousBound { bounded_type, .. } => {
+            remap(bounded_type)
+        }
+        UnreadableBound { bound } => remap(bound),
+        MalformedComposite { composite } => remap(composite),
+        OperandTypeMismatch {
+            expected, found, ..
+        } => {
+            remap(expected);
+            if let Some(found) = found {
+                remap(found);
+            }
+        }
+        UnknownTypeNode { .. }
+        | UnknownEnum { .. }
+        | ForeignEnum { .. }
+        | UnknownComposite { .. }
+        | ForeignComposite { .. }
+        | WrongAdmittedKind { .. }
+        | PackageAccounting { .. }
+        | SelectedDependencyUnsupported { .. }
+        | DuplicateRequest
+        | InvalidInput
+        | NotExpression { .. }
+        | FormMismatch { .. }
+        | BodyMismatch
+        | LoweringWorkExhausted { .. }
+        | LoweringByteLimitExceeded { .. }
+        | LoweringLimitUnrecognised { .. }
+        | TypeResolutionWorkExhausted { .. }
+        | Declaration { .. }
+        | IllTyped { .. } => {}
+    }
+}
+
 /// Traceability for one generated oracle.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct GeneratedCompositeEqualityClaim {
@@ -747,6 +809,41 @@ pub fn generate_composite_equality_oracles(
         ));
     }
     let graph = Graph::new(package);
+    let source_keys = source
+        .graph()
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let key = source.structural_key(&node.node_id)?;
+            crate::core::ir::node_key::checked_node_key(key).map(|key| (key, &node.node_id))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let source_by_output = graph
+        .node_keys()
+        .iter()
+        .filter_map(|(id, key)| {
+            source_keys
+                .get(key)
+                .map(|source| (id.clone(), (*source).clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let output_by_source = source_by_output
+        .iter()
+        .map(|(output, source)| (source, output))
+        .collect::<BTreeMap<_, _>>();
+    let source_id = |id: &CheckedNodeId| {
+        source_by_output
+            .get(id)
+            .cloned()
+            .ok_or(OracleGenerationError::InvalidPlanState)
+    };
+
+    let structural_source_id = |id: &CheckedNodeId| {
+        crate::core::ir::node_key::checked_node_key(id)
+            .and_then(|key| source_keys.get(&key).map(|id| (*id).clone()))
+            .ok_or(OracleGenerationError::InvalidPlanState)
+    };
+
     let mut bounds_by_type: BTreeMap<
         &CheckedNodeId,
         Vec<&CheckedSemanticNodeV2<serde_json::Value>>,
@@ -785,9 +882,9 @@ pub fn generate_composite_equality_oracles(
         by_key.entry(key).or_insert((request_index, item));
     }
 
-    let mut source = SourceBuilder::new(limits.source_bytes)?;
-    source.expected_package = Some(expected_package.clone());
-    source.expected_package_bytes = original_bytes;
+    let mut rendered_source = SourceBuilder::new(limits.source_bytes)?;
+    rendered_source.expected_package = Some(expected_package.clone());
+    rendered_source.expected_package_bytes = original_bytes;
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, key, item, checked item), rendered once every
     // generated oracle is named.
@@ -798,9 +895,12 @@ pub fn generate_composite_equality_oracles(
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
-        } else if let Some(node_tag) = graph
-            .node(&item.node_id)
-            .and_then(|node| direct_unsupported_form(node, graph.term(&item.node_id)))
+        } else if let Some(node_tag) = source
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == item.node_id)
+            .and_then(|node| direct_unsupported_form(node, source.term(&item.node_id)))
         {
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::Unsupported {
@@ -833,19 +933,54 @@ pub fn generate_composite_equality_oracles(
                         },
                     }
                 }
-                PackageItem::Lowered {
-                    closure,
-                    occurrences,
-                    ..
-                } => match check_item(
-                    admitted,
-                    &graph,
-                    &bounds_by_type,
-                    closure.root,
-                    item,
-                    limits.type_resolution_work_units,
-                ) {
-                    Ok(generated) => {
+                PackageItem::Lowered { closure, .. } => match (|| {
+                    let type_id = |id: &CheckedNodeId| {
+                        output_by_source
+                            .get(id)
+                            .map(|id| (*id).clone())
+                            .ok_or_else(|| {
+                                ItemCheckError::Refusal(CompositeEqualityRefusal::UnknownTypeNode {
+                                    type_node_id: id.clone(),
+                                })
+                            })
+                    };
+                    let operand = |operand: &EqualityOperandDescriptor| {
+                        Ok::<_, ItemCheckError>(EqualityOperandDescriptor {
+                            source_type: type_id(&operand.source_type)?,
+                            conversion_target: operand
+                                .conversion_target
+                                .as_ref()
+                                .map(type_id)
+                                .transpose()?,
+                        })
+                    };
+                    let selected = CompositeEqualityItem {
+                        node_id: closure.root.node_id.clone(),
+                        operator: item.operator,
+                        left: operand(&item.left)?,
+                        right: operand(&item.right)?,
+                    };
+                    check_item(
+                        admitted,
+                        &graph,
+                        &bounds_by_type,
+                        closure.root,
+                        &selected,
+                        limits.type_resolution_work_units,
+                    )
+                })() {
+                    Ok(mut generated) => {
+                        for binding in generated.composite_bindings.values_mut() {
+                            binding.node = source_id(&binding.node)?;
+                        }
+                        for binding in &mut generated.enums {
+                            binding.node = source_id(&binding.node)?;
+                        }
+                        generated.declaration_keys = generated
+                            .declaration_keys
+                            .iter()
+                            .map(source_id)
+                            .collect::<Result<_, _>>()?;
                         let runtime_by_node = generated
                             .composites
                             .iter()
@@ -873,16 +1008,29 @@ pub fn generate_composite_equality_oracles(
                                 oracle_symbol: String::new(),
                                 contract_package_identity: package.wire().package.source.clone(),
                                 node_id: item.node_id.clone(),
-                                semantic_type: closure.root.semantic_type.clone(),
-                                source_map: occurrences.to_vec(),
-                                claims: closure.claims,
-                                bounds: closure.bounds,
+                                semantic_type: source_id(&closure.root.semantic_type)?,
+                                source_map: source
+                                    .source_map()
+                                    .iter()
+                                    .filter(|entry| entry.node_id == item.node_id)
+                                    .cloned()
+                                    .collect(),
+                                claims: closure
+                                    .claims
+                                    .iter()
+                                    .map(structural_source_id)
+                                    .collect::<Result<_, _>>()?,
+                                bounds: closure
+                                    .bounds
+                                    .iter()
+                                    .map(structural_source_id)
+                                    .collect::<Result<_, _>>()?,
                                 dependencies: closure
                                     .nodes
                                     .iter()
-                                    .filter(|entry| entry.node.node_id != item.node_id)
-                                    .map(|entry| entry.node.node_id.clone())
-                                    .collect(),
+                                    .filter(|entry| entry.node.node_id != closure.root.node_id)
+                                    .map(|entry| source_id(&entry.node.node_id))
+                                    .collect::<Result<_, _>>()?,
                                 descriptor: recorded_descriptor(item),
                                 declaration_keys: generated.declaration_keys.clone(),
                                 declaration_runtime_keys: runtime_keys,
@@ -892,7 +1040,10 @@ pub fn generate_composite_equality_oracles(
                         pending.push((claims.len(), key, item, generated));
                         claim
                     }
-                    Err(ItemCheckError::Refusal(refusal)) => ClaimDisposition::Refused { refusal },
+                    Err(ItemCheckError::Refusal(mut refusal)) => {
+                        map_refusal_nodes(&mut refusal, &source_by_output);
+                        ClaimDisposition::Refused { refusal }
+                    }
                     // An RT `#[non_exhaustive]` enum yielded a variant this
                     // generator does not know: not this one item's refusal, so it
                     // aborts the whole generation (see
@@ -912,7 +1063,7 @@ pub fn generate_composite_equality_oracles(
             result,
         });
     }
-    render_and_emit(&mut claims, &mut source, pending, render_item)?;
+    render_and_emit(&mut claims, &mut rendered_source, pending, render_item)?;
 
     let claim_map = ClaimMap {
         source: package.wire().package.source.clone(),
@@ -926,12 +1077,12 @@ pub fn generate_composite_equality_oracles(
         .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
         .collect::<Vec<_>>();
     subjects.extend(
-        source
+        rendered_source
             .inline_composite_subjects
             .iter()
             .map(crate::core::provenance::node_subject),
     );
-    let source_artifacts = source
+    let source_artifacts = rendered_source
         .finish(limits.source_bytes)?
         .into_iter()
         .map(|mut artifact| {
@@ -961,7 +1112,7 @@ pub fn generate_composite_equality_oracles(
         equality_oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
     ));
     artifacts.extend(source_artifacts);
-    if let Some(bytes) = source.expected_package_bytes {
+    if let Some(bytes) = rendered_source.expected_package_bytes {
         artifacts.push(Artifact::new("checked-package.json", bytes));
     }
     artifacts.push(Artifact::new("claim-map.json", map_text));
@@ -1119,6 +1270,7 @@ fn check_item<Body: GraphBody>(
     check_operand_types(graph, arguments, item)?;
 
     let mut closure = TypeClosure {
+        node_keys: graph.node_keys(),
         work_limit: type_resolution_work_units,
         ..TypeClosure::default()
     };
@@ -1347,6 +1499,7 @@ struct TypeClosure {
     enum_members: quire_semantic_value::enumeration::EnumMemberIndex,
     enums: Vec<admitted::EnumBinding>,
     composite_bindings: BTreeMap<NodeKey, admitted::CompositeBinding>,
+    node_keys: std::sync::Arc<BTreeMap<CheckedNodeId, NodeKey>>,
     /// Every V2 node id whose declaration entered the closure, ascending.
     node_ids: Vec<CheckedNodeId>,
 }
@@ -1362,6 +1515,7 @@ impl Default for TypeClosure {
             enum_members: Default::default(),
             enums: Vec::new(),
             composite_bindings: BTreeMap::new(),
+            node_keys: Default::default(),
         }
     }
 }
@@ -1420,6 +1574,9 @@ fn resolve_type<Body: GraphBody>(
     closure: &mut TypeClosure,
     type_id: &CheckedNodeId,
 ) -> Result<ValueType, ItemCheckError> {
+    if closure.node_keys.is_empty() {
+        closure.node_keys = graph.node_keys();
+    }
     resolution::resolve_type(admitted, graph, bounds_by_type, closure, type_id)
 }
 

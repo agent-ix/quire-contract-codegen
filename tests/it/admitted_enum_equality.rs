@@ -701,8 +701,8 @@ fn authentic_enum_request_order_repeatability_and_dual_operator_symbols() {
         .expect("generated enum source")
         .contents
         .as_str();
-    assert!(generated.contains("enum_declaration_by_wire("));
-    assert!(generated.contains("enum_case_by_wire("));
+    assert!(generated.contains("enum_declaration("));
+    assert!(generated.contains("enum_case("));
     items.reverse();
     let reverse = generate_items(&package, Some(compiled.context()), &items, &[]).expect("reverse");
     assert_eq!(

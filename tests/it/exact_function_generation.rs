@@ -2171,8 +2171,8 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
                 "identity":"quire.op.temporal.fair", "laws":[], "mode":null,
                 "member":{
                     "kind":"fairness", "fairness_kind":"weak", "granularity":"each",
-                    "declaration":model_placeholder,
-                    "name":"size"
+                    "target": {"kind":"operation", "declaration":model_placeholder,
+                    "name":"size"}
                 },
                 "leaves":[]
             },

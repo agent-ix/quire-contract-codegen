@@ -221,6 +221,7 @@ pub(crate) struct PackageItems<'a> {
     bound_driver_indices: Vec<usize>,
     source_key_indices: BTreeMap<&'a CheckedNodeId, usize>,
     source_structural_indices: BTreeMap<CheckedNodeId, usize>,
+    original_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
 }
 
 impl<'a> PackageItems<'a> {
@@ -305,6 +306,16 @@ impl<'a> PackageItems<'a> {
             bound_driver_indices,
             source_key_indices,
             source_structural_indices,
+            original_nodes: source
+                .graph()
+                .nodes
+                .iter()
+                .filter_map(|node| {
+                    source
+                        .structural_key(&node.node_id)
+                        .map(|key| (key, &node.node_id))
+                })
+                .collect(),
         })
     }
 
@@ -313,6 +324,13 @@ impl<'a> PackageItems<'a> {
         let key = ContractSourceKeyV1::from_v2_request(self.source, node_id)?;
         let index = self.source_structural_indices.get(key.structural_key())?;
         self.package.wire().source_keys.get(*index)
+    }
+
+    /// Translate a retained accounting identity through its own source table.
+    pub(crate) fn original_node(&self, accounted: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        let index = self.source_key_indices.get(accounted)?;
+        let key = self.package.source_key_at(*index)?;
+        self.original_nodes.get(key.structural_key()).copied()
     }
 
     /// Number of positions with their own envelope item.

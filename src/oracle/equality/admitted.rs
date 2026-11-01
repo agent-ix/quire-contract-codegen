@@ -16,15 +16,14 @@ pub(super) struct EnumBinding {
 }
 
 fn admitted_key(
-    admitted: &AdmittedContext,
+    closure: &TypeClosure,
     wire: &CheckedNodeId,
 ) -> Result<NodeKey, CompositeEqualityRefusal> {
-    admitted
-        .wire_graph()
-        .key(wire)
-        .map_err(|_| CompositeEqualityRefusal::MalformedAdmittedWire {
+    closure.node_keys.get(wire).cloned().ok_or_else(|| {
+        CompositeEqualityRefusal::MalformedAdmittedWire {
             declaration: wire.clone(),
-        })
+        }
+    })
 }
 
 pub(super) fn lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityRefusal {
@@ -68,7 +67,7 @@ pub(super) fn resolve_enum<Body>(
     let mismatch = || CompositeEqualityRefusal::EnumContextMismatch {
         declaration: node.node_id.clone(),
     };
-    let key = admitted_key(admitted, &node.node_id)?;
+    let key = admitted_key(closure, &node.node_id)?;
     let actual = admitted.enum_declaration(&key).map_err(lookup_refusal)?;
     let Some(CheckedTerm::NominalBody(body)) = term else {
         return Err(mismatch().into());
@@ -175,7 +174,7 @@ pub(super) fn resolve_composite<Body>(
     let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
         declaration: node.node_id.clone(),
     };
-    let key = admitted_key(admitted, &node.node_id)?;
+    let key = admitted_key(closure, &node.node_id)?;
     let actual = admitted
         .composite_declaration(&key)
         .map_err(composite_lookup_refusal)?;
@@ -283,7 +282,7 @@ mod tests {
                 ordinal: 0,
             };
             assert_eq!(
-                admitted_key(context, &malformed),
+                admitted_key(&TypeClosure::default(), &malformed),
                 Err(CompositeEqualityRefusal::MalformedAdmittedWire {
                     declaration: malformed
                 })

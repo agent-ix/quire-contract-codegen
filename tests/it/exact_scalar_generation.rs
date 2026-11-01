@@ -2693,12 +2693,11 @@ fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused(
         TWO_PARAMETER_WRONG_FORM_OPERAND,
         TWO_PARAMETER_WRONG_FORM_RESULT,
     ] {
-        assert_eq!(
-            two_parameter_refusal(code, add_over(0, 29)),
-            ExactScalarRefusal::MissingBound {
-                bounded_type: code_id(T_INTEGER),
-                expected_form: BoundForm::IntegerRange,
-            },
+        assert!(
+            matches!(
+                two_parameter_wrong_form_package(code).read().0,
+                CheckedPackageV2ReadResult::Refused(_)
+            ),
             "node {code}"
         );
     }
@@ -3027,14 +3026,10 @@ fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
 #[trace("FR-014-AC-33", "TC-024")]
 #[test]
 fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
-    assert_qsl_refused(
-        QSL_WRONG_FORM_NARROWED,
-        add_over(10, 29),
-        ExactScalarRefusal::MissingBound {
-            bounded_type: code_id(T_INTEGER),
-            expected_form: BoundForm::IntegerRange,
-        },
-    );
+    assert!(matches!(
+        qsl_wrong_form_package().read().0,
+        CheckedPackageV2ReadResult::Refused(_)
+    ));
     let (result, wire, _) = qsl_wrong_base_package().read_resolved();
     let invalid = id(&wrong_base_bound().key());
     let position = wire["semantic_graph"]["nodes"]

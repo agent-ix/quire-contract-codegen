@@ -810,3 +810,87 @@ fn tc_024_bound_members_are_looked_up_by_name_in_any_order() {
         None
     );
 }
+
+/// Malformed bound spellings cannot enter public admission. These private
+/// nodes drive the defensive generation and derivation checks directly.
+#[trace("FR-014-AC-23", "FR-014-AC-33", "TC-024")]
+#[test]
+fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
+    for (form, base, narrowed) in [
+        ("text_bounds", '1', false),
+        ("text_bounds", '1', true),
+        ("integer_range", '4', true),
+    ] {
+        let mut nodes = bounded_parameter_nodes();
+        nodes.push(v2_node(
+            '7',
+            "bounded_domain",
+            form,
+            base,
+            range_body(vec![]),
+        ));
+        let body = CheckedTerm::Application {
+            operator: ApplicationOperator::Binary,
+            operation: serde_json::from_value(
+                serde_json::json!({"identity":"quire.op.integer.add"}),
+            )
+            .expect("typed operation"),
+            result_type: node_id(if narrowed { '1' } else { '7' }),
+            arguments: vec![reference_to('3'), reference_to('3')],
+        };
+        let root = v2_node(
+            '8',
+            "expression",
+            "binary",
+            if narrowed { '1' } else { '7' },
+            body,
+        );
+        if narrowed {
+            nodes.push(v2_node(
+                '9',
+                "expression",
+                "conversion",
+                '7',
+                CheckedTerm::Application {
+                    operator: ApplicationOperator::Convert,
+                    operation: serde_json::from_value(
+                        serde_json::json!({"identity":"quire.op.numeric.narrow"}),
+                    )
+                    .expect("typed narrow"),
+                    result_type: node_id('7'),
+                    arguments: vec![reference_to('8')],
+                },
+            ));
+        }
+        nodes.push(root.clone());
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let complete = CompleteContractNodeV2 {
+            node: root.metadata.clone(),
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: root.semantic_type.clone(),
+            dependencies: vec![],
+            bounds: vec![node_id('7')],
+            claims: vec![],
+        };
+        let expected = ExactScalarRefusal::MissingBound {
+            bounded_type: node_id('1'),
+            expected_form: BoundForm::IntegerRange,
+        };
+        let descriptor = ExactScalarOperation::IntegerArithmetic {
+            operator: IntegerOperator::Add,
+            domain: IntegerDomain::Bounded(interval_of("0", "9")),
+        };
+        let record = CompleteLoweringRecordV2::Lowered {
+            node: Box::new(complete),
+        };
+        assert!(
+            matches!(check_item(&graph, &root.node_id, &record, &descriptor), Err(ItemCheckError::Refusal(refusal)) if refusal == expected)
+        );
+        assert_eq!(
+            super::super::derive::derive_operation(&graph, &root.node_id, &record),
+            Err(expected),
+            "{form} over {base}, narrowed={narrowed}"
+        );
+    }
+}

@@ -1183,7 +1183,10 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     };
     assert!(
         super::kani_obligations_state_frame::native_twin::node_matches_site(
-            &declared_parameter.node_id,
+            fixture
+                .package
+                .structural_key(&declared_parameter.node_id)
+                .expect("admitted parameter key"),
             parameter.view(),
         )
     );

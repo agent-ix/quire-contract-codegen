@@ -3650,6 +3650,40 @@ pub const BOUNDED_PRODUCT: u32 = 2061;
 /// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
 /// two-parameter shapes of IR-298.
 pub fn two_parameter_package() -> PackageBuilder {
+    let mut builder = two_parameter_wire();
+    for code in [
+        V_PARAM_WRONG_FORM,
+        TWO_PARAMETER_WRONG_FORM_OPERAND,
+        TWO_PARAMETER_WRONG_FORM_RESULT,
+    ] {
+        builder.omit_code(code);
+    }
+    remove_wrong_form_bound(&mut builder);
+    builder
+}
+
+/// Reader-negative wrong-form operand or result, isolated from valid controls.
+pub fn two_parameter_wrong_form_package(code: u32) -> PackageBuilder {
+    two_parameter_wire().focused(&[code_id(code)])
+}
+
+fn remove_wrong_form_bound(builder: &mut PackageBuilder) {
+    let wrong = wrong_form_bound();
+    let rejected = std::iter::once(wrong.key())
+        .chain(wrong.foreign().iter().map(Bound::key))
+        .map(|key| node_ref(&key))
+        .collect::<Vec<_>>();
+    builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes")
+        .retain(|node| !rejected.contains(&node["node_id"]));
+    builder.value["source_map"]
+        .as_array_mut()
+        .expect("sources")
+        .retain(|node| !rejected.contains(&node["node_id"]));
+}
+
+fn two_parameter_wire() -> PackageBuilder {
     let mut builder =
         corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL, V_PARAM_PLAIN]);
     let integer_type = key(T_INTEGER);
@@ -3901,6 +3935,22 @@ pub fn wrong_base_bound() -> Bound {
 ///   application with the identity `quire.op.numeric.narrow`, its `type_argument` member naming
 ///   the bound, and one argument, a reference to the arithmetic node.
 pub fn qsl_shaped_package() -> PackageBuilder {
+    let mut builder = qsl_shaped_wire();
+    builder.omit_code(QSL_WRONG_FORM_NARROWED);
+    builder.omit_code(QSL_WRONG_FORM_NARROW);
+    remove_wrong_form_bound(&mut builder);
+    builder
+}
+
+/// Reader-negative wrong-form narrowing, isolated from valid narrowing controls.
+pub fn qsl_wrong_form_package() -> PackageBuilder {
+    qsl_shaped_wire().focused(&[
+        code_id(QSL_WRONG_FORM_NARROWED),
+        code_id(QSL_WRONG_FORM_NARROW),
+    ])
+}
+
+fn qsl_shaped_wire() -> PackageBuilder {
     let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL]);
     let integer_type = key(T_INTEGER);
     let x_bound = builder.bound(&Bound::Integer(0, 9));
