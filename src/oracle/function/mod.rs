@@ -3678,7 +3678,7 @@ mod tests {
         let library_compiled = compile_package(
             CompileUnit {
                 source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
-                package_name: "selected-library".to_owned(),
+                package_name: "test/selected-library".to_owned(),
                 path: "selected-library.native",
                 bytes: library_source.as_bytes(),
             },

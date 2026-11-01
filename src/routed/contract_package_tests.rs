@@ -430,12 +430,31 @@ mod tests {
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9]): Boolean pure { a = a }\n";
 
+    /// A lowered package's own node identities. Package identity is structural: the source name
+    /// and lock alone do not tell two packages of one name apart, their node identities do.
+    fn package_node_ids(package: &quire_contract_model::ContractPackageV1) -> Vec<CheckedNodeId> {
+        package
+            .wire()
+            .semantic_graph
+            .nodes
+            .iter()
+            .map(|node| node.node_id.clone())
+            .collect()
+    }
+
     fn admitted_source(source: &str) -> CheckedPackageV2 {
+        admitted_named_source("package-items", source)
+    }
+
+    /// Admits `source` as the package `name`, whose one source file is `<name>.native`. Package
+    /// identity is its name and lock, so another name is another admitted package.
+    fn admitted_named_source(name: &str, source: &str) -> CheckedPackageV2 {
+        let path = format!("{name}.native");
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-                package_name: "package-items".to_owned(),
-                path: "package-items.native",
+                source: SourceIdentity::new("test", &path, "git", "fixture"),
+                package_name: name.to_owned(),
+                path: &path,
                 bytes: source.as_bytes(),
             },
             [],
@@ -1112,10 +1131,10 @@ mod tests {
         );
     }
 
-    /// One envelope indexes each admitted function graph once, including cloned package values.
+    /// One envelope indexes each admitted package instance's function graph once.
     #[trace("FR-019-AC-25", "TC-030")]
     #[test]
-    fn function_preflight_graph_index_is_shared_only_within_one_package_identity() {
+    fn function_preflight_graph_index_is_shared_only_within_one_package_instance() {
         use exact_function_fixture::{
             ac11_classifier_package, code_id, source_bound_call_package, SOURCE_CALL,
             SOURCE_FUNCTION, SOURCE_OTHER_FUNCTION, SOURCE_PARAM_A, SOURCE_PARAM_B,
@@ -1123,7 +1142,7 @@ mod tests {
 
         let (shared, shared_ids) = source_bound_call_package().admit_resolved();
         let (different, different_ids) = ac11_classifier_package().admit_resolved();
-        assert_ne!(shared.lock(), different.lock());
+        assert_ne!(shared.graph().nodes, different.graph().nodes);
         assert_eq!(
             shared_ids.resolve(&code_id(SOURCE_CALL)),
             different_ids.resolve(&code_id(SOURCE_CALL)),
@@ -1146,7 +1165,10 @@ mod tests {
         ));
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
         let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
-        let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
+        // The envelope's lookups are keyed by admitted package instance (a same-name package may
+        // hold different contents), so `first`, its clone `second` and `wrong_callee` are each
+        // indexed once, and `third` is indexed once.
+        let expected_visits = 3 * shared.graph().nodes.len() + different.graph().nodes.len();
         let max_graph_nodes = shared
             .graph()
             .nodes
@@ -1224,7 +1246,7 @@ mod tests {
         assert_eq!(
             crate::oracle::function::take_function_preflight_graph_visits(),
             expected_visits,
-            "two cloned packages reuse one graph walk; a distinct identity gets its own"
+            "each admitted package instance is indexed once; clones are distinct instances"
         );
         let lookup_work = crate::oracle::function::take_function_preflight_graph_lookup_work();
         assert_eq!(
@@ -1240,7 +1262,7 @@ mod tests {
         );
     }
 
-    /// Repeated outside forms share checked-node and scalar-derivation graph work.
+    /// Each outside form's package instance is walked once for checked-node and scalar-derivation work.
     #[trace("TC-030")]
     #[test]
     fn routed_forms_batch_graph_lookup_and_scalar_family_derivation() {
@@ -1252,11 +1274,13 @@ mod tests {
 
         let (checked, ids) = source_bound_call_package().admit_resolved();
         let (other, other_ids) = ac11_classifier_package().admit_resolved();
-        let node_count = checked.graph().nodes.len() + other.graph().nodes.len();
+        // Each item owns a clone of its package, and lookups are keyed by admitted package
+        // instance: four items over `checked` and one over `other` index five graphs.
+        let node_count = 4 * checked.graph().nodes.len() + other.graph().nodes.len();
         let call = ids.resolve(&code_id(SOURCE_CALL));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
-        assert_ne!(checked.lock(), other.lock());
+        assert_ne!(checked.graph().nodes, other.graph().nodes);
         assert_eq!(
             call, other_call,
             "distinct packages share a checked node id"
@@ -1698,11 +1722,11 @@ mod tests {
                 }
                 PackageItem::Refused { record, .. } => panic!("comparison must lower: {record:?}"),
             }
-            identities.push(admitted.wire().package.source.clone());
+            identities.push(package_node_ids(&admitted));
         }
         assert_ne!(
             identities[0], identities[1],
-            "changed admitted operation changes package identity"
+            "changed admitted operation changes the package's node identities"
         );
     }
 
@@ -1826,9 +1850,12 @@ mod tests {
                 source.contents.contains(rendered),
                 "the admitted operation is rendered"
             );
-            emitted.push((admitted.wire().package.source.clone(), source.contents));
+            emitted.push((package_node_ids(&admitted), source.contents));
         }
-        assert_ne!(emitted[0].0, emitted[1].0, "the source packages differ");
+        assert_ne!(
+            emitted[0].0, emitted[1].0,
+            "the packages' node identities differ"
+        );
         assert_ne!(
             emitted[0].1, emitted[1].1,
             "the admitted operation drives bytes"
@@ -1893,7 +1920,7 @@ mod tests {
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("contract scalar library");
-        let subject = format!("{expression:?}");
+        let subject = format!("{expression:?}").escape_debug().to_string();
         let header = lib
             .contents
             .lines()
@@ -2185,7 +2212,7 @@ mod tests {
             settle(&checked, cross_context.clone(), 0),
             crate::routed::capability::Disposition::Supported { .. }
         ));
-        let foreign_checked = admitted_source(SOURCE);
+        let foreign_checked = admitted_named_source("foreign-items", SOURCE);
         assert!(matches!(
             settle(&foreign_checked, positions.to_vec(), 0),
             crate::routed::capability::Disposition::InvalidRequest {
@@ -2678,8 +2705,8 @@ mod tests {
             "shared application identity"
         );
         assert_ne!(
-            first.wire().package.source,
-            second.wire().package.source,
+            package_node_ids(&first),
+            package_node_ids(&second),
             "distinct admitted authorities"
         );
         let generate = |package: &quire_contract_model::ContractPackageV1,
@@ -3456,7 +3483,7 @@ mod tests {
         assert_eq!(refusal.cause, None);
         assert_eq!(
             refusal.loci[0].path.as_ref().map(|path| path.as_str()),
-            Some("/semantic_graph/nodes/11/node_id")
+            Some("/semantic_graph/nodes/11/node_id/package")
         );
     }
 }

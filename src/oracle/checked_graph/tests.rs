@@ -22,25 +22,11 @@ fn published_package(fixture: &str) -> CheckedPackageV2 {
     let document: serde_json::Value = serde_json::from_slice(&bytes).expect("published JSON");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    let selections: serde_json::Value = serde_json::from_slice(
-        &fs::read(root.join("selected-documents.json"))
-            .expect("published fixture document selections"),
-    )
-    .expect("published selection JSON");
-    let fixture_path = format!("fixtures/{fixture}");
-    if let Some(selected_path) = selections["selected_documents"][fixture_path.as_str()].as_str() {
-        let bytes = fs::read(root.join(selected_path)).expect("published selected domain document");
-        let selected: serde_json::Value =
-            serde_json::from_slice(&bytes).expect("selected domain JSON");
-        evidence
-            .insert_domain_package_document(
-                selected["package"]["identity"]
-                    .as_str()
-                    .expect("selected domain identity"),
-                bytes,
-            )
-            .expect("retain published evidence");
-    }
+    crate::checked_package_evidence::retain_selected_document(
+        std::path::Path::new(&std::env::var_os("QSPEC_DIR").expect("published QSpec checkout")),
+        fixture,
+        &mut evidence,
+    );
     let definitions: serde_json::Value = serde_json::from_slice(
         &fs::read(root.join("extension-definitions.json")).expect("published extensions"),
     )

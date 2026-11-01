@@ -33,13 +33,24 @@ mod rekey;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FixtureIds {
     package_name: Box<str>,
+    /// Nodes the fixture re-identified after authoring, as (resolved authored ID, new ID).
+    renames: Vec<(CheckedNodeId, CheckedNodeId)>,
 }
 
 impl FixtureIds {
     fn for_wire(wire: &Value) -> Self {
         Self {
             package_name: wire["name"].as_str().expect("fixture package name").into(),
+            renames: Vec::new(),
         }
+    }
+
+    /// Record that the fixture submitted `to` where the authored `from` resolves, wherever the
+    /// ID occurs, including as a path segment of another node's ID.
+    pub fn renamed(mut self, from: &CheckedNodeId, to: CheckedNodeId) -> Self {
+        let from = self.resolve(from);
+        self.renames.push((from, to));
+        self
     }
 
     /// Resolve a fixture node while preserving IDs already owned by the imported package.
@@ -51,6 +62,23 @@ impl FixtureIds {
         for segment in &mut node.path {
             if let CheckedNodePathSegment::Node(child) = segment {
                 **child = self.resolve(child);
+            }
+        }
+        for (from, to) in &self.renames {
+            if &node == from {
+                return to.clone();
+            }
+            let renamed_child = node.path.iter().any(|segment| {
+                matches!(segment, CheckedNodePathSegment::Node(child) if child.as_ref() == from)
+            });
+            if renamed_child {
+                for segment in &mut node.path {
+                    if let CheckedNodePathSegment::Node(child) = segment {
+                        if child.as_ref() == from {
+                            **child = to.clone();
+                        }
+                    }
+                }
             }
         }
         node
