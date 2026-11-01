@@ -98,3 +98,34 @@ scope:
     an admitted collection claim, CG item or harness. For an admitted claim whose
     checked selected declaration or field ca
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At 565ce888, operation HarnessSpec cover is Completed(true) and emitted after all assertions. The real generated-source regression restricts OrderedSet<Boolean>[0,2] to length 1 and checks the actual cover Boolean; focused log has 13 passes. |
+| FND-002 | fixed | Both refusal variants now carry the exact CheckedNodeId; missing-request and unsupported-body branches retain the sibling ID, with discriminating identity assertions. |
+
+## Final disposition verdict
+
+PASS for the scoped PR findings at 565ce888. Original findings remain unchanged. Focused ordinary controls (13/0), all-target Clippy and fmt logs were inspected. Parent owns the full integration baseline comparison and merge gate. No installed-backend or native-replay proof credit is inferred. The gap analysis remains no repository-wide completeness assertion.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-003 | low | CollectionOperationConditionIdentity is a public field type of CollectionOperationIdentity but is not re-exported through the crate root; its defining kani and identity modules are private. External callers cannot name or match the typed condition. Export it alongside CollectionOperationIdentity. | src/lib.rs:247; src/kani/identity.rs:297 | implementation-bug-despite-evidence |
+
+## Completion delta audit
+
+Inspected 565ce888..ea1f91a9. The one typed condition representation is shared by lowering, renderer, serialized operation identity and symbol material; nonquantifier literals and sibling bodies therefore change both context and module identity. The authentic QSL regression compares distinct scalar literals in primary/sibling conditions. The old operation fixture now declares only its supported finite items/flags state; whole-state playback decodes both fields, and conjunct/parameter support assertions reflect the new ABI. Existing unsupported controls remain. Installed-backend test staging gains its real exact dependency, but no backend/native-replay execution credit is claimed. Earlier FND-001/002 fixes remain intact. New final-head gates are owned by the parent and were pending during this audit.
+
+## Dispositions (pass 2)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | At 1383564b the crate root re-exports CollectionOperationConditionIdentity alongside CollectionOperationIdentity; the external integration test now pattern-matches exported And and Scalar variants, so the public field vocabulary is accessible. |
+
+## Completion delta verdict
+
+PASS for the scoped fix audit at 1383564b; no open review findings. No new cargo gate was run by the reviewer. Parent owns pending final-head gate evidence.

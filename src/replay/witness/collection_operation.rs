@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Decode every whole-object symbolic draw in the generated operation ABI order.
 
 use super::{decode_falsification, DecodeFailure};

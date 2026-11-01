@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Whole-object collection operation contexts from authentic QSL emission and IR admission.
 
 use ix_trace_rs::trace;

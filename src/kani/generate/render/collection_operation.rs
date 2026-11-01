@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Emission of whole exact-value model states and typed collection operation calls.
 
 use super::super::{

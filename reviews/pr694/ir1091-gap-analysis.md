@@ -99,3 +99,17 @@ scope:
     an admitted collection claim, CG item or harness. For an admitted claim whose
     checked selected declaration or field ca
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fresh quoin matrix reports AC-38/39/43 tagged. Declaration-order/context, produced-domain, and same-anchor assumption/refusal tests bind the implemented obligations; tags are backed by real execution/assertions. |
+
+## Final disposition verdict
+
+PASS for the scoped PR findings at 565ce888. Original findings remain unchanged. Focused ordinary controls (13/0), all-target Clippy and fmt logs were inspected. Parent owns the full integration baseline comparison and merge gate. No installed-backend or native-replay proof credit is inferred. The gap analysis remains no repository-wide completeness assertion.
+
+## Completion delta audit
+
+At 1383564b, the added identity control authenticates the typed exported conjunction/scalar API and distinguishes nonquantifier and sibling-literal meanings. Existing operation-fixture/source/playback expectations now use the whole-state ABI. AC-38/39/43 trace bindings remain in place. No additional scoped gap finding; parent owns final-head execution gates.
