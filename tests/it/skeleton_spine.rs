@@ -211,6 +211,9 @@ fn node_key_of_entry_name(name: &str) -> qsl_replay::NodeKey {
                 CheckedNodePathSegment::Node(child) => {
                     quire_exact::PathSegment::Node(convert(child))
                 }
+                CheckedNodePathSegment::Index(_) => {
+                    panic!("witness entry names require expanded identities, not wire indexes")
+                }
             })
             .collect();
         qsl_replay::NodeKey::new(id.package.to_string(), path, id.ordinal)
