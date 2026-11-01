@@ -3042,10 +3042,18 @@ mod tests {
         };
         assert_eq!(claim.claims, closure.claims);
         assert_eq!(claim.bounds, closure.bounds);
-        assert_eq!(
-            claim.source_map,
-            admitted.wire().source_map.requested_items[1].occurrences
+        let original_occurrences = checked
+            .source_map()
+            .iter()
+            .filter(|entry| entry.node_id == requested[1])
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_ne!(
+            original_occurrences,
+            admitted.wire().source_map.requested_items[1].occurrences,
+            "the source and lowered occurrence tables use different owning frames"
         );
+        assert_eq!(claim.source_map, original_occurrences);
         assert!(generated
             .artifacts
             .iter()

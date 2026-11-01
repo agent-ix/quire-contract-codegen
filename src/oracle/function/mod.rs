@@ -95,7 +95,7 @@
 //! agreement claim; quire-integration IR-842 owns that cross-repository boundary.
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
-mod owner_path;
+pub(crate) mod owner_path;
 mod owner_render;
 use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
@@ -110,11 +110,6 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
-pub use owner_path::{
-    apply_checked_function, checked_function_key, select_checked_callable,
-    selected_nested_call_site, CheckedFunctionError, CheckedFunctionErrorCode,
-    CheckedFunctionSource,
-};
 use quire_contract_model::{
     ApplicationOperator, CheckedNodeId, CheckedNodeKind, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticNodeV2,
@@ -2945,6 +2940,21 @@ pub fn generate_exact_function_oracles(
                 return Err(refusal);
             }
             let (closure, _) = admitted_binary_body(admitted, graph)?;
+            // Refuse a body outside the selected lowering form before reading
+            // its signature types. Unsupported scalar operators retain their
+            // existing signature/operation refusal precedence.
+            let required_form = match &declaration.body {
+                ExactFunctionBody::Scalar { operator } => {
+                    BinaryIntegerOperator::of(*operator).map(|_| "binary")
+                }
+                ExactFunctionBody::CompositeEquality { .. } => Some("binary"),
+                ExactFunctionBody::Call { .. } => Some("call"),
+            };
+            if required_form.is_some_and(|form| closure.root.semantic_form.as_ref() != form) {
+                return Err(ExactFunctionRefusal::FormMismatch {
+                    found: closure.root.semantic_form.to_string(),
+                });
+            }
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 let represented = accounting
