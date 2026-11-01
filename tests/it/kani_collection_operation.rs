@@ -892,6 +892,21 @@ fn identity_binds_nonquantifier_conjuncts_and_assumed_precondition_meaning() {
         let package = fixture_with_body(&document(), pre, body);
         postcondition(negotiate(&package, &clauses(&package)))
     });
+    let quire_contract_codegen::CollectionOperationConditionIdentity::And(_, scalar) = &variants[1]
+        .identity
+        .collection_operation
+        .as_ref()
+        .unwrap()
+        .condition
+    else {
+        panic!("the public identity retains the whole conjunction");
+    };
+    let quire_contract_codegen::CollectionOperationConditionIdentity::Scalar { expression } =
+        scalar.as_ref()
+    else {
+        panic!("the public identity retains its scalar conjunct");
+    };
+    assert!(expression.contains("2_i64"));
     assert_ne!(variants[0].identity, variants[1].identity);
     assert_ne!(
         variants[0].identity.module_symbol,
