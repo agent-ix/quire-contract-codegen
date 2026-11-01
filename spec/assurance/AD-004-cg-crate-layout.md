@@ -355,8 +355,8 @@ The internal arrows above do not grant an external evaluator import. `oracle`
 currently emits target-neutral function schedules under FR-021; a schedule is
 not an evaluated result. `replay` obtains witness settlements through the
 public `qsl_replay` facade, and `kani/terminal.rs` maps their typed results
-under FR-029. The current concrete function oracle still imports RT's
-`exact` port; replacing it is an open FR-021-AC-32 obligation. Neither
+under FR-029. The concrete function oracle uses the public QSL checked-closure application
+facade and direct leaf crates under FR-021-AC-32. Neither
 module imports QSL evaluator/checker internals as an alternate path. QSL
 FR-060 T12-A continues to constrain the CG replay adapter to the facade.
 
@@ -372,14 +372,14 @@ a checked `CallableSelection` and generated `BodyFactory` through `register`,
 then starts a metered `CheckedApplicationSession` through `begin_call`; the
 session's `step` or `run` delegates to the one leaf evaluator. QSL's reference
 adapter and the leaf's authoritative root call site sit behind this facade.
-The QSL facade is merged delivery. Before a concrete function-application
-oracle replaces the historical RT-port witness, the IR-595 CG consumer must
-land and pass its acceptance checks. CG's `oracle` module will use this
-application facade for checked callables; CG's `replay` module keeps
+The CG consumer compares the complete acquired unit and declaring-owner
+package bytes, retaining the typed sidecar, before selecting or registering a
+callable. Imported owner bytes come from the same acquisition through
+`owner_package_bytes`; no package is recompiled for the comparison.
+CG's `oracle` module uses this application facade for checked callables; CG's `replay` module keeps
 using `qsl_replay::replay` for Kani witness settlement. Neither module imports
 RT or QSL evaluator/checker internals for the new path, and neither copies an
-evaluator. FR-021 holds the concrete-oracle criteria Planned until that work
-lands. IR-853's target decision is Done. FR-044's evaluator corpus is a
+evaluator. FR-021 records the concrete-oracle criteria. IR-853's target decision is Done. FR-044's evaluator corpus is a
 separate case-record contract and does not itself deliver the consumer API.
 
 The planned FR-018 admitted-context migration preserves this internal graph:

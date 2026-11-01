@@ -1061,7 +1061,11 @@ mod tests {
     fn genuine_other_unit_identity_stops_before_lookup_or_registration() {
         let (package, f, _) = admitted();
         let other = separately_admitted_unit();
-        assert_ne!(package.name(), other.name());
+        assert_eq!(package.name(), other.name());
+        assert_ne!(
+            package_bytes(&package).unwrap(),
+            package_bytes(&other).unwrap()
+        );
         let dependencies = DependencyInput::default();
         let mut meter = meter();
         let refusal = apply_checked_function(
@@ -1094,7 +1098,11 @@ mod tests {
     fn unrelated_declaring_package_cannot_authorize_a_callable() {
         let (unit, f, _) = admitted();
         let unrelated = separately_admitted_unit();
-        assert_ne!(unit.name(), unrelated.name());
+        assert_eq!(unit.name(), unrelated.name());
+        assert_ne!(
+            package_bytes(&unit).unwrap(),
+            package_bytes(&unrelated).unwrap()
+        );
         let acquisition = acquire_checked_closure(
             CompileUnit {
                 source: identity(),

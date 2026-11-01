@@ -3024,15 +3024,20 @@ pub fn generate_exact_function_oracles(
                     })),
                     Some(callee_node_id) => match resolved.get(callee_node_id) {
                         Some(Ok(())) => Some(
-                            source_nested_body_matches(
-                                &source_index,
-                                &declaration.name,
-                                &declaration.node_id,
-                                callee,
-                                callee_node_id,
-                            )
-                            .then_some(())
-                            .ok_or(ExactFunctionRefusal::BodyMismatch),
+                            accounting
+                                .represented_node(&declaration.node_id)
+                                .zip(accounting.represented_node(callee_node_id))
+                                .is_some_and(|(caller_body, callee_body)| {
+                                    source_nested_body_matches(
+                                        &source_index,
+                                        &declaration.name,
+                                        caller_body,
+                                        callee,
+                                        callee_body,
+                                    )
+                                })
+                                .then_some(())
+                                .ok_or(ExactFunctionRefusal::BodyMismatch),
                         ),
                         Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
@@ -3103,26 +3108,20 @@ pub fn generate_exact_function_oracles(
                 .or_insert(position);
         }
     }
-    let source_order = |node_id: &CheckedNodeId| {
-        accounting
-            .original_represented_node(node_id)
-            .and_then(|original| source_positions.get(original).copied())
-    };
-    let mut bodies_by_source = source_index
-        .graph
+    let original_graph = Graph::from_checked(source);
+    let source_order = |node_id: &CheckedNodeId| source_positions.get(node_id).copied();
+    let mut bodies_by_source = original_graph
         .nodes()
         .filter(|node| &*node.node_tag == "function" && &*node.semantic_form == "pure_function")
         .filter_map(|node| {
-            let body = source_index
-                .graph
+            let body = original_graph
                 .term(&node.node_id)
                 .and_then(|term| binding_value(term, "body"))
-                .and_then(|term| reference_in_graph(term, &source_index.graph))?;
-            let original_body = accounting.original_represented_node(body)?;
+                .and_then(|term| reference_in_graph(term, &original_graph))?;
             Some((
                 source_order(&node.node_id).or_else(|| source_order(body)),
                 &node.node_id,
-                original_body,
+                body,
             ))
         })
         .collect::<Vec<_>>();
@@ -3130,16 +3129,23 @@ pub fn generate_exact_function_oracles(
     let location_index: BTreeMap<&CheckedNodeId, usize> = bodies_by_source
         .into_iter()
         .enumerate()
-        .map(|(index, (_, _, body))| (body, index))
+        .map(|(index, (_, function, _))| (function, index))
         .collect();
+    let source_location = |declaration: &ExactFunctionDeclaration| {
+        let body = accounting.represented_node(&declaration.node_id)?;
+        let function = source_index.source_function_node_id(&declaration.name, body)?;
+        let original_function = accounting.original_represented_node(function)?;
+        location_index.get(original_function).copied()
+    };
     let survivor_index: BTreeMap<&CheckedNodeId, (usize, &ExactFunctionDeclaration)> = classified
         .iter()
-        .enumerate()
-        .map(|(index, function)| {
+        .map(|function| {
             let declaration = function.declaration;
-            (&declaration.node_id, (index, declaration))
+            let index =
+                source_location(declaration).ok_or(OracleGenerationError::InvalidPlanState)?;
+            Ok((&declaration.node_id, (index, declaration)))
         })
-        .collect();
+        .collect::<Result<_, OracleGenerationError>>()?;
     let classified_by_id: BTreeMap<&CheckedNodeId, &ClassifiedFunction<'_>> = classified
         .iter()
         .map(|function| (&function.declaration.node_id, function))
@@ -3148,9 +3154,7 @@ pub fn generate_exact_function_oracles(
     // Static location records describe the admitted IR graph, independently of a later QSL run.
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
-        let index = *location_index
-            .get(&declaration.node_id)
-            .ok_or(OracleGenerationError::InvalidPlanState)?;
+        let index = source_location(declaration).ok_or(OracleGenerationError::InvalidPlanState)?;
         let call_point = match &declaration.body {
             ExactFunctionBody::Scalar { .. } => CallPointKind::ScalarOperator,
             ExactFunctionBody::CompositeEquality { .. } => CallPointKind::EqualityEvaluation,
@@ -3596,15 +3600,53 @@ fn item_disposition<'a>(
                 .cloned()
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?,
             package_id: package.wire().package.source.clone(),
-            semantic_type: node.semantic_type.clone(),
-            source_map: occurrences.to_vec(),
-            claims: closure.claims,
-            bounds: closure.bounds,
+            semantic_type: accounting
+                .original_represented_node(&node.semantic_type)
+                .cloned()
+                .ok_or(ExactFunctionRefusal::BodyMismatch)?,
+            source_map: occurrences
+                .iter()
+                .map(|occurrence| {
+                    let mut original = occurrence.clone();
+                    original.node_id = accounting
+                        .original_node(&occurrence.node_id)
+                        .cloned()
+                        .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+                    Ok(original)
+                })
+                .collect::<Result<_, ExactFunctionRefusal>>()?,
+            claims: closure
+                .claims
+                .iter()
+                .map(|id| {
+                    accounting
+                        .original_structural_node(id)
+                        .cloned()
+                        .ok_or(ExactFunctionRefusal::BodyMismatch)
+                })
+                .collect::<Result<_, _>>()?,
+            bounds: closure
+                .bounds
+                .iter()
+                .map(|id| {
+                    accounting
+                        .original_structural_node(id)
+                        .cloned()
+                        .ok_or(ExactFunctionRefusal::BodyMismatch)
+                })
+                .collect::<Result<_, _>>()?,
             dependencies: closure
                 .nodes
                 .iter()
-                .filter(|entry| entry.node.node_id != item.call_node_id)
-                .map(|entry| entry.node.node_id.clone())
+                .filter(|entry| entry.node.node_id != node.node_id)
+                .map(|entry| {
+                    accounting
+                        .original_represented_node(&entry.node.node_id)
+                        .cloned()
+                        .ok_or(ExactFunctionRefusal::BodyMismatch)
+                })
+                .collect::<Result<std::collections::BTreeSet<_>, _>>()?
+                .into_iter()
                 .collect(),
             function: declaration.name.clone(),
             function_origin: RecordedOrigin::Body {

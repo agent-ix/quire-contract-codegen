@@ -884,7 +884,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
             let root_header = raised.source.lines().take_while(|line| !line.is_empty())
                 .collect::<std::collections::BTreeSet<_>>();
             for claim in &raised.claims {
-                let subject = format!("// Subject: {:?}", claim.call_node_id);
+                let subject = format!("// Subject: {}", format!("{:?}", claim.call_node_id).escape_debug());
                 assert!(root_header.contains(subject.as_str()), "split root lacks claim {subject}");
             }
             for module in &raised.modules {
@@ -898,11 +898,11 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 );
                 let header_lines = module.contents.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 for instruction in &function.schedule.instructions[*start..*end] {
-                    let expected = format!("// Subject: {:?}", instruction.node);
+                    let expected = format!("// Subject: {}", format!("{:?}", instruction.node).escape_debug());
                     assert!(header_lines.contains(expected.as_str()), "{} lacks instruction source node {:?}", module.path, instruction.node);
                 }
                 let first_instruction = &function.schedule.instructions[*start];
-                let removed = format!("// Subject: {:?}", first_instruction.node);
+                let removed = format!("// Subject: {}", format!("{:?}", first_instruction.node).escape_debug());
                 let mutant = module.contents.replace(&format!("{removed}\n"), "");
                 let mutant_header = mutant.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 assert!(!mutant_header.contains(removed.as_str()), "{} accepts an omitted instruction", module.path);
@@ -1524,23 +1524,13 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 
 /// The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
-/// index}` in canonical order of surviving exact declarations' body-root
-/// keys. The claim also records the actual V2 function node independently
+/// index}` in the checked source function order. The claim also records the actual V2 function node independently
 /// of the generated source text.
 #[trace("FR-021-AC-3", "TC-031")]
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let (package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let mut ordered = ["add", "eq", "nested"]
-        .into_iter()
-        .map(|name| {
-            (
-                super::exact_function_agreement::body_id(&package, name),
-                name,
-            )
-        })
-        .collect::<Vec<_>>();
-    ordered.sort_by(|a, b| a.0.cmp(&b.0));
+    let ordered = ["add", "eq", "nested"];
     for claim in &oracles.claim_map.items {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("genuine source claim refused: {claim:?}");
@@ -1556,7 +1546,7 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         );
         let expected_index = ordered
             .iter()
-            .position(|(_, name)| *name == generated.function)
+            .position(|name| *name == generated.function)
             .expect("claim names a requested function");
         match &generated.function_origin {
             quire_contract_codegen::RecordedOrigin::Body { function, index } => {
@@ -2039,7 +2029,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     assert!(matches!(
         &generated.function_origin,
         quire_contract_codegen::RecordedOrigin::Body { function, index }
-            if function == "unrelated" && *index == 0
+            if function == "unrelated" && *index == 6
     ));
     assert_eq!(sibling, baseline);
     assert_eq!(combined.location_map.len(), 1);
@@ -2762,7 +2752,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     }
     for subject in &subjects {
         assert!(
-            header.contains(format!("// Subject: {subject}").as_str()),
+            header.contains(format!("// Subject: {}", subject.escape_debug()).as_str()),
             "{subject}"
         );
     }

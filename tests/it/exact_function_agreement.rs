@@ -555,10 +555,15 @@ pub(super) fn genuine_temporal_and_healthy(
     let language = lines.next().expect("language header");
     let value_profile = lines.next().expect("model-complete profile");
     let model = lines.next().expect("authored model selection");
-    let digest = model
-        .split_once("sha256-jcs:")
-        .and_then(|(_, rest)| rest.split('"').next())
-        .expect("authored model digest");
+    let model_identity: String = serde_json::from_str(
+        model
+            .split_once('=')
+            .expect("authored model selection")
+            .1
+            .trim()
+            .trim_end_matches(';'),
+    )
+    .expect("authored model package identity");
     let source = format!(
         "{language}\n{value_profile}\n\
          profile t = \"quire.temporal.infinite-trace/v1\";\n\
@@ -592,7 +597,7 @@ pub(super) fn genuine_temporal_and_healthy(
         evidence.support_feature(feature.as_str().expect("feature name"));
     }
     evidence
-        .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
+        .insert_domain_package_document(model_identity, twin.domain.clone())
         .expect("one model document");
     let read = CheckedPackageV2::read(bytes, CheckedPackageReadLimits::bounded(), &evidence);
     let CheckedPackageV2ReadResult::Admitted(package) = read else {
@@ -1069,7 +1074,7 @@ fn genuine_corpus_request(
 #[trace("FR-021-AC-32", "FR-021-AC-35", "TC-031")]
 #[test]
 fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
-    let (_, generated) = genuine_corpus();
+    let (package, generated) = genuine_corpus();
     let claims = generated
         .claim_map
         .items
@@ -1083,6 +1088,37 @@ fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
             .all(|claim| matches!(claim, ClaimDisposition::Generated(_))),
         "{claims:?}"
     );
+    let nodes = package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| &node.node_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    for claim in &generated.claim_map.items {
+        let ClaimDisposition::Generated(value) = &claim.result else {
+            panic!("genuine claim refused")
+        };
+        assert!(nodes.contains(&value.semantic_type));
+        assert!(nodes.contains(&value.function_node_id));
+        assert!(!value.dependencies.contains(&value.node_id));
+        for id in value
+            .dependencies
+            .iter()
+            .chain(&value.bounds)
+            .chain(&value.claims)
+        {
+            assert!(
+                nodes.contains(id),
+                "claim metadata must retain its original V2 identity: {id:?}"
+            );
+        }
+        for occurrence in &value.source_map {
+            assert!(
+                package.source_map().contains(occurrence),
+                "source occurrence must come from the admitted V2 package"
+            );
+        }
+    }
     let source = generated
         .artifacts
         .iter()
@@ -1416,5 +1452,30 @@ fn tc_031_generated_imported_owner_matches_independent_fr485_session() {
             .map(|(path, contents)| (path.as_str(), contents.as_str())),
         &[("names.rs", names.as_str())],
         "tests/exact_function_support/imported_cases.rs",
+    );
+}
+
+#[trace("TC-031", "FR-021-AC-17")]
+#[test]
+fn omitted_earlier_function_does_not_renumber_the_checked_origin() {
+    let package = admitted_source();
+    let declaration = declared_source_body(
+        &package,
+        "eq",
+        type_id(&package, "boolean"),
+        ExactFunctionBody::CompositeEquality {
+            operator: EqualityOperatorKind::Equal,
+        },
+    );
+    let generated = generated_for_source_body(&package, &[declaration], "probe_eq", "eq");
+    let ClaimDisposition::Generated(claim) = &generated.claim_map.items[0].result else {
+        panic!("the selected equality body must generate")
+    };
+    assert!(matches!(&claim.function_origin,
+        quire_contract_codegen::RecordedOrigin::Body { function, index: 1 } if function == "eq"));
+    assert_eq!(generated.location_map.len(), 1);
+    assert_eq!(
+        generated.location_map[0].location.origin,
+        claim.function_origin
     );
 }
