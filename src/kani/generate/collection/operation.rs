@@ -114,8 +114,8 @@ fn parameter(
                 _ => None,
             };
             let (minimum, maximum) = (
-                number("minimum").ok_or_else(failure)?,
-                number("maximum").ok_or_else(failure)?,
+                number("min").ok_or_else(failure)?,
+                number("max").ok_or_else(failure)?,
             );
             if minimum > maximum {
                 return Err(failure());
@@ -403,4 +403,82 @@ fn scalar_condition(
         }
         _ => None,
     }
+}
+
+pub(super) fn validate(
+    request: &crate::kani::generate::outcome::KaniObligationRequest<'_>,
+    operation: &LoweredOperation,
+    node_id: &CheckedNodeId,
+) -> Result<(), crate::kani::generate::outcome::UnsupportedObligation> {
+    use crate::kani::generate::{outcome::UnsupportedObligation, spec::CollectionElement};
+    let failure = |reason| UnsupportedObligation::CollectionClaimNotRendered {
+        node_id: node_id.clone(),
+        reason,
+    };
+    let mut bytes = 0u64;
+    for field in &operation.spec.identity.fields {
+        let storage = match &field.bounds {
+            SymbolicBounds::Sequence {
+                maximum_length,
+                element,
+                ..
+            } => {
+                let maximum = u64::try_from(*maximum_length).map_err(|_| {
+                    failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness)
+                })?;
+                let required = maximum.checked_add(1).ok_or_else(|| {
+                    failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness)
+                })?;
+                if required > u64::from(request.unwind) {
+                    return Err(failure(
+                        CollectionUnsupportedReason::UnwindBelowCollectionBound {
+                            required,
+                            supplied: request.unwind,
+                        },
+                    ));
+                }
+                if field.collection_kind == Some(CollectionKindIdentity::OrderedSet) {
+                    let element = match element.as_ref() {
+                        SymbolicBounds::Boolean => CollectionElement::Boolean,
+                        SymbolicBounds::Integer { minimum, maximum } => {
+                            CollectionElement::Integer {
+                                minimum: *minimum,
+                                maximum: *maximum,
+                            }
+                        }
+                        _ => {
+                            return Err(failure(
+                                CollectionUnsupportedReason::UnsupportedObjectState,
+                            ))
+                        }
+                    };
+                    if let Some(capacity) = super::unique_capacity_exceeded(element, maximum) {
+                        return Err(failure(
+                            CollectionUnsupportedReason::UniqueElementCapacityExceeded {
+                                capacity,
+                                declared_maximum: maximum,
+                            },
+                        ));
+                    }
+                }
+                maximum
+                    .checked_mul(3 * (std::mem::size_of::<quire_exact::Value>() as u64 + 16))
+                    .and_then(|value| value.checked_add(64))
+            }
+            _ => Some(3 * (std::mem::size_of::<quire_exact::Value>() as u64 + 16)),
+        }
+        .ok_or_else(|| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
+        bytes = bytes
+            .checked_add(storage)
+            .ok_or_else(|| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
+    }
+    if bytes > request.ceilings.memory_bytes.get() {
+        return Err(failure(
+            CollectionUnsupportedReason::SymbolicDomainExceedsMemoryCeiling {
+                minimum_required_bytes: bytes,
+                ceiling_bytes: request.ceilings.memory_bytes.get(),
+            },
+        ));
+    }
+    Ok(())
 }

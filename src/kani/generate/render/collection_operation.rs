@@ -123,7 +123,7 @@ fn draw_field(source: &mut String, field: &CollectionObjectFieldIdentity) -> Opt
                     writeln!(source, "for prior in 0..index {{ kani::assume(item != {name}_items[prior as usize]); }}").ok()?;
                 }
             }
-            writeln!(source, "{name}_occurrences.push({conversion});\n}}\nlet {name} = match quire_exact::collection::build_typed_prestate(&type_{name}(), {name}_occurrences, &mut meter(), Some(&mut admit_{name})) {{\nOk(quire_exact::Outcome::Completed(value)) => value, _ => panic!(\"the complete admitted prestate must construct\"),\n}};").ok()?;
+            writeln!(source, "{name}_occurrences.push({conversion});\n}}\nlet {name} = match quire_exact::build_typed_prestate(&type_{name}(), {name}_occurrences, &mut meter(), Some(&mut admit_{name})) {{\nOk(quire_exact::Outcome::Completed(value)) => value, _ => panic!(\"the complete admitted prestate must construct\"),\n}};").ok()?;
         }
         bounds => {
             let value = draw_scalar(source, &format!("{name}_input"), bounds)?;
@@ -254,7 +254,7 @@ fn emit(
         for field in &operation.identity.fields {
             match &field.bounds {
                 SymbolicBounds::Sequence { .. } => {
-                    writeln!(source, "assert!(matches!(quire_exact::collection::inspect_typed_poststate(&type_{}(), &post.{}, &mut meter(), Some(&mut admit_{})), Ok(quire_exact::Outcome::Completed(_))), \"every produced collection retains its admitted type and domain\");", field.slot, field.slot, field.slot).ok()?;
+                    writeln!(source, "assert!(matches!(quire_exact::inspect_typed_poststate(&type_{}(), &post.{}, &mut meter(), Some(&mut admit_{})), Ok(quire_exact::Outcome::Completed(_))), \"every produced collection retains its admitted type and domain\");", field.slot, field.slot, field.slot).ok()?;
                 }
                 bounds => {
                     writeln!(source, "assert!({}, \"every produced field retains its admitted type and domain\");", domain_check(&format!("&post.{}", field.slot), bounds)?).ok()?;

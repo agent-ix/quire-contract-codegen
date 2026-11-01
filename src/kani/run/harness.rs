@@ -166,7 +166,28 @@ impl<'a> KaniExecutableHarness<'a> {
             }
             Self::Collection(harness) => collection_arguments(&harness.identity),
             Self::V2Clause(harness) => {
-                if let Some(marker) = &harness.identity.collection_precondition {
+                if let Some(context) = &harness.identity.collection_operation {
+                    let mut arguments = context
+                        .fields
+                        .iter()
+                        .map(|field| SymbolicArgumentBounds {
+                            identifier: format!("self.{}", field.field_name),
+                            bounds: field.bounds.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    arguments.extend(context.parameters.iter().map(|parameter| {
+                        SymbolicArgumentBounds {
+                            identifier: parameter.name.clone(),
+                            bounds: match parameter.domain {
+                                CollectionElementIdentity::Boolean => SymbolicBounds::Boolean,
+                                CollectionElementIdentity::Integer { minimum, maximum } => {
+                                    SymbolicBounds::Integer { minimum, maximum }
+                                }
+                            },
+                        }
+                    }));
+                    arguments
+                } else if let Some(marker) = &harness.identity.collection_precondition {
                     collection_arguments(&marker.collection)
                 } else {
                     harness

@@ -522,6 +522,7 @@ pub(super) fn render_collection_operation(
         .operation
         .as_ref()
         .ok_or(UnsupportedObligation::RenderFailed)?;
+    operation::validate(request, operation, &collection.function_id)?;
     let context = &operation.spec.identity;
     if operation.spec.postcondition {
         for sibling in &context.preconditions {
