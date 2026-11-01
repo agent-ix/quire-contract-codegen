@@ -148,6 +148,8 @@ fn scalar_package_with_occurrences(
         1004,
         1011,
         UNBOUNDED,
+        package::WRONG_BOUND_FORM,
+        package::FUNCTION,
         MODEL,
         STATE,
         V_BOOLEAN,

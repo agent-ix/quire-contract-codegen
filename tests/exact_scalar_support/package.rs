@@ -4306,12 +4306,19 @@ pub fn conversion_operand_package() -> PackageBuilder {
 /// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
 /// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
 pub fn derivation_package() -> PackageBuilder {
+    derivation_package_with(&[])
+}
+
+/// [`derivation_package`] that also retains the corpus expressions `extra_codes`, for tests that
+/// build further nodes over them.
+pub fn derivation_package_with(extra_codes: &[u32]) -> PackageBuilder {
     // The corpus nodes the derivation tests select, below the reader's package byte ceiling.
     let mut codes = vec![
         T_BOOLEAN, T_INTEGER, T_RATIONAL, FUNCTION, UNBOUNDED, AMBIGUOUS, 1001, 1011, 1012, 1013,
         1032, 1033, 1041, 1044, 1045, 1053,
     ];
     codes.extend(QUANTITY_CONVERSIONS);
+    codes.extend_from_slice(extra_codes);
     let mut subjects = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
     // The Boolean and quantity value nodes are keyed, not coded.
     subjects.extend([id(&key(V_BOOLEAN)), id(&key(V_QUANTITY))]);
