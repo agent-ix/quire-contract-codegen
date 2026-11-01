@@ -1710,7 +1710,7 @@ pub(crate) mod batch_tests {
         core::{artifact::Artifact, test_support::discover_scratch},
         kani::{
             abi::adapter_options,
-            identity::{StateFrameHarness, StateFrameProperty},
+            identity::{KaniV2ClauseObligationHarness, StateFrameHarness, StateFrameProperty},
             run::launch::CAPTURE_LIMIT,
             test_support::{
                 batch_report, named_state_frame_harness, write_launcher, BatchEntry, COVER_OK,
@@ -2317,12 +2317,117 @@ exit 0
         }
     }
 
+    /// A minimal collection-precondition harness, built by hand for the runner: a module whose
+    /// one proof function holds the totality assertion on a known line, and the identity naming
+    /// that line. The runner reads the identity and the source, never how they were generated.
+    #[cfg(target_os = "linux")]
+    fn runner_precondition_fixture(quantifier: &str) -> KaniV2ClauseObligationHarness {
+        use crate::{
+            core::{
+                artifact::Artifact,
+                identity::{HarnessSymbol, ModuleSymbol},
+            },
+            kani::identity::{
+                CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
+                CollectionPreconditionIdentity, CollectionPredicateIdentity, ObligationKind,
+                ProofDependencySnapshot, ScalarIntegerRepresentation, V2ClauseObligationIdentity,
+            },
+        };
+        let module = format!("collection_{}", quantifier.rsplit('.').next().unwrap());
+        let harness = "check";
+        let id = |label: &str| -> quire_contract_model::CheckedNodeId {
+            serde_json::from_value(serde_json::json!({
+                "package": "runner-fixture", "path": [label], "ordinal": 0,
+            }))
+            .expect("a node id")
+        };
+        let package: quire_contract_model::ContractSourceV1 =
+            serde_json::from_value(serde_json::json!({
+                "name": "runner-fixture",
+                "lock": {
+                    "sources": [],
+                    "edition": {"role": "edition", "definition": {"authority": "test", "identity": "edition"}},
+                    "profile_selections": [], "definition_selections": [],
+                    "required_features": [], "dependency_selections": []
+                }
+            }))
+            .expect("fixture package source");
+        let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(30),
+        );
+        let options = adapter_options(
+            &format!("{module}::{harness}"),
+            8,
+            KaniSolver::Cadical,
+            false,
+        );
+        let assertion = crate::kani::identity::collection_precondition_totality_assertion();
+        let source = format!(
+            "mod {module} {{\n    #[kani::proof]\n    pub fn {harness}() {{\n        {assertion}\n    }}\n}}\n"
+        );
+        let module_symbol = ModuleSymbol::try_from(module.as_str()).unwrap();
+        let harness_symbol = HarnessSymbol::try_from(harness).unwrap();
+        let collection = CollectionObligationIdentity {
+            ceilings,
+            package: package.clone(),
+            subject_path: "crate::subject".to_owned(),
+            function_id: id("function"),
+            quantifier_id: id("quantifier"),
+            projection_id: id("projection"),
+            declaration_id: id("declaration"),
+            field_name: "items".to_owned(),
+            collection_kind: CollectionKindIdentity::Sequence,
+            minimum_length: 0,
+            maximum_length: 3,
+            element: CollectionElementIdentity::Integer {
+                minimum: 0,
+                maximum: 9,
+            },
+            element_type_id: id("element-type"),
+            quantifier_operation: quantifier.to_owned(),
+            predicate_id: id("predicate"),
+            predicate: CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 0 },
+            solver: KaniSolver::Cadical,
+            unwind: 8,
+            options: options.clone(),
+            module_symbol: module_symbol.clone(),
+            harness_symbol: harness_symbol.clone(),
+        };
+        let snapshot = ProofDependencySnapshot::default();
+        let identity = V2ClauseObligationIdentity {
+            dependencies: snapshot.dependencies().to_vec(),
+            readiness: snapshot.readiness(),
+            proof_execution_state: snapshot.proof_execution_state(),
+            integer_representation: ScalarIntegerRepresentation::General,
+            native_integer_selection: None,
+            ceilings,
+            package,
+            clause: id("clause"),
+            collection_precondition: Some(CollectionPreconditionIdentity {
+                collection,
+                totality_assertion_line: 4,
+            }),
+            kind: ObligationKind::Precondition,
+            oracle_symbol: "oracle".to_owned(),
+            subject_path: "crate::subject".to_owned(),
+            arguments: Vec::new(),
+            module_symbol,
+            harness_symbol,
+            solver: KaniSolver::Cadical,
+            unwind: 8,
+            options,
+        };
+        KaniV2ClauseObligationHarness::generated(
+            identity,
+            Artifact::new(format!("src/generated/{module}.rs"), source),
+            Artifact::new(format!("kani-obligations/{module}.json"), "{}"),
+        )
+    }
+
     #[cfg(target_os = "linux")]
     #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_controls_single_readonly_and_batch_evidence() {
-        use crate::kani::generate::collection::tests::runner_precondition_fixture;
-        use crate::kani::identity::KaniV2ClauseObligationHarness;
         use serde_json::json;
 
         let harness = runner_precondition_fixture("quire.op.collection.forall");

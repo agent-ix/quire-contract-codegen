@@ -1514,21 +1514,6 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn runner_precondition_fixture(quantifier: &str) -> KaniV2ClauseObligationHarness {
-        let request = KaniObligationRequest {
-            ceilings: crate::kani::identity::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(1 << 30).expect("nonzero"),
-                wall_clock: std::time::Duration::from_secs(30),
-            },
-            items: &[],
-            subject_path: "crate::subject",
-            unwind: 8,
-        };
-        let mut claim = base_claim();
-        claim.field.quantifier_operation = quantifier.to_owned();
-        render_collection_precondition(&request, &claim).expect("runner fixture")
-    }
-
     fn rendered_module(
         claim: &LoweredCollectionClaim,
         subject_path: &str,
