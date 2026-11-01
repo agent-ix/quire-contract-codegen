@@ -270,10 +270,11 @@ pub(super) fn assert_authentic_recursive_item_generation() {
             actual.node().to_string(),
             node_key(&item.left.source_type).to_string()
         );
-        assert_ne!(
+        // Structural identity (IR-1079): the kernel declaration key is the wire node identity.
+        assert_eq!(
             actual.key(),
             actual.node(),
-            "wire identity is not the kernel declaration key"
+            "wire identity is the kernel declaration key"
         );
         assert_eq!(item.left.source_type, item.right.source_type);
         let output = generate_items(

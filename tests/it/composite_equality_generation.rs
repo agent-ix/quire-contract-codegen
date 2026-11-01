@@ -434,7 +434,6 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     )
     .expect("QSpec fixture JSON");
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let node_ref = |path: &str| json!({"package": "cg-fixture", "path": [path], "ordinal": 0});
     let case_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
         nodes
             .iter()
@@ -450,7 +449,11 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         .clone();
     let integer_literals: Vec<serde_json::Value> = nodes
         .iter()
-        .filter(|node| node["node_tag"] == "value" && node["semantic_form"] == "literal")
+        .filter(|node| {
+            node["node_tag"] == "value"
+                && node["semantic_form"] == "literal"
+                && node["semantic_type"] == integer_type
+        })
         .take(2)
         .map(|node| node["node_id"].clone())
         .collect();
@@ -473,7 +476,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
             json!({
                 "term":"application", "operator":"binary",
                 "operation":{"identity":"quire.op.integer.eq","laws":[],"mode":null,"member":null,"leaves":[]},
-                "result_type":node_ref(&key(BOOLEAN)),
+                "result_type":reference(BOOLEAN)["target"].clone(),
                 "arguments":integer_literals.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>(),
             }),
         );
@@ -1793,7 +1796,8 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             "kernel identities retain the corresponding wire declaration order"
         );
         for actual in declarations {
-            assert_ne!(actual.node(), actual.key());
+            // Structural identity (IR-1079): the kernel declaration key is the wire node identity.
+            assert_eq!(actual.node(), actual.key());
         }
         assert_eq!(claim.node_id, item.node_id);
         assert_eq!(claim.schedule, RecordedSchedule::Plan);
@@ -2375,8 +2379,8 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
         {
             for required in [
                 "prepared.binding !=",
-                "actual.domain().as_str() !=",
-                "actual.hex() !=",
+                "actual.as_str() !=",
+                "EXPECTED_PACKAGE_BYTES !=",
                 "GeneratedDescriptorReconstructionFailed",
                 "environment.check_type(left_comparison)",
                 "environment.check_type(right_comparison)",
