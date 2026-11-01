@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-CONDITIONAL. Resolve the findings before merge.
+PASS — original findings statically fixed at 610c3424. Runtime/clippy and final aggregate qualification remain pending.
 
 ## Findings
 
@@ -79,3 +79,12 @@ The new caller resolves parameter/result IDs with PackageItems::represented_node
 ### FND-002 detail
 
 RecordedOrigin says claim records use request order, and GeneratedExactFunctionClaim::function_origin says canonical body-root order among surviving declarations. Both now use the original checked source function index (including omitted/refused predecessors), as the new regression proves. Update those comments and the stale Stage 2 package-admission comment at 3072.
+
+## Dispositions
+
+Round 1: static verification of 610c342485023504fd513efb9d239a168b327e3e. No Cargo commands were run by the reviewer. Runtime/clippy fix evidence remains queued and is not claimed verified.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Lookup and diagnostic identities are separated for parameter, result and argument paths; static inspection at 610c3424. Runtime regression is queued, not claimed passed. |
+| FND-002 | fixed | Both public comments now match source-order behavior; stale Stage 2 admission comment corrected. |

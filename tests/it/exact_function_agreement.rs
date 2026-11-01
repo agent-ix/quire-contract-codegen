@@ -1470,7 +1470,7 @@ fn omitted_earlier_function_does_not_renumber_the_checked_origin() {
     );
 }
 
-#[trace("TC-031", "FR-021-AC-10")]
+#[trace("TC-031", "FR-021-AC-1")]
 #[test]
 fn operand_type_refusal_retains_the_original_v2_frame() {
     let package = admitted_source();
@@ -1507,6 +1507,17 @@ fn operand_type_refusal_retains_the_original_v2_frame() {
         "regression requires distinct owning graph frames"
     );
     let generated = generated_for_source_items(&package, &[declaration], &[call]);
+    assert_eq!(generated.claim_map.items.len(), 1);
+    assert!(generated.location_map.is_empty());
+    let source = generated
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("the shared crate scaffold is present");
+    assert!(
+        !source.contents.contains("pub fn oracle_"),
+        "a refused item emits no concrete oracle"
+    );
     assert!(matches!(&generated.claim_map.items[0].result,
         ClaimDisposition::Refused { refusal: quire_contract_codegen::ExactFunctionRefusal::UnsupportedOperandType { type_node_id } }
         if type_node_id == &bounded));

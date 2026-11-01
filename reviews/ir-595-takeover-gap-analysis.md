@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-FAIL. Resolve the findings before merge.
+CONDITIONAL — original trace gap fixed; new FND-002 remains open.
 
 ## Findings
 
@@ -74,3 +74,20 @@ and schedule emission use charged iterative walks and no fixe
 ### FND-001 detail
 
 quire matrix --scope . reports FR-021-AC-37 as (none)/untagged. The owner_path negative tests use fully qualified #[ix_trace_rs::trace(...)] attributes, which this installed scanner does not bind; the agreement support include file is likewise not evidence in the matrix. Use the repository-recognized trace import/attribute and verify the computed matrix binds the real mismatch and post-lookup tests.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | New frame-refusal regression claims AC-10 without exercising a reference-type blocker. | tests/it/exact_function_agreement.rs:1473-1516 |
+
+operand_type_refusal_retains_the_original_v2_frame supplies a bounded_domain parameter and asserts UnsupportedOperandType, but is tagged FR-021-AC-10, whose obligation is a reference composite blocker. This creates incorrect AC-10 matrix evidence. Bind it to a criterion it actually verifies (for example FR-039-AC-2 with explicit original requested-identity/backend-refusal assertions), or trace it only to its owning requirement until a precise criterion exists; retain the regression.
+
+## Dispositions
+
+Round 1: static verification of 610c342485023504fd513efb9d239a168b327e3e. No Cargo commands were run by the reviewer. Runtime/clippy fix evidence remains queued and is not claimed verified.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Owner-path uses imported bare trace attributes. The refreshed computed matrix lists real mismatch/post-lookup tests and compiled support evidence for AC-37. |
+| FND-002 | still-open | operand_type_refusal_retains_the_original_v2_frame supplies a bounded_domain parameter and asserts UnsupportedOperandType, but is tagged FR-021-AC-10, whose obligation is a reference composite blocker. This creates incorrect AC-10 matrix evidence. Bind it to a criterion it actually verifies (for example FR-039-AC-2 with explicit original requested-identity/backend-refusal assertions), or trace it only to its owning requirement until a precise criterion exists; retain the regression. |

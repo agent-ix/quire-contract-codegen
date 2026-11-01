@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-CONDITIONAL. Resolve the findings before merge.
+PASS — original findings statically fixed at 610c3424. Runtime/clippy and final aggregate qualification remain pending.
 
 ## Findings
 
@@ -79,3 +79,12 @@ AC-9 now ends "The agreement vectors remain" and AC-17 ends "The runtime check r
 ### FND-002 detail
 
 The changed Description, AD-004 and AC-35/36/37 describe the concrete owner path, but AC-1/2/8/14/32 still mark that same delivery Planned through IR-595; AC-19 says no concrete FR-485 oracle exists yet. Reconcile delivery/status wording with the implemented scope; preserve genuine pending dangling-reference and IR-709 obligations. AC-3 also retains the obsolete domain/digest sorting vocabulary for structural schedule identities.
+
+## Dispositions
+
+Round 1: static verification of 610c342485023504fd513efb9d239a168b327e3e. No Cargo commands were run by the reviewer. Runtime/clippy fix evidence remains queued and is not claimed verified.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Incomplete tails on AC-5/9/17 were removed; their substantive obligations remain. |
+| FND-002 | fixed | Delivery wording corrected at AC-1/2/8/14/19/32 and structural sorting wording at AC-3; genuine reference and IR-709 future obligations remain planned. |
