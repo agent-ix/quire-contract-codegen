@@ -3092,7 +3092,9 @@ pub fn generate_exact_function_oracles(
     let mut pending = Vec::new();
     for (key, (position, item)) in by_key {
         let direct_tag = original_graph.node(&item.call_node_id).and_then(|node| {
-            direct_unsupported_form(node, original_graph.term(&item.call_node_id))
+            (node.node_tag.as_ref() == "expression")
+                .then(|| direct_unsupported_form(node, original_graph.term(&item.call_node_id)))
+                .flatten()
         });
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let duplicate_node = names.duplicate_node_refusal(&item.function);

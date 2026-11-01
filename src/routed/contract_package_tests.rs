@@ -2833,13 +2833,16 @@ mod tests {
             let admitted_conversion = items
                 .represented_node(conversion)
                 .expect("source-bound conversion key");
-            let target = package
-                .wire()
-                .semantic_graph
+            assert!(
+                package.node(admitted_conversion).is_some(),
+                "conversion is represented in its V1 frame"
+            );
+            let target = source
+                .graph()
                 .nodes
                 .iter()
-                .find(|node| &node.node_id == admitted_conversion)
-                .expect("admitted result conversion")
+                .find(|node| &node.node_id == conversion)
+                .expect("original result conversion")
                 .semantic_type
                 .clone();
             assert_eq!(value.checked_bounds.first(), Some(&target));

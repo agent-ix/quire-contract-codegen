@@ -1113,7 +1113,7 @@ fn refuse_unknown_node_kind<Body>(
 }
 
 fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outcome {
-    let graph = |id: &CheckedNodeId| lookup.node(id);
+    let graph = |id: &CheckedNodeId| lookup.source_node(id);
     match &claim.result {
         ClaimDisposition::Generated(generated) => {
             let mut derived = Vec::new();

@@ -223,6 +223,7 @@ pub(crate) struct PackageItems<'a> {
     source_structural_indices: BTreeMap<CheckedNodeId, usize>,
     original_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
     represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
+    original_represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
 }
 
 impl<'a> PackageItems<'a> {
@@ -310,7 +311,7 @@ impl<'a> PackageItems<'a> {
         .ok();
         let source_frame =
             qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id)).ok();
-        let represented_nodes = source
+        let represented_nodes: BTreeMap<_, _> = source
             .graph()
             .nodes
             .iter()
@@ -324,6 +325,10 @@ impl<'a> PackageItems<'a> {
                 ))
             })
             .collect();
+        let original_represented_nodes = represented_nodes
+            .iter()
+            .map(|(source, output)| (*output, *source))
+            .collect();
         Ok(Self {
             source,
             package,
@@ -333,6 +338,7 @@ impl<'a> PackageItems<'a> {
             source_key_indices,
             source_structural_indices,
             represented_nodes,
+            original_represented_nodes,
             original_nodes: source
                 .graph()
                 .nodes
@@ -356,6 +362,22 @@ impl<'a> PackageItems<'a> {
     /// Resolve a V2 request into the represented output-graph frame.
     pub(crate) fn represented_node(&self, request: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
         self.represented_nodes.get(request).copied()
+    }
+
+    /// Translate a represented graph identity into its authenticated V2 frame.
+    pub(crate) fn original_represented_node(
+        &self,
+        node: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.original_represented_nodes.get(node).copied()
+    }
+
+    /// Translate a resolved structural identity into its authenticated V2 frame.
+    pub(crate) fn original_structural_node(
+        &self,
+        node: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.original_nodes.get(node).copied()
     }
 
     /// Translate a retained accounting identity through its own source table.

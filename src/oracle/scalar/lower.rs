@@ -2168,6 +2168,21 @@ pub(super) fn plan_contract_scalar_oracles(
     let items = PackageItems::new(source, package, requested)
         .map_err(super::ContractScalarError::Request)?;
     let graph = Graph::new(package);
+    let source_id =
+        |node: &CheckedNodeId| {
+            items.original_represented_node(node).cloned().ok_or(
+                super::ContractScalarError::Oracle(OracleGenerationError::InvalidPlanState),
+            )
+        };
+    let structural_source_id = |node: &CheckedNodeId| {
+        items
+            .original_structural_node(node)
+            .cloned()
+            .ok_or(super::ContractScalarError::Oracle(
+                OracleGenerationError::InvalidPlanState,
+            ))
+    };
+
     let mut claims = Vec::with_capacity(positions.len());
     let mut pending = Vec::new();
     let mut counts = BTreeMap::new();
@@ -2259,8 +2274,8 @@ pub(super) fn plan_contract_scalar_oracles(
                                 .nodes
                                 .iter()
                                 .filter(|entry| entry.node.node_id != closure.root.node_id)
-                                .map(|entry| entry.node.node_id.clone())
-                                .collect();
+                                .map(|entry| source_id(&entry.node.node_id))
+                                .collect::<Result<Vec<_>, _>>()?;
                             pending.push((
                                 claims.len(),
                                 operation.clone(),
@@ -2278,20 +2293,34 @@ pub(super) fn plan_contract_scalar_oracles(
                                     node_id: node_id.clone(),
                                     package_id: package.wire().package.source.clone(),
                                     semantic_form: closure.root.semantic_form.to_string(),
-                                    semantic_type: closure.root.semantic_type.clone(),
+                                    semantic_type: source_id(&closure.root.semantic_type)?,
                                     quantity_conversion_target: conversion_target(
                                         &graph,
                                         closure.root,
-                                    ),
+                                    )
+                                    .as_ref()
+                                    .map(source_id)
+                                    .transpose()?,
                                     source_map: source
                                         .source_map()
                                         .iter()
                                         .filter(|entry| entry.node_id == *node_id)
                                         .cloned()
                                         .collect(),
-                                    claims: closure.claims,
-                                    bounds: closure.bounds,
-                                    checked_bounds,
+                                    claims: closure
+                                        .claims
+                                        .iter()
+                                        .map(structural_source_id)
+                                        .collect::<Result<_, _>>()?,
+                                    bounds: closure
+                                        .bounds
+                                        .iter()
+                                        .map(structural_source_id)
+                                        .collect::<Result<_, _>>()?,
+                                    checked_bounds: checked_bounds
+                                        .iter()
+                                        .map(source_id)
+                                        .collect::<Result<_, _>>()?,
                                     dependencies,
                                     oracle_source: String::new(),
                                     boolean_right_may_stop: matches!(

@@ -816,10 +816,11 @@ fn tc_024_bound_members_are_looked_up_by_name_in_any_order() {
 #[trace("FR-014-AC-23", "FR-014-AC-33", "TC-024")]
 #[test]
 fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
-    for (form, base, narrowed) in [
-        ("text_bounds", '1', false),
-        ("text_bounds", '1', true),
-        ("integer_range", '4', true),
+    for (form, base, narrowed, wrong_operand) in [
+        ("text_bounds", '1', false, false),
+        ("text_bounds", '1', true, false),
+        ("integer_range", '4', true, false),
+        ("text_bounds", '1', false, true),
     ] {
         let mut nodes = bounded_parameter_nodes();
         nodes.push(v2_node(
@@ -829,22 +830,31 @@ fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
             base,
             range_body(vec![]),
         ));
+        if wrong_operand {
+            nodes
+                .iter_mut()
+                .find(|node| node.node_id == node_id('3'))
+                .expect("operand")
+                .metadata
+                .semantic_type = node_id('7');
+        }
+        let result = if wrong_operand {
+            '2'
+        } else if narrowed {
+            '1'
+        } else {
+            '7'
+        };
         let body = CheckedTerm::Application {
             operator: ApplicationOperator::Binary,
             operation: serde_json::from_value(
                 serde_json::json!({"identity":"quire.op.integer.add"}),
             )
             .expect("typed operation"),
-            result_type: node_id(if narrowed { '1' } else { '7' }),
+            result_type: node_id(result),
             arguments: vec![reference_to('3'), reference_to('3')],
         };
-        let root = v2_node(
-            '8',
-            "expression",
-            "binary",
-            if narrowed { '1' } else { '7' },
-            body,
-        );
+        let root = v2_node('8', "expression", "binary", result, body);
         if narrowed {
             nodes.push(v2_node(
                 '9',
@@ -870,7 +880,11 @@ fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
             source_map: vec![],
             semantic_type: root.semantic_type.clone(),
             dependencies: vec![],
-            bounds: vec![node_id('7')],
+            bounds: if wrong_operand {
+                vec![node_id('2'), node_id('7')]
+            } else {
+                vec![node_id('7')]
+            },
             claims: vec![],
         };
         let expected = ExactScalarRefusal::MissingBound {
