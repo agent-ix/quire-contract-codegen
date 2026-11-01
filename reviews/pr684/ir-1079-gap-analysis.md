@@ -34,3 +34,9 @@ Compared the changed FR-039 claim-identity implementation and tests with the com
 Plan completion: not assessed
 
 `quire matrix --scope . --format json` reports FR-039-AC-1, AC-2, AC-9, and AC-10 tagged, but AC-11 untagged with zero binders. The new `genuine_qsl_function_claim_uses_admitted_package_identity_and_reached_keys` test is tagged AC-7 and AC-8 and asserts function claim identity without claiming AC-11. The inherited AC-4 untagged state is outside this PR's changed contract; its QSL dependency is recorded in the FR-039 spec. The three focused module failures are detailed in SR-2026103043 and prevent credit for their affected assertions.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At fecd5d6482ac19fba212dc701eb9751c4757ffb0, the computed matrix tags AC-11 to four tests covering scalar, function and equality claim/map identities; the focused module passes. |

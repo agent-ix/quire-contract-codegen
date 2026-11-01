@@ -33,3 +33,9 @@ Reviewed PR 684 at 0eac8b6c60e5dbd33c2b74ebfefcdaffda8da620 against freshly fetc
 ## Evidence
 
 `cargo test --locked --lib routed::contract_package_tests::tests` reported 26 passed and 3 failed: `admitted_ordering_variants_change_routed_oracle_bytes_and_keep_refused_sibling`, `duplicate_expression_uses_each_selected_conversion_context`, and `scalar_selected_occurrences_remain_package_local`. The first compares an admitted accounting ID with `requested[0]`; the second compares an admitted checked-bound ID with a V2 bound (actual `Index(6)` versus expected `Index(13)`); the third passes `first_expression` from the V2 source to `package.source_occurrences`, gets `None`, and panics. These assertions need source-key or admitted-frame resolution before comparison. Production's `PackageItems` already uses `ContractSourceKeyV1::from_v2_request` and `source_key_at`, and the genuine function claim test passes across the two frames.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At fecd5d6482ac19fba212dc701eb9751c4757ffb0, all three assertions resolve source keys or admitted nodes before V1 queries; the focused 29-test module passes. |
