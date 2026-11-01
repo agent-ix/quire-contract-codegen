@@ -15,7 +15,7 @@ Ticket: IR-1091 (PARTIAL). Rust-review disposition of SR-654001 FND-004 and FND-
 
 ## Verdict
 
-CONDITIONAL. FND-004 and FND-005 are fixed and the changed Rust is otherwise clean. One new low evidence finding: the final clippy log is empty, so it shows nothing about the head.
+PASS at rebased PR head `e5e78b82b5b55ca86df549df7c3378c7838bc6e4`. FND-004 and FND-005 were fixed in the historical pass; FND-008's empty-log evidence gap is fixed by the current nonempty passing Clippy log. The original finding and earlier disposition rows remain below.
 
 ## Dispositions
 
@@ -23,6 +23,7 @@ CONDITIONAL. FND-004 and FND-005 are fixed and the changed Rust is otherwise cle
 | --- | --- | --- |
 | FND-004 | fixed | tests/it/kani_obligations_symbolic_domains.rs:2084-2095 now matches `ClauseRefusal::Coded { code: "invalid_runtime_input", cause: "duplicate-member", .. }`. Both fields are `&'static str` at the pin (qsl-replay/src/clause_evaluation.rs:113-115). |
 | FND-005 | fixed | `native_collection_precondition` uses `DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest)` at :1929 and `.hex()` at :1934, matching :646 and :683. The hand-rolled `{byte:02x}` loop is gone from the helper. |
+| FND-008 | fixed | On current PR head `e5e78b82b5b55ca86df549df7c3378c7838bc6e4`, `/tmp/ir1091-pr654-clippy.log` is nonempty, shows `Checking quire-contract-codegen` in the PR worktree, ends with `Finished` and `exit=0`; the empty-log defect is resolved. The code lead's final aggregate lint gate remains pending. |
 
 ## Findings
 
@@ -39,6 +40,8 @@ FND-008 detail: cargo clippy normally prints a `Finished` line, so an empty log 
 **Rust style.** `TemporaryDirectory` scopes the scratch build. The `?`-free test code uses contextual `expect` messages. The `usize::try_from` at :2042 is checked. No new `unsafe`, no `as` cast in the test, and the helper-extraction into `assert_collection_precondition_equivalence` removes the duplication that two fixtures would otherwise need. The test stays in the merged `it` binary as the repository's CLAUDE.md requires. `#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]` is present at :2055.
 
 **Log evidence.** `review-fix-test-final.log` passes the named test, `1 passed; 0 failed`. No log records the head SHA.
+
+**Current-head disposition.** Round 1 on rebased PR head `e5e78b82b5b55ca86df549df7c3378c7838bc6e4` inspected the new nonempty test-target Clippy log and the unchanged `FND-008` finding. The original verdict and earlier rows above record the historical pass; this appended row closes the one finding that remained open. No new defect was found in the current diff.
 
 ## Examined scope and bindings
 
