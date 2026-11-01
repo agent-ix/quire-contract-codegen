@@ -3880,7 +3880,7 @@ mod tests {
         assert!(!header.replace("test", "").contains("test"));
     }
 
-    #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
+    #[trace("FR-018-AC-28", "FR-018-AC-30", "FR-018-AC-33", "TC-029")]
     #[test]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
