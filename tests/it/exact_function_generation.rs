@@ -2668,7 +2668,8 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
         !invokes_panicking_macro(&lib),
         "main corpus emits a panicking macro"
     );
-    assert!(lib.contains("sv::declaration::TypeEnvironment::default()"));
+    assert!(lib.contains("TypeEnvironment::bounded_with_cancel("));
+    assert!(!lib.contains("TypeEnvironment::default()"));
 }
 
 /// In the emitted scalar and equality bodies, the match over the kernel
@@ -2810,7 +2811,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
 
     let lib = contents(&oracles, "src/lib.rs");
     assert!(lib.contains("exact::evaluate_integer_arithmetic("));
-    assert!(lib.contains("checked.evaluate(&environment, left, right, meter)"));
+    assert!(lib.contains("checked.evaluate(environment, left, right, meter)"));
     assert!(lib.contains("apply_checked_function("));
     assert!(!lib.contains("Outcome::Completed(Value::Integer(Integer::from("));
 }
@@ -2863,13 +2864,43 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
 fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
-    // The header comment documents (in prose) that `Evaluation.location`/
-    // `.losses` are never read; check for an actual field *read* --
-    // `evaluation.location`/`evaluation.losses`, lowercase, the shape a real
-    // access would take -- rather than banning the substring outright,
-    // which the header's own documentation legitimately contains.
-    assert!(!lib.contains("evaluation.location"));
-    assert!(!lib.contains("evaluation.losses"));
+    // Static boundary annotations are writes, not reads of invocation data.
+    // Inspect the syntax so a renamed evaluation binding cannot hide a read.
+    struct InvocationFieldReads(Vec<String>);
+    impl<'ast> syn::visit::Visit<'ast> for InvocationFieldReads {
+        fn visit_expr_assign(&mut self, expression: &'ast syn::ExprAssign) {
+            if let syn::Expr::Field(field) = &*expression.left {
+                if matches!(&field.member, syn::Member::Named(name) if name == "location" || name == "losses")
+                {
+                    syn::visit::Visit::visit_expr(self, &field.base);
+                    syn::visit::Visit::visit_expr(self, &expression.right);
+                    return;
+                }
+            }
+            syn::visit::visit_expr_assign(self, expression);
+        }
+        fn visit_expr_field(&mut self, expression: &'ast syn::ExprField) {
+            let static_self =
+                matches!(&*expression.base, syn::Expr::Path(path) if path.path.is_ident("self"));
+            if !static_self {
+                if let syn::Member::Named(name) = &expression.member {
+                    if name == "location" || name == "losses" {
+                        self.0.push(name.to_string());
+                    }
+                }
+            }
+            syn::visit::visit_expr_field(self, expression);
+        }
+    }
+    let syntax = syn::parse_file(&lib).expect("actual emitted Rust");
+    let mut reads = InvocationFieldReads(Vec::new());
+    syn::visit::Visit::visit_file(&mut reads, &syntax);
+    assert!(reads.0.is_empty(), "invocation field reads: {:?}", reads.0);
+    assert_eq!(
+        lib.matches("evaluation.location =").count(),
+        2,
+        "only the two statically known result/declaration boundary annotations"
+    );
     assert!(
         lib.contains("Result<Result<eval::Evaluation, eval::CallFailure>, CheckedFunctionError>")
     );
