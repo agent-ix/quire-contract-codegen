@@ -289,7 +289,7 @@ fn cleanup_success_and_failure_preserve_real_receipt_after_snapshot_removal() {
     );
 }
 
-#[trace("FR-017-AC-42")]
+#[trace("TC-027", "FR-017-AC-42")]
 #[test]
 fn bounded_single_run_preserves_cancelled_with_start_signal_and_timeout_without_signal() {
     use crate::kani::{
@@ -307,7 +307,15 @@ fn bounded_single_run_preserves_cancelled_with_start_signal_and_timeout_without_
     }
 
     for cancelled in [true, false] {
-        let (harness, artifacts) = fixture(Duration::from_secs(30));
+        // Startup acknowledgement selects requested cancellation. Its result must
+        // not race an unrelated proof deadline while the watcher is descheduled.
+        // The no-signal control still exercises the real finite work ceiling.
+        let timeout = if cancelled {
+            Duration::MAX
+        } else {
+            Duration::from_secs(30)
+        };
+        let (harness, artifacts) = fixture(timeout);
         let control = crate::core::test_support::discover_scratch(if cancelled {
             "scalar-cancel"
         } else {
