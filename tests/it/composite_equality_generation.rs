@@ -20,7 +20,7 @@ use quire_contract_codegen::{
     COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
+    CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
     CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
