@@ -2449,14 +2449,16 @@ pub(super) fn plan_exact_scalar_oracles(
         });
     }
     Ok(ExactScalarPlan {
-        source: lowering
-            .package
-            .wire()
-            .ok_or(OracleGenerationError::ContractPackageUnavailable)?
-            .wire()
-            .package
-            .source
-            .clone(),
+        // The lowered package has no wire exactly when its canonical bytes exceed the byte
+        // limit; every record is then `Failed` and refused per item, so the plan still names the
+        // checked package it was requested from.
+        source: lowering.package.wire().map_or_else(
+            || quire_contract_model::ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
+            |lowered| lowered.wire().package.source.clone(),
+        ),
         claims,
         pending,
     })
