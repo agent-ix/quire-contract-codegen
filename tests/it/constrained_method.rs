@@ -187,11 +187,11 @@ fn qsl_owner_evaluates_the_complete_small_state_domain() {
         for flag in [false, true] {
             for aux in 0..=3 {
                 assert!(matches!(
-                    owner_evaluation(&f, "EvalSafety", n, flag, aux, provisions.evaluator_limits),
-                    qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(true))
+                    owner_evaluation(&f, "Safe", n, flag, aux, provisions.evaluator_limits),
+                    qsl_replay::ClauseEvaluation::Completed(true)
                 ));
                 assert!(
-                    matches!(owner_evaluation(&f,"EvalConstraint0",n,flag,aux,provisions.evaluator_limits),qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(value)) if value==(n<2))
+                    matches!(owner_evaluation(&f,"Limit0",n,flag,aux,provisions.evaluator_limits),qsl_replay::ClauseEvaluation::Completed(value) if value==(n<2))
                 );
             }
         }
@@ -216,7 +216,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
             "true",
             "self.flag",
             0,
-            1,
+            0,
             ConstrainedMethodStatus::ConstraintReached,
         ),
         (
@@ -224,7 +224,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
             "true",
             "true",
             0,
-            1,
+            0,
             ConstrainedMethodStatus::BoundedSuccess,
         ),
         (
@@ -232,7 +232,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
             "self.flag",
             "self.flag",
             0,
-            1,
+            0,
             ConstrainedMethodStatus::Falsified,
         ),
         (
@@ -240,7 +240,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
             "self.flag",
             "self.flag",
             1,
-            1,
+            0,
             ConstrainedMethodStatus::Falsified,
         ),
     ] {
@@ -261,9 +261,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
         for n in 0..=1 {
             for flag in [false, true] {
                 for aux in 0..=1 {
-                    for (function, expression) in
-                        [("EvalSafety", safety), ("EvalConstraint0", constraint)]
-                    {
+                    for (function, expression) in [("Safe", safety), ("Limit0", constraint)] {
                         let original = owner_evaluation(
                             &f,
                             function,
@@ -273,7 +271,7 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
                             provisions.evaluator_limits,
                         );
                         assert!(
-                            matches!(original, qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(value)) if value == (expression == "true" || flag)),
+                            matches!(original, qsl_replay::ClauseEvaluation::Completed(value) if value == (expression == "true" || flag)),
                             "{name}: {function} at ({n},{flag},{aux})"
                         );
                     }
@@ -283,18 +281,18 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
         let evidence = run_installed(&method);
         let safety = owner_evaluation(
             &f,
-            "EvalSafety",
+            "Safe",
             observation_n,
             false,
-            1,
+            i64::from(initial_n == 0),
             provisions.evaluator_limits,
         );
         let constraint = owner_evaluation(
             &f,
-            "EvalConstraint0",
+            "Limit0",
             observation_n,
             false,
-            1,
+            i64::from(initial_n == 0),
             provisions.evaluator_limits,
         );
         let observation = ConstrainedOwnerObservation {
@@ -387,15 +385,17 @@ fn boolean_and_partial_conditions_use_the_owner_oracle_and_unbounded_domains_ref
                 .contents
                 .contains("undefined constraint evaluation"));
         }
-        let outcome =
-            owner_evaluation(&f, "EvalConstraint0", 0, false, 0, request.evaluator_limits);
+        let outcome = owner_evaluation(&f, "Limit0", 0, false, 0, request.evaluator_limits);
         if condition != "self.n mod self.aux = 0" {
             assert!(matches!(
                 outcome,
-                qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(value)) if value == (condition == "true")
+                qsl_replay::ClauseEvaluation::Completed(value) if value == (condition == "true")
             ));
         } else {
-            assert!(matches!(outcome, qsl_replay::CallOutcome::Undefined { .. }));
+            assert!(matches!(
+                outcome,
+                qsl_replay::ClauseEvaluation::Undefined { .. }
+            ));
             assert!(method.rust().contents.contains("rt::modulo"));
         }
     }
@@ -515,8 +515,7 @@ fn run_installed(method: &KaniConstrainedMethodHarness) -> ConstrainedBackendEvi
 const SUBJECT: &str = r#"
 pub mod subject {
     pub fn idle(_n:&mut i64,_flag:&mut bool,_aux:&mut i64,enabled:bool)->bool { enabled }
-    pub fn nudge(n:&mut i64,flag:&mut bool,aux:&mut i64,delta:i64) {
-        *n=(*n+delta).min(1);
+    pub fn nudge(_n:&mut i64,flag:&mut bool,aux:&mut i64,_delta:i64) {
         *flag=!*flag;
         *aux=(*aux+1)%2;
     }
@@ -612,4 +611,83 @@ fn a_standalone_collection_constraint_remains_unsupported_without_a_harness() {
             }
         }
     ));
+}
+
+#[trace("TC-062", "FR-048-AC-2", "FR-048-AC-8")]
+#[test]
+fn same_named_general_clause_bodies_and_preconditions_cannot_reuse_a_method() {
+    for changed in ["safety", "constraint", "precondition"] {
+        let make = |constant: u8| {
+            let safety = if changed == "safety" {
+                format!("self.n mod self.aux = {constant}")
+            } else {
+                "self.n <= 3".into()
+            };
+            let constraint = if changed == "constraint" {
+                format!("self.n mod self.aux = {constant}")
+            } else {
+                "self.n < 2".into()
+            };
+            let precondition = if changed == "precondition" {
+                format!("delta mod self.aux = {constant}")
+            } else {
+                "delta >= 0".into()
+            };
+            let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\ninvariant Safe using v on M::Node at current {{ {safety} }}\nconstraint Limit0 using v on M::Node at current {{ {constraint} }}\npre Ready using v on M::Node::nudge {{ {precondition} }}\n");
+            let bytes = quire_canonical::to_vec(&document(), quire_canonical::Limits::new(1 << 20))
+                .unwrap();
+            fixture_source(bytes, "same-labelled-general-body", source)
+        };
+        let a = make(0);
+        let b = make(1);
+        assert_eq!(
+            serde_json::to_value(&a.safety).unwrap(),
+            serde_json::to_value(&b.safety).unwrap(),
+            "{changed}: nominal safety IDs alone do not bind content"
+        );
+        assert_eq!(
+            serde_json::to_value(&a.constraints[0]).unwrap(),
+            serde_json::to_value(&b.constraints[0]).unwrap(),
+            "{changed}: nominal constraint IDs alone do not bind content"
+        );
+        let initial = initial(0);
+        let bindings_a = bindings(&a);
+        let bindings_b = bindings(&b);
+        let request_a = request(&a, &initial, &bindings_a);
+        let request_b = request(&b, &initial, &bindings_b);
+        let method_a = emit_method(&request_a).unwrap();
+        let method_b = emit_method(&request_b).unwrap();
+        let legacy = |method: &ConstrainedMethodIdentity| {
+            let mut value = serde_json::to_value(method).unwrap();
+            let object = value.as_object_mut().unwrap();
+            object.remove("oracle_contents");
+            object.insert("module_symbol".into(), json!(""));
+            object.insert("options".into(), json!([]));
+            value
+        };
+        assert_eq!(
+            legacy(method_a.identity()),
+            legacy(method_b.identity()),
+            "{changed}: the original incomplete preimage collides"
+        );
+        assert_ne!(
+            method_a.identity().oracle_contents,
+            method_b.identity().oracle_contents,
+            "{changed}"
+        );
+        assert_ne!(
+            method_a.identity().module_symbol,
+            method_b.identity().module_symbol,
+            "{changed}"
+        );
+        assert_ne!(method_a.rust().path, method_b.rust().path, "{changed}");
+        assert!(
+            method_a
+                .identity()
+                .oracles
+                .iter()
+                .any(|(_, native)| native.is_none()),
+            "{changed}: genuine general owner fallback"
+        );
+    }
 }

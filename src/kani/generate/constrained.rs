@@ -336,6 +336,17 @@ pub(super) fn lower(
                 )
             })
             .collect(),
+        oracle_contents: std::iter::once(&prepared.safety)
+            .chain(prepared.constraint.iter())
+            .chain(prepared.preconditions.iter().flatten())
+            .map(|condition| {
+                let preimage = crate::core::canonical::preimage_value(&condition.oracle.source)
+                    .map_err(|_| R::Render)?;
+                let digest =
+                    crate::core::canonical::content_digest(&preimage).map_err(|_| R::Render)?;
+                Ok((condition.oracle.descriptor.node_id.clone(), digest))
+            })
+            .collect::<Result<Vec<_>, R>>()?,
         module_symbol: String::new(),
         options: Vec::new(),
         safety_assertion_line: 0,

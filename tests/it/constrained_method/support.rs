@@ -30,13 +30,14 @@ pub(super) fn document() -> Value {
     };
     json!({"contractVersion":"2.0.0","canonicalization":{"algorithm":"rfc8785-v1"},"source":{"identity":"ix://cg/constrained/spec","version":"1.0.0","dialect":"spec-bundle"},"package":{"identity":MODEL,"version":"1.0.0","mappingVersions":[],"profileVersions":[]},"constructs":[
         {"kind":{"module":MODEL,"name":"entity"},"moduleVersion":"1.0.0","construct":{"identity":"none","shape":"record","members":{},"meaning":"quire.meaning.model.object-type/v1"}},
+        {"kind":{"module":MODEL,"name":"population"},"moduleVersion":"1.0.0","construct":{"identity":"none","shape":"record","members":{},"meaning":"quire.meaning.model.population/v1"}},
         {"kind":{"module":MODEL,"name":"value_type"},"moduleVersion":"1.0.0","construct":{"identity":"none","shape":"record","members":{},"meaning":"quire.meaning.model.value-type/v1"}}
     ],"occurrences":[],"extensions":[],"types":[
         {"identity":SMALL,"displayName":"Small","kind":{"module":MODEL,"name":"value_type"},"roles":[],"origin":origin(),"extensions":[],"unknownPolicy":"reject","scalar":"integer","constraints":[
             {"identity":format!("{SMALL}/min"),"keyword":"min","operands":{"value":"0"},"appliesTo":"ix://quire/native/Integer","diagnosticCode":"small.minimum","origin":origin()},
             {"identity":format!("{SMALL}/max"),"keyword":"max","operands":{"value":"3"},"appliesTo":"ix://quire/native/Integer","diagnosticCode":"small.maximum","origin":origin()}]},
         {"identity":OBJECT,"displayName":"Node","kind":{"module":MODEL,"name":"entity"},"roles":[],"origin":origin(),"constraints":[],"extensions":[],"unknownPolicy":"reject","supertypes":[],"fields":[slot(OBJECT,"n",SMALL),slot(OBJECT,"flag","ix://quire/native/Boolean"),slot(OBJECT,"aux",SMALL)],"operations":[op("nudge","delta",SMALL,false),op("idle","enabled","ix://quire/native/Boolean",true)]}
-    ],"populations":[]})
+    ],"populations":[{"identity":format!("ix://{MODEL}/nodes"),"displayName":"nodes","kind":{"module":MODEL,"name":"population"},"members":[OBJECT],"extent":"closed","origin":origin()}]})
 }
 
 pub(super) struct Fixture {
@@ -55,13 +56,6 @@ pub(super) fn fixture(doc: &Value, name: &str, safety: &str, constraints: &[&str
         source.push_str(&format!(
             "constraint Limit{index} using v on M::Node at current {{ {body} }}\n"
         ));
-    }
-    let function = |name: &str, body: &str| {
-        format!("function {name} using v(n: Int[0, 3], flag: Boolean, aux: Int[0, 3]): Boolean pure {{ {} }}\n",body.replace("self.n","n").replace("self.flag","flag").replace("self.aux","aux"))
-    };
-    source.push_str(&function("EvalSafety", safety));
-    for (index, body) in constraints.iter().enumerate() {
-        source.push_str(&function(&format!("EvalConstraint{index}"), body));
     }
     fixture_source(bytes, name, source)
 }
@@ -222,44 +216,52 @@ pub(super) fn emit_method_with_unwind(
 
 pub(super) fn owner_evaluation(
     f: &Fixture,
-    function: &str,
+    clause: &str,
     n: i64,
     flag: bool,
     aux: i64,
     accounting: quire_exact::ScalarLimits,
-) -> qsl_replay::CallOutcome {
-    let call = qsl_replay::Call {
-        function: function.to_owned(),
-        arguments: vec![
-            qsl_replay::CallArgument {
-                parameter: "n".into(),
-                value: quire_exact::Value::Integer(n.into()),
+) -> qsl_replay::ClauseEvaluation {
+    let population = format!("ix://{MODEL}/nodes");
+    let fields = BTreeMap::from([
+        (
+            "n",
+            SnapshotValue::integer(n.to_string()).to_json().unwrap(),
+        ),
+        ("flag", SnapshotValue::boolean(flag).to_json().unwrap()),
+        (
+            "aux",
+            SnapshotValue::integer(aux.to_string()).to_json().unwrap(),
+        ),
+    ]);
+    let snapshot = json!({
+        "format":"quire.state.snapshot/v1",
+        "identity":{"authority":"agent-ix","identity":"constrained-current","revision_namespace":"git","revision":"fixture"},
+        "observation":"current","model":{"identity":MODEL},
+        "anchor":{"kind":"handler","name":"control"},
+        "populations":[{"population":population,"complete":true,"objects":[{"key":"self","type":OBJECT,"fields":fields}]}]
+    });
+    qsl_replay::evaluate_clause(qsl_replay::ClauseEvaluationRequest {
+        source: SourceIdentity::new("agent-ix", format!("{}.native", f.name), "git", "fixture"),
+        package_name: f.name.clone(),
+        path: "constrained.native".into(),
+        bytes: f.source.as_bytes().to_vec(),
+        packages: vec![f.document.clone()],
+        dependencies: DependencyInput::default(),
+        clause: clause.into(),
+        observation: qsl_replay::ClauseObservation::Current {
+            snapshot: serde_json::to_vec(&snapshot).unwrap(),
+            anchor: qsl_replay::SelectedAnchor {
+                kind: qsl_replay::AnchorKind::Handler,
+                name: "control".into(),
             },
-            qsl_replay::CallArgument {
-                parameter: "flag".into(),
-                value: quire_exact::Value::Boolean(flag),
-            },
-            qsl_replay::CallArgument {
-                parameter: "aux".into(),
-                value: quire_exact::Value::Integer(aux.into()),
-            },
-        ],
+            self_object: Some(qsl_replay::SelectedObject {
+                population,
+                key: "self".into(),
+            }),
+        },
+        limits: qsl_replay::SpineLimits::default(),
+        observation_limits: qsl_replay::ObservationLimits::default(),
         accounting,
-        supplied: Default::default(),
-    };
-    qsl_replay::run_with_requirements(
-        SourceIdentity::new("agent-ix", format!("{}.native", f.name), "git", "fixture"),
-        f.name.clone(),
-        "constrained.native",
-        f.source.as_bytes(),
-        &BTreeMap::from([(MODEL.to_owned(), f.document.clone())]),
-        &DependencyInput::default(),
-        qsl_replay::SpineLimits::default(),
-        &call,
-        &qsl_replay::ObjectEnvironment::default(),
-        &quire_exact::Cancel::new(),
-    )
-    .expect("independent QSL owner evaluation")
-    .into_parts()
-    .0
+    })
 }

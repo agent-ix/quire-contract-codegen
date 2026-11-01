@@ -25,9 +25,9 @@ pub struct ConstrainedOwnerObservation<'a> {
     /// Method whose admitted clauses and snapshot were evaluated.
     pub method: &'a ConstrainedMethodIdentity,
     /// Original QSL/kernel safety evaluation or original call failure.
-    pub safety: Result<&'a qsl_replay::CallOutcome, &'a quire_eval::CallFailure>,
+    pub safety: Result<&'a qsl_replay::ClauseEvaluation, &'a quire_eval::CallFailure>,
     /// Original QSL/kernel constraint evaluation or original call failure.
-    pub constraint: Option<Result<&'a qsl_replay::CallOutcome, &'a quire_eval::CallFailure>>,
+    pub constraint: Option<Result<&'a qsl_replay::ClauseEvaluation, &'a quire_eval::CallFailure>>,
     /// Exact backend playback when evaluating a counterexample; absent on a nonfalsified run.
     pub playback: Option<&'a str>,
 }
@@ -133,7 +133,7 @@ pub fn classify_constrained_method<'a>(
     evidence: &'a ConstrainedBackendEvidence,
     owner: &'a ConstrainedOwnerObservation<'a>,
 ) -> Result<ConstrainedMethodResult<'a>, ConstrainedBindingRefusal> {
-    use qsl_replay::{CallOutcome as O, CallValue as V};
+    use qsl_replay::ClauseEvaluation as O;
     use ConstrainedMethodStatus as S;
     if &evidence.method != owner.method {
         return Err(ConstrainedBindingRefusal::Method);
@@ -173,7 +173,7 @@ pub fn classify_constrained_method<'a>(
         evidence.backend.outcome,
         KaniRunOutcome::Verified | KaniRunOutcome::CoverUnsatisfied { .. }
     );
-    let boundary = evidence.method.constraint.as_ref().map(|_| {
+    let mut boundary = evidence.method.constraint.as_ref().map(|_| {
         let covers = evidence
             .backend
             .checks
@@ -190,7 +190,19 @@ pub fn classify_constrained_method<'a>(
             }
         }
     });
-    let status = if owner.safety.is_err() || owner.constraint.is_some_and(|value| value.is_err()) {
+    let is_fault = |value: Result<&qsl_replay::ClauseEvaluation, &quire_eval::CallFailure>| {
+        value.is_err()
+            || matches!(
+                value,
+                Ok(O::Refused(qsl_replay::ClauseRefusal::Fault { .. }))
+            )
+    };
+    let status = if is_fault(owner.safety) || owner.constraint.is_some_and(is_fault) {
+        boundary = evidence
+            .method
+            .constraint
+            .as_ref()
+            .map(|_| ConstraintBoundary::Unknown);
         S::RuntimeInvariant
     } else {
         let safety = owner
@@ -202,9 +214,7 @@ pub fn classify_constrained_method<'a>(
             .transpose()?;
         match &evidence.backend.outcome {
             KaniRunOutcome::Falsified { .. } => match (safety, constraint) {
-                (O::Completed(V::Boolean(false)), _) if safety_check(KaniCheckStatus::Failure) => {
-                    S::Falsified
-                }
+                (O::Completed(false), _) if safety_check(KaniCheckStatus::Failure) => S::Falsified,
                 (O::Undefined { .. }, _) => S::EvaluationViolation,
                 (O::Refused(_), _) => S::Refused,
                 (O::Incomplete(_), _) => S::Incomplete,
@@ -214,7 +224,7 @@ pub fn classify_constrained_method<'a>(
                 _ => return Err(ConstrainedBindingRefusal::Observation),
             },
             KaniRunOutcome::Verified | KaniRunOutcome::CoverUnsatisfied { .. } => {
-                if !matches!(safety, O::Completed(V::Boolean(true))) {
+                if !matches!(safety, O::Completed(true)) {
                     return Err(ConstrainedBindingRefusal::Observation);
                 }
                 let covers = evidence
@@ -236,14 +246,10 @@ pub fn classify_constrained_method<'a>(
                     S::Inconclusive
                 } else {
                     match (boundary, constraint) {
-                        (
-                            Some(ConstraintBoundary::Reached),
-                            Some(O::Completed(V::Boolean(false))),
-                        ) => S::ConstraintReached,
-                        (
-                            Some(ConstraintBoundary::NotReached),
-                            Some(O::Completed(V::Boolean(true))),
-                        )
+                        (Some(ConstraintBoundary::Reached), Some(O::Completed(false))) => {
+                            S::ConstraintReached
+                        }
+                        (Some(ConstraintBoundary::NotReached), Some(O::Completed(true)))
                         | (None, None) => S::BoundedSuccess,
                         (Some(ConstraintBoundary::Unknown), _) => S::Inconclusive,
                         _ => return Err(ConstrainedBindingRefusal::Observation),

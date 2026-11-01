@@ -41,6 +41,28 @@ impl ConstrainedBackendEvidence {
             None
         }
     }
+    /// Original cancellation source, without exposing an ordinary proof outcome.
+    pub fn cancellation_source(&self) -> Option<quire_contract_ir::kani::KaniCancellationSource> {
+        if let KaniRunOutcome::Cancelled { source } = self.backend.outcome {
+            Some(source)
+        } else {
+            None
+        }
+    }
+    /// Original typed backend failure cause, when the report retained one.
+    pub fn failure_cause(&self) -> Option<&crate::kani::output::report::KaniFailureCause> {
+        self.backend.failure_cause.as_ref()
+    }
+    /// Original bounded/redacted backend diagnostics, when retained.
+    pub fn diagnostics(
+        &self,
+    ) -> Option<&crate::kani::output::diagnostics::KaniNoVerdictDiagnostics> {
+        self.backend.diagnostics.as_ref()
+    }
+    /// Actual backend-tree memory observation.
+    pub fn memory(&self) -> &super::memory::MemoryObservation {
+        &self.backend.memory
+    }
     /// The original typed non-proof reason, retained without inventing a cover result.
     pub fn nonproof_reason(&self) -> Option<KaniInconclusiveReason> {
         if let KaniRunOutcome::Inconclusive { reason } = self.backend.outcome {

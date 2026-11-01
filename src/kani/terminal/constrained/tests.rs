@@ -83,7 +83,7 @@ fn conversion_preserves_original_causes_and_rejects_malformed_or_cross_method_ev
     let bindings = support::bindings(&f);
     let request = support::request(&f, &initial, &bindings);
     let method = support::emit_method(&request).unwrap();
-    let healthy = qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(true));
+    let healthy = qsl_replay::ClauseEvaluation::Completed(true);
     let observation = ConstrainedOwnerObservation {
         method: method.identity(),
         safety: Ok(&healthy),
@@ -124,6 +124,53 @@ fn conversion_preserves_original_causes_and_rejects_malformed_or_cross_method_ev
         assert_eq!(result.boundary(), Some(ConstraintBoundary::Unknown));
     }
 
+    for source in [
+        quire_contract_ir::kani::KaniCancellationSource::Requested,
+        quire_contract_ir::kani::KaniCancellationSource::Deadline,
+    ] {
+        backend.backend.outcome = KaniRunOutcome::Cancelled { source };
+        let result = classify_constrained_method(&backend, &observation).unwrap();
+        assert_eq!(result.status(), ConstrainedMethodStatus::Inconclusive);
+        assert_eq!(result.evidence().cancellation_source(), Some(source));
+        assert_eq!(result.boundary(), Some(ConstraintBoundary::Unknown));
+    }
+    use crate::kani::output::{
+        diagnostics::{KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt},
+        report::KaniFailureCause,
+    };
+    backend.backend.outcome = KaniRunOutcome::Inconclusive {
+        reason: KaniInconclusiveReason::FailedWithoutCounterexample,
+    };
+    backend.backend.failure_cause = Some(KaniFailureCause::OutOfMemory);
+    backend.backend.diagnostics = Some(KaniNoVerdictDiagnostics {
+        phase: KaniFailurePhase::Solver,
+        stdout: KaniStreamExcerpt {
+            text: "original bounded diagnostic".into(),
+            omitted_bytes: 17,
+        },
+        stderr: KaniStreamExcerpt {
+            text: "original stderr".into(),
+            omitted_bytes: 0,
+        },
+    });
+    let result = classify_constrained_method(&backend, &observation).unwrap();
+    assert_eq!(
+        result.evidence().failure_cause(),
+        Some(&KaniFailureCause::OutOfMemory)
+    );
+    assert!(std::ptr::eq(
+        result.evidence().diagnostics().unwrap(),
+        backend.backend.diagnostics.as_ref().unwrap()
+    ));
+    assert_eq!(
+        result
+            .evidence()
+            .diagnostics()
+            .unwrap()
+            .stdout
+            .omitted_bytes,
+        17
+    );
     let partial = support::fixture(
         &support::document(),
         "constrained-partial",
@@ -132,25 +179,22 @@ fn conversion_preserves_original_causes_and_rejects_malformed_or_cross_method_ev
     );
     let mut zero = request.evaluator_limits;
     zero.work_units = 0;
-    let incomplete = support::owner_evaluation(&f, "EvalSafety", 0, false, 0, zero);
-    assert!(matches!(incomplete, qsl_replay::CallOutcome::Incomplete(_)));
-    let undefined = support::owner_evaluation(
-        &partial,
-        "EvalConstraint0",
-        0,
-        false,
-        0,
-        request.evaluator_limits,
-    );
+    let incomplete = support::owner_evaluation(&f, "Safe", 0, false, 0, zero);
+    assert!(matches!(
+        incomplete,
+        qsl_replay::ClauseEvaluation::Incomplete(_)
+    ));
+    let undefined =
+        support::owner_evaluation(&partial, "Limit0", 0, false, 0, request.evaluator_limits);
     assert!(matches!(
         undefined,
-        qsl_replay::CallOutcome::Undefined { .. }
+        qsl_replay::ClauseEvaluation::Undefined { .. }
     ));
-    let refusal = qsl_replay::CallOutcome::Refused(qsl_replay::CallRefusal::Family {
-        code: quire_semantic_value::catalog::InternalFault::new("unit-refusal", "unit-payload")
-            .catalog_code(),
-        location: None,
-    });
+    let refusal = support::owner_evaluation(&f, "Missing", 0, false, 0, request.evaluator_limits);
+    assert!(matches!(
+        refusal,
+        qsl_replay::ClauseEvaluation::Refused(qsl_replay::ClauseRefusal::MissingClause { .. })
+    ));
     backend.backend.outcome = KaniRunOutcome::Falsified {
         counterexample: "unit conversion report".into(),
     };
@@ -186,6 +230,44 @@ fn conversion_preserves_original_causes_and_rejects_malformed_or_cross_method_ev
     let code = result.fault_catalog_code().unwrap();
     assert_eq!(code.code(), "runtime_invariant");
     assert_eq!(code.cause(), "established-invariant-broken");
+
+    for boundary_status in [KaniCheckStatus::Satisfied, KaniCheckStatus::Unsatisfiable] {
+        let mut complete = evidence(method.identity());
+        complete.backend.checks[2].status = boundary_status;
+        let owner_fault = qsl_replay::ClauseEvaluation::Refused(qsl_replay::ClauseRefusal::Fault {
+            stage: "original-stage",
+            invariant: "original-invariant",
+        });
+        for owner in [
+            ConstrainedOwnerObservation {
+                safety: Err(&fault),
+                ..observation
+            },
+            ConstrainedOwnerObservation {
+                constraint: Some(Err(&fault)),
+                ..observation
+            },
+            ConstrainedOwnerObservation {
+                constraint: Some(Ok(&owner_fault)),
+                ..observation
+            },
+        ] {
+            let result = classify_constrained_method(&complete, &owner).unwrap();
+            assert_eq!(result.status(), ConstrainedMethodStatus::RuntimeInvariant);
+            assert_eq!(result.boundary(), Some(ConstraintBoundary::Unknown));
+        }
+    }
+    let mut changed_body = method.identity().clone();
+    changed_body.oracle_contents[0].1[0] ^= 1;
+    let changed_owner = ConstrainedOwnerObservation {
+        method: &changed_body,
+        playback: backend.playback(),
+        ..observation
+    };
+    assert!(matches!(
+        classify_constrained_method(&backend, &changed_owner),
+        Err(ConstrainedBindingRefusal::Method)
+    ));
     let mut other = method.identity().clone();
     other.maximum_steps += 1;
     let changed = ConstrainedOwnerObservation {

@@ -142,6 +142,9 @@ pub struct ConstrainedMethodIdentity {
         CheckedNodeId,
         Option<crate::core::native_integer::NativeIntegerSelection>,
     )>,
+    /// Canonical content digests of every complete generated owner oracle, including
+    /// general fallback and operation preconditions; declaration IDs alone do not bind bodies.
+    pub oracle_contents: Vec<(CheckedNodeId, [u8; 32])>,
     /// Generated module symbol.
     pub module_symbol: String,
     /// Exact backend options.
