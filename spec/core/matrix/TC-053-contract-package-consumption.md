@@ -20,7 +20,8 @@ decisions the original checked graph or detached lowering records would make.
 1. Admit a native QSL package with two independent clauses and a pure
    function, lower the requested items together through Contract IR, and pass
    its one admitted FR-330 value to the production CG entry. Record each
-   request index, exact node key, source occurrence, typed disposition and
+   request index, original V2 node ID, resolved source key, V1 accounting ID,
+   source occurrence, typed disposition and
    generated artifact. Repeat with request order changed, including a repeated
    node ID at two positions.
 2. Make one clause unrepresentable under the selected lowering profile while
@@ -55,8 +56,9 @@ decisions the original checked graph or detached lowering records would make.
 5. For one genuinely admitted package, generate scalar, composite equality and
    exact function claims at two different requested node IDs. For each family,
    inspect both the typed claim and serialized claim map: the generated result
-   has the admitted source package name and complete lock as `contract_package_identity`, the requested
-   `CheckedNodeId` as `node_id`, the originating checked-package `package_id`,
+   has the admitted source package name and complete lock as `contract_package_identity`, the original
+   requested V2 `CheckedNodeId` as the single public `node_id` in both places,
+   the originating checked-package `package_id`,
    `semantic_type`, admitted `source_map`, family-specific provenance, typed
    `claims`, `bounds` and `dependencies`, and no `ir_id` member. Compare
    reached claim, bound and dependency keys, and any declaration
@@ -64,9 +66,15 @@ decisions the original checked graph or detached lowering records would make.
    Repeat one requested node in two independently lowered, admitted packages
    with the same source package name and node ID but different immutable locks. Assert that the
    two claim-identity pairs differ despite equal node IDs. Independently change the package
-   name with a correspondingly changed structural node ID, and assert a different pair; the
+   name with a correspondingly changed requested V2 node ID, and assert a different pair; the
    two nodes in the first package also have different pairs despite equal package identity.
-   Preserve repeated request positions without treating index as identity.
+   Include a genuine indexed request whose V2 graph index differs from the
+   corresponding V1 `source_keys` index. Resolve the request with
+   `ContractSourceKeyV1::from_v2_request(source, request)` and the accounting
+   key with the admitted V1 `source_key_at`; assert equal structural keys,
+   successful settlement, and the unchanged original V2 request ID in the
+   claim and claim map. Preserve repeated request positions without treating
+   index as identity or exposing the V1 frame ID as a second claim identity.
 6. At the Contract IR lowering and strict-reader boundary, exercise inputs
    with an unresolved required root, bound or selected dependency. Assert that
    no such input becomes an admitted `lowered` item handed to CG; preserve
@@ -79,19 +87,21 @@ decisions the original checked graph or detached lowering records would make.
 7. Lower an admitted request with a bound driver item, an excluded
    accounting-only position and a second bound driver item, with an optional
    context-only root immediately after the first bound item and before the
-   excluded position. Verify exact accounting position and node ID
+   excluded position. Verify exact accounting position and source-bound key
    for every entry, the two bound items' original driver indexes, and the
    absence of a claim and artifact for the excluded position.
-   Remove, duplicate or change the excluded position's node ID while holding
-   the admitted package fixed; each mismatch must refuse the whole request
-   before any artifact.
+   Repeat with different raw V2 and V1 indexes that resolve to the same
+   structural key; settlement remains accepted. Remove or duplicate the
+   excluded position, change its resolved key, or supply an unresolvable V2
+   key while holding the admitted package fixed; each mismatch must refuse the
+   whole request before any artifact.
 8. For FR-039-AC-10, place a selected conversion context root immediately
    before the excluded position and confirm that the preceding bound item
    retains its selected result context. In a separate otherwise valid request,
    put that conversion root after the next bound driver item; the preceding
    item must receive typed `IncompleteContext`. Finally place a context-only root directly after
    the excluded position and before the next bound item, with matching admitted
-   accounting and node ID. Confirm a typed whole-request correspondence
+   accounting position and source-bound key. Confirm a typed whole-request correspondence
    refusal before any artifact because the root has no owning bound item.
 
 ## Expected Results
@@ -106,13 +116,15 @@ generated bytes even when a retained legacy checked-graph argument is fixed;
 an API with no such argument has no graph fallback. No detached record, copied
 schema, second parser or original-graph fallback decides an item.
 Generated scalar, equality and function claim maps serialize the admitted
-structural package name and lock plus requested structural node ID as the public claim identity, retain
+structural package name and lock plus original requested V2 node ID as the public claim identity, retain
 the originating checked-package ID and their existing source/provenance fields,
-and omit `ir_id`. The same-node/different-lock and different-node/same-package controls both change the identity pair. Reached
+and omit `ir_id`. Different raw V2 and V1 frame indexes with an equal resolved
+source key settle successfully and retain the V2 request ID as the only public
+claim node ID. The same-node/different-lock and different-node/same-package controls both change the identity pair. Reached
 keys agree with Contract IR's total traversal of admitted lowered items;
 unresolved required references never reach CG as lowered items, and reader
 refusals stop the request.
-The excluded position retains its admitted accounting identity and driver
+The excluded position retains its admitted source-bound accounting identity and driver
 index without a claim or artifact; an interleaved context root changes
 neither driver nor envelope indexes. Correspondence mismatches and an orphan
 context root after the excluded position refuse the whole request. A selected
