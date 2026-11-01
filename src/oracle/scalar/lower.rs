@@ -1975,7 +1975,7 @@ pub(super) fn selected_scalar_key(
     if application.node_id != *node_id || application.role != CheckedOccurrenceRole::Expression {
         return None;
     }
-    let admitted_node = items.admitted_node(node_id)?;
+    let admitted_node = items.accounted_node(node_id)?;
     let admitted_application = ContractOccurrenceKeyV1 {
         node_id: admitted_node.clone(),
         role: application.role.clone(),
@@ -1997,7 +1997,7 @@ pub(super) fn selected_scalar_key(
         {
             return None;
         }
-        let admitted_conversion_node = items.admitted_node(&conversion.node_id)?;
+        let admitted_conversion_node = items.accounted_node(&conversion.node_id)?;
         #[cfg(test)]
         source_selection_work::source(true);
         package
@@ -2070,7 +2070,7 @@ pub(super) fn contract_checked_operation<'a>(
     if &application.node_id != node_id {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     }
-    let Some(admitted_node) = items.admitted_node(node_id) else {
+    let Some(admitted_node) = items.accounted_node(node_id) else {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     };
     let admitted_application = ContractOccurrenceKeyV1 {
@@ -2079,7 +2079,7 @@ pub(super) fn contract_checked_operation<'a>(
         ordinal: application.ordinal,
     };
     let admitted_conversion = if let Some(key) = conversion {
-        let Some(admitted_node) = items.admitted_node(&key.node_id) else {
+        let Some(admitted_node) = items.accounted_node(&key.node_id) else {
             return Ok(Err(ExactScalarRefusal::IncompleteContext));
         };
         Some(ContractOccurrenceKeyV1 {

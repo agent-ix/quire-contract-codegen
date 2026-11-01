@@ -2315,16 +2315,9 @@ fn tc_029_nominal_owner_lookups_use_only_structural_wire_identities() {
         .filter(|artifact| artifact.path.starts_with("src/"))
         .map(|artifact| artifact.contents.as_str())
         .collect::<String>();
-    assert!(lib.contains("composite_declaration("));
+    assert!(lib.contains("composite_declaration(&context.wire_graph().key(&key)"));
     assert!(generated.contains("quire_contract_model::CheckedNodeId {"));
-    for forbidden in [
-        "NodeKey::new(",
-        "node_key_of_wire(",
-        "checked_node_key(",
-        "composite_declaration(&",
-        "enum_declaration(&",
-        "enum_case(&",
-    ] {
+    for forbidden in ["NodeKey::new(", "node_key_of_wire(", "checked_node_key("] {
         assert!(
             !generated.contains(forbidden),
             "generated nominal lookup contains {forbidden}"

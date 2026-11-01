@@ -1984,7 +1984,11 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         .iter()
         .find(|claim| claim.node_id == healthy_call_id)
         .expect("standalone healthy sibling claim");
-    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
+    assert!(
+        matches!(&generated.result, ClaimDisposition::Generated(_)),
+        "healthy sibling: {:?}",
+        generated.result
+    );
     assert_eq!(generated.result, generated_only.result);
     assert_eq!(
         contents(&combined, "src/lib.rs"),
@@ -2181,6 +2185,16 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         }),
     );
     let fairness_placeholder = fixture_code_id(&builder.raw_wire(), FAIRNESS_NODE);
+    let mut fairness_wire = builder.raw_wire();
+    let fairness = fairness_wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|node| node["node_id"] == json!(fairness_placeholder))
+        .unwrap();
+    fairness["dependencies"] = json!([model_placeholder]);
+    builder = PackageBuilder::from_wire(fairness_wire);
+
     let clause = builder.raw_wire()["semantic_graph"]["nodes"]
         .as_array()
         .unwrap()

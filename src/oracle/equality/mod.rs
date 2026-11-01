@@ -809,14 +809,14 @@ pub fn generate_composite_equality_oracles(
         ));
     }
     let graph = Graph::new(package);
-    let source_keys = source
-        .graph()
-        .nodes
+    let source_frame =
+        qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id))
+            .map_err(|_| OracleGenerationError::InvalidPlanState)?;
+    let source_keys = source_frame
+        .keys()
         .iter()
-        .filter_map(|node| {
-            let key = source.structural_key(&node.node_id)?;
-            crate::core::ir::node_key::checked_node_key(key).map(|key| (key, &node.node_id))
-        })
+        .cloned()
+        .zip(source.graph().nodes.iter().map(|node| &node.node_id))
         .collect::<BTreeMap<_, _>>();
     let source_by_output = graph
         .node_keys()

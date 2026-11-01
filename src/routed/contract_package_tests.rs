@@ -2820,18 +2820,18 @@ mod tests {
             assert_eq!(value.node_id, first_expression);
             let items = PackageItems::new(source, package, positions)
                 .expect("selected package-local positions");
-            let admitted_expression = items
-                .admitted_node(&first_expression)
-                .expect("source-bound expression key");
             assert_eq!(
                 value.source_map,
-                package
-                    .source_occurrences(admitted_expression)
-                    .expect("admitted sources")
+                source
+                    .source_map()
+                    .iter()
+                    .filter(|entry| entry.node_id == first_expression)
+                    .cloned()
+                    .collect::<Vec<_>>()
             );
             let conversion = positions[1].node_id();
             let admitted_conversion = items
-                .admitted_node(conversion)
+                .represented_node(conversion)
                 .expect("source-bound conversion key");
             let target = package
                 .wire()

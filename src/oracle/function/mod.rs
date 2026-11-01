@@ -3415,7 +3415,7 @@ fn item_disposition<'a>(
     }
     if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
         let admitted_body_id = accounting
-            .admitted_node(&declaration.node_id)
+            .represented_node(&declaration.node_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let source_function_id = source_index
             .source_function_node_id(&declaration.name, admitted_body_id)
@@ -3423,7 +3423,7 @@ fn item_disposition<'a>(
         let admitted_arguments = item
             .argument_node_ids
             .iter()
-            .map(|node_id| accounting.admitted_node(node_id))
+            .map(|node_id| accounting.represented_node(node_id))
             .collect::<Option<Vec<_>>>()
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
@@ -3439,7 +3439,7 @@ fn item_disposition<'a>(
     }
     for argument_id in &item.argument_node_ids {
         let admitted_argument_id = accounting
-            .admitted_node(argument_id)
+            .represented_node(argument_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let argument = graph
             .node(admitted_argument_id)

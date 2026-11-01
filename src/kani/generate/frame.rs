@@ -469,8 +469,9 @@ fn short(package: &CheckedPackageV2, node: &CheckedNodeId) -> Result<String, Sta
         name: package.name().into(),
         lock: package.lock().clone(),
     };
-    let node_key = crate::kani::generate::outcome::node_label(node).to_string();
-    let preimage = crate::core::canonical::preimage_value(&(&source, &node_key))
+    let node_key = quire_contract_model::ContractSourceKeyV1::from_v2_request(package, node)
+        .ok_or(StateFrameRefusal::RecordSerialization)?;
+    let preimage = crate::core::canonical::preimage_value(&(&source, node_key.structural_key()))
         .map_err(|_| StateFrameRefusal::RecordSerialization)?;
     let digest = crate::core::canonical::content_digest(&preimage)
         .map_err(|_| StateFrameRefusal::RecordSerialization)?;

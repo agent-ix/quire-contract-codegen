@@ -74,7 +74,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
-    CheckedTerm, ContractPackageV1, ContractSourceKeyV1, ContractSourceV1, StateClauseKind,
+    CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
 };
 
 use crate::{
@@ -117,58 +117,56 @@ use crate::{
 /// A node's first graph entry and all source entries retain their original wire order.
 struct ContractLookup<'a> {
     source: &'a CheckedPackageV2,
-    package: &'a ContractPackageV1,
     graph: CheckedGraph<'a>,
     sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
-    source_indices: BTreeMap<CheckedNodeId, usize>,
-    original_nodes: BTreeMap<&'a CheckedNodeId, Option<&'a CheckedNodeId>>,
+    represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
+    original_nodes: BTreeMap<CheckedNodeId, Option<&'a CheckedNodeId>>,
 }
 
 impl<'a> ContractLookup<'a> {
     fn new(source: &'a CheckedPackageV2, package: &'a ContractPackageV1) -> Self {
         let graph = CheckedGraph::new(package);
         let mut sources = BTreeMap::<_, Vec<_>>::new();
-        for entry in &package.wire().source_map.nodes {
-            sources
-                .entry(&entry.node_id)
-                .or_default()
-                .extend(entry.occurrences.iter());
+        for entry in source.source_map() {
+            sources.entry(&entry.node_id).or_default().push(entry);
         }
-        let source_indices: BTreeMap<CheckedNodeId, usize> = (0..package.wire().source_keys.len())
-            .filter_map(|index| {
-                package
-                    .source_key_at(index)
-                    .map(|key| (key.structural_key().clone(), index))
+        let source_frame =
+            qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id)).ok();
+        let source_by_key = source_frame
+            .as_ref()
+            .map(|frame| {
+                frame
+                    .keys()
+                    .iter()
+                    .cloned()
+                    .zip(source.graph().nodes.iter().map(|node| &node.node_id))
+                    .collect::<BTreeMap<_, _>>()
             })
-            .collect();
+            .unwrap_or_default();
+        let output_keys = graph.node_keys();
+        let mut represented_nodes = BTreeMap::new();
         let mut original_nodes = BTreeMap::new();
-        for node in &source.graph().nodes {
-            let mapped = (|| {
-                let key = ContractSourceKeyV1::from_v2_request(source, &node.node_id)?;
-                let index = source_indices.get(key.structural_key())?;
-                Some((package.wire().source_keys.get(*index)?, &node.node_id))
-            })();
-            if let Some((admitted, original)) = mapped {
-                original_nodes
-                    .entry(admitted)
-                    .and_modify(|entry| *entry = None)
-                    .or_insert(Some(original));
+        for node in &package.wire().semantic_graph.nodes {
+            if let Some(original) = output_keys
+                .get(&node.node_id)
+                .and_then(|key| source_by_key.get(key))
+                .copied()
+            {
+                represented_nodes.insert(original, &node.node_id);
+                original_nodes.insert(node.node_id.clone(), Some(original));
             }
         }
         Self {
             source,
-            package,
             graph,
             sources,
-            source_indices,
+            represented_nodes,
             original_nodes,
         }
     }
 
     fn admitted_node(&self, id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
-        let key = ContractSourceKeyV1::from_v2_request(self.source, id)?;
-        let index = self.source_indices.get(key.structural_key())?;
-        self.package.wire().source_keys.get(*index)
+        self.represented_nodes.get(id).copied()
     }
 
     fn original_node(&self, id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
@@ -193,8 +191,7 @@ impl<'a> ContractLookup<'a> {
     }
 
     fn source_occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
-        self.admitted_node(id)
-            .map_or_else(Vec::new, |node| self.occurrences(node))
+        self.occurrences(id)
     }
 }
 

@@ -222,6 +222,7 @@ pub(crate) struct PackageItems<'a> {
     source_key_indices: BTreeMap<&'a CheckedNodeId, usize>,
     source_structural_indices: BTreeMap<CheckedNodeId, usize>,
     original_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
+    represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
 }
 
 impl<'a> PackageItems<'a> {
@@ -298,6 +299,31 @@ impl<'a> PackageItems<'a> {
                 ContractRequestPosition::ContextRoot { .. } => {}
             }
         }
+        let output_frame = qsl_replay::WireGraph::new(
+            package
+                .wire()
+                .semantic_graph
+                .nodes
+                .iter()
+                .map(|node| &node.node_id),
+        )
+        .ok();
+        let source_frame =
+            qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id)).ok();
+        let represented_nodes = source
+            .graph()
+            .nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| {
+                let key = source_frame.as_ref()?.keys().get(index)?;
+                let position = usize::try_from(output_frame.as_ref()?.index_of(key)?).ok()?;
+                Some((
+                    &node.node_id,
+                    &package.wire().semantic_graph.nodes.get(position)?.node_id,
+                ))
+            })
+            .collect();
         Ok(Self {
             source,
             package,
@@ -306,6 +332,7 @@ impl<'a> PackageItems<'a> {
             bound_driver_indices,
             source_key_indices,
             source_structural_indices,
+            represented_nodes,
             original_nodes: source
                 .graph()
                 .nodes
@@ -320,10 +347,15 @@ impl<'a> PackageItems<'a> {
     }
 
     /// Resolve a caller's authenticated V2 node identity into the admitted V1 frame.
-    pub(crate) fn admitted_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+    pub(crate) fn accounted_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
         let key = ContractSourceKeyV1::from_v2_request(self.source, node_id)?;
         let index = self.source_structural_indices.get(key.structural_key())?;
         self.package.wire().source_keys.get(*index)
+    }
+
+    /// Resolve a V2 request into the represented output-graph frame.
+    pub(crate) fn represented_node(&self, request: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        self.represented_nodes.get(request).copied()
     }
 
     /// Translate a retained accounting identity through its own source table.

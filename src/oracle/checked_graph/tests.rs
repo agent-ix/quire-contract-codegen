@@ -112,25 +112,32 @@ fn source_framed_value(
 
 fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
     let graph = CheckedGraph::new(package);
-    let keys = source
+    let source_by_key = source
         .graph()
         .nodes
         .iter()
         .filter_map(|node| {
-            let key =
-                quire_contract_model::ContractSourceKeyV1::from_v2_request(source, &node.node_id)
-                    .expect("source request");
-            match package
-                .reached_closure(&key)
-                .expect("admitted source closure")
-            {
-                quire_contract_model::ContractRootViewV1::Lowered(view) => {
-                    Some((view.root.node_id.clone(), node.node_id.clone()))
-                }
-                _ => None,
-            }
+            source
+                .structural_key(&node.node_id)
+                .map(|key| (key, &node.node_id))
         })
         .collect::<std::collections::BTreeMap<_, _>>();
+    let mut keys = std::collections::BTreeMap::new();
+    for node in &source.graph().nodes {
+        let key = quire_contract_model::ContractSourceKeyV1::from_v2_request(source, &node.node_id)
+            .expect("source request");
+        if let quire_contract_model::ContractRootViewV1::Lowered(view) = package
+            .reached_closure(&key)
+            .expect("admitted source closure")
+        {
+            for reached in view.nodes {
+                let original = source_by_key
+                    .get(&reached.structural_key)
+                    .expect("reached source identity");
+                keys.insert(reached.node.node_id.clone(), (*original).clone());
+            }
+        }
+    }
 
     assert!(
         graph.len() > 0,
