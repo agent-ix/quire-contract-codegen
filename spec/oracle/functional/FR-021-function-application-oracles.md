@@ -374,6 +374,34 @@ session; CG's current schedule and location map do not supply it.
   dispatch checked expressions or invent a second evaluator. The separate
   Kani witness path shall continue to use `qsl_replay::replay` without this
   generated-body registry.
+- Under `cfg(kani)` the emitted crate shall expose each generated body module
+  `body_{symbol}` (with its `Factory`) as `pub(crate)` and shall not compile
+  the host entry `oracle_{symbol}`: the owner-path entry runs
+  `acquire_checked_closure`, which executes the QSL compiler, and Kani
+  0.68.0 cannot code-generate that compiler (model-checking/kani#4813,
+  unreleased fix #4819; #5024, fix #5066 unmerged). QSL's checked closure is
+  unforgeable and has no constructor from bytes; CG shall not add or request
+  one. The Kani obligation is therefore exactly: the generated body, driven
+  directly through `BodyFactory::begin` and `Body::resume(Resume::Start(..))`
+  over arguments and a `Meter` and beside the genuinely read retained
+  `CheckedPackageV2` (FR-039 strict reader, unmodified), yields the oracle
+  outcome. It does NOT cover, and earns no proof credit for, acquisition,
+  source authentication, owner/identity binding, callable selection,
+  registration, `begin_call`, the nested-call site or scheduler, or the typed
+  `CheckedFunctionError` mapping. That glue is covered only by the host tests
+  tagged to FR-021-AC-35 through AC-37 and AC-17 in
+  `src/oracle/function/owner_path.rs`:
+  `checked_owner_path_applies_a_genuine_source_callable`,
+  `checked_owner_path_applies_a_locked_imported_callable`,
+  `nested_call_site_comes_from_the_selected_checked_body`,
+  `own_and_imported_callers_charge_their_checked_nested_site`,
+  `malformed_source_stops_at_acquisition`,
+  `genuine_other_unit_identity_stops_before_lookup_or_registration`,
+  `unrelated_declaring_package_cannot_authorize_a_callable`,
+  `post_lookup_guard_refuses_a_genuine_second_selection` and
+  `typed_facade_outcomes_keep_distinct_serializable_cause_codes`. A nested
+  call body (`Transition::Call`) needs the QSL scheduler and is outside the
+  Kani obligation until a proof-safe scheduler entry exists.
 - When an emitted function body returns `Outcome::Completed(value)`, the
   generated body shall compare that value with the same checker-issued
   `CallableSelection::signature().result()` supplied at registration, using
@@ -470,6 +498,7 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-39 | For an emitted function with real checker-owned nominal declarations, the unmutated emitted preparation consumes the selected closure's exact declaration keys, forms, ordered members, presence and types once each and constructs successfully. A test-only mutation of emitted pre-body assembly submits one unchanged real owner declaration twice to the shipped QSV constructor; its genuine duplicate-key `EnvironmentFailure::Refused(InvalidDeclaration)` yields `Done(Evaluation { outcome: FamilyOutcome::Evaluated(Outcome::Refused(CheckedInvariant { cause: GeneratedEnvironmentRejected })), location: Some(declaration occurrence), .. })` before body operation or body charge, retaining the exact `InvalidDeclaration` in diagnostic evidence. No synthetic declaration, forced error, empty-default environment or production hook is used. `Limit(WorkUnits)` is distinguished by the cancel handle's tripped state; `Allocation` and `Capacity` remain distinct storage failures, and none maps to this cause. The current match is inspected; executable allocation/capacity controls remain PLANNED until QSL-1107 provides a public reservation seam for this constructor. PLANNED (IR-709 after IR-595; blocked by QSL-1105 and QSL-1107). | Test and Inspection (TC-031, TC-057) |
 | FR-021-AC-40 | For the same selected callable, the generated result check reads the exact checker-issued `selection.signature().result()` and the admitted QSV environment, never a CG re-derived or test-supplied result type; `Undefined`, `Refused` and `Incomplete` body results pass through with their original variant, payload, location and admitted charge prefix. `admits` returning `Err(EnvironmentFailure)` yields no membership verdict and is never `GeneratedUnexpectedOutcome` or `Completed`; the exact non-conflating leaf mapping and executable storage control await QSL-1107, while nominal result environment awaits QSL-1105. The current match is inspected without claiming an executable storage stop. PLANNED (IR-709 after IR-595). | Test and Inspection (TC-031, TC-057) |
 | FR-021-AC-41 | For a plain strict-reader-admitted V1 package, after existing duplicate, capability and item-precedence checks, an eligible selected call item or declaration body with an admitted `Unsupported` accounting record whose `node_tag` is `"temporal"` and whose requested-root-kind view is `NotAdmitted` causes whole-call `OracleGenerationError::UnauthenticatedRequestedRootKind { request_index, node_id }` before claim map, schedule, oracle or partial publication. These V1 facts trigger refusal without deciding whether the requested root is direct `formula`, direct `fairness` or a temporal clause. For a direct call item the error names its own driver request index and call-node root; for a declared body reached through a distinct valid call item it names the body's declaration driver request index and body root, never that call item's index/root. The lowest eligible driver request index wins across both kinds, independent of function and item slice order. The first reachable `unsupported_node_id` and `node_tag` do not substitute for the requested root. The same canonical V1 bytes read through authenticated `read_with_source` retain AC-11's clause blocker and AC-33's direct formula/fairness `Unsupported` claim, including unaffected sibling results. A plain-read request without an eligible temporal-tag `Unsupported` record retains its existing result. | Test (TC-031) |
+| FR-021-AC-42 | The emitted function-oracle crate, compiled with `cfg(kani)`, declares every `body_{symbol}` module `pub(crate)` with a `pub(crate)` `Factory` and omits every `oracle_{symbol}` host entry, and compiled without `cfg(kani)` is unchanged (all `oracle_{symbol}` entries present and behaving as AC-35 through AC-37 require). A source-level check of the emitted text proves the `#[cfg(not(kani))]` gate on each host entry and the module visibility; the Kani obligation and its explicit exclusions are as stated in Behavior, and no test, doc comment or matrix row credits the host glue to a Kani proof. | Test (TC-031), Inspection |
 
 ### Mutations these criteria detect
 
@@ -516,6 +545,7 @@ written.
 | FR-021-AC-39 | Duplicate an owner declaration in production, invent a malformed declaration in the test instead of resubmitting an authentic one, map a resource error to `GeneratedEnvironmentRejected`, or run a body operation before environment admission. |
 | FR-021-AC-40 | Derive the result type from CG input rather than the checker-issued selection, turn `admits` storage failure into `Ok(false)`, or relabel `Undefined`, `Refused` or `Incomplete`. |
 | FR-021-AC-41 | Inspect an unavailable requested-root kind to decide whether the plain-read guard runs, infer a direct formula or fairness root from the V1 `node_tag` or a represented node, report the call item's index for a declaration-body refusal, or change the selected index when either slice is permuted. |
+| FR-021-AC-42 | Leave an `oracle_{symbol}` host entry compiled under `cfg(kani)` (re-importing the QSL compiler into the proof), gate out the body module so the proof has nothing to drive, add a QSL-closure constructor from bytes, or credit registry/selection/begin_call behaviour to the Kani proof. |
 
 ## Dependencies
 
