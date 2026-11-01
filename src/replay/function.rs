@@ -234,26 +234,9 @@ pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
         text(out, view.package());
         out.push_str(",\"path\":[");
     }
-    // A JSON string literal spelled as serde_json spells it: `"` `\\` and the control
-    // characters escaped, everything else (including non-ASCII) verbatim.
+    // A JSON string literal exactly as serde_json spells it (its `Display` for a string is infallible).
     fn text(out: &mut String, value: &str) {
-        out.push('"');
-        for character in value.chars() {
-            match character {
-                '"' => out.push_str("\\\""),
-                '\\' => out.push_str("\\\\"),
-                '\u{08}' => out.push_str("\\b"),
-                '\u{0c}' => out.push_str("\\f"),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                control if u32::from(control) < 0x20 => {
-                    out.push_str(&format!("\\u{:04x}", u32::from(control)));
-                }
-                other => out.push(other),
-            }
-        }
-        out.push('"');
+        out.push_str(&serde_json::Value::String(value.to_owned()).to_string());
     }
     let mut json = String::new();
     let root = key.view();

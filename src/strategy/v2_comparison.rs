@@ -194,16 +194,8 @@ pub fn admit_v2_integer_comparison(
     let oracle = V2IntegerOracle {
         source: crate::oracle::integer_comparison::lower_typed_integer_comparison(
             &projection,
-            match relation.primary() {
-                OperandPosition::Left => crate::oracle::integer_comparison::PrimaryOperand::Left,
-                OperandPosition::Right => crate::oracle::integer_comparison::PrimaryOperand::Right,
-            },
-            match relation.partner() {
-                Partner::Read => crate::oracle::integer_comparison::PartnerOperand::Read,
-                Partner::Literal(value) => {
-                    crate::oracle::integer_comparison::PartnerOperand::Literal(value)
-                }
-            },
+            relation.primary().into(),
+            relation.partner().into(),
         ),
     };
     Ok(V2ComparisonAdmission {
@@ -215,4 +207,22 @@ pub fn admit_v2_integer_comparison(
         domain,
         oracle,
     })
+}
+
+impl From<OperandPosition> for crate::oracle::integer_comparison::PrimaryOperand {
+    fn from(position: OperandPosition) -> Self {
+        match position {
+            OperandPosition::Left => Self::Left,
+            OperandPosition::Right => Self::Right,
+        }
+    }
+}
+
+impl From<Partner> for crate::oracle::integer_comparison::PartnerOperand {
+    fn from(partner: Partner) -> Self {
+        match partner {
+            Partner::Read => Self::Read,
+            Partner::Literal(value) => Self::Literal(value),
+        }
+    }
 }
