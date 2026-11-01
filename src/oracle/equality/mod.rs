@@ -2007,9 +2007,9 @@ impl Default for SourceBuilder {
 }
 
 // Debug Rust codegen can retain temporaries from sequential statements in a
-// function frame. Keep each generated constructor small enough for a 512 KiB
-// caller stack independently of source-byte artifact partitioning.
-const MAX_DECLARATIONS_PER_FUNCTION: usize = 128;
+// function frame. Leave room for structural NodeKey comparison on a 512 KiB
+// worker stack independently of source-byte artifact partitioning.
+const MAX_DECLARATIONS_PER_FUNCTION: usize = 64;
 
 impl SourceBuilder {
     fn new(limit: usize) -> Result<Self, OracleGenerationError> {
@@ -2088,7 +2088,7 @@ impl SourceBuilder {
                 ))?;
             }
         } else {
-            let mut chunk_calls = String::new();
+            let mut chunk_functions = String::new();
             let mut chunk = String::new();
             let mut chunk_index = 0usize;
             let mut chunk_count = 0usize;
@@ -2104,7 +2104,7 @@ impl SourceBuilder {
                         &crate::core::provenance::node_subject(&item.node_id),
                         chunk_index,
                         &chunk,
-                        &mut chunk_calls,
+                        &mut chunk_functions,
                         &chunk_subjects,
                     )?;
                     chunk_index += 1;
@@ -2124,12 +2124,12 @@ impl SourceBuilder {
                     &crate::core::provenance::node_subject(&item.node_id),
                     chunk_index,
                     &chunk,
-                    &mut chunk_calls,
+                    &mut chunk_functions,
                     &chunk_subjects,
                 )?;
             }
             self.append_function(format!(
-                "\nfn composites_{symbol}(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
+                "\nfn composites_{symbol}(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n    let chunks: &[fn(Option<&qsl_replay::AdmittedContext>, &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError>] = &[\n{chunk_functions}    ];\n    for chunk in chunks {{\n        declarations.extend(chunk(_context, _enum_members)?);\n    }}\n    Ok(declarations)\n}}\n"
             ))?;
         }
 
@@ -2158,7 +2158,7 @@ impl SourceBuilder {
         subject: &str,
         index: usize,
         declarations: &str,
-        calls: &mut String,
+        functions: &mut String,
         composite_subjects: &[String],
     ) -> Result<(), OracleGenerationError> {
         let name = format!("composites_{symbol}_{index}");
@@ -2172,9 +2172,7 @@ impl SourceBuilder {
         self.charge(module_declaration.len().saturating_add(module_source.len()))?;
         self.module_declarations.push_str(&module_declaration);
         self.modules.push((format!("src/{name}.rs"), module_source));
-        calls.push_str(&format!(
-            "    declarations.extend({name}::declarations(_context, _enum_members)?);\n"
-        ));
+        functions.push_str(&format!("        {name}::declarations,\n"));
         Ok(())
     }
 
@@ -3880,14 +3878,30 @@ mod tests {
         assert!(!header.replace("test", "").contains("test"));
     }
 
-    #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
+    #[trace("FR-018-AC-28", "FR-018-AC-30", "FR-018-AC-33", "TC-029")]
     #[test]
-    #[ignore = "50,000-record intake and generated crate compile pass; runtime deep.rs:33 ContextPackageContentMismatch in deep genuine prepared environment, then deep.rs:58 512 KiB stack join panic; IR-1079"]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
         let (original_source, original, context, ids, leaf) = admitted_record_chain(RECORDS, true);
+        let original_bytes = encode_checked_package_v2(
+            original.name(),
+            original.lock(),
+            original.graph(),
+            CheckedPackageSourceCorrespondenceRef {
+                source_map: original.source_map(),
+                refinement_step_rows: original.refinement_step_rows(),
+            },
+            original.checked_term_data(),
+            original.capability_report(),
+            original.diagnostics(),
+            quire_canonical::Limits::new(u64::MAX),
+        )
+        .expect("the original checked package encodes");
+        assert_eq!(original_bytes, context.package_bytes());
+        let original_bytes =
+            String::from_utf8(original_bytes).expect("the canonical checked package is UTF-8 JSON");
         let root = ids[0].clone();
-        let (artifacts, _root) = std::thread::Builder::new()
+        let (artifacts, _root, original_bytes) = std::thread::Builder::new()
             .stack_size(512 * 1024)
             .spawn(move || {
                 let nodes = fixture_nodes(&original);
@@ -3967,7 +3981,7 @@ mod tests {
                     assert!(lib.contents.contains("oracle_test1"));
                 }
                 let operand = EqualityOperandDescriptor::typed(root.clone());
-                let (outcomes, source) = check_component_items_with_context(
+                let (outcomes, mut source) = check_component_items_with_context(
                     Some(&context),
                     nodes,
                     &[(operand.clone(), operand)],
@@ -3977,6 +3991,7 @@ mod tests {
                     },
                 );
                 assert_eq!(outcomes, vec![Ok(())]);
+                source.expected_package_bytes = Some(original_bytes.clone());
                 let all = source.finish(usize::MAX).expect("complete source");
                 let bytes: usize = all.iter().map(|artifact| artifact.contents.len()).sum();
                 assert!(bytes > MAX_GENERATED_SOURCE_BYTES);
@@ -4043,7 +4058,7 @@ mod tests {
                         .any(|line| line == root_subject),
                     "the root's reconstruction module lacks its composite subject"
                 );
-                (exact, root)
+                (exact, root, original_bytes)
             })
             .expect("small-stack worker starts")
             .join()
@@ -4059,6 +4074,11 @@ mod tests {
         .expect("scratch manifest");
         std::fs::write(scratch.join("deep.native"), &original_source)
             .expect("retain exact original nominal source");
+        std::fs::write(
+            scratch.join("checked-package.json"),
+            original_bytes.as_bytes(),
+        )
+        .expect("retain the authenticated original checked package");
         for artifact in &artifacts {
             std::fs::write(scratch.join(&artifact.path), &artifact.contents)
                 .expect("generated source");
@@ -4090,6 +4110,11 @@ fn deep_matches_shallow() {
         },
         qsl_replay::ReplayLimits::default().with_input_bytes(u64::try_from(source.len()).unwrap()),
     ).expect("same retained source must admit independently");
+    assert_eq!(
+        EXPECTED_PACKAGE_BYTES,
+        Some(admitted.context().package_bytes()),
+        "independent recompilation must reproduce the full original checked package"
+    );
     std::thread::Builder::new().stack_size(512 * 1024).spawn(move || {
         let context = admitted.context();
         let key = |name: &str| context.composites().find(|declaration|
