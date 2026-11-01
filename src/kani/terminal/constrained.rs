@@ -174,7 +174,12 @@ pub fn classify_constrained_method<'a>(
         KaniRunOutcome::Verified | KaniRunOutcome::CoverUnsatisfied { .. }
     );
     let boundary = evidence.method.constraint.as_ref().map(|_| {
-        let covers = evidence.backend.checks.iter().filter(|check| check.class == KaniCheckClass::Cover).count();
+        let covers = evidence
+            .backend
+            .checks
+            .iter()
+            .filter(|check| check.class == KaniCheckClass::Cover)
+            .count();
         if !completed_run || !complete || covers != 2 || ordinary.is_none() {
             ConstraintBoundary::Unknown
         } else {

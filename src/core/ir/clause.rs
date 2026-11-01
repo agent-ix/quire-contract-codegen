@@ -105,7 +105,7 @@ impl<'a> ClauseGraphView<'a> {
 struct Reader<'a, 'view> {
     package: &'a CheckedPackageV2,
     nodes: &'view ClauseGraphView<'a>,
-    self_id: Option<CheckedNodeId>,
+    self_id: CheckedNodeId,
     allowed_parameters: BTreeSet<CheckedNodeId>,
     inputs: BTreeSet<ClauseInput>,
     visiting: BTreeSet<CheckedNodeId>,
@@ -130,8 +130,15 @@ impl Reader<'_, '_> {
                 }
                 let node = self.node(&id)?;
                 if &*node.node_tag == "value" && &*node.semantic_form == "parameter" {
-                    let boolean = self.nodes.kind(&node.semantic_type) == Some(CheckedNodeKind::ScalarType(quire_contract_model::ScalarTypeForm::Boolean));
-                    let bound = if boolean { (0, 1) } else { self.bound(&node.semantic_type)? };
+                    let boolean = self.nodes.kind(&node.semantic_type)
+                        == Some(CheckedNodeKind::ScalarType(
+                            quire_contract_model::ScalarTypeForm::Boolean,
+                        ));
+                    let bound = if boolean {
+                        (0, 1)
+                    } else {
+                        self.bound(&node.semantic_type)?
+                    };
                     let declaration = self.package.parameter_declaration(&id).ok()?;
                     if side != ClauseInputSide::Current || !self.allowed_parameters.contains(&id) {
                         return None;
@@ -191,11 +198,7 @@ impl Reader<'_, '_> {
             CheckedTerm::Literal {
                 value_kind, value, ..
             } => match value_kind {
-                LiteralKind::Boolean => match value.as_str()? {
-                    "true" => Some(ClauseTerm::Boolean(true)),
-                    "false" => Some(ClauseTerm::Boolean(false)),
-                    _ => None,
-                },
+                LiteralKind::Boolean => Some(ClauseTerm::Boolean(value.as_bool()?)),
                 LiteralKind::Integer => Some(ClauseTerm::Integer(value.as_str()?.to_owned())),
                 _ => None,
             },
@@ -268,7 +271,7 @@ impl Reader<'_, '_> {
         else {
             return None;
         };
-        if Some(reference(subject)?) != self.self_id.as_ref() {
+        if reference(subject)? != &self.self_id {
             return None;
         }
         let fields = self.package.model_object_fields(declaration).ok()?;
@@ -317,14 +320,10 @@ pub(crate) fn read_clause(
     let CheckedTerm::Aggregate { members: declared } = parameters else {
         return None;
     };
-    let self_id = match declared.first() {
-        Some(term) => {
-            let id = reference(term)?;
-            if package.parameter_declaration(id).ok()?.name.as_ref() != "self" { return None; }
-            Some(id.clone())
-        }
-        None => None,
-    };
+    let self_id = declared.first().and_then(reference)?.clone();
+    if package.parameter_declaration(&self_id).ok()?.name.as_ref() != "self" {
+        return None;
+    }
     let allowed_parameters = declared
         .iter()
         .skip(1)

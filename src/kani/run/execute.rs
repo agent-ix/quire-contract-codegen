@@ -410,7 +410,10 @@ pub(crate) fn execute_kani_obligation_readonly(
     request: &KaniExecutionRequest<'_>,
     source_directory: &Path,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    if matches!(request.harness, super::harness::KaniExecutableHarness::Constrained(_)) {
+    if matches!(
+        request.harness,
+        super::harness::KaniExecutableHarness::Constrained(_)
+    ) {
         return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
     }
     let totality_line = require_in_crate(request)?;

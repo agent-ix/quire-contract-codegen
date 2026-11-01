@@ -138,7 +138,10 @@ fn oracle(
                     .iter()
                     .position(|field| {
                         field.name == input.name
-                            && matches!(field.domain, SymbolicBounds::Integer { .. } | SymbolicBounds::Boolean)
+                            && matches!(
+                                field.domain,
+                                SymbolicBounds::Integer { .. } | SymbolicBounds::Boolean
+                            )
                     })
                     .ok_or(R::Condition)?;
                 format!("state.{index}")
@@ -150,20 +153,27 @@ fn oracle(
                     .iter()
                     .position(|(name, domain)| {
                         name == &input.name
-                            && matches!(domain.bounds, SymbolicBounds::Integer { .. } | SymbolicBounds::Boolean)
+                            && matches!(
+                                domain.bounds,
+                                SymbolicBounds::Integer { .. } | SymbolicBounds::Boolean
+                            )
                     })
                     .ok_or(R::Condition)?;
                 format!("*parameter_{index}")
             }
             ClauseInputSide::Pre => return Err(R::Condition),
         };
-        arguments.push(if input.boolean { value } else if condition.oracle.native_integer_selection.is_some() {
+        arguments.push(if input.boolean {
+            value
+        } else if condition.oracle.native_integer_selection.is_some() {
             format!("&quire_exact::NativeInteger::new(i128::from({value}))")
         } else {
             format!("&quire_exact::Integer::from({value})")
         });
     }
-    arguments.push("&mut meter()".into());
+    if !condition.oracle.descriptor.operation_identities.is_empty() {
+        arguments.push("&mut meter()".into());
+    }
     let state_type = tuple_type(identity);
     let parameters = operation
         .map(|operation| {
@@ -176,7 +186,12 @@ fn oracle(
         })
         .unwrap_or_default();
     // Exact-kernel outcomes are retained rather than coerced to a Boolean predicate.
-    writeln!(source,"fn evaluate_{name}(state: &{state_type}{parameters}) -> Result<quire_exact::Outcome<bool>, {name}::ClauseStop> {{ {name}::oracle_clause({}) }}",arguments.join(",")).map_err(|_|R::Render)
+    let result = if condition.oracle.descriptor.operation_identities.is_empty() {
+        "bool".to_owned()
+    } else {
+        format!("Result<quire_exact::Outcome<bool>, {name}::ClauseStop>")
+    };
+    writeln!(source,"fn evaluate_{name}(state: &{state_type}{parameters}) -> {result} {{ {name}::oracle_clause({}) }}",arguments.join(",")).map_err(|_|R::Render)
 }
 
 fn tuple_type(identity: &ConstrainedMethodIdentity) -> String {
@@ -217,9 +232,9 @@ pub(super) fn render(
         "result_units",
     ];
     writeln!(source,"fn meter() -> quire_exact::Meter {{ quire_exact::Meter::new(quire_exact::ScalarLimits {{ {} }}) }}",names.iter().zip(identity.evaluator_limits).map(|(name,value)|format!("{name}: {value}u64")).collect::<Vec<_>>().join(",")).map_err(|_|R::Render)?;
-    oracle(&mut source, "safety", &prepared.safety, &identity, None)?;
+    oracle(&mut source, "safety", &prepared.safety, identity, None)?;
     if let Some(constraint) = &prepared.constraint {
-        oracle(&mut source, "constraint", constraint, &identity, None)?;
+        oracle(&mut source, "constraint", constraint, identity, None)?;
     }
     for (index, (operation, conditions)) in identity
         .operations
@@ -232,7 +247,7 @@ pub(super) fn render(
                 &mut source,
                 &format!("pre_{index}_{condition_index}"),
                 condition,
-                &identity,
+                identity,
                 Some(operation),
             )?;
         }
@@ -253,7 +268,7 @@ pub(super) fn render(
     writeln!(
         source,
         "#[kani::proof]\nfn search() {{\nlet mut state: {} = {};",
-        tuple_type(&identity),
+        tuple_type(identity),
         initial
     )
     .map_err(|_| R::Render)?;
@@ -266,9 +281,23 @@ pub(super) fn render(
         identity.maximum_steps
     )
     .map_err(|_| R::Render)?;
-    source.push_str("match evaluate_safety(&state) {\nOk(quire_exact::Outcome::Completed(value)) => assert!(value, \"safety violation\"),\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined safety evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused safety evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete safety evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
-    if prepared.constraint.is_some() {
-        source.push_str("match evaluate_constraint(&state) {\nOk(quire_exact::Outcome::Completed(false)) => { boundary = true; break; },\nOk(quire_exact::Outcome::Completed(true)) => {},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined constraint evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused constraint evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete constraint evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
+    if prepared
+        .safety
+        .oracle
+        .descriptor
+        .operation_identities
+        .is_empty()
+    {
+        source.push_str("assert!(evaluate_safety(&state), \"safety violation\");\n");
+    } else {
+        source.push_str("match evaluate_safety(&state) {\nOk(quire_exact::Outcome::Completed(value)) => assert!(value, \"safety violation\"),\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined safety evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused safety evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete safety evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
+    }
+    if let Some(constraint) = &prepared.constraint {
+        if constraint.oracle.descriptor.operation_identities.is_empty() {
+            source.push_str("if !evaluate_constraint(&state) { boundary = true; break; }\n");
+        } else {
+            source.push_str("match evaluate_constraint(&state) {\nOk(quire_exact::Outcome::Completed(false)) => { boundary = true; break; },\nOk(quire_exact::Outcome::Completed(true)) => {},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined constraint evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused constraint evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete constraint evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
+        }
     }
     writeln!(
         source,
@@ -303,7 +332,20 @@ pub(super) fn render(
                 .map(|parameter| format!(", &parameter_{parameter}"))
                 .collect::<String>();
             for condition in 0..prepared.preconditions[index].len() {
-                writeln!(source,"match evaluate_pre_{index}_{condition}(&state{parameters}) {{\nOk(quire_exact::Outcome::Completed(false)) => break,\nOk(quire_exact::Outcome::Completed(true)) => {{}},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined precondition evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused precondition evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete precondition evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}}").map_err(|_|R::Render)?;
+                if prepared.preconditions[index][condition]
+                    .oracle
+                    .descriptor
+                    .operation_identities
+                    .is_empty()
+                {
+                    writeln!(
+                        source,
+                        "if !evaluate_pre_{index}_{condition}(&state{parameters}) {{ break; }}"
+                    )
+                    .map_err(|_| R::Render)?;
+                } else {
+                    writeln!(source,"match evaluate_pre_{index}_{condition}(&state{parameters}) {{\nOk(quire_exact::Outcome::Completed(false)) => break,\nOk(quire_exact::Outcome::Completed(true)) => {{}},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined precondition evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused precondition evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete precondition evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}}").map_err(|_|R::Render)?;
+                }
             }
             let mut arguments = (0..identity.fields.len())
                 .map(|field| format!("&mut state.{field}"))
@@ -366,4 +408,37 @@ pub(super) fn render(
         source,
     );
     Ok(rust)
+}
+
+/// Attribute the renderer's own assertion and distinct covers, never backend text.
+pub(in crate::kani::generate) fn observation_lines(
+    rust: &Artifact,
+    constrained: bool,
+) -> Result<(u32, u32, Option<u32>), ConstrainedMethodRefusal> {
+    use ConstrainedMethodRefusal as R;
+    let mut safety = rust.contents.lines().enumerate().filter(|(_, line)| {
+        line.trim_start()
+            .starts_with("Ok(quire_exact::Outcome::Completed(value)) => assert!(value,")
+            || line
+                .trim_start()
+                .starts_with("assert!(evaluate_safety(&state),")
+    });
+    let (index, _) = safety.next().ok_or(R::Render)?;
+    if safety.next().is_some() {
+        return Err(R::Render);
+    }
+    let safety = u32::try_from(index + 1).map_err(|_| R::Render)?;
+    let rows = rust
+        .contents
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim_start().starts_with("kani::cover!("))
+        .map(|(index, _)| u32::try_from(index + 1))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| R::Render)?;
+    match rows.as_slice() {
+        [ordinary, boundary] if constrained => Ok((safety, *ordinary, Some(*boundary))),
+        [ordinary] if !constrained => Ok((safety, *ordinary, None)),
+        _ => Err(R::Render),
+    }
 }

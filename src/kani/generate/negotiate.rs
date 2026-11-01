@@ -654,39 +654,42 @@ fn classify<'a>(
         ObligationItem::ConstrainedMethod { request: method } => {
             let lookup = checked_lookup(checked_lookups, method.safety.package);
             let source_map = lookup.occurrences(method.safety.clause);
-            let (identity, outcome) =
-                match super::constrained::lower(method, ceilings, unwind, native, lookup.clause()) {
-                    Ok(lowered) => (
-                        Some(ItemIdentity::ConstrainedMethod {
-                            module_symbol: lowered.identity.module_symbol.clone(),
-                        }),
-                        Outcome::LoweredConstrained(Box::new(lowered)),
-                    ),
-                    Err(reason) => {
-                        use super::outcome::constrained::ConstrainedMethodRefusal as R;
-                        let outcome = match reason {
-                            R::UnsupportedDomain | R::Census { .. } | R::Condition | R::Render => {
-                                Outcome::Unsupported(UnsupportedObligation::ConstrainedMethod {
-                                    reason,
-                                })
-                            }
-                            R::WrongPackage
-                            | R::MissingConstraint
-                            | R::AmbiguousConstraint
-                            | R::NotConstraint
-                            | R::WrongContext
-                            | R::UnsupportedSafety
-                            | R::OperationBindings
-                            | R::InitialState
-                            | R::Provision => {
-                                Outcome::Invalid(InvalidObligationItem::ConstrainedMethod {
-                                    reason,
-                                })
-                            }
-                        };
-                        (None, outcome)
-                    }
-                };
+            let (identity, outcome) = match super::constrained::lower(
+                method,
+                ceilings,
+                unwind,
+                native,
+                lookup.clause(),
+            ) {
+                Ok(lowered) => (
+                    Some(ItemIdentity::ConstrainedMethod {
+                        module_symbol: lowered.identity.module_symbol.clone(),
+                    }),
+                    Outcome::LoweredConstrained(Box::new(lowered)),
+                ),
+                Err(reason) => {
+                    use super::outcome::constrained::ConstrainedMethodRefusal as R;
+                    let outcome = match reason {
+                        R::UnsupportedDomain | R::Census { .. } | R::Condition | R::Render => {
+                            Outcome::Unsupported(UnsupportedObligation::ConstrainedMethod {
+                                reason,
+                            })
+                        }
+                        R::WrongPackage
+                        | R::MissingConstraint
+                        | R::AmbiguousConstraint
+                        | R::NotConstraint
+                        | R::WrongContext
+                        | R::UnsupportedSafety
+                        | R::OperationBindings
+                        | R::InitialState
+                        | R::Provision => {
+                            Outcome::Invalid(InvalidObligationItem::ConstrainedMethod { reason })
+                        }
+                    };
+                    (None, outcome)
+                }
+            };
             ItemState {
                 kind: Some(ObligationKind::Invariant),
                 subject: ObligationSubject::CheckedNode {

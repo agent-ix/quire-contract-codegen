@@ -43,6 +43,8 @@ pub struct V2ClauseDescriptor {
     /// Ordered operand values and their admitted inclusive bounds.
     pub inputs: Vec<ClauseOracleInput>,
     /// Checked scalar operation identities in evaluation-plan order.
+    /// An empty plan emits a direct Boolean read; otherwise oracle_clause accepts a meter
+    /// and returns Result<Outcome<bool>, ClauseStop>.
     pub operation_identities: Vec<String>,
     /// Number of implication consequents derived from the condition tree.
     pub expected_consequents: u32,
@@ -332,24 +334,43 @@ fn generate_clause_oracle_with_view(
     };
     let parameters = names
         .iter()
-        .map(|(input, name)| if input.boolean { format!("{name}: bool, ") } else { format!("{name}: &{integer_type}, ") })
+        .map(|(input, name)| {
+            if input.boolean {
+                format!("{name}: bool, ")
+            } else {
+                format!("{name}: &{integer_type}, ")
+            }
+        })
         .collect::<String>();
     let arguments = names
         .values()
         .map(|name| format!("{name}, "))
         .collect::<String>();
-    for (index, step) in plan.iter().enumerate() {
-        render_step(
-            &mut source,
-            index,
-            step,
-            &names,
-            &parameters,
-            &arguments,
-            policy,
-        )?;
+    if operations.is_empty() {
+        // A literal or Boolean read has no accounted operation. Keep this one entry
+        // free of a meter allocation; no owner operation or charge is skipped.
+        let value = match &plan.get(root).ok_or(V2ClauseRefusal::Render)?.term {
+            StepTerm::Boolean(value) => value.to_string(),
+            StepTerm::Input(input) if input.boolean => {
+                names.get(input).ok_or(V2ClauseRefusal::Render)?.clone()
+            }
+            _ => return Err(V2ClauseRefusal::UnsupportedCondition),
+        };
+        source.push_str(&format!("\n/// The admitted V2 clause condition, without accounted operations.\npub fn oracle_clause({parameters}) -> bool {{\n    {value}\n}}\n"));
+    } else {
+        for (index, step) in plan.iter().enumerate() {
+            render_step(
+                &mut source,
+                index,
+                step,
+                &names,
+                &parameters,
+                &arguments,
+                policy,
+            )?;
+        }
+        source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
     }
-    source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(V2ClauseRefusal::Render);
     }
@@ -511,7 +532,11 @@ fn lower(
             term: StepTerm::Integer(value.clone()),
         },
         ClauseTerm::Input(input) if names.contains_key(input) => Step {
-            kind: if input.boolean { ValueKind::Boolean } else { ValueKind::Integer },
+            kind: if input.boolean {
+                ValueKind::Boolean
+            } else {
+                ValueKind::Integer
+            },
             term: StepTerm::Input(input.clone()),
         },
         ClauseTerm::Input(_) => return Err(V2ClauseRefusal::UnsupportedCondition),
@@ -558,7 +583,8 @@ fn lower(
                     operator: crate::oracle::operator_catalog::IntegerOperator::Negate,
                     ..
                 } => (ValueKind::Integer, vec![ValueKind::Integer]),
-                ExactScalarOperation::IntegerArithmetic { .. } | ExactScalarOperation::IntegerModulo { .. } => {
+                ExactScalarOperation::IntegerArithmetic { .. }
+                | ExactScalarOperation::IntegerModulo { .. } => {
                     (ValueKind::Integer, vec![ValueKind::Integer; 2])
                 }
                 _ => return Err(V2ClauseRefusal::UnsupportedCondition),

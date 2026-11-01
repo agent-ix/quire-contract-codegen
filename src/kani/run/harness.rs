@@ -101,12 +101,36 @@ impl<'a> KaniExecutableHarness<'a> {
     /// Record argument bounds only when producing execution evidence.
     pub(super) fn symbolic_arguments(self) -> Vec<SymbolicArgumentBounds> {
         match self {
-            Self::Constrained(harness) => harness.identity.operations.iter().flat_map(|operation| {
-                operation.parameters.iter().map(|(name, domain)| SymbolicArgumentBounds {
-                    identifier: format!("step[*].{}::{name}", operation.name),
-                    bounds: domain.bounds.clone(),
-                })
-            }).collect(),
+            Self::Constrained(harness) => {
+                let mut arguments = Vec::new();
+                if !harness.identity.operations.is_empty() {
+                    let maximum = i64::try_from(harness.identity.operations.len() - 1)
+                        .expect("sealed lowering validates the complete census length");
+                    arguments.push(SymbolicArgumentBounds {
+                        identifier: "step[*].operation".into(),
+                        bounds: SymbolicBounds::Integer {
+                            minimum: 0,
+                            maximum,
+                        },
+                    });
+                }
+                arguments.extend(
+                    harness
+                        .identity
+                        .operations
+                        .iter()
+                        .flat_map(|operation| {
+                            operation.parameters.iter().map(|(name, domain)| {
+                                SymbolicArgumentBounds {
+                                    identifier: format!("step[*].{}::{name}", operation.name),
+                                    bounds: domain.bounds.clone(),
+                                }
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                arguments
+            }
             Self::Contract(harness) => {
                 let identity = &harness.identity;
                 identity

@@ -252,7 +252,10 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
         let bindings = bindings(&f);
         let mut provisions = request(&f, &initial, &bindings);
         provisions.maximum_steps = 1;
-        let method = emit_method(&provisions).unwrap();
+        generate_v2_clause_native_oracle(&f.package, &f.safety).expect("native safety condition");
+        generate_v2_clause_native_oracle(&f.package, &f.constraints[0])
+            .expect("native constraint condition");
+        let method = emit_method_with_unwind(&provisions, 3).unwrap();
         let evidence = run_installed(&method);
         let safety = owner_evaluation(
             &f,
@@ -343,16 +346,30 @@ fn installed_small_method_controls_retain_boundary_safety_and_no_boundary_succes
 #[trace("TC-062", "FR-048-AC-1", "FR-048-AC-6", "FR-048-AC-11")]
 #[test]
 fn boolean_and_partial_conditions_use_the_owner_oracle_and_unbounded_domains_refuse() {
-    for condition in ["self.flag", "self.n mod self.aux = 0"] {
-        let f = fixture(&document(), "constrained-conditions", "self.n <= 3", &[condition]);
+    for condition in ["self.flag", "true", "false", "self.n mod self.aux = 0"] {
+        let f = fixture(
+            &document(),
+            "constrained-conditions",
+            "self.n <= 3",
+            &[condition],
+        );
         let initial = initial(0);
         let bindings = bindings(&f);
         let request = request(&f, &initial, &bindings);
         let method = emit_method(&request).expect("Boolean and partial integer owner conditions");
-        assert!(method.rust().contents.contains("undefined constraint evaluation"));
-        let outcome = owner_evaluation(&f, "EvalConstraint0", 0, false, 0, request.evaluator_limits);
-        if condition == "self.flag" {
-            assert!(matches!(outcome, qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(false))));
+        if condition == "self.n mod self.aux = 0" {
+            assert!(method
+                .rust()
+                .contents
+                .contains("undefined constraint evaluation"));
+        }
+        let outcome =
+            owner_evaluation(&f, "EvalConstraint0", 0, false, 0, request.evaluator_limits);
+        if condition != "self.n mod self.aux = 0" {
+            assert!(matches!(
+                outcome,
+                qsl_replay::CallOutcome::Completed(qsl_replay::CallValue::Boolean(value)) if value == (condition == "true")
+            ));
         } else {
             assert!(matches!(outcome, qsl_replay::CallOutcome::Undefined { .. }));
             assert!(method.rust().contents.contains("rt::modulo"));
@@ -361,36 +378,74 @@ fn boolean_and_partial_conditions_use_the_owner_oracle_and_unbounded_domains_ref
     for slot in ["unread-field", "uncalled-parameter", "uncalled-result"] {
         let mut doc = document();
         match slot {
-            "unread-field" => doc["types"][1]["fields"][2]["typeRef"] = json!("ix://quire/native/Integer"),
-            "uncalled-parameter" => doc["types"][1]["operations"][0]["params"][0]["typeRef"] = json!("ix://quire/native/Integer"),
-            "uncalled-result" => doc["types"][1]["operations"][1]["returns"]["typeRef"] = json!("ix://quire/native/Integer"),
+            "unread-field" => {
+                doc["types"][1]["fields"][2]["typeRef"] = json!("ix://quire/native/Integer")
+            }
+            "uncalled-parameter" => {
+                doc["types"][1]["operations"][0]["params"][0]["typeRef"] =
+                    json!("ix://quire/native/Integer")
+            }
+            "uncalled-result" => {
+                doc["types"][1]["operations"][1]["returns"]["typeRef"] =
+                    json!("ix://quire/native/Integer")
+            }
             _ => unreachable!(),
         }
-        let f = fixture(&doc, "constrained-unbounded", "self.n <= 3", &["self.n < 2"]);
+        let f = fixture(
+            &doc,
+            "constrained-unbounded",
+            "self.n <= 3",
+            &["self.n < 2"],
+        );
         let initial = initial(0);
         let bindings = bindings(&f);
-        assert_eq!(emit_method(&request(&f, &initial, &bindings)).unwrap_err(), ConstrainedMethodRefusal::UnsupportedDomain, "{slot}");
+        assert_eq!(
+            emit_method(&request(&f, &initial, &bindings)).unwrap_err(),
+            ConstrainedMethodRefusal::UnsupportedDomain,
+            "{slot}"
+        );
     }
 }
 
 #[trace("TC-062", "FR-048-AC-1", "FR-048-AC-2", "FR-048-AC-8")]
 #[test]
 fn equivalent_package_instances_cannot_mix_handles_and_census_refusal_retains_owner_payload() {
-    let a = fixture(&document(), "constrained-instance", "self.n <= 3", &["self.n < 2"]);
-    let b = fixture(&document(), "constrained-instance", "self.n <= 3", &["self.n < 2"]);
+    let a = fixture(
+        &document(),
+        "constrained-instance",
+        "self.n <= 3",
+        &["self.n < 2"],
+    );
+    let b = fixture(
+        &document(),
+        "constrained-instance",
+        "self.n <= 3",
+        &["self.n < 2"],
+    );
     let initial = initial(0);
     let bindings_a = bindings(&a);
     let bindings_b = bindings(&b);
     let mut request_a = request(&a, &initial, &bindings_a);
     let request_b = request(&b, &initial, &bindings_b);
-    assert_eq!(emit_method(&request_a).unwrap().identity(), emit_method(&request_b).unwrap().identity());
+    assert_eq!(
+        emit_method(&request_a).unwrap().identity(),
+        emit_method(&request_b).unwrap().identity()
+    );
     request_a.constraint = request_b.constraint;
-    assert_eq!(emit_method(&request_a).unwrap_err(), ConstrainedMethodRefusal::WrongPackage);
+    assert_eq!(
+        emit_method(&request_a).unwrap_err(),
+        ConstrainedMethodRefusal::WrongPackage
+    );
     request_a.constraint = request(&a, &initial, &bindings_a).constraint;
     request_a.census_work = 0;
     let refusal = emit_method(&request_a).unwrap_err();
-    let ConstrainedMethodRefusal::Census { source } = &refusal else { panic!("original census refusal: {refusal:?}") };
-    assert_eq!(source.code, quire_contract_model::CheckedOperationReadErrorCode::WorkLimit);
+    let ConstrainedMethodRefusal::Census { source } = &refusal else {
+        panic!("original census refusal: {refusal:?}")
+    };
+    assert_eq!(
+        source.code,
+        quire_contract_model::CheckedOperationReadErrorCode::WorkLimit
+    );
     assert_eq!(source.context, a.context);
     assert_eq!(source.limit, 0);
     assert!(source.work > source.limit);
@@ -444,13 +499,93 @@ pub mod subject {
 }
 "#;
 
-
 #[trace("TC-062", "FR-048-AC-1")]
 #[test]
 fn structurally_identical_constraint_occurrences_require_an_explicit_selection() {
-    let f = fixture(&document(), "constrained-ambiguous", "self.n <= 3", &["self.n < 2", "self.n < 2"]);
+    let f = fixture(
+        &document(),
+        "constrained-ambiguous",
+        "self.n <= 3",
+        &["self.n < 2", "self.n < 2"],
+    );
     let initial = initial(0);
     let bindings = bindings(&f);
-    assert_eq!(f.constraints.len(), 1, "canonical interning retains both occurrences on one node");
-    assert_eq!(emit_method(&request(&f, &initial, &bindings)).unwrap_err(), ConstrainedMethodRefusal::AmbiguousConstraint);
+    assert_eq!(
+        f.constraints.len(),
+        1,
+        "canonical interning retains both occurrences on one node"
+    );
+    assert_eq!(
+        emit_method(&request(&f, &initial, &bindings)).unwrap_err(),
+        ConstrainedMethodRefusal::AmbiguousConstraint
+    );
+}
+
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let f = fixture(
+        &document(),
+        "constrained-cover-audit",
+        "self.n <= 3",
+        &["self.n < 2"],
+    );
+    let initial = initial(0);
+    let bindings = bindings(&f);
+    let mut request = request(&f, &initial, &bindings);
+    let constrained = emit_method(&request).unwrap().rust().contents.clone();
+    request.constraint = None;
+    let unconstrained = emit_method(&request).unwrap().rust().contents.clone();
+    vec![
+        ("constrained method", constrained),
+        ("unconstrained method", unconstrained),
+    ]
+}
+
+#[trace("TC-062", "FR-048-AC-11")]
+#[test]
+fn a_standalone_collection_constraint_remains_unsupported_without_a_harness() {
+    let mut doc = document();
+    let mut field = doc["types"][1]["fields"][2].clone();
+    field["name"] = json!("items");
+    field["identity"] = json!(format!("{OBJECT}/items"));
+    field["multiplicity"] = json!({"lower":0,"upper":3,"ordered":true,"unique":false});
+    doc["types"][1]["fields"]
+        .as_array_mut()
+        .unwrap()
+        .push(field);
+    let bytes = quire_canonical::to_vec(&doc, quire_canonical::Limits::new(1 << 20)).unwrap();
+    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\ninvariant Safe using v on M::Node at current {{ self.n <= 3 }}\nconstraint Limit using v on M::Node at current {{ forall(item in self.items: item >= 0) }}\n");
+    let f = fixture_source(bytes, "constrained-standalone-collection", source);
+    let quantifier = f.package.graph().nodes.iter().find(|node| matches!(f.package.term(&node.node_id),Some(quire_contract_model::CheckedTerm::Application {operation,..}) if operation.identity()==Some("quire.op.collection.forall"))).expect("QSL emitted forall");
+    let items = [ObligationItem::CollectionClaim {
+        package: &f.package,
+        function_id: &f.constraints[0],
+        node_id: &quantifier.node_id,
+    }];
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: proof_ceilings(),
+        unwind: 8,
+        items: &items,
+        subject_path: "crate::subject",
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        constrained_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("per-item typed unsupported")
+    };
+    assert!(collection_harnesses.is_empty());
+    assert!(constrained_harnesses.is_empty());
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::UnsupportedClaimShape,
+                ..
+            }
+        }
+    ));
 }

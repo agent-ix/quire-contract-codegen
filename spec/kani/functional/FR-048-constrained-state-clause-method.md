@@ -25,9 +25,8 @@ CG SHALL retain the constraint as a method input rather than a proof obligation.
 When that method reaches a state outside the constraint, CG SHALL evaluate
 that state's safety obligations before stopping expansion from it.
 
-This requirement specifies the constrained-method slice of IR-1157. Every
-criterion below is PLANNED: the current request, generator, classifier and
-terminal map do not implement this method. A standalone constraint collection
+This requirement specifies the constrained-method slice of IR-1157.
+A standalone constraint collection
 claim remains unsupported without a harness under
 [FR-015-AC-128](./FR-015-bounded-kani-obligations.md).
 This requirement neither turns that refusal into proof evidence nor changes

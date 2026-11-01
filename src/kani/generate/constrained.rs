@@ -126,7 +126,13 @@ fn prepare_condition(
         .ok_or(ConstrainedMethodRefusal::Condition)?
         .inputs;
     let oracle = generate_v2_clause_native_oracle_with_view(id, view)
-        .or_else(|error| if native_only { Err(error) } else { generate_v2_clause_oracle_with_view(id, view) })
+        .or_else(|error| {
+            if native_only {
+                Err(error)
+            } else {
+                generate_v2_clause_oracle_with_view(id, view)
+            }
+        })
         .map_err(|_| ConstrainedMethodRefusal::Condition)?;
     Ok(ConstrainedConditionSpec { oracle, inputs })
 }
@@ -197,6 +203,9 @@ pub(super) fn lower(
     let census = package
         .model_operations(request.context, request.census_work)
         .map_err(|source| R::Census { source })?;
+    if i64::try_from(census.operations().len()).is_err() {
+        return Err(R::Provision);
+    }
     if census.operations().len() != request.operations.len() {
         return Err(R::OperationBindings);
     }
@@ -303,8 +312,8 @@ pub(super) fn lower(
         fields,
         operations,
         maximum_steps: request.maximum_steps,
-        ceilings: ceilings,
-        unwind: unwind,
+        ceilings,
+        unwind,
         evaluator_limits: [
             l.integer_bits,
             l.decimal_digits,
@@ -369,46 +378,14 @@ pub(super) fn render(
         },
     )?;
     let rust = super::render::render(&spec)?;
-    let mut safety = rust.contents.lines().enumerate().filter(|(_, line)| {
-        line.trim_start()
-            .starts_with("Ok(quire_exact::Outcome::Completed(value)) => assert!(value,")
-    });
-    let (index, _) =
-        safety
-            .next()
-            .ok_or(super::outcome::UnsupportedObligation::ConstrainedMethod {
-                reason: ConstrainedMethodRefusal::Render,
-            })?;
-    if safety.next().is_some() {
-        return Err(super::outcome::UnsupportedObligation::ConstrainedMethod {
-            reason: ConstrainedMethodRefusal::Render,
-        });
-    }
-    identity.safety_assertion_line = u32::try_from(index + 1).map_err(|_| {
-        super::outcome::UnsupportedObligation::ConstrainedMethod {
-            reason: ConstrainedMethodRefusal::Render,
-        }
-    })?;
-    let rows = rust
-        .contents
-        .lines()
-        .enumerate()
-        .filter(|(_, line)| line.trim_start().starts_with("kani::cover!("))
-        .map(|(index, _)| u32::try_from(index + 1))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(
-            |_| super::outcome::UnsupportedObligation::ConstrainedMethod {
-                reason: ConstrainedMethodRefusal::Render,
-            },
-        )?;
-    let expected = if identity.constraint.is_some() { 2 } else { 1 };
-    if rows.len() != expected {
-        return Err(super::outcome::UnsupportedObligation::ConstrainedMethod {
-            reason: ConstrainedMethodRefusal::Render,
-        });
-    }
-    identity.ordinary_cover_line = rows[0];
-    identity.boundary_cover_line = rows.get(1).copied();
+    let (safety, ordinary, boundary) =
+        super::render::constrained::observation_lines(&rust, identity.constraint.is_some())
+            .map_err(
+                |reason| super::outcome::UnsupportedObligation::ConstrainedMethod { reason },
+            )?;
+    identity.safety_assertion_line = safety;
+    identity.ordinary_cover_line = ordinary;
+    identity.boundary_cover_line = boundary;
     let record = super::record::record(&identity.module_symbol, &identity, &rust)?;
     Ok(KaniConstrainedMethodHarness {
         identity,

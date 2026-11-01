@@ -128,7 +128,9 @@ pub(crate) fn clause_scalar_operation(
         }
         Family::IntegerModulo => {
             let domain = match result_bound {
-                Some((lower, upper)) => IntegerDomain::Bounded(IntegerInterval::new(lower.into(), upper.into()).ok()?),
+                Some((lower, upper)) => {
+                    IntegerDomain::Bounded(IntegerInterval::new(lower.into(), upper.into()).ok()?)
+                }
                 None => IntegerDomain::Mathematical,
             };
             Some(ExactScalarOperation::IntegerModulo { domain })

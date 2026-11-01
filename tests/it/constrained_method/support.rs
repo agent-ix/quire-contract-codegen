@@ -63,6 +63,9 @@ pub(super) fn fixture(doc: &Value, name: &str, safety: &str, constraints: &[&str
     for (index, body) in constraints.iter().enumerate() {
         source.push_str(&function(&format!("EvalConstraint{index}"), body));
     }
+    fixture_source(bytes, name, source)
+}
+pub(super) fn fixture_source(bytes: Vec<u8>, name: &str, source: String) -> Fixture {
     let site = call_site(
         SourceIdentity::new("agent-ix", format!("{name}.native"), "git", "fixture"),
         name.to_owned(),
@@ -176,10 +179,16 @@ pub(super) fn proof_ceilings() -> ProofCeilings {
 pub(super) fn emit_method(
     request: &ConstrainedMethodRequest<'_>,
 ) -> Result<KaniConstrainedMethodHarness, ConstrainedMethodRefusal> {
+    emit_method_with_unwind(request, 8)
+}
+pub(super) fn emit_method_with_unwind(
+    request: &ConstrainedMethodRequest<'_>,
+    unwind: u32,
+) -> Result<KaniConstrainedMethodHarness, ConstrainedMethodRefusal> {
     let item = ObligationItem::ConstrainedMethod { request };
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: proof_ceilings(),
-        unwind: 8,
+        unwind,
         items: &[item],
         subject_path: "crate::subject",
     })
@@ -254,4 +263,3 @@ pub(super) fn owner_evaluation(
     .into_parts()
     .0
 }
-
