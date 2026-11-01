@@ -8,13 +8,12 @@ use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirector
 use ix_trace_rs::trace;
 use qsl_replay::{
     call_site, evaluate_clause, object_reference_witness, replay, write_object_environment,
-    ByteDigest, ClauseEvaluation, ClauseEvaluationRequest, ClauseIncomplete, ClauseName,
-    ClauseObservation, ClauseRefusal, DeclarationKey, DependencyInput, DigestDomain, DigestRecord,
-    DomainPackageRef, EnvironmentLabels, EnvironmentModel, EnvironmentObject,
-    EnvironmentPopulation, EvaluatedValue, Identifier, ModelNormalizationLimits, ObservationLimits,
-    ObligationIdentity, QualifiedName, ReplayLimits, ReplayRequestWire, ReplayResult, ReplaySource,
-    RequestTargetWire, ScalarLimits, SelectedObject, SnapshotValue, SourceIdentity, SpineLimits,
-    StateEnvironment, WitnessValue,
+    ClauseEvaluation, ClauseEvaluationRequest, ClauseIncomplete, ClauseName, ClauseObservation,
+    ClauseRefusal, DeclarationKey, DependencyInput, DomainPackageRef, EnvironmentLabels,
+    EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue, Identifier,
+    ModelNormalizationLimits, ObligationIdentity, ObservationLimits, QualifiedName, ReplayLimits,
+    ReplayRequestWire, ReplayResult, ReplaySource, RequestTargetWire, ScalarLimits, SelectedObject,
+    SnapshotValue, SourceIdentity, SpineLimits, StateEnvironment, WitnessValue,
 };
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, run_terminal_value,
@@ -34,6 +33,7 @@ use quire_contract_model::{
 use quire_exact::CollectionKind;
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, env, fs, path::PathBuf, process::Command, time::Duration};
 
 const NODE_ID: &str = "ix://ir268.test/domain/Node";
@@ -1938,20 +1938,18 @@ fn native_collection_precondition(
     let fields = json!({
         "items": {"ordered-set": items.iter().map(ToString::to_string).map(|item| json!({"integer": item})).collect::<Vec<_>>()},
         "flags": {"sequence": []},
-        "next": {"reference": {"population": POPULATION_ID, "key": object.key}},
-        "maybe": {"absent": {}},
-        "many": {"sequence": []},
     });
-    let model_digest = DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest);
+    let model_digest = Sha256::digest(&fixture.model_bytes);
     let snapshot = json!({
         "format": "quire.state.snapshot/v1",
         "identity": {"authority": "agent-ix", "identity": "ix://ir268.test/collection/prestate", "revision_namespace": "git", "revision": "fixture"},
         "observation": "pre",
-        "model": {"identity": "ir268.test/domain", "version": "1.0.0", "digest": format!("sha256-jcs:{}", model_digest.hex())},
+        "model": {"identity": "ir268.test/domain", "version": "1.0.0", "digest": format!("sha256-jcs:{model_digest:x}")},
         "populations": [{"population": POPULATION_ID, "complete": true, "objects": [{"key": object.key, "type": NODE_ID, "fields": fields}]}],
     });
     evaluate_clause(ClauseEvaluationRequest {
         source: SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
+        package_name: fixture.package.name().to_owned(),
         path: "ir1091-clause.native".to_owned(),
         bytes: fixture.source.as_bytes().to_vec(),
         packages: vec![fixture.model_bytes.clone()],
@@ -1970,6 +1968,22 @@ fn native_collection_precondition(
 
 fn assert_collection_precondition_equivalence(fixture: &Emitted, cases: &[([i64; 3], i64, bool)]) {
     let harness = precondition_collection_harness(fixture);
+    let operation = harness
+        .identity
+        .collection_operation
+        .as_ref()
+        .expect("whole-object operation context");
+    assert_eq!(
+        operation
+            .fields
+            .iter()
+            .map(|field| (field.slot.as_str(), field.field_name.as_str()))
+            .collect::<Vec<_>>(),
+        [("field_0", "items"), ("field_1", "flags")],
+        "generated and native states use the admitted declaration order"
+    );
+    assert!(operation.parameters.is_empty());
+    assert!(operation.result.is_none());
     let marker = harness
         .identity
         .collection_precondition
@@ -1998,17 +2012,17 @@ fn assert_collection_precondition_equivalence(fixture: &Emitted, cases: &[([i64;
         .expect("generated proof module");
     let oracle_items = module
         .iter()
-        .filter(|item| match item {
-            syn::Item::Enum(item) => item.ident == "ClauseEvaluation",
-            syn::Item::Fn(item) => item.sig.ident == "oracle_clause",
-            _ => false,
-        })
+        .filter(|item| !matches!(item, syn::Item::Fn(function) if function.sig.ident == harness.identity.harness_symbol.as_str()))
         .collect::<Vec<_>>();
-    assert_eq!(
-        oracle_items.len(),
-        2,
-        "generated enum and oracle are present"
-    );
+    assert!(oracle_items
+        .iter()
+        .any(|item| matches!(item, syn::Item::Struct(value) if value.ident == "CgObjectState")));
+    assert!(oracle_items
+        .iter()
+        .any(|item| matches!(item, syn::Item::Enum(value) if value.ident == "ClauseEvaluation")));
+    assert!(oracle_items
+        .iter()
+        .any(|item| matches!(item, syn::Item::Fn(value) if value.sig.ident == "oracle_clause")));
     let oracle_source = oracle_items
         .iter()
         .map(quote::ToTokens::to_token_stream)
@@ -2023,15 +2037,36 @@ fn assert_collection_precondition_equivalence(fixture: &Emitted, cases: &[([i64;
         .join(", ");
     let scratch = TemporaryDirectory::new("ir1091-native-clause-equivalence");
     let program = format!(
-        "mod generated {{ {oracle_source}\n pub fn observations() -> [bool; {count}] {{\n  let cases: [([i64; 3], i64); {count}] = [{case_source}];\n  cases.map(|(items, len)| match oracle_clause(&items, len) {{ ClauseEvaluation::Completed(value) => value, _ => panic!(\"generated clause did not complete\") }})\n }} }}\nfn main() {{ for value in generated::observations() {{ println!(\"{{value}}\"); }} }}\n"
+        "mod generated {{ {oracle_source}\n pub fn observations() -> [bool; {count}] {{\n  let cases: [([i64; 3], i64); {count}] = [{case_source}];\n  cases.map(|(items, len)| {{\n    let values = items[..usize::try_from(len).expect(\"admitted length\")].iter().copied().map(|item| quire_exact::Value::Integer(quire_exact::Integer::from(item))).collect();\n    let field_0 = match quire_exact::build_typed_prestate(&type_field_0(), values, &mut meter(), Some(&mut admit_field_0)) {{ Ok(quire_exact::Outcome::Completed(value)) => value, _ => panic!(\"selected exact prestate\") }};\n    let field_1 = match quire_exact::build_typed_prestate(&type_field_1(), Vec::new(), &mut meter(), Some(&mut admit_field_1)) {{ Ok(quire_exact::Outcome::Completed(value)) => value, _ => panic!(\"unread exact prestate\") }};\n    let state = CgObjectState {{ field_0, field_1 }};\n    match oracle_clause(&state, &state) {{ ClauseEvaluation::Completed(value) => value, _ => panic!(\"generated clause did not complete\") }}\n  }})\n }} }}\nfn main() {{ for value in generated::observations() {{ println!(\"{{value}}\"); }} }}\n"
     );
     let source = scratch.path.join("oracle.rs");
     let executable = scratch.path.join("oracle");
     fs::write(&source, program).expect("write generated oracle driver");
+    let dependencies = std::env::current_exe()
+        .expect("test executable")
+        .parent()
+        .expect("Cargo dependency directory")
+        .to_path_buf();
+    let exact = fs::read_dir(&dependencies)
+        .expect("Cargo dependency artifacts")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("libquire_exact-"))
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "rlib")
+        })
+        .expect("locked quire-exact library");
     let compile = Command::new("rustc")
         .args(["--edition=2021", "-o"])
         .arg(&executable)
         .arg(&source)
+        .arg("-L")
+        .arg(format!("dependency={}", dependencies.display()))
+        .arg("--extern")
+        .arg(format!("quire_exact={}", exact.display()))
         .output()
         .expect("launch rustc");
     assert!(
