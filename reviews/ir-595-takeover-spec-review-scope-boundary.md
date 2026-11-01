@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-PASS. No scope-boundary defect found in the examined delta; aggregate/full integration qualification is pending the lead.
+PASS — all review findings are resolved. Focused all-target clippy and 16/16 native function agreement tests pass through e010c62b; the final aggregate gate and full integration target remain pending.
 
 ## Findings
 
@@ -74,3 +74,15 @@ and schedule emission use charged iterative walks and no fixe
 ### Allocation
 
 CG owns source-bound classification, artifact emission and correspondence refusals (core); QSL owns retained checked acquisition, complete owner bytes and callable/site authority (external contract, exercised by native agreement tests); quire-eval owns registry/session/scheduler and call charges (external contract, exercised); Exact/QSV own values, scalar/equality outcomes and meter operations (external contract, exercised for scoped Boolean/Integer cases). Nominal/result-cause completeness stays with explicitly planned IR-709; no RT exact or QSL internal fallback remains.
+
+
+## Qualification evidence
+
+Inspected at e010c62b480477764b53d5b93f7d7b2583ae3a2e. Changes since the reviewed fixes are review-artifact custody and test doc-comment blank-line removal; no new production behavior is introduced.
+
+- `/tmp/ir595-review-fix-clippy.log`: all-target clippy with denied warnings finished successfully.
+- `/tmp/ir595-review-fix-it.log`: 16 passed, 0 failed; this includes the original-versus-represented type-refusal regression and compiled own/imported-owner native agreement cases.
+- `/tmp/ir595-review-artifacts-validate.log`: Quire artifact validation completed with advisory warnings and no validation error.
+- CG baseline remains f3d328e37d28a381e68bb4b7bbe248218e712f95; QSpec fixture baseline remains 3405bdb8c5355adef03202d4573a95c4219178d9.
+
+The lead has started the single aggregate gate. `/tmp/ir595-aggregate-summary.txt` had no completed stage entries when inspected; no aggregate or full-IT success is claimed here. Historical pending notes in the earlier disposition rounds describe their evidence at that time. No reviewer Cargo commands or source edits were performed.

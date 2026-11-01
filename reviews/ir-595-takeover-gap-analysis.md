@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-PASS — all findings statically fixed through deffec57. Runtime/clippy and final aggregate qualification remain pending.
+PASS — all review findings are resolved. Focused all-target clippy and 16/16 native function agreement tests pass through e010c62b; the final aggregate gate and full integration target remain pending.
 
 ## Findings
 
@@ -100,3 +100,15 @@ Static verification of deffec57e92272fc166832c2c6ba7f6b3b2d3c01. The regression 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-002 | fixed | The trace now matches the concrete refused-disposition/no-artifact assertions under AC-1; the source-frame regression remains intact. |
+
+
+## Qualification evidence
+
+Inspected at e010c62b480477764b53d5b93f7d7b2583ae3a2e. Changes since the reviewed fixes are review-artifact custody and test doc-comment blank-line removal; no new production behavior is introduced.
+
+- `/tmp/ir595-review-fix-clippy.log`: all-target clippy with denied warnings finished successfully.
+- `/tmp/ir595-review-fix-it.log`: 16 passed, 0 failed; this includes the original-versus-represented type-refusal regression and compiled own/imported-owner native agreement cases.
+- `/tmp/ir595-review-artifacts-validate.log`: Quire artifact validation completed with advisory warnings and no validation error.
+- CG baseline remains f3d328e37d28a381e68bb4b7bbe248218e712f95; QSpec fixture baseline remains 3405bdb8c5355adef03202d4573a95c4219178d9.
+
+The lead has started the single aggregate gate. `/tmp/ir595-aggregate-summary.txt` had no completed stage entries when inspected; no aggregate or full-IT success is claimed here. Historical pending notes in the earlier disposition rounds describe their evidence at that time. No reviewer Cargo commands or source edits were performed.
