@@ -646,6 +646,7 @@ pub struct KaniScalarObligationHarness {
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
     original_scalar_limits: Option<quire_exact::ScalarLimits>,
+    scalar_replay_body: Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError>,
 }
 
 // This value compares the per-harness public output and its origin seal. The routed package seal
@@ -659,6 +660,7 @@ impl PartialEq for KaniScalarObligationHarness {
             && self.generated_rust == other.generated_rust
             && self.generated_record == other.generated_record
             && self.original_scalar_limits == other.original_scalar_limits
+            && self.scalar_replay_body == other.scalar_replay_body
     }
 }
 
@@ -680,6 +682,7 @@ impl KaniScalarObligationHarness {
             record,
             generated_artifacts: None,
             original_scalar_limits: None,
+            scalar_replay_body: Err(crate::replay::scalar_authority::ScalarAuthorityError::Unavailable),
         }
     }
 
@@ -693,6 +696,19 @@ impl KaniScalarObligationHarness {
         let mut harness = Self::generated(identity, rust, record);
         harness.original_scalar_limits = Some(limits);
         harness
+    }
+
+    /// Original admitted positional replay body, authenticated against the generator seal.
+    ///
+    /// # Errors
+    /// Refuses changed generated fields or unavailable/ambiguous admitted provenance.
+    pub fn scalar_replay_body(&self) -> Result<&crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError> {
+        if !self.has_valid_provenance() { return Err(crate::replay::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged); }
+        self.scalar_replay_body.as_ref().map_err(Clone::clone)
+    }
+
+    pub(crate) fn bind_scalar_replay_body(&mut self, body: Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError>) {
+        self.scalar_replay_body = body;
     }
 
     /// The original accounting limits supplied to the meter in this generated scalar source.

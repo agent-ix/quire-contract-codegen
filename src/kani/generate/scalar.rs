@@ -336,6 +336,14 @@ pub(super) fn lower_scalar_claim(
 }
 
 impl LoweredScalarClaim {
+    pub(super) fn replay_body(&self, source: &quire_contract_model::CheckedPackageV2) -> Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError> {
+        use crate::replay::scalar_authority::{ScalarReplayBody, ScalarAuthorityError};
+        if self.operation == ScalarOperation::Implies { return Err(ScalarAuthorityError::Unavailable); }
+        let body = ScalarReplayBody::admitted(source, &self.node_id)?;
+        if body.operands.len() != self.operands.len() || body.operands.iter().zip(&self.operands).any(|(operand, (lower, upper))| operand.range.lower != i128::from(*lower) || operand.range.upper != i128::from(*upper)) { return Err(ScalarAuthorityError::Ranges); }
+        Ok(body)
+    }
+
     /// Select the exact kernel native route from the full original operand intervals.
     pub(super) fn select_native_integer(&mut self) -> Result<(), UnsupportedObligation> {
         let operator = match self.operation {

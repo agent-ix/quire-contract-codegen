@@ -376,7 +376,10 @@ fn negotiate_integer_policy(
                     }
                 }
                 Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
-                    Ok(harness) => {
+                    Ok(mut harness) => {
+                        if let ObligationItem::ScalarClaim { source, .. } = request.items[index] {
+                            harness.bind_scalar_replay_body(lowered.replay_body(source));
+                        }
                         let symbol = harness.identity.harness_symbol.clone();
                         scalar_harnesses.push(harness);
                         ObligationDisposition::Supported {

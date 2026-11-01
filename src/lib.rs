@@ -325,3 +325,5 @@ pub use kani::terminal::constrained::{
     ConstrainedMethodResult, ConstrainedMethodStatus, ConstrainedOwnerObservation,
     ConstrainedReplaySettlement, ConstraintBoundary,
 };
+/// Original admitted scalar replay body and typed family authority.
+pub use replay::scalar_authority::{ScalarAuthorityError, ScalarReplayBody, ScalarReplayKind};
