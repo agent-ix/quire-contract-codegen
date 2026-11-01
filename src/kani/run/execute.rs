@@ -3631,7 +3631,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     }
 
     /// Injected event ordering distinguishes running cancellation from accepted completion.
-    #[trace("FR-040-AC-3", "FR-040-AC-5")]
+    #[trace("TC-055", "FR-040-AC-3", "FR-040-AC-5")]
     #[cfg(target_os = "linux")]
     #[test]
     fn controlled_caller_order_distinguishes_cancelled_and_completed_batch() {
@@ -3644,13 +3644,25 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     fn controlled_batch_cancellation_arm(withhold: bool) {
         use quire_exact::CancelCause::{Deadline, Requested};
 
-        let harnesses = [
+        let mut harnesses = [
             member("a", "check", 4),
             member("b", "check", 4),
             member("c", "check", 4),
         ];
+        // These assertions order caller events, not elapsed time. The controller's
+        // settlement timeout cancels both handles if a real owner stops progressing.
+        for harness in &mut harnesses {
+            harness.identity.ceilings.wall_clock = Duration::MAX;
+        }
         let body = format!(
-            "case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}"
+            r#"case "$ids" in *a::check*)
+printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+printf 'ready' > "$CALLS.ready"
+while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
+exit 0;;
+esac
+{VERIFY_EVERY_HARNESS}"#
         );
         let mut stand_in = StandIn::running("controlled-caller-order", &body);
         stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
@@ -3658,14 +3670,14 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         let clone = stand_in.cancel.clone();
         let (observation, confirmation) = stand_in.controlled_owners();
         let requests = [
-            stand_in.request(&harnesses[0], T),
+            stand_in.request(&harnesses[0], Duration::MAX),
             KaniExecutionRequest {
                 cancel: &clone,
-                ..stand_in.request(&harnesses[1], T)
+                ..stand_in.request(&harnesses[1], Duration::MAX)
             },
             KaniExecutionRequest {
                 cancel: &independent,
-                ..stand_in.request(&harnesses[2], T)
+                ..stand_in.request(&harnesses[2], Duration::MAX)
             },
         ];
         let groups = std::thread::scope(|scope| {
@@ -3687,12 +3699,11 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     stand_in.cancel.cancel(Deadline);
                     assert_eq!(stand_in.cancel.cause(), Some(Requested));
                 }
+                if withhold {
+                    fs::write(stand_in.directory.join("calls.finish"), b"finish").unwrap();
+                }
                 releases.release_memory();
-                releases
-                    .cleanup
-                    .entered
-                    .recv_timeout(Duration::from_secs(65))
-                    .expect("real owned cleanup confirmation reached");
+                releases.cleanup.entered();
                 eprintln!("controlled withhold={withhold}: real cleanup poll returned; readiness validation follows release");
                 if withhold {
                     assert_eq!(stand_in.cancel.cause(), None);
