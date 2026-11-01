@@ -15,7 +15,7 @@ mod generated {
                 exact::PathSegment::Text(name) =>
                     quire_contract_model::CheckedNodePathSegment::Name(name.into()),
                 exact::PathSegment::Node(child) =>
-                    quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child))),
+                    quire_contract_model::CheckedNodePathSegment::Node(std::sync::Arc::new(wire(&child))),
             }).collect(),
             ordinal: key.ordinal(),
         }

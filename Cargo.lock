@@ -1279,7 +1279,7 @@ dependencies = [
 [[package]]
 name = "qsl-cst"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "ix-trace-rs",
  "logos",
@@ -1291,7 +1291,7 @@ dependencies = [
 [[package]]
 name = "qsl-eval"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "ix-trace-rs",
  "qsl-foundation",
@@ -1310,7 +1310,7 @@ dependencies = [
 [[package]]
 name = "qsl-forms"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "ix-trace-rs",
  "qsl-cst",
@@ -1322,7 +1322,7 @@ dependencies = [
 [[package]]
 name = "qsl-foundation"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "ix-trace-rs",
  "quire-exact",
@@ -1335,7 +1335,7 @@ dependencies = [
 [[package]]
 name = "qsl-package"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "ix-trace-rs",
  "qsl-foundation",
@@ -1353,7 +1353,7 @@ dependencies = [
 [[package]]
 name = "qsl-replay"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "base64 0.22.1",
  "ix-trace-rs",
@@ -1380,7 +1380,7 @@ dependencies = [
 [[package]]
 name = "qsl-semantics"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#a517baa0b688fd6252080fd38cf637586bdc3f0c"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
  "agent-ix-extraction-frontend",
  "agent-ix-semantic-ir",
@@ -1465,7 +1465,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-ir"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#8320ebe7d85d61ed86af866ee0836aebc623ef33"
+source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#21fd5e98ad8962d4ef8a82b7a79dabb83c0f5b21"
 dependencies = [
  "ix-trace-rs",
  "quire-contract-model",
@@ -1477,7 +1477,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-model"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#013b4e9fc45a46394d5c1ed8881d6a3cc83ec771"
+source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#21fd5e98ad8962d4ef8a82b7a79dabb83c0f5b21"
 dependencies = [
  "ix-trace-rs",
  "jsonschema 0.17.1",
@@ -1521,7 +1521,7 @@ dependencies = [
 [[package]]
 name = "quire-exact"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-exact?branch=main#532d87b67f5c5866e9aa231f2cdc245c4aa350bc"
+source = "git+https://github.com/agent-ix/quire-exact?branch=main#82e8f9b4d9583ba4eee505550ff80a211333696f"
 dependencies = [
  "allocator-api2",
  "num-bigint",
@@ -1557,7 +1557,7 @@ dependencies = [
 [[package]]
 name = "quire-semantic-value"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-semantic-value?branch=main#74ab6f8a772de060c485bc75fd97219d1d6a9de0"
+source = "git+https://github.com/agent-ix/quire-semantic-value?branch=main#3cc0b27e19a398f336152ada05972072053fa47e"
 dependencies = [
  "quire-canonical",
  "quire-exact",

@@ -240,7 +240,9 @@ mod tests {
                         quire_contract_model::CheckedNodePathSegment::Name(name.into())
                     }
                     quire_exact::PathSegment::Node(child) => {
-                        quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child)))
+                        quire_contract_model::CheckedNodePathSegment::Node(std::sync::Arc::new(
+                            wire(&child),
+                        ))
                     }
                 })
                 .collect(),

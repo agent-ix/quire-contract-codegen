@@ -1583,7 +1583,7 @@ fn render_wire_node_id(key: &CheckedNodeId) -> Result<String, RenderError> {
                     .ok_or(OracleGenerationError::InvalidPlanState)?;
                 let path = rendered.split_off(start).join(", ");
                 let expression = format!("quire_contract_model::CheckedNodeId {{ package: {package:?}.into(), path: vec![{path}], ordinal: {ordinal} }}");
-                rendered.push(if root { expression } else { format!("quire_contract_model::CheckedNodePathSegment::Node(Box::new({expression}))") });
+                rendered.push(if root { expression } else { format!("quire_contract_model::CheckedNodePathSegment::Node(std::sync::Arc::new({expression}))") });
             }
         }
     }
