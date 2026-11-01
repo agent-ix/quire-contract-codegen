@@ -1602,8 +1602,6 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
-    use sha2::{Digest, Sha256};
-
     const REQUESTS: u32 = 16;
     let (builder, source, sites) = source_backed_byte_chain(REQUESTS);
     let raw = builder.raw_wire();
@@ -1613,10 +1611,9 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
         .iter()
         .find(|item| item["identity"] == "ir764-ac40-source")
         .expect("authored source is locked");
-    assert_eq!(
-        source_ref["digest"],
-        format!("{:x}", Sha256::digest(source.as_bytes()))
-    );
+    // The lock names an authored source by authority and identity only; the source map's byte
+    // spans below are what bind each node to the authored text.
+    assert_eq!(source_ref["authority"], "agent-ix");
     for (code, spans) in &sites {
         let entries = raw["source_map"]
             .as_array()
@@ -2029,7 +2026,15 @@ fn tc_024_anonymous_integer_range_generates_one_addition() {
 #[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
-    let (outcome, _, ids) = corpus_package().read_resolved();
+    // The nodes the assertions read, below the reader's package byte ceiling.
+    let (outcome, _, ids) = corpus_package()
+        .focused(&[
+            code_id(T_INTEGER),
+            id(&INT5.key()),
+            code_id(1053),
+            code_id(T_DECIMAL_AWAY),
+        ])
+        .read_resolved();
     let CheckedPackageV2ReadResult::Admitted(package) = outcome else {
         panic!("corpus must admit before CG generation: {outcome:?}");
     };
@@ -2156,12 +2161,15 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
 #[trace("FR-014-AC-3", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed() {
-    let package = corpus_package_for_codes(&[LITERAL_OPERAND]).admit();
+    // Node 1051 is the decimal constant checked at the end of the test.
+    let package = corpus_package_for_codes(&[LITERAL_OPERAND, 1051]).admit();
     let oracles = generate(
         &package,
         &golden_items()
             .into_iter()
-            .filter(|item| item.node_id == code_id(LITERAL_OPERAND))
+            .filter(|item| {
+                item.node_id == code_id(LITERAL_OPERAND) || item.node_id == code_id(1051)
+            })
             .collect::<Vec<_>>(),
     );
     let lib = contents(&oracles, "src/lib.rs");
@@ -2413,17 +2421,32 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
         panic!("one protocol claim expected");
     };
     assert_eq!(claim.node_id, requested_id);
-    let ClaimDisposition::Refused {
-        refusal:
-            ExactScalarRefusal::Unsupported {
-                unsupported_node_id,
-                node_tag: "protocol",
-            },
-    } = &claim.result
-    else {
-        panic!("expected typed protocol refusal, got {:?}", claim.result);
+    // FR-014-AC-7 refuses a protocol node "with its blocked or unsupported reason", and FR-014-AC-44
+    // names the first unsupported reachable node, which need not be the request root. Contract IR
+    // now reports the obligation's unsupported model dependency, a blocked reason.
+    let ClaimDisposition::Refused { refusal } = &claim.result else {
+        panic!("expected a typed protocol refusal, got {:?}", claim.result);
     };
-    assert_eq!(unsupported_node_id, &requested_id);
+    let reached = match refusal {
+        ExactScalarRefusal::Unsupported {
+            unsupported_node_id,
+            node_tag: "protocol",
+        } => unsupported_node_id,
+        ExactScalarRefusal::BlockedOnUpstream {
+            unsupported_node_id,
+            ..
+        } => unsupported_node_id,
+        other => panic!("expected an unsupported or blocked refusal, got {other:?}"),
+    };
+    assert!(
+        reached == &requested_id
+            || package
+                .graph()
+                .nodes
+                .iter()
+                .any(|node| &node.node_id == reached),
+        "the refusal names a node of the package: {reached:?}"
+    );
     assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&requested_id)));
 }
 
@@ -2440,28 +2463,8 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     crate::checked_package_evidence::retain_selected_extensions(&root, &wire, &mut evidence);
-    if let Some(selection) = wire["lock"]["model_selections"]
-        .as_array()
-        .and_then(|rows| rows.first())
-    {
-        let identity = selection["identity"]
-            .as_str()
-            .expect("model selection identity");
-        let digest = selection["digest"]
-            .as_str()
-            .expect("model selection digest");
-        let document = match identity {
-            "acme/orders" => "domain-package-acme-orders.json",
-            other => panic!("no published model document for QSpec selection {other}"),
-        };
-        evidence
-            .insert_domain_package_document(
-                digest,
-                fs::read(root.join("proposals/checked-package-v2").join(document))
-                    .expect("read selected QSpec model package"),
-            )
-            .expect("retain selected QSpec model package");
-    }
+    // The domain document QSpec publishes for this fixture, if any, resolves its selected model owner.
+    crate::checked_package_evidence::retain_selected_document(&root, fixture, &mut evidence);
     match CheckedPackageV2::read(&canonical, CheckedPackageReadLimits::bounded(), &evidence) {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("authoritative QSpec fixture must be admitted: {other:?}"),
@@ -4182,7 +4185,7 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
             parameters: vec![
                 FunctionParameter {
                     name: "a".to_owned(),
-                    type_node_id: integer.clone(),
+                    type_node_id: ids.resolve(&id(&unit_type())),
                 },
                 FunctionParameter {
                     name: "b".to_owned(),

@@ -1611,7 +1611,9 @@ pub fn refused_corpus() -> Vec<Expression> {
 
 /// [`corpus_package`] plus the one [`refused_corpus`] expression `code`.
 pub fn refused_corpus_package(code: u32) -> PackageBuilder {
-    let mut builder = corpus_package();
+    // Focused: the whole corpus exceeds the reader's package byte ceiling.
+    let mut builder =
+        corpus_package().focused(&[code_id(T_TEXT), code_id(T_INTEGER), code_id(T_BOOLEAN)]);
     let expression = refused_corpus()
         .into_iter()
         .find(|expression| expression.code == code)
@@ -4157,9 +4159,15 @@ pub const ADDER_NAME: &str = "nadder";
 /// [`corpus_package`] plus a function declared over a quantity conversion node and a quantity
 /// equality that reads a conversion node as an operand.
 pub fn conversion_operand_package() -> PackageBuilder {
+    // The adder parameters added below carry a text `name` literal, so its scalar type is retained;
+    // the calls below pass an integer value, so that value is retained too, and
+    // the adder body is the integer addition `1001`.
     let mut builder = corpus_package().focused(&[
         code_id(T_BOOLEAN),
+        code_id(T_TEXT),
+        id(&key(V_INTEGER)),
         id(&key(V_QUANTITY)),
+        code_id(1001),
         code_id(QUANTITY_CONVERSIONS[0]),
     ]);
     let conversion = fixture_label(&code_id(QUANTITY_CONVERSIONS[0])).to_owned();
@@ -4298,7 +4306,16 @@ pub fn conversion_operand_package() -> PackageBuilder {
 /// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
 /// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
 pub fn derivation_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_BOOLEAN, T_INTEGER, T_RATIONAL]);
+    // The corpus nodes the derivation tests select, below the reader's package byte ceiling.
+    let mut codes = vec![
+        T_BOOLEAN, T_INTEGER, T_RATIONAL, FUNCTION, UNBOUNDED, AMBIGUOUS, 1001, 1011, 1012, 1013,
+        1032, 1033, 1041, 1044, 1045, 1053,
+    ];
+    codes.extend(QUANTITY_CONVERSIONS);
+    let mut subjects = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
+    // The Boolean and quantity value nodes are keyed, not coded.
+    subjects.extend([id(&key(V_BOOLEAN)), id(&key(V_QUANTITY))]);
+    let mut builder = corpus_package().focused(&subjects);
     let int5 = builder.bound(&INT5);
     let int = builder.bound(&INT);
     let rat = builder.bound(&RAT);
