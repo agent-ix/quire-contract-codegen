@@ -181,6 +181,31 @@ fn values(amount: i64, balance: i64) -> Vec<(String, WitnessValue)> {
     ]
 }
 
+#[trace("TC-026")]
+#[test]
+fn replay_parameters_keep_the_existing_transcript_entry_names() {
+    let source = format!(
+        "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
+         function flag using v(b: Boolean): Boolean pure {{ b }}\n"
+    );
+    let mut replay_inputs = inputs(&source, Vec::new());
+    // Separator bytes must stay escaped in the entry name QSL receives.
+    replay_inputs.package_name = "skeleton%;|<>".to_owned();
+    let package = ReplayPackage::new(replay_inputs, "flag").expect("the twin compiles");
+    let parameters = package.parameters();
+    let names = parameters
+        .iter()
+        .map(|parameter| (parameter.argument, parameter.node_id))
+        .collect::<Vec<_>>();
+    let expected = concat!(
+        r#"{"ordinal":0,"package":"skeleton%25%3B%7C%3C%3E","path":["value","parameter","name","#,
+        r#"{"ordinal":0,"package":"skeleton%25%3B%7C%3C%3E","path":["scalar_type","text"]},"b","level","#,
+        r#"{"ordinal":0,"package":"skeleton%25%3B%7C%3C%3E","path":["scalar_type","integer"]},"0","#,
+        r#"{"ordinal":0,"package":"skeleton%25%3B%7C%3C%3E","path":["scalar_type","boolean"]}]}"#,
+    );
+    assert_eq!(names, vec![("b", expected)]);
+}
+
 const VIOLATING_TWIN: &str = "balance_pre + amount_current";
 const HEALTHY_TWIN: &str = "balance_pre - amount_current";
 
