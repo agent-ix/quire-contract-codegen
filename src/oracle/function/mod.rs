@@ -2944,9 +2944,19 @@ pub fn generate_exact_function_oracles(
             let (closure, _) = admitted_binary_body(admitted, graph)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
-                parameter_kinds.push(resolve_operand_type(graph, &parameter.type_node_id)?);
+                let represented = accounting
+                    .represented_node(&parameter.type_node_id)
+                    .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
+                        type_node_id: parameter.type_node_id.clone(),
+                    })?;
+                parameter_kinds.push(resolve_operand_type(graph, represented)?);
             }
-            let result_kind = resolve_operand_type(graph, &declaration.result_type)?;
+            let represented_result = accounting
+                .represented_node(&declaration.result_type)
+                .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
+                    type_node_id: declaration.result_type.clone(),
+                })?;
+            let result_kind = resolve_operand_type(graph, represented_result)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             let body = classify_body_shape(
                 closure.root,
@@ -3529,7 +3539,7 @@ fn item_disposition<'a>(
     if graph.operator(&node.node_id) != Some(ApplicationOperator::Call) {
         return Err(ExactFunctionRefusal::BodyMismatch);
     }
-    {
+    let source_function_id = {
         let admitted_body_id = accounting
             .represented_node(&declaration.node_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
@@ -3552,7 +3562,8 @@ fn item_disposition<'a>(
         ) {
             return Err(ExactFunctionRefusal::BodyMismatch);
         }
-    }
+        source_function_id
+    };
     for argument_id in &item.argument_node_ids {
         let admitted_argument_id = accounting
             .represented_node(argument_id)

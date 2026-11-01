@@ -15,33 +15,10 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
     FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
     FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim, OracleGenerationError,
-    UpstreamBlocker,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
 use quire_contract_model::CheckedPackageV2;
 use std::ops::Deref;
-
-fn source_path(id: &quire_contract_model::CheckedNodeId) -> String {
-    id.path
-        .iter()
-        .map(|segment| match segment {
-            quire_contract_model::CheckedNodePathSegment::Name(name) if !name.contains('/') => {
-                name.as_ref()
-            }
-            _ => panic!("fixture scalar type needs slash-free authored path segments"),
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-fn fixture_code_id(wire: &serde_json::Value, code: u32) -> quire_contract_model::CheckedNodeId {
-    serde_json::from_value(serde_json::json!({
-        "package": wire["name"],
-        "path": [format!("n{}", key(code))],
-        "ordinal": 0,
-    }))
-    .expect("fixture code key")
-}
 
 #[trace(
     "FR-021-AC-28",
@@ -1255,24 +1232,6 @@ fn admitted_full_request(
     AdmittedFunctionRequest {
         contract: admitted_function_contract(&package.checked, &requested),
         roots: driver_positions(&requested),
-    }
-}
-
-fn plain_read_function_contract(
-    admitted: &quire_contract_model::ContractPackageV1,
-) -> quire_contract_model::ContractPackageV1 {
-    let bytes = quire_canonical::to_vec(
-        &serde_json::to_value(admitted.wire()).expect("project admitted V1 wire"),
-        quire_canonical::Limits::new(1 << 20),
-    )
-    .expect("encode canonical admitted V1 wire");
-    match quire_contract_model::ContractPackageWireV1::read(
-        &bytes,
-        quire_contract_model::CheckedPackageReadLimits::bounded(),
-        &quire_contract_model::ContractDependencies::new(),
-    ) {
-        quire_contract_model::ContractPackageReadResult::Admitted(package) => *package,
-        other => panic!("plain V1 read admits the same wire: {other:?}"),
     }
 }
 

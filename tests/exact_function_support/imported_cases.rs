@@ -6,12 +6,10 @@ mod generated {
 }
 
 use qsl_replay::{
-    acquire_checked_closure, CompileUnit, LibraryName, ApplicationEnvironment, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits, SuppliedLibrary,
+    acquire_checked_closure, ApplicationEnvironment, CompileUnit, DependencyInput, LibraryName,
+    ReplayLimits, SourceIdentity, StageLimits, SuppliedLibrary,
 };
-use quire_contract_codegen::{
-    checked_function_key, CheckedFunctionSource,
-};
+use quire_contract_codegen::{checked_function_key, CheckedFunctionSource};
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
     CheckedPackageV2ReadResult,
@@ -75,11 +73,22 @@ fn function_id(package: &CheckedPackageV2) -> CheckedNodeId {
         .clone()
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35", "FR-021-AC-36")]
+#[ix_trace_rs::trace(
+    "TC-031",
+    "FR-021-AC-2",
+    "FR-021-AC-32",
+    "FR-021-AC-35",
+    "FR-021-AC-36"
+)]
 #[test]
 fn generated_library_body_matches_importer_facade_application() {
     let compiled_library = acquire_checked_closure(
-        CompileUnit { source: library_identity(), package_name: "test/function-library".to_owned(), path: "function-library.native", bytes: generated::LIBRARY_SOURCE.as_bytes() },
+        CompileUnit {
+            source: library_identity(),
+            package_name: "test/function-library".to_owned(),
+            path: "function-library.native",
+            bytes: generated::LIBRARY_SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -95,7 +104,12 @@ fn generated_library_body_matches_importer_facade_application() {
     }])
     .expect("one genuine QSL library dependency");
     let compiled_unit = acquire_checked_closure(
-        CompileUnit { source: importer_identity(), package_name: "function-importer".to_owned(), path: "function-importer.native", bytes: generated::IMPORTER_SOURCE.as_bytes() },
+        CompileUnit {
+            source: importer_identity(),
+            package_name: "function-importer".to_owned(),
+            path: "function-importer.native",
+            bytes: generated::IMPORTER_SOURCE.as_bytes(),
+        },
         [],
         &dependencies,
         StageLimits::default(),
@@ -130,7 +144,12 @@ fn generated_library_body_matches_importer_facade_application() {
     .expect("generated imported body completes");
 
     let fresh = acquire_checked_closure(
-        CompileUnit { source: importer_identity(), package_name: "function-importer".to_owned(), path: "function-importer.native", bytes: generated::IMPORTER_SOURCE.as_bytes() },
+        CompileUnit {
+            source: importer_identity(),
+            package_name: "function-importer".to_owned(),
+            path: "function-importer.native",
+            bytes: generated::IMPORTER_SOURCE.as_bytes(),
+        },
         [],
         &dependencies,
         StageLimits::default(),
@@ -139,7 +158,8 @@ fn generated_library_body_matches_importer_facade_application() {
     .expect("independent importer acquisition");
     let handle = fresh.handle();
     let owner = LibraryName::new(library.name().to_owned()).expect("exact library owner id");
-    let wire = checked_function_key(&library, &function_id(&library)).expect("exact function wire id");
+    let wire =
+        checked_function_key(&library, &function_id(&library)).expect("exact function wire id");
     let selection = handle
         .lookup_callable(&owner, &wire)
         .expect("QSL selects imported callable");

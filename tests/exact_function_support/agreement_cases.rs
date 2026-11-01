@@ -7,12 +7,10 @@ mod generated {
 }
 
 use qsl_replay::{
-    acquire_checked_closure, CompileUnit, LibraryName, ApplicationEnvironment, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits,
+    acquire_checked_closure, ApplicationEnvironment, CompileUnit, DependencyInput, LibraryName,
+    ReplayLimits, SourceIdentity, StageLimits,
 };
-use quire_contract_codegen::{
-    checked_function_key, CheckedFunctionError, CheckedFunctionSource,
-};
+use quire_contract_codegen::{checked_function_key, CheckedFunctionError, CheckedFunctionSource};
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
     CheckedPackageV2ReadResult,
@@ -42,7 +40,12 @@ fn source<'a>(dependencies: &'a DependencyInput) -> CheckedFunctionSource<'a> {
 
 fn package() -> CheckedPackageV2 {
     let acquired = acquire_checked_closure(
-        CompileUnit { source: source_identity(), package_name: "ir595-agreement".to_owned(), path: "ir595-agreement.native", bytes: generated::SOURCE.as_bytes() },
+        CompileUnit {
+            source: source_identity(),
+            package_name: "ir595-agreement".to_owned(),
+            path: "ir595-agreement.native",
+            bytes: generated::SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -69,7 +72,12 @@ fn unrelated_package() -> CheckedPackageV2 {
         "function unrelated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x - y }\n",
     );
     let acquired = acquire_checked_closure(
-        CompileUnit { source: source_identity(), package_name: "ir595-agreement".to_owned(), path: "ir595-other.native", bytes: OTHER.as_bytes() },
+        CompileUnit {
+            source: source_identity(),
+            package_name: "ir595-agreement".to_owned(),
+            path: "ir595-other.native",
+            bytes: OTHER.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -127,7 +135,12 @@ fn direct(
     meter: &mut Meter,
 ) -> quire_eval::Evaluation {
     let acquired = acquire_checked_closure(
-        CompileUnit { source: source_identity(), package_name: "ir595-agreement".to_owned(), path: "ir595-agreement.native", bytes: generated::SOURCE.as_bytes() },
+        CompileUnit {
+            source: source_identity(),
+            package_name: "ir595-agreement".to_owned(),
+            path: "ir595-agreement.native",
+            bytes: generated::SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -239,7 +252,12 @@ fn direct_begin_refusal(
     meter: &mut Meter,
 ) -> qsl_replay::ApplicationBeginRefusal {
     let acquired = acquire_checked_closure(
-        CompileUnit { source: source_identity(), package_name: "ir595-agreement".to_owned(), path: "ir595-agreement.native", bytes: generated::SOURCE.as_bytes() },
+        CompileUnit {
+            source: source_identity(),
+            package_name: "ir595-agreement".to_owned(),
+            path: "ir595-agreement.native",
+            bytes: generated::SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

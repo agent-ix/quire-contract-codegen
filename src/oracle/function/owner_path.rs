@@ -35,7 +35,6 @@ pub struct CheckedFunctionSource<'a> {
     pub replay_limits: ReplayLimits,
 }
 
-/// A failure before the checked application can run.
 /// Stable categories of a checked-function application failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CheckedFunctionErrorCode {
@@ -65,6 +64,7 @@ pub enum CheckedFunctionErrorCode {
     ApplicationBeginRefused,
 }
 
+/// A typed failure before a checked function application can run.
 #[derive(Debug, thiserror::Error)]
 pub enum CheckedFunctionError {
     /// QSL did not admit the supplied closure; no handle was issued.
@@ -1156,7 +1156,7 @@ mod tests {
         let owner = owner_name(&package).expect("IR package id");
         let cases = [
             map_lookup_refusal(CallableLookupRefusal::Unknown),
-            map_lookup_refusal(CallableLookupRefusal::Foreign(owner)),
+            map_lookup_refusal(CallableLookupRefusal::Foreign(owner.clone())),
             map_lookup_refusal(CallableLookupRefusal::WrongKind),
             map_selection_refusal(SelectionRefusal::WrongAcquisition),
             map_begin_refusal(ApplicationBeginRefusal::WrongAcquisition),
@@ -1186,7 +1186,7 @@ mod tests {
         );
         assert!(encoded[1]["detail"]
             .as_str()
-            .is_some_and(|s| s.contains(&owner.hex())));
+            .is_some_and(|s| s.contains(owner.as_str())));
         assert!(map_registration(Admission::Accepted).is_none());
         for (admission, code) in [
             (Admission::RegistrySealed, "registration.registry_sealed"),

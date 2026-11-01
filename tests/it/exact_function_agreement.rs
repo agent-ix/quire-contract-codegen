@@ -290,6 +290,7 @@ pub(super) fn genuine_ambiguous_and_healthy() -> (
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(&package, &roots);
     let combined = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &functions
@@ -306,6 +307,7 @@ pub(super) fn genuine_ambiguous_and_healthy() -> (
     )
     .expect("ambiguous source request generates one healthy survivor");
     let only = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[position(&functions[2].node_id)],
@@ -351,6 +353,7 @@ pub(super) fn genuine_bad_arity() -> quire_contract_codegen::ExactFunctionOracle
         .unwrap();
     let contract = package::admitted_function_contract(&package, &roots);
     generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[function_position],
@@ -404,6 +407,7 @@ pub(super) fn genuine_known_and_zz_unknown() -> [quire_contract_codegen::ExactFu
         .unwrap();
     let run = |item_positions: &[usize], items: &[ExactFunctionItem]| {
         generate_exact_function_oracles(
+            &package,
             &contract,
             &positions,
             &[function_position],
@@ -503,6 +507,7 @@ pub(super) fn genuine_case_and_healthy() -> (
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(&package, &roots);
     let combined = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[position(&body_id), position(&case_id)],
@@ -516,6 +521,7 @@ pub(super) fn genuine_case_and_healthy() -> (
     )
     .expect("case and healthy function share one admitted source");
     let healthy_only = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[position(&body_id)],
@@ -632,6 +638,7 @@ pub(super) fn genuine_temporal_and_healthy(
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(&package, &roots);
     let combined = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[position(&body_id)],
@@ -641,6 +648,7 @@ pub(super) fn genuine_temporal_and_healthy(
     )
     .expect("temporal root and healthy function share one admitted source");
     let healthy_only = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[position(&body_id)],
@@ -729,6 +737,7 @@ fn imported_corpus() -> (
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(&library, &roots);
     let generated = generate_exact_function_oracles(
+        &library,
         &contract,
         &positions,
         &[
@@ -791,6 +800,7 @@ fn generated_for_source_items(
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(package, &roots);
     generate_exact_function_oracles(
+        package,
         &contract,
         &positions,
         &functions
@@ -1043,6 +1053,7 @@ fn genuine_corpus_request(
         .map(|item| take(&item.call_node_id))
         .collect::<Vec<_>>();
     let generated = generate_exact_function_oracles(
+        &package,
         &admitted,
         &package::driver_positions(&requested),
         &function_positions,
@@ -1346,7 +1357,7 @@ fn tc_031_generated_function_crate_matches_independent_fr485_session() {
         };
         (artifact.path.clone(), contents)
     }).collect::<Vec<_>>();
-    super::exact_scalar_agreement::run_agreement_cases_in_repo_target(
+    super::exact_scalar_agreement::run_agreement_cases(
         "exact-function-fr485-parity",
         artifacts
             .iter()
@@ -1398,7 +1409,7 @@ fn tc_031_generated_imported_owner_matches_independent_fr485_session() {
         };
         (artifact.path.clone(), contents)
     }).collect::<Vec<_>>();
-    super::exact_scalar_agreement::run_agreement_cases_in_repo_target(
+    super::exact_scalar_agreement::run_agreement_cases(
         "exact-function-imported-fr485-parity",
         artifacts
             .iter()
