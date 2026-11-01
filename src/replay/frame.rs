@@ -30,7 +30,6 @@ use quire_exact::NodeKey;
 use serde::Deserialize;
 
 use crate::{
-    core::ir::node_key::checked_node_key,
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
@@ -590,9 +589,10 @@ fn tie_pre_state(
 fn same_node(
     member: ScopeMember,
     harness: &quire_contract_model::CheckedNodeId,
+    keys: Option<&qsl_replay::WireGraph>,
     named: &quire_exact::NodeKey,
 ) -> Result<(), FrameReplayError> {
-    if checked_node_key(harness).as_ref() == Some(named) {
+    if keys.and_then(|keys| keys.key(harness).ok()).as_ref() == Some(named) {
         Ok(())
     } else {
         Err(FrameReplayError::ScopeMismatch {
@@ -659,9 +659,20 @@ impl FrameReplay {
             &operation,
         )
         .map_err(FrameReplayError::CallSite)?;
+        let keys = crate::core::ir::node_key::producer_node_keys(&located.package);
         let site = located.site;
-        same_node(ScopeMember::Anchor, &harness.scope.anchor, &site.anchor)?;
-        same_node(ScopeMember::Frame, &harness.scope.frame, &site.frame)?;
+        same_node(
+            ScopeMember::Anchor,
+            &harness.scope.anchor,
+            keys.as_ref(),
+            &site.anchor,
+        )?;
+        same_node(
+            ScopeMember::Frame,
+            &harness.scope.frame,
+            keys.as_ref(),
+            &site.frame,
+        )?;
         let obligation = frame_identity(&site, kind).map_err(FrameReplayError::Identity)?;
         let selected = SelectedFrameClaim {
             identity: obligation.clone(),

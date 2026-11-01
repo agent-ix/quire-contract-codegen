@@ -699,6 +699,20 @@ fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals()
     };
     let declared = interval_of("0", "9");
     let (good, bad) = (node('2'), node('7'));
+    let mut missing = node('2');
+    missing.bounds.clear();
+    assert_eq!(
+        Bounds {
+            graph: &graph,
+            node: BoundView::complete(&missing)
+        }
+        .read(BoundForm::TextBounds, read_text_bounds),
+        Err(ExactScalarRefusal::MissingBound {
+            bounded_type: missing.semantic_type.clone(),
+            expected_form: BoundForm::TextBounds,
+        })
+    );
+
     assert_eq!(
         Bounds {
             graph: &graph,
@@ -795,4 +809,102 @@ fn tc_024_bound_members_are_looked_up_by_name_in_any_order() {
         ]),
         None
     );
+}
+
+/// Malformed bound spellings cannot enter public admission. These private
+/// nodes drive the defensive generation and derivation checks directly.
+#[trace("FR-014-AC-23", "FR-014-AC-33", "TC-024")]
+#[test]
+fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
+    for (form, base, narrowed, wrong_operand) in [
+        ("text_bounds", '1', false, false),
+        ("text_bounds", '1', true, false),
+        ("integer_range", '4', true, false),
+        ("text_bounds", '1', false, true),
+    ] {
+        let mut nodes = bounded_parameter_nodes();
+        nodes.push(v2_node(
+            '7',
+            "bounded_domain",
+            form,
+            base,
+            range_body(vec![]),
+        ));
+        if wrong_operand {
+            nodes
+                .iter_mut()
+                .find(|node| node.node_id == node_id('3'))
+                .expect("operand")
+                .metadata
+                .semantic_type = node_id('7');
+        }
+        let result = if wrong_operand {
+            '2'
+        } else if narrowed {
+            '1'
+        } else {
+            '7'
+        };
+        let body = CheckedTerm::Application {
+            operator: ApplicationOperator::Binary,
+            operation: serde_json::from_value(
+                serde_json::json!({"identity":"quire.op.integer.add"}),
+            )
+            .expect("typed operation"),
+            result_type: node_id(result),
+            arguments: vec![reference_to('3'), reference_to('3')],
+        };
+        let root = v2_node('8', "expression", "binary", result, body);
+        if narrowed {
+            nodes.push(v2_node(
+                '9',
+                "expression",
+                "conversion",
+                '7',
+                CheckedTerm::Application {
+                    operator: ApplicationOperator::Convert,
+                    operation: serde_json::from_value(
+                        serde_json::json!({"identity":"quire.op.numeric.narrow"}),
+                    )
+                    .expect("typed narrow"),
+                    result_type: node_id('7'),
+                    arguments: vec![reference_to('8')],
+                },
+            ));
+        }
+        nodes.push(root.clone());
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let complete = CompleteContractNodeV2 {
+            node: root.metadata.clone(),
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: root.semantic_type.clone(),
+            dependencies: vec![],
+            bounds: if wrong_operand {
+                vec![node_id('2'), node_id('7')]
+            } else {
+                vec![node_id('7')]
+            },
+            claims: vec![],
+        };
+        let expected = ExactScalarRefusal::MissingBound {
+            bounded_type: node_id('1'),
+            expected_form: BoundForm::IntegerRange,
+        };
+        let descriptor = ExactScalarOperation::IntegerArithmetic {
+            operator: IntegerOperator::Add,
+            domain: IntegerDomain::Bounded(interval_of("0", "9")),
+        };
+        let record = CompleteLoweringRecordV2::Lowered {
+            node: Box::new(complete),
+        };
+        assert!(
+            matches!(check_item(&graph, &root.node_id, &record, &descriptor), Err(ItemCheckError::Refusal(refusal)) if refusal == expected)
+        );
+        assert_eq!(
+            super::super::derive::derive_operation(&graph, &root.node_id, &record),
+            Err(expected),
+            "{form} over {base}, narrowed={narrowed}"
+        );
+    }
 }

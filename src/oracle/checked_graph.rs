@@ -66,6 +66,7 @@ impl GraphBody for CheckedTerm {
 pub(crate) struct CheckedGraph<'a, Body: GraphBody = Value> {
     package: Package<'a, Body>,
     ordered: Vec<&'a CheckedSemanticNodeV2<Body>>,
+    keys: std::sync::Arc<std::collections::BTreeMap<CheckedNodeId, quire_exact::NodeKey>>,
 }
 
 enum Package<'a, Body: GraphBody> {
@@ -81,6 +82,7 @@ impl<'a> CheckedGraph<'a, Value> {
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
         Self {
             package: Package::Owner(package),
+            keys: frame_keys(Value::nodes(package).iter().map(|node| &node.node_id)),
             ordered,
         }
     }
@@ -104,12 +106,35 @@ impl<'a> CheckedGraph<'a, Value> {
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
         CheckedGraph {
             package: Package::Owner(package),
+            keys: frame_keys(CheckedTerm::nodes(package).iter().map(|node| &node.node_id)),
             ordered,
         }
     }
 }
 
+fn frame_keys<'a>(
+    ids: impl Iterator<Item = &'a CheckedNodeId>,
+) -> std::sync::Arc<std::collections::BTreeMap<CheckedNodeId, quire_exact::NodeKey>> {
+    let ids = ids.collect::<Vec<_>>();
+    let keys = match qsl_replay::WireGraph::new(ids.iter().copied()) {
+        Ok(graph) => ids
+            .into_iter()
+            .cloned()
+            .zip(graph.keys().iter().cloned())
+            .collect(),
+        Err(_) => std::collections::BTreeMap::new(),
+    };
+    std::sync::Arc::new(keys)
+}
+
 impl<'a, Body: GraphBody> CheckedGraph<'a, Body> {
+    /// Structural keys are resolved once in this graph's own index frame.
+    pub(crate) fn node_keys(
+        &self,
+    ) -> std::sync::Arc<std::collections::BTreeMap<CheckedNodeId, quire_exact::NodeKey>> {
+        std::sync::Arc::clone(&self.keys)
+    }
+
     /// The represented node selected by its complete admitted key.
     pub(crate) fn node(&self, key: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<Body>> {
         match self.package {
@@ -238,6 +263,15 @@ pub(crate) mod fixture {
             let nodes: Vec<_> = unique.into_iter().collect();
             let ordered = nodes.iter().map(|(_, node)| &node.metadata).collect();
             Self {
+                keys: std::sync::Arc::new(
+                    nodes
+                        .iter()
+                        .filter_map(|(id, _)| {
+                            crate::core::ir::node_key::checked_node_key(id)
+                                .map(|key| ((*id).clone(), key))
+                        })
+                        .collect(),
+                ),
                 package: Package::Fixture(nodes),
                 ordered,
             }

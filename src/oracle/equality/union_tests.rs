@@ -215,6 +215,21 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     );
 }
 
+fn lookup_closure(context: &qsl_replay::AdmittedContext, node: &CheckedNodeId) -> TypeClosure {
+    TypeClosure {
+        node_keys: std::sync::Arc::new(
+            context
+                .wire_graph()
+                .key(node)
+                .ok()
+                .map(|key| (node.clone(), key))
+                .into_iter()
+                .collect(),
+        ),
+        ..TypeClosure::default()
+    }
+}
+
 #[trace("TC-029", "FR-018-AC-44")]
 #[test]
 fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
@@ -235,7 +250,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         let mut node = original.clone();
         node.semantic_form = form.into();
         assert_eq!(
-            admitted::resolve_composite(&context, &mut TypeClosure::default(), &node),
+            admitted::resolve_composite(
+                &context,
+                &mut lookup_closure(&context, &node.node_id),
+                &node
+            ),
             Err(CompositeEqualityRefusal::CompositeContextMismatch {
                 declaration: node.node_id.clone()
             })
@@ -244,7 +263,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let mut renamed = original.clone();
     renamed.declaration.as_mut().unwrap().qualified_name = vec!["Wrong".into()];
     assert!(matches!(
-        admitted::resolve_composite(&context, &mut TypeClosure::default(), &renamed),
+        admitted::resolve_composite(
+            &context,
+            &mut lookup_closure(&context, &renamed.node_id),
+            &renamed
+        ),
         Err(CompositeEqualityRefusal::CompositeContextMismatch { .. })
     ));
     let mut unknown = original.clone();
@@ -257,7 +280,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let unknown_key = crate::core::ir::node_key::checked_node_key(&unknown.node_id)
         .expect("structural unknown key");
     assert_eq!(
-        admitted::resolve_composite(&context, &mut TypeClosure::default(), &unknown),
+        admitted::resolve_composite(
+            &context,
+            &mut lookup_closure(&context, &unknown.node_id),
+            &unknown
+        ),
         Err(CompositeEqualityRefusal::UnknownComposite {
             declaration: unknown_key.to_string()
         })
@@ -276,7 +303,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         .node_id
         .clone();
     assert_eq!(
-        admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
+        admitted::resolve_composite(
+            &context,
+            &mut lookup_closure(&context, &wrong_kind.node_id),
+            &wrong_kind
+        ),
         Err(CompositeEqualityRefusal::WrongAdmittedKind {
             declaration: marker.key().to_string()
         })
@@ -316,7 +347,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     .expect("distinct authentic importer source");
     let owner = context.package_name();
     assert_eq!(
-        admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
+        admitted::resolve_composite(
+            importer.context(),
+            &mut lookup_closure(importer.context(), &original.node_id),
+            original
+        ),
         Err(CompositeEqualityRefusal::ForeignComposite {
             declaration: shape.node().to_string(),
             package_name: owner.as_str().to_owned(),

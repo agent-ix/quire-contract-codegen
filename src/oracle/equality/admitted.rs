@@ -15,10 +15,18 @@ pub(super) struct EnumBinding {
     pub ordered: bool,
 }
 
-pub(super) fn lookup_refusal(
-    cause: AdmittedLookupRefusal,
+fn admitted_key(
+    closure: &TypeClosure,
     wire: &CheckedNodeId,
-) -> CompositeEqualityRefusal {
+) -> Result<NodeKey, CompositeEqualityRefusal> {
+    closure.node_keys.get(wire).cloned().ok_or_else(|| {
+        CompositeEqualityRefusal::MalformedAdmittedWire {
+            declaration: wire.clone(),
+        }
+    })
+}
+
+pub(super) fn lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityRefusal {
     match cause {
         AdmittedLookupRefusal::Unknown { declaration, case } => {
             CompositeEqualityRefusal::UnknownEnum {
@@ -38,11 +46,6 @@ pub(super) fn lookup_refusal(
             declaration: declaration.to_string(),
             package_name: package.to_string(),
         },
-        AdmittedLookupRefusal::MalformedWire { .. } => {
-            CompositeEqualityRefusal::MalformedAdmittedWire {
-                declaration: wire.clone(),
-            }
-        }
     }
 }
 
@@ -64,9 +67,8 @@ pub(super) fn resolve_enum<Body>(
     let mismatch = || CompositeEqualityRefusal::EnumContextMismatch {
         declaration: node.node_id.clone(),
     };
-    let actual = admitted
-        .enum_declaration_by_wire(&node.node_id)
-        .map_err(|cause| lookup_refusal(cause, &node.node_id))?;
+    let key = admitted_key(closure, &node.node_id)?;
+    let actual = admitted.enum_declaration(&key).map_err(lookup_refusal)?;
     let Some(CheckedTerm::NominalBody(body)) = term else {
         return Err(mismatch().into());
     };
@@ -104,8 +106,8 @@ pub(super) fn resolve_enum<Body>(
     let mut variants = Vec::with_capacity(actual.cases().len());
     for case in actual.cases() {
         let selected = admitted
-            .enum_case_by_wire(&node.node_id, case.case())
-            .map_err(|cause| lookup_refusal(cause, &node.node_id))?;
+            .enum_case(&key, case.case())
+            .map_err(lookup_refusal)?;
         let value = declaration
             .member(selected.case().as_str(), selected.key().clone())
             .map_err(OracleGenerationError::EnumReconstruction)?;
@@ -141,10 +143,7 @@ pub(super) struct CompositeBinding {
     pub declaration: qsl_replay::AdmittedComposite,
 }
 
-pub(super) fn composite_lookup_refusal(
-    cause: AdmittedLookupRefusal,
-    wire: &CheckedNodeId,
-) -> CompositeEqualityRefusal {
+pub(super) fn composite_lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityRefusal {
     match cause {
         AdmittedLookupRefusal::Unknown {
             declaration,
@@ -164,11 +163,6 @@ pub(super) fn composite_lookup_refusal(
                 declaration: declaration.to_string(),
             }
         }
-        AdmittedLookupRefusal::MalformedWire { .. } => {
-            CompositeEqualityRefusal::MalformedAdmittedWire {
-                declaration: wire.clone(),
-            }
-        }
     }
 }
 
@@ -180,9 +174,10 @@ pub(super) fn resolve_composite<Body>(
     let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
         declaration: node.node_id.clone(),
     };
+    let key = admitted_key(closure, &node.node_id)?;
     let actual = admitted
-        .composite_declaration_by_wire(&node.node_id)
-        .map_err(|cause| composite_lookup_refusal(cause, &node.node_id))?;
+        .composite_declaration(&key)
+        .map_err(composite_lookup_refusal)?;
     let key = actual.key().clone();
     let expected_form = match node.semantic_form.as_ref() {
         "record" => AdmittedCompositeForm::Record,
@@ -229,25 +224,6 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
 
-    fn wire(key: &NodeKey) -> CheckedNodeId {
-        CheckedNodeId {
-            package: key.package().into(),
-            path: key
-                .path()
-                .into_iter()
-                .map(|segment| match segment {
-                    quire_exact::PathSegment::Text(name) => {
-                        quire_contract_model::CheckedNodePathSegment::Name(name.into())
-                    }
-                    quire_exact::PathSegment::Node(child) => {
-                        quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child)))
-                    }
-                })
-                .collect(),
-            ordinal: key.ordinal(),
-        }
-    }
-
     /// Authentic owner lookups retain wrong-kind, unknown, foreign and malformed refusals.
     #[trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-46", "TC-029")]
     #[test]
@@ -257,12 +233,11 @@ mod tests {
             let context = compiled.context();
             let marker = context.enums().next().expect("real own enum");
             let wrong = marker.key().clone();
-            let requested = wire(&wrong);
             let cause = context
-                .composite_declaration_by_wire(&requested)
+                .composite_declaration(&wrong)
                 .expect_err("own enum is wrong kind");
             assert_eq!(
-                composite_lookup_refusal(cause, &requested),
+                composite_lookup_refusal(cause),
                 CompositeEqualityRefusal::WrongAdmittedKind {
                     declaration: wrong.to_string(),
                 }
@@ -273,12 +248,11 @@ mod tests {
                 0,
             )
             .expect("structural unknown key");
-            let unknown_wire = wire(&unknown);
             let cause = context
-                .composite_declaration_by_wire(&unknown_wire)
+                .composite_declaration(&unknown)
                 .expect_err("not an admitted declaration");
             assert_eq!(
-                composite_lookup_refusal(cause, &unknown_wire),
+                composite_lookup_refusal(cause),
                 CompositeEqualityRefusal::UnknownComposite {
                     declaration: unknown.to_string(),
                 }
@@ -291,12 +265,11 @@ mod tests {
             let owner = leaf.context().package_name().to_string();
             for actual in leaf.context().composites() {
                 let key = actual.node().clone();
-                let requested = wire(&key);
                 let cause = context
-                    .composite_declaration_by_wire(&requested)
+                    .composite_declaration(&key)
                     .expect_err("foreign closure declaration");
                 assert_eq!(
-                    composite_lookup_refusal(cause, &requested),
+                    composite_lookup_refusal(cause),
                     CompositeEqualityRefusal::ForeignComposite {
                         declaration: key.to_string(),
                         package_name: owner.clone(),
@@ -308,23 +281,11 @@ mod tests {
                 path: Vec::new(),
                 ordinal: 0,
             };
-            let cause = context
-                .composite_declaration_by_wire(&malformed)
-                .expect_err("empty wire path is malformed");
             assert_eq!(
-                composite_lookup_refusal(cause, &malformed),
-                CompositeEqualityRefusal::MalformedAdmittedWire {
-                    declaration: malformed.clone()
-                }
-            );
-            let cause = context
-                .enum_declaration_by_wire(&malformed)
-                .expect_err("empty enum wire path is malformed");
-            assert_eq!(
-                lookup_refusal(cause, &malformed),
-                CompositeEqualityRefusal::MalformedAdmittedWire {
+                admitted_key(&TypeClosure::default(), &malformed),
+                Err(CompositeEqualityRefusal::MalformedAdmittedWire {
                     declaration: malformed
-                }
+                })
             );
         }
     }

@@ -3,12 +3,13 @@
 
 //! FR-039: position-preserving access to Contract IR's admitted FR-330 package.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedSourceMapEntry, CompleteLoweringProfileV2,
-    ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageV1, ContractReachedClosureV1,
-    ContractRootViewError, ContractRootViewV1, LoweringProfileRef,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSourceMapEntry,
+    CompleteLoweringProfileV2, ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageV1,
+    ContractReachedClosureV1, ContractRootViewError, ContractRootViewV1, ContractSourceKeyV1,
+    ContractSourceV1, LoweringProfileRef,
 };
 
 /// The CG-owned lowering profile for one mixed routed request.
@@ -98,6 +99,13 @@ impl ContractRequestPosition {
 /// A mismatch between the driver's request and one admitted package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PackageRequestError {
+    /// The supplied source package differs from the admitted package's source identity or lock.
+    SourceMismatch {
+        /// Source identity and lock recorded by the admitted package.
+        expected: Box<ContractSourceV1>,
+        /// Source identity and lock supplied by the caller.
+        actual: Box<ContractSourceV1>,
+    },
     /// The caller supplied a different number of descriptors and request positions.
     ItemPositions {
         /// Number of descriptors.
@@ -112,7 +120,7 @@ pub enum PackageRequestError {
         /// Number of admitted accounting records.
         accounted: usize,
     },
-    /// An accounting record names a different exact requested key.
+    /// An accounting record has a different source-frame structural key.
     Identity {
         /// Position of the disagreement.
         request_index: usize,
@@ -121,7 +129,7 @@ pub enum PackageRequestError {
         /// Exact key in the admitted accounting record.
         accounted: CheckedNodeId,
     },
-    /// A lowering root, driver or context, disagrees with IR accounting.
+    /// A lowering root, driver or context, disagrees with IR source-key accounting.
     AccountingIdentity {
         /// Position in the full lowering request.
         accounting_index: usize,
@@ -206,18 +214,36 @@ impl PackageItem<'_> {
 
 /// A checked correspondence between request positions and one admitted package.
 pub(crate) struct PackageItems<'a> {
+    source: &'a CheckedPackageV2,
     package: &'a ContractPackageV1,
     positions: &'a [ContractRequestPosition],
     driver_to_accounting: Vec<usize>,
     bound_driver_indices: Vec<usize>,
+    source_key_indices: BTreeMap<&'a CheckedNodeId, usize>,
+    source_structural_indices: BTreeMap<CheckedNodeId, usize>,
+    original_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
+    represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
+    original_represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
 }
 
 impl<'a> PackageItems<'a> {
-    /// Match every position and exact key before any item can be consumed.
+    /// Match every position through its admitted source key before any item can be consumed.
     pub(crate) fn new(
+        source: &'a CheckedPackageV2,
         package: &'a ContractPackageV1,
         positions: &'a [ContractRequestPosition],
     ) -> Result<Self, PackageRequestError> {
+        let actual = ContractSourceV1 {
+            name: source.name().into(),
+            lock: source.lock().clone(),
+        };
+        let expected = &package.wire().package.source;
+        if &actual != expected {
+            return Err(PackageRequestError::SourceMismatch {
+                expected: Box::new(expected.clone()),
+                actual: Box::new(actual),
+            });
+        }
         let accounted = &package.wire().feature_accounting;
         if positions.len() != accounted.len() {
             return Err(PackageRequestError::Count {
@@ -227,9 +253,28 @@ impl<'a> PackageItems<'a> {
         }
         let mut driver_to_accounting = Vec::new();
         let mut bound_driver_indices = Vec::new();
+        let source_key_indices: BTreeMap<_, _> = package
+            .wire()
+            .source_keys
+            .iter()
+            .enumerate()
+            .map(|(index, key)| (key, index))
+            .collect();
+        let source_structural_indices = (0..package.wire().source_keys.len())
+            .filter_map(|index| {
+                package
+                    .source_key_at(index)
+                    .map(|key| (key.structural_key().clone(), index))
+            })
+            .collect();
         let mut after_excluded = false;
         for (accounting_index, (position, record)) in positions.iter().zip(accounted).enumerate() {
-            if position.node_id() != record.node_id() {
+            let requested = ContractSourceKeyV1::from_v2_request(source, position.node_id());
+            let accounted = source_key_indices
+                .get(record.node_id())
+                .copied()
+                .and_then(|index| package.source_key_at(index));
+            if requested.is_none() || requested != accounted {
                 return Err(PackageRequestError::AccountingIdentity {
                     accounting_index,
                     requested: position.node_id().clone(),
@@ -255,12 +300,91 @@ impl<'a> PackageItems<'a> {
                 ContractRequestPosition::ContextRoot { .. } => {}
             }
         }
+        let output_frame = qsl_replay::WireGraph::new(
+            package
+                .wire()
+                .semantic_graph
+                .nodes
+                .iter()
+                .map(|node| &node.node_id),
+        )
+        .ok();
+        let source_frame =
+            qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id)).ok();
+        let represented_nodes: BTreeMap<_, _> = source
+            .graph()
+            .nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| {
+                let key = source_frame.as_ref()?.keys().get(index)?;
+                let position = usize::try_from(output_frame.as_ref()?.index_of(key)?).ok()?;
+                Some((
+                    &node.node_id,
+                    &package.wire().semantic_graph.nodes.get(position)?.node_id,
+                ))
+            })
+            .collect();
+        let original_represented_nodes = represented_nodes
+            .iter()
+            .map(|(source, output)| (*output, *source))
+            .collect();
         Ok(Self {
+            source,
             package,
             positions,
             driver_to_accounting,
             bound_driver_indices,
+            source_key_indices,
+            source_structural_indices,
+            represented_nodes,
+            original_represented_nodes,
+            original_nodes: source
+                .graph()
+                .nodes
+                .iter()
+                .filter_map(|node| {
+                    source
+                        .structural_key(&node.node_id)
+                        .map(|key| (key, &node.node_id))
+                })
+                .collect(),
         })
+    }
+
+    /// Resolve a caller's authenticated V2 node identity into the admitted V1 frame.
+    pub(crate) fn accounted_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        let key = ContractSourceKeyV1::from_v2_request(self.source, node_id)?;
+        let index = self.source_structural_indices.get(key.structural_key())?;
+        self.package.wire().source_keys.get(*index)
+    }
+
+    /// Resolve a V2 request into the represented output-graph frame.
+    pub(crate) fn represented_node(&self, request: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        self.represented_nodes.get(request).copied()
+    }
+
+    /// Translate a represented graph identity into its authenticated V2 frame.
+    pub(crate) fn original_represented_node(
+        &self,
+        node: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.original_represented_nodes.get(node).copied()
+    }
+
+    /// Translate a resolved structural identity into its authenticated V2 frame.
+    pub(crate) fn original_structural_node(
+        &self,
+        node: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.original_nodes.get(node).copied()
+    }
+
+    /// Translate a retained accounting identity through its own source table.
+    pub(crate) fn original_node(&self, accounted: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        let index = self.source_key_indices.get(accounted)?;
+        let key = self.package.source_key_at(*index)?;
+        self.original_nodes.get(key.structural_key()).copied()
     }
 
     /// Number of positions with their own envelope item.
@@ -291,11 +415,9 @@ impl<'a> PackageItems<'a> {
     /// Exact key of one driver request, independently of context-root order.
     pub(crate) fn driver_node(&self, request_index: usize) -> Option<&'a CheckedNodeId> {
         let accounting_index = *self.driver_to_accounting.get(request_index)?;
-        self.package
-            .wire()
-            .feature_accounting
+        self.positions
             .get(accounting_index)
-            .map(ContractFeatureRecordV1::node_id)
+            .map(ContractRequestPosition::node_id)
     }
 
     /// Accounting slot for one bound driver; context roots may occupy slots
@@ -369,7 +491,12 @@ impl<'a> PackageItems<'a> {
             .feature_accounting
             .get(accounting_index)
             .ok_or(PackageRequestError::Position { request_index })?;
-        if record.node_id() != node_id {
+        let requested = ContractSourceKeyV1::from_v2_request(self.source, node_id);
+        let accounted = self
+            .source_key_indices
+            .get(record.node_id())
+            .and_then(|index| self.package.source_key_at(*index));
+        if requested.is_none() || requested != accounted {
             return Err(PackageRequestError::Identity {
                 request_index,
                 requested: node_id.clone(),
@@ -382,7 +509,16 @@ impl<'a> PackageItems<'a> {
             .as_slice();
         match record {
             ContractFeatureRecordV1::Lowered { node_id } => {
-                let view = self.package.reached_closure(node_id).map_err(|cause| {
+                let source_key = self
+                    .source_key_indices
+                    .get(node_id)
+                    .and_then(|index| self.package.source_key_at(*index))
+                    .ok_or_else(|| PackageRequestError::ReachedClosure {
+                        request_index,
+                        node_id: node_id.clone(),
+                        cause: Box::new(ContractRootViewError::Inconsistent),
+                    })?;
+                let view = self.package.reached_closure(&source_key).map_err(|cause| {
                     PackageRequestError::ReachedClosure {
                         request_index,
                         node_id: node_id.clone(),

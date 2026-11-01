@@ -20,13 +20,12 @@ use quire_contract_codegen::{
     COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageLimit,
-    CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageWireV1,
+    CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits, CheckedPackageRefusalCause,
+    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2, ContractDependencies,
+    ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageWireV1,
 };
-use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth, NodeKey, PathSegment};
+use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
 use quire_exact::{CollectionType, Presence, ValueType};
 use quire_semantic_value::declaration::{
     CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
@@ -42,18 +41,6 @@ use serde_json::json;
 mod package;
 
 use package::*;
-
-fn runtime_node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(runtime_node_key(child)),
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
-}
 
 /// Structural equality reaching IEEE is reader-ineligible.
 #[trace("FR-018-AC-6", "TC-029")]
@@ -1769,7 +1756,15 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
                     .graph()
                     .nodes
                     .iter()
-                    .find(|node| runtime_node_key(&node.node_id) == *actual.node())
+                    .find(|node| {
+                        compiled
+                            .context()
+                            .wire_graph()
+                            .key(&node.node_id)
+                            .ok()
+                            .as_ref()
+                            == Some(actual.node())
+                    })
                     .expect("actual wire-to-kernel pairing")
                     .node_id
                     .clone()
@@ -1781,7 +1776,9 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             .map(|id| {
                 declarations
                     .iter()
-                    .find(|actual| *actual.node() == runtime_node_key(id))
+                    .find(|actual| {
+                        compiled.context().wire_graph().key(id).ok().as_ref() == Some(actual.node())
+                    })
                     .expect("actual wire-to-kernel pairing")
                     .key()
                     .to_string()
@@ -2318,16 +2315,9 @@ fn tc_029_nominal_owner_lookups_use_only_structural_wire_identities() {
         .filter(|artifact| artifact.path.starts_with("src/"))
         .map(|artifact| artifact.contents.as_str())
         .collect::<String>();
-    assert!(lib.contains("composite_declaration_by_wire("));
+    assert!(lib.contains("composite_declaration(&context.wire_graph().key(&key)"));
     assert!(generated.contains("quire_contract_model::CheckedNodeId {"));
-    for forbidden in [
-        "NodeKey::new(",
-        "node_key_of_wire(",
-        "checked_node_key(",
-        "composite_declaration(&",
-        "enum_declaration(&",
-        "enum_case(&",
-    ] {
+    for forbidden in ["NodeKey::new(", "node_key_of_wire(", "checked_node_key("] {
         assert!(
             !generated.contains(forbidden),
             "generated nominal lookup contains {forbidden}"

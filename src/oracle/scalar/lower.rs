@@ -45,7 +45,7 @@ use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
     read_text_bounds,
 };
-use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2, ContractRootViewError};
+use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2};
 
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
@@ -1972,38 +1972,55 @@ pub(super) fn selected_scalar_key(
     else {
         return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
     };
+    if application.node_id != *node_id || application.role != CheckedOccurrenceRole::Expression {
+        return None;
+    }
+    let admitted_node = items.accounted_node(node_id)?;
+    let admitted_application = ContractOccurrenceKeyV1 {
+        node_id: admitted_node.clone(),
+        role: application.role.clone(),
+        ordinal: application.ordinal,
+    };
     #[cfg(test)]
     source_selection_work::source(true);
-    package.source_occurrences(node_id)?.iter().find(|source| {
-        #[cfg(test)]
-        source_selection_work::occurrence(false);
-        application.node_id == *node_id
-            && application.role == CheckedOccurrenceRole::Expression
-            && source.role == application.role
-            && source.ordinal == application.ordinal
-    })?;
-    if let Some(conversion) = conversion {
+    package
+        .source_occurrences(admitted_node)?
+        .iter()
+        .find(|source| {
+            #[cfg(test)]
+            source_selection_work::occurrence(false);
+            source.role == application.role && source.ordinal == application.ordinal
+        })?;
+    let admitted_conversion = if let Some(conversion) = conversion {
         if conversion.role != CheckedOccurrenceRole::Expression
             || !items.has_context_root(request_index, &conversion.node_id)
         {
             return None;
         }
+        let admitted_conversion_node = items.accounted_node(&conversion.node_id)?;
         #[cfg(test)]
         source_selection_work::source(true);
         package
-            .source_occurrences(&conversion.node_id)?
+            .source_occurrences(admitted_conversion_node)?
             .iter()
             .find(|entry| {
                 #[cfg(test)]
                 source_selection_work::occurrence(true);
                 entry.role == conversion.role && entry.ordinal == conversion.ordinal
             })?;
-    }
+        Some(ContractOccurrenceKeyV1 {
+            node_id: admitted_conversion_node.clone(),
+            role: conversion.role.clone(),
+            ordinal: conversion.ordinal,
+        })
+    } else {
+        None
+    };
     let ContractResultViewV1::Lowered(view) = package
         .result_context(
-            node_id,
-            application,
-            conversion.as_ref(),
+            admitted_node,
+            &admitted_application,
+            admitted_conversion.as_ref(),
             BoundedDomainForm::IntegerRange,
         )
         .ok()?
@@ -2027,6 +2044,7 @@ pub(super) fn contract_checked_operation<'a>(
     closure: &'a quire_contract_model::ContractReachedClosureV1<'_>,
     tag: Option<CheckedNodeTag>,
     node_id: &CheckedNodeId,
+    items: &PackageItems<'_>,
     package: &'a ContractPackageV1,
     selection: &'a ContractDriverResultSelection,
 ) -> Result<
@@ -2052,12 +2070,32 @@ pub(super) fn contract_checked_operation<'a>(
     if &application.node_id != node_id {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     }
+    let Some(admitted_node) = items.accounted_node(node_id) else {
+        return Ok(Err(ExactScalarRefusal::IncompleteContext));
+    };
+    let admitted_application = ContractOccurrenceKeyV1 {
+        node_id: admitted_node.clone(),
+        role: application.role.clone(),
+        ordinal: application.ordinal,
+    };
+    let admitted_conversion = if let Some(key) = conversion {
+        let Some(admitted_node) = items.accounted_node(&key.node_id) else {
+            return Ok(Err(ExactScalarRefusal::IncompleteContext));
+        };
+        Some(ContractOccurrenceKeyV1 {
+            node_id: admitted_node.clone(),
+            role: key.role.clone(),
+            ordinal: key.ordinal,
+        })
+    } else {
+        None
+    };
     let bounds = BoundView::admitted(
         closure,
         SelectedResult {
             package,
-            application,
-            conversion: conversion.as_ref(),
+            application: &admitted_application,
+            conversion: admitted_conversion.as_ref(),
         },
     );
     let operation = match derive_operation_from_view(graph, closure.root, bounds.clone()) {
@@ -2122,13 +2160,29 @@ pub(super) struct ContractScalarPlan {
 }
 
 pub(super) fn plan_contract_scalar_oracles(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     positions: &[usize],
 ) -> Result<ContractScalarPlan, super::ContractScalarError> {
-    let items =
-        PackageItems::new(package, requested).map_err(super::ContractScalarError::Request)?;
+    let items = PackageItems::new(source, package, requested)
+        .map_err(super::ContractScalarError::Request)?;
     let graph = Graph::new(package);
+    let source_id =
+        |node: &CheckedNodeId| {
+            items.original_represented_node(node).cloned().ok_or(
+                super::ContractScalarError::Oracle(OracleGenerationError::InvalidPlanState),
+            )
+        };
+    let structural_source_id = |node: &CheckedNodeId| {
+        items
+            .original_structural_node(node)
+            .cloned()
+            .ok_or(super::ContractScalarError::Oracle(
+                OracleGenerationError::InvalidPlanState,
+            ))
+    };
+
     let mut claims = Vec::with_capacity(positions.len());
     let mut pending = Vec::new();
     let mut counts = BTreeMap::new();
@@ -2170,18 +2224,6 @@ pub(super) fn plan_contract_scalar_oracles(
                 },
             ),
             PackageItem::Lowered { closure, .. } => {
-                let root_sources = closure
-                    .nodes
-                    .iter()
-                    .find(|entry| entry.node.node_id == *node_id)
-                    .map(|entry| entry.sources)
-                    .ok_or_else(|| {
-                        super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
-                            request_index,
-                            node_id: node_id.clone(),
-                            cause: Box::new(ContractRootViewError::Inconsistent),
-                        })
-                    })?;
                 let identity = scalar_ir::identity(graph.term(&closure.root.node_id))
                     .unwrap_or_default()
                     .to_owned();
@@ -2223,7 +2265,7 @@ pub(super) fn plan_contract_scalar_oracles(
                         }),
                     )?;
                     match contract_checked_operation(
-                        &graph, &closure, tag, node_id, package, selection,
+                        &graph, &closure, tag, node_id, &items, package, selection,
                     )
                     .map_err(super::ContractScalarError::Oracle)?
                     {
@@ -2231,9 +2273,9 @@ pub(super) fn plan_contract_scalar_oracles(
                             let dependencies = closure
                                 .nodes
                                 .iter()
-                                .filter(|entry| entry.node.node_id != *node_id)
-                                .map(|entry| entry.node.node_id.clone())
-                                .collect();
+                                .filter(|entry| entry.node.node_id != closure.root.node_id)
+                                .map(|entry| source_id(&entry.node.node_id))
+                                .collect::<Result<Vec<_>, _>>()?;
                             pending.push((
                                 claims.len(),
                                 operation.clone(),
@@ -2251,15 +2293,34 @@ pub(super) fn plan_contract_scalar_oracles(
                                     node_id: node_id.clone(),
                                     package_id: package.wire().package.source.clone(),
                                     semantic_form: closure.root.semantic_form.to_string(),
-                                    semantic_type: closure.root.semantic_type.clone(),
+                                    semantic_type: source_id(&closure.root.semantic_type)?,
                                     quantity_conversion_target: conversion_target(
                                         &graph,
                                         closure.root,
-                                    ),
-                                    source_map: root_sources.to_vec(),
-                                    claims: closure.claims,
-                                    bounds: closure.bounds,
-                                    checked_bounds,
+                                    )
+                                    .as_ref()
+                                    .map(source_id)
+                                    .transpose()?,
+                                    source_map: source
+                                        .source_map()
+                                        .iter()
+                                        .filter(|entry| entry.node_id == *node_id)
+                                        .cloned()
+                                        .collect(),
+                                    claims: closure
+                                        .claims
+                                        .iter()
+                                        .map(structural_source_id)
+                                        .collect::<Result<_, _>>()?,
+                                    bounds: closure
+                                        .bounds
+                                        .iter()
+                                        .map(structural_source_id)
+                                        .collect::<Result<_, _>>()?,
+                                    checked_bounds: checked_bounds
+                                        .iter()
+                                        .map(source_id)
+                                        .collect::<Result<_, _>>()?,
                                     dependencies,
                                     oracle_source: String::new(),
                                     boolean_right_may_stop: matches!(

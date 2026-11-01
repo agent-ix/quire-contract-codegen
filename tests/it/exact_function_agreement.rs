@@ -101,6 +101,7 @@ fn tc_031_ac17_location_map_origin_confirmed_against_runtime_check_refusal() {
     let function_positions = (0..functions.len()).collect::<Vec<_>>();
     let item_positions = (functions.len()..requested.len()).collect::<Vec<_>>();
     let oracles = quire_contract_codegen::generate_exact_function_oracles(
+        &package,
         &admitted,
         &driver_positions(&requested),
         &function_positions,

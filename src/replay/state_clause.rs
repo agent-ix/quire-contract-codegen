@@ -606,7 +606,12 @@ impl StateClauseReplay {
         )
         .map_err(StateClauseReplayError::CallSite)?;
         let site = located.site;
-        if checked_node_key(clause_node).as_ref() != Some(&site.node) {
+        if package
+            .structural_key(clause_node)
+            .and_then(checked_node_key)
+            .as_ref()
+            != Some(&site.node)
+        {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
 
@@ -624,7 +629,7 @@ impl StateClauseReplay {
         let fields = state_fields(&graph, &shape, &requested_fields)?;
         let pre = bind(&fields, &playback, Side::Playback)?;
         let post = bind(&fields, &post_state, Side::PostState)?;
-        let domains = declared_domains(&shape, &fields)?;
+        let domains = declared_domains(package, &shape, &fields)?;
 
         let model = model_header(&packages, &object.object_type)
             .map_err(|cause| StateClauseReplayError::Document(DocumentError::Model(cause)))?;
@@ -1122,6 +1127,7 @@ fn bind(
 /// One `DeclaredDomain` per state field that declares a range: the range, on `self`'s parameter
 /// node, at the field's child index among the framed object's members.
 fn declared_domains(
+    package: &CheckedPackageV2,
     shape: &ClauseShape,
     fields: &[StateField],
 ) -> Result<Vec<DeclaredDomain>, StateClauseReplayError> {
@@ -1133,7 +1139,10 @@ fn declared_domains(
     let Some(self_parameter) = shape.parameters.first() else {
         return Err(unreadable(&shape.scope.anchor));
     };
-    let parameter = checked_node_key(self_parameter).ok_or_else(|| unreadable(self_parameter))?;
+    let parameter = package
+        .structural_key(self_parameter)
+        .and_then(checked_node_key)
+        .ok_or_else(|| unreadable(self_parameter))?;
     let mut domains = Vec::new();
     for (position, field) in fields.iter().enumerate() {
         let Some((minimum, maximum)) = field.range else {

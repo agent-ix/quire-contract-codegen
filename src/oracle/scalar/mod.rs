@@ -857,11 +857,13 @@ pub enum ContractScalarError {
 /// The returned claim indexes align with `positions` and identify each selected
 /// occurrence after the claim map's stable sort.
 pub(crate) fn generate_contract_scalar_oracles(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     positions: &[usize],
 ) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
     render::build_contract_scalar_oracles(
+        source,
         package,
         requested,
         positions,
@@ -871,11 +873,13 @@ pub(crate) fn generate_contract_scalar_oracles(
 
 /// Derive a selected scalar claim for capability preflight without rendering artifacts.
 pub(crate) fn preflight_contract_scalar_claim(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     request_index: usize,
 ) -> Result<ExactScalarClaim, ContractScalarError> {
     let (oracles, indexes) = render::build_contract_scalar_oracles(
+        source,
         package,
         requested,
         &[request_index],

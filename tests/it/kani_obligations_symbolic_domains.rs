@@ -302,7 +302,12 @@ fn collection_identity(
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -356,7 +361,12 @@ fn collection_harness_with_ceilings(
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -415,7 +425,12 @@ fn collection_item_outcome(
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("selected function exists")
         .node_id
         .clone();
@@ -856,7 +871,12 @@ fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("selected QSL clause");
     assert_eq!(clause.semantic_form.as_ref(), "state_clause");
     let harness = collection_harness(&fixture, "quire.op.collection.forall");
@@ -1122,7 +1142,12 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("QSL FunctionSite identity names an admitted function node");
     let Some(CheckedTerm::Reference { target }) = named_member(function, "body") else {
         panic!("the admitted function body has a target identity");
@@ -1204,7 +1229,12 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("the selected function exists")
         .node_id
         .clone();
@@ -1541,7 +1571,12 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -1839,7 +1874,12 @@ fn precondition_collection_outcome(
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("source-authored clause")
         .node_id
         .clone();
@@ -1965,7 +2005,10 @@ fn precondition_collection_source_is_admitted() {
             .graph()
             .nodes
             .iter()
-            .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+            .find(|node| fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view())))
             .unwrap()
             .semantic_form
             .as_ref(),
@@ -1976,7 +2019,12 @@ fn precondition_collection_source_is_admitted() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -2827,7 +2875,12 @@ fn assert_ordered_set_capacity_refusal(
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -2889,7 +2942,12 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -2944,7 +3002,12 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -3055,7 +3118,12 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -3223,7 +3291,12 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .unwrap()
         .node_id
         .clone();
@@ -3588,7 +3661,12 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
+        .find(|node| {
+            fixture
+                .package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| node_key_matches(key, fixture.function_key.view()))
+        })
         .expect("the selected function exists")
         .node_id
         .clone();

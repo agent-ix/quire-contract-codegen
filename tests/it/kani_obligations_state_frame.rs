@@ -1465,7 +1465,7 @@ fn field_read_through(
     deref: &str,
     (object, field, bound): (&str, &str, &str),
 ) -> String {
-    let member = json!({"kind": "field", "declaration": node_ref(object), "name": field});
+    let member = json!({"kind": "field", "declaration": node_ref(object), "name": field, "read_form": "bare"});
     builder.application_code_with(
         code,
         "expression",
@@ -5058,11 +5058,15 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     let anchor = node_of("operation_anchor");
     let frame = node_of("frame");
     assert!(native_twin::node_matches_site(
-        &anchor.node_id,
+        package
+            .structural_key(&anchor.node_id)
+            .expect("admitted anchor key"),
         site.anchor.view()
     ));
     assert!(native_twin::node_matches_site(
-        &frame.node_id,
+        package
+            .structural_key(&frame.node_id)
+            .expect("admitted frame key"),
         site.frame.view()
     ));
     let bound_frame = match &anchor.body {
@@ -5139,7 +5143,9 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
             .graph()
             .nodes
             .iter()
-            .find(|node| native_twin::node_matches_site(&node.node_id, site.anchor.view()))
+            .find(|node| package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| native_twin::node_matches_site(key, site.anchor.view())))
             .expect("anchor node")
             .node_id
     );
@@ -5149,7 +5155,9 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
             .graph()
             .nodes
             .iter()
-            .find(|node| native_twin::node_matches_site(&node.node_id, site.frame.view()))
+            .find(|node| package
+                .structural_key(&node.node_id)
+                .is_some_and(|key| native_twin::node_matches_site(key, site.frame.view())))
             .expect("frame node")
             .node_id
     );

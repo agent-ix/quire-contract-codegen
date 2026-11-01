@@ -200,6 +200,9 @@ fn fixture_label(id: &CheckedNodeId) -> String {
             quire_contract_model::CheckedNodePathSegment::Node(_) => {
                 panic!("fixture node has a nested path: {id:?}")
             }
+            quire_contract_model::CheckedNodePathSegment::Index(_) => {
+                panic!("fixture node has an indexed path: {id:?}")
+            }
         })
         .collect::<Vec<_>>();
     if let ["fixture", label] = path.as_slice() {
@@ -3281,7 +3284,31 @@ pub fn corpus_package() -> PackageBuilder {
     builder.omit_code(EXPRESSION_OPERAND);
     builder.omit_code(WRONG_OPERAND);
     builder.omit_code(LITERAL_QUANTITY);
+    builder.omit_code(WRONG_BOUND_FORM);
+    // Wrong-form bounds are reader-negative inputs after IR-772. Retain them in
+    // wrong_form_bound_package(), never in a reader-admitted scalar corpus.
+    let wrong = wrong_form_bound();
+    let rejected_keys = std::iter::once(wrong.key())
+        .chain(wrong.foreign().iter().map(Bound::key))
+        .map(|key| node_ref(&key))
+        .collect::<Vec<_>>();
+    for field in ["semantic_graph", "source_map"] {
+        let entries = if field == "semantic_graph" {
+            &mut builder.value[field]["nodes"]
+        } else {
+            &mut builder.value[field]
+        };
+        entries
+            .as_array_mut()
+            .expect("fixture entries")
+            .retain(|entry| !rejected_keys.contains(&entry["node_id"]));
+    }
     builder
+}
+
+/// Deliberately malformed TextBounds over Integer, tested at the strict reader.
+pub fn wrong_form_bound_package() -> PackageBuilder {
+    corpus_package_with_expression_operand().focused(&[code_id(WRONG_BOUND_FORM)])
 }
 
 /// A mutable scalar corpus slice for tests that extend one or more authored
@@ -3623,6 +3650,40 @@ pub const BOUNDED_PRODUCT: u32 = 2061;
 /// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
 /// two-parameter shapes of IR-298.
 pub fn two_parameter_package() -> PackageBuilder {
+    let mut builder = two_parameter_wire();
+    for code in [
+        V_PARAM_WRONG_FORM,
+        TWO_PARAMETER_WRONG_FORM_OPERAND,
+        TWO_PARAMETER_WRONG_FORM_RESULT,
+    ] {
+        builder.omit_code(code);
+    }
+    remove_wrong_form_bound(&mut builder);
+    builder
+}
+
+/// Reader-negative wrong-form operand or result, isolated from valid controls.
+pub fn two_parameter_wrong_form_package(code: u32) -> PackageBuilder {
+    two_parameter_wire().focused(&[code_id(code)])
+}
+
+fn remove_wrong_form_bound(builder: &mut PackageBuilder) {
+    let wrong = wrong_form_bound();
+    let rejected = std::iter::once(wrong.key())
+        .chain(wrong.foreign().iter().map(Bound::key))
+        .map(|key| node_ref(&key))
+        .collect::<Vec<_>>();
+    builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes")
+        .retain(|node| !rejected.contains(&node["node_id"]));
+    builder.value["source_map"]
+        .as_array_mut()
+        .expect("sources")
+        .retain(|node| !rejected.contains(&node["node_id"]));
+}
+
+fn two_parameter_wire() -> PackageBuilder {
     let mut builder =
         corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL, V_PARAM_PLAIN]);
     let integer_type = key(T_INTEGER);
@@ -3874,6 +3935,22 @@ pub fn wrong_base_bound() -> Bound {
 ///   application with the identity `quire.op.numeric.narrow`, its `type_argument` member naming
 ///   the bound, and one argument, a reference to the arithmetic node.
 pub fn qsl_shaped_package() -> PackageBuilder {
+    let mut builder = qsl_shaped_wire();
+    builder.omit_code(QSL_WRONG_FORM_NARROWED);
+    builder.omit_code(QSL_WRONG_FORM_NARROW);
+    remove_wrong_form_bound(&mut builder);
+    builder
+}
+
+/// Reader-negative wrong-form narrowing, isolated from valid narrowing controls.
+pub fn qsl_wrong_form_package() -> PackageBuilder {
+    qsl_shaped_wire().focused(&[
+        code_id(QSL_WRONG_FORM_NARROWED),
+        code_id(QSL_WRONG_FORM_NARROW),
+    ])
+}
+
+fn qsl_shaped_wire() -> PackageBuilder {
     let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL]);
     let integer_type = key(T_INTEGER);
     let x_bound = builder.bound(&Bound::Integer(0, 9));
@@ -4535,7 +4612,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         DUPLICATED,
         UNBOUNDED,
         AMBIGUOUS,
-        WRONG_BOUND_FORM,
         UNTYPED_OPERAND,
     ]
     .into_iter()

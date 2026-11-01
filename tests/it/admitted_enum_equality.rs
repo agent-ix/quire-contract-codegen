@@ -7,26 +7,12 @@ use quire_contract_codegen::{
     OracleGenerationError,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageEvidence,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
-    CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
-    ContractPackageWireV1, LoweringProfileRef,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CompleteLoweringProfileV2, ContractDependencies,
+    ContractPackageReadResult, ContractPackageWireV1, LoweringProfileRef,
 };
-use quire_exact::{NodeKey, PathSegment};
 
 use super::admitted_enum_fixture as fixture;
-
-fn node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
-}
 
 fn foreign_context() -> qsl_replay::AdmittedCompilation {
     qsl_replay::compile_admitted(
@@ -161,7 +147,9 @@ fn enum_items(
             .graph()
             .nodes
             .iter()
-            .find(|node| &node_key(&node.node_id) == admitted.key())
+            .find(|node| {
+                context.wire_graph().key(&node.node_id).ok().as_ref() == Some(admitted.key())
+            })
             .expect("IR retains that exact admitted enum declaration")
             .node_id
             .clone();
@@ -713,8 +701,8 @@ fn authentic_enum_request_order_repeatability_and_dual_operator_symbols() {
         .expect("generated enum source")
         .contents
         .as_str();
-    assert!(generated.contains("enum_declaration_by_wire("));
-    assert!(generated.contains("enum_case_by_wire("));
+    assert!(generated.contains("enum_declaration("));
+    assert!(generated.contains("enum_case("));
     items.reverse();
     let reverse = generate_items(&package, Some(compiled.context()), &items, &[]).expect("reverse");
     assert_eq!(

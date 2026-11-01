@@ -199,26 +199,33 @@ fn success() -> Verdict {
 /// The structural node key a parameter's witness entry name spells: the name is the compact JSON
 /// of the node id, which holds no percent escape for the identifiers these fixtures use.
 fn node_key_of_entry_name(name: &str) -> qsl_replay::NodeKey {
-    use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
-    fn convert(id: &CheckedNodeId) -> qsl_replay::NodeKey {
-        let path = id
+    // Witness entry names spell structural keys, not checked-package wire IDs.
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Entry {
+        package: String,
+        path: Vec<Segment>,
+        ordinal: u64,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Segment {
+        Text(String),
+        Node(Entry),
+    }
+    fn convert(entry: Entry) -> qsl_replay::NodeKey {
+        let path = entry
             .path
-            .iter()
+            .into_iter()
             .map(|segment| match segment {
-                CheckedNodePathSegment::Name(name) => {
-                    quire_exact::PathSegment::Text(name.to_string())
-                }
-                CheckedNodePathSegment::Node(child) => {
-                    quire_exact::PathSegment::Node(convert(child))
-                }
+                Segment::Text(text) => quire_exact::PathSegment::Text(text),
+                Segment::Node(node) => quire_exact::PathSegment::Node(convert(node)),
             })
             .collect();
-        qsl_replay::NodeKey::new(id.package.to_string(), path, id.ordinal)
-            .expect("an admitted structural node id")
+        qsl_replay::NodeKey::new(entry.package, path, entry.ordinal)
+            .expect("witness structural key")
     }
-    let id: CheckedNodeId =
-        serde_json::from_str(name).expect("a witness entry name spells a node id");
-    convert(&id)
+    convert(serde_json::from_str(name).expect("a witness entry name spells a structural key"))
 }
 
 #[trace("FR-016-AC-9", "TC-026")]

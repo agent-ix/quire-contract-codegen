@@ -1856,6 +1856,7 @@ mod ir988_admitted_generation_tests {
     }
 
     struct AdmittedCase {
+        source: CheckedPackageV2,
         contract: ContractPackageV1,
         positions: Vec<ContractRequestPosition>,
         function_positions: Vec<usize>,
@@ -1955,6 +1956,7 @@ mod ir988_admitted_generation_tests {
         let contract = admitted_function_contract(&checked, &requested);
         let positions = driver_positions(&requested);
         AdmittedCase {
+            source: checked,
             contract,
             positions,
             function_positions,
@@ -1970,6 +1972,7 @@ mod ir988_admitted_generation_tests {
         for requests in [2, 4, 8] {
             for functions in [4, 8, 16] {
                 let AdmittedCase {
+                    source,
                     contract,
                     positions,
                     function_positions,
@@ -1979,6 +1982,7 @@ mod ir988_admitted_generation_tests {
                 } = admitted_case(requests, functions);
                 IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
                 let output = generate_exact_function_oracles(
+                    &source,
                     &contract,
                     &positions,
                     &function_positions,
@@ -2005,6 +2009,7 @@ mod ir988_admitted_generation_tests {
                     "one source index build per admitted batch"
                 );
                 let repeated = generate_exact_function_oracles(
+                    &source,
                     &contract,
                     &positions,
                     &function_positions,
@@ -2270,6 +2275,7 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     let declarations = [declaration];
     let items = [item];
     let Ok(oracles) = generate_exact_function_oracles(
+        checked,
         contract,
         positions,
         &declaration_position,
@@ -2785,6 +2791,7 @@ fn validate_signature(
 /// requested temporal-root kind, or artifact generation failure. Other
 /// per-item problems are refusals in the claim map.
 pub fn generate_exact_function_oracles(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     function_positions: &[usize],
@@ -2792,8 +2799,8 @@ pub fn generate_exact_function_oracles(
     item_positions: &[usize],
     items: &[ExactFunctionItem],
 ) -> Result<ExactFunctionOracles, OracleGenerationError> {
-    let accounting =
-        PackageItems::new(package, requested).map_err(OracleGenerationError::PackageRequest)?;
+    let accounting = PackageItems::new(source, package, requested)
+        .map_err(OracleGenerationError::PackageRequest)?;
     for (positions, count) in [
         (function_positions, functions.len()),
         (item_positions, items.len()),
@@ -3076,6 +3083,7 @@ pub fn generate_exact_function_oracles(
         by_key.entry(key).or_insert((position, item));
     }
 
+    let original_graph = Graph::from_checked(source);
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
     let mut unauthenticated_root: Option<(usize, CheckedNodeId)> = None;
@@ -3083,20 +3091,22 @@ pub fn generate_exact_function_oracles(
     // every generated function is named.
     let mut pending = Vec::new();
     for (key, (position, item)) in by_key {
+        let direct_tag = original_graph.node(&item.call_node_id).and_then(|node| {
+            (node.node_tag.as_ref() == "expression")
+                .then(|| direct_unsupported_form(node, original_graph.term(&item.call_node_id)))
+                .flatten()
+        });
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let duplicate_node = names.duplicate_node_refusal(&item.function);
         // An item naming a refused duplicate-node function carries that
         // refusal even when it was also requested more than once (AC-22).
-        let result = if let Some(refusal) = duplicate_node {
+        let mut result = if let Some(refusal) = duplicate_node {
             ClaimDisposition::Refused { refusal }
         } else if duplicate {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
-        } else if let Some(node_tag) = graph
-            .node(&item.call_node_id)
-            .and_then(|node| direct_unsupported_form(node, graph.term(&item.call_node_id)))
-        {
+        } else if let Some(node_tag) = direct_tag {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::Unsupported {
                     unsupported_node_id: item.call_node_id.clone(),
@@ -3153,6 +3163,7 @@ pub fn generate_exact_function_oracles(
                     &resolved,
                     &survivor_index,
                     &package_refusal,
+                    &accounting,
                     (package, &source_index),
                     item,
                     admitted,
@@ -3165,6 +3176,21 @@ pub fn generate_exact_function_oracles(
                 }
             }
         };
+        if let ClaimDisposition::Refused {
+            refusal:
+                ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id,
+                    ..
+                },
+        } = &mut result
+        {
+            // This cause is retained in FR-330's source-accounting frame.
+            if direct_tag.is_none() {
+                if let Some(original) = accounting.original_node(unsupported_node_id) {
+                    *unsupported_node_id = original.clone();
+                }
+            }
+        }
         claims.push(ExactFunctionClaim {
             node_id: item.call_node_id.clone(),
             result,
@@ -3345,6 +3371,7 @@ fn item_disposition<'a>(
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
     survivor_index: &BTreeMap<&CheckedNodeId, (usize, &'a ExactFunctionDeclaration)>,
     package_refusal: &Option<String>,
+    accounting: &PackageItems<'_>,
     source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
@@ -3389,8 +3416,17 @@ fn item_disposition<'a>(
         });
     }
     if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
+        let admitted_body_id = accounting
+            .represented_node(&declaration.node_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let source_function_id = source_index
-            .source_function_node_id(&declaration.name, &declaration.node_id)
+            .source_function_node_id(&declaration.name, admitted_body_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        let admitted_arguments = item
+            .argument_node_ids
+            .iter()
+            .map(|node_id| accounting.represented_node(node_id))
+            .collect::<Option<Vec<_>>>()
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
             graph
@@ -3398,14 +3434,17 @@ fn item_disposition<'a>(
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?,
             graph,
             source_function_id,
-            &item.argument_node_ids,
+            &admitted_arguments.into_iter().cloned().collect::<Vec<_>>(),
         ) {
             return Err(ExactFunctionRefusal::BodyMismatch);
         }
     }
     for argument_id in &item.argument_node_ids {
+        let admitted_argument_id = accounting
+            .represented_node(argument_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let argument = graph
-            .node(argument_id)
+            .node(admitted_argument_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let type_node = graph.node(&argument.semantic_type).ok_or_else(|| {
             ExactFunctionRefusal::UnknownTypeNode {
@@ -3783,7 +3822,8 @@ mod tests {
             node_id: call_id.clone(),
             result_selection: ContractDriverResultSelection::NotApplicable,
         }];
-        let accounting = PackageItems::new(&admitted, &requests).expect("exact real request");
+        let accounting =
+            PackageItems::new(&checked, &admitted, &requests).expect("exact real request");
         let item = accounting.at(0, &call_id).expect("selected call closure");
         let PackageItem::Lowered { closure, .. } = &item else {
             return Err("selected call must lower".to_owned());

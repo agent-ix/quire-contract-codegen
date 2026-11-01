@@ -9,20 +9,6 @@ use quire_contract_codegen::{
     ClaimDisposition, CompositeEqualityLimits, CompositeEqualityRefusal, EqualityOperatorKind,
     OracleGenerationError,
 };
-use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
-use quire_exact::{NodeKey, PathSegment};
-
-fn node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
-}
 
 fn foreign_context() -> qsl_replay::AdmittedCompilation {
     qsl_replay::compile_admitted(
@@ -268,13 +254,12 @@ pub(super) fn assert_authentic_recursive_item_generation() {
         assert_eq!(actual.form(), qsl_replay::AdmittedCompositeForm::Record);
         assert_eq!(
             actual.node().to_string(),
-            node_key(&item.left.source_type).to_string()
-        );
-        // Structural identity (IR-1079): the kernel declaration key is the wire node identity.
-        assert_eq!(
-            actual.key(),
-            actual.node(),
-            "wire identity is the kernel declaration key"
+            compiled
+                .context()
+                .wire_graph()
+                .key(&item.left.source_type)
+                .expect("source type belongs to admitted graph")
+                .to_string()
         );
         assert_eq!(item.left.source_type, item.right.source_type);
         let output = generate_items(
@@ -489,7 +474,16 @@ fn genuine_union_host_generation_closes_nested_owner_declarations() {
             .declaration_keys
             .iter()
             .zip(&claim.declaration_runtime_keys)
-            .map(|(node, key)| (node_key(node), key.clone()))
+            .map(|(node, key)| {
+                (
+                    compiled
+                        .context()
+                        .wire_graph()
+                        .key(node)
+                        .expect("declaration belongs to admitted graph"),
+                    key.clone(),
+                )
+            })
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
             actual, expected,
@@ -592,4 +586,52 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
             && lib.contains("qsl_replay::AdmittedCompositeForm::Union")
     );
     assert!(!lib.contains("NodeKey::from_"));
+}
+
+#[trace("FR-018-AC-39", "FR-018-AC-42", "TC-029")]
+#[test]
+fn source_context_comparison_retains_a_present_checked_term_sidecar() {
+    use quire_contract_model::{
+        encode_checked_package_v2, CheckedPackageEvidence, CheckedPackageReadLimits,
+        CheckedPackageSourceCorrespondenceRef, CheckedPackageV2, CheckedPackageV2ReadResult,
+        CheckedTermDataV2,
+    };
+    let compiled = fixture::compile(fixture::UNION_SOURCE, &Default::default());
+    let original = checked(&compiled, &[]);
+    assert!(original.checked_term_data().is_none());
+    let item = direct_source_item(&original, "healthy");
+    generate_items(
+        &original,
+        Some(compiled.context()),
+        std::slice::from_ref(&item),
+        &[],
+    )
+    .expect("unchanged complete source matches its context");
+    let data = CheckedTermDataV2::default();
+    let bytes = encode_checked_package_v2(
+        original.name(),
+        original.lock(),
+        original.graph(),
+        CheckedPackageSourceCorrespondenceRef {
+            source_map: original.source_map(),
+            refinement_step_rows: original.refinement_step_rows(),
+        },
+        Some(&data),
+        original.capability_report(),
+        original.diagnostics(),
+        quire_canonical::Limits::new(u64::MAX),
+    )
+    .expect("encode an explicitly present empty decision sidecar");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let with_data =
+        match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {
+            CheckedPackageV2ReadResult::Admitted(package) => package,
+            other => panic!("present empty sidecar must admit: {other:?}"),
+        };
+    assert_eq!(with_data.checked_term_data(), Some(&data));
+    assert_eq!(
+        generate_items(&with_data, Some(compiled.context()), &[item], &[]),
+        Err(OracleGenerationError::ContextPackageContentMismatch)
+    );
 }

@@ -152,6 +152,7 @@ fn harness(
     .expect("linked Kani route")
     .with_scalar_selection(&admitted, selection);
     let generated = generate_routed(
+        &checked,
         &admitted,
         &positions,
         &[route],

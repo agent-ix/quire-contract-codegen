@@ -17,8 +17,8 @@ use crate::core::profile::oracle_crate_manifest;
 use crate::core::source_map::SourceProbe;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError};
 use crate::oracle::operator_catalog::IntegerOperator;
-use quire_contract_model::CheckedNodeId;
 use quire_contract_model::ContractPackageV1;
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
     IntegerInterval, OrderingOperator, RoundingMode, TextProfile,
@@ -966,6 +966,7 @@ pub(super) enum ScalarBuildMode {
 }
 
 pub(super) fn build_contract_scalar_oracles(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     positions: &[usize],
@@ -975,7 +976,7 @@ pub(super) fn build_contract_scalar_oracles(
         mut claims,
         mut pending,
         selected_keys,
-    } = super::lower::plan_contract_scalar_oracles(package, requested, positions)?;
+    } = super::lower::plan_contract_scalar_oracles(source, package, requested, positions)?;
     let mut source = SourceBuilder::default();
     // Emit in selected-occurrence order, including two requests over one
     // expression node. Request permutation cannot rename or reorder source.

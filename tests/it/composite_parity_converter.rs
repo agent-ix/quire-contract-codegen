@@ -13,7 +13,7 @@ use qsl_replay::{
 use quire_contract_codegen::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeReportError,
 };
-use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
+use quire_contract_model::CheckedNodeId;
 use quire_exact::PathSegment;
 
 fn limits() -> ScalarLimits {
@@ -34,18 +34,6 @@ fn limits() -> ScalarLimits {
 struct PublicCompositeFixture {
     wire: ReplayRequestWire,
     claim: CompositeParityClaim,
-}
-
-fn node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
 }
 
 fn sequence_value(value: i64) -> WitnessValue {
@@ -114,6 +102,8 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         panic!("read package")
     };
     let nodes = &package.graph().nodes;
+    let graph = qsl_replay::WireGraph::new(nodes.iter().map(|node| &node.node_id))
+        .expect("admitted graph has structural keys");
     let named = |name: &str| {
         nodes
             .iter()
@@ -142,7 +132,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         .iter()
         .map(|entry| {
             let id: CheckedNodeId = serde_json::from_value(entry["target"].clone()).unwrap();
-            node_key(&id)
+            graph.key(&id).expect("parameter target belongs to graph")
         })
         .collect::<Vec<_>>();
     assert_eq!(parameters.len(), 2);
@@ -154,7 +144,9 @@ fn public_composite_fixture() -> PublicCompositeFixture {
                     if operation.identity() == Some("quire.op.structural.eq"))
         })
         .expect("compiled structural equality");
-    let node = node_key(&application.node_id);
+    let node = graph
+        .key(&application.node_id)
+        .expect("application belongs to graph");
     let occurrence = &application.occurrences[0];
     let origin = Origin::new(Role::new("expression"), occurrence.ordinal);
     let bounds = parameters

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Admitted control for the boundary between typed term children and opaque
+//! Admitted narrowing control plus a defensive term-only control for opaque
 //! operation metadata. The fixture extension is authored here; it carries no
 //! claim of QSL compilation or generated oracle behavior.
 
@@ -189,13 +189,35 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     node["body"]["operation"]["member"] = json!({"term":"reference", "target":target.node_id});
     let opaque_key = rekey_application(&mut wire, &opaque_node.node_id);
     let mutated_bytes = encode_draft(&wire);
-    let mutated = read(&mutated_bytes, &evidence, "TRUE_NARROW_OPAQUE");
+    // Closed operation metadata is rejected by the public reader. Exercise the
+    // defensive child walker on the detached term, without claiming admission.
+    assert!(matches!(
+        CheckedPackageV2::read(
+            &mutated_bytes,
+            CheckedPackageReadLimits::bounded(),
+            &evidence
+        ),
+        CheckedPackageV2ReadResult::Refused(_)
+    ));
+    let opaque_body = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["node_id"] == serde_json::to_value(&opaque_key).unwrap())
+        .unwrap()["body"]
+        .clone();
+    let opaque_term: CheckedTerm =
+        serde_json::from_str(&serde_json::to_string(&opaque_body).unwrap()).unwrap();
+    assert!(
+        !references(Some(&opaque_term), &target.node_id),
+        "metadata is not a semantic child"
+    );
     assert_eq!(
         baseline.graph().nodes.len(),
         original.graph().nodes.len() + 1
     );
-    assert_eq!(mutated.graph().nodes.len(), baseline.graph().nodes.len());
-    for (package, add_key) in [(&baseline, &opaque_node.node_id), (&mutated, &opaque_key)] {
+    {
+        let (package, add_key) = (&baseline, &opaque_node.node_id);
         let graph = Graph::from_checked(package);
         let Some(CheckedTerm::Application {
             operator: ApplicationOperator::Convert,
@@ -246,13 +268,6 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
             narrow.dependencies
         );
     }
-    let Some(CheckedTerm::Application { operation, .. }) = mutated.term(&opaque_key) else {
-        panic!("opaque metadata not retained")
-    };
-    assert_eq!(
-        serde_json::to_value(operation).unwrap()["member"],
-        json!({"term":"reference", "target":target.node_id})
-    );
     // Positive discriminator: a real argument reference, unlike metadata,
     // creates an additional semantic consumer alongside the true narrowing.
     let node = wire["semantic_graph"]["nodes"]
@@ -261,6 +276,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         .iter_mut()
         .find(|node| node["node_id"] == serde_json::to_value(&opaque_key).unwrap())
         .unwrap();
+    node["body"]["operation"]["member"] = Value::Null;
     node["body"]["arguments"][0] = json!({"term":"reference", "target":target.node_id});
     node["dependencies"] = json!([target.node_id]);
     let semantic_key = rekey_application(&mut wire, &opaque_key);
@@ -295,6 +311,6 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     assert!(matches!(&arguments[0], CheckedTerm::Reference {target: id} if id == &target.node_id));
     assert_eq!(
         serde_json::to_value(operation).unwrap()["member"],
-        json!({"term":"reference", "target":target.node_id})
+        Value::Null
     );
 }
