@@ -177,11 +177,7 @@ impl std::error::Error for CompositeBuildError {}
 /// the request inputs, dependencies and limits. No native/falsified production route is exposed here.
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
-    original: CheckedPackageV2,
-    inputs: ReplayInputs,
-    dependencies: DependencyInput,
-    selection: QualifiedName,
-    read_limits: CheckedPackageReadLimits,
+    context: OriginalReplayContext,
 }
 
 struct SelectedParityClaim {
@@ -213,54 +209,8 @@ impl OriginalCompositeEqContext {
         function: &str,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, CompositeBuildError> {
-        let identifier =
-            Identifier::new(function).map_err(|_| CompositeBuildError::InvalidFunction)?;
-        let selection = QualifiedName::new(vec![identifier])
-            .map_err(|_| CompositeBuildError::InvalidFunction)?;
-        let source = &inputs.source;
-        if source != original_source {
-            return Err(CompositeBuildError::SourceMismatch);
-        }
-        let source_ref = CheckedSourceRef {
-            authority: source.authority.clone().into_boxed_str(),
-            identity: source.identity.clone().into_boxed_str(),
-        };
-        if original.name() != inputs.package_name || !original.lock().sources.contains(&source_ref)
-        {
-            return Err(CompositeBuildError::SourceMismatch);
-        }
-        let (inputs, dependencies) = inputs.admit().map_err(CompositeBuildError::Dependencies)?;
-        let selections = &original.lock().dependency_selections;
-        if selections.len() != inputs.dependencies.len()
-            || selections
-                .iter()
-                .zip(&inputs.dependencies)
-                .any(|(original, retained)| original.identity.as_ref() != retained.identity)
-        {
-            return Err(CompositeBuildError::ContextMismatch);
-        }
-        if !selections.is_empty() {
-            return Err(CompositeBuildError::ImportedContextUnsupported);
-        }
-        original
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| {
-                node.node_tag.as_ref() == "function"
-                    && node.declaration.as_ref().is_some_and(|declaration| {
-                        declaration.qualified_name.len() == 1
-                            && declaration.qualified_name[0].as_ref() == function
-                    })
-            })
-            .ok_or(CompositeBuildError::UnknownFunction)?;
-        Ok(Self {
-            original,
-            inputs,
-            dependencies,
-            selection,
-            read_limits,
-        })
+        OriginalReplayContext::new(original, original_source, inputs, function, read_limits)
+            .map(|context| Self { context })
     }
 
     /// Build the retained body from the original Eq or Ne application's two positional operands.
@@ -289,11 +239,16 @@ impl OriginalCompositeEqContext {
         work_limit: u64,
     ) -> Result<SelectedParityClaim, CompositeBuildError> {
         let operands = self
+            .context
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
         // IR-803 will carry the typed operator; read the checked node's identity meanwhile.
-        let actual = self.original.term(node).and_then(application_identity);
+        let actual = self
+            .context
+            .original
+            .term(node)
+            .and_then(application_identity);
         let actual = node_equality_operator(actual)?;
         if actual != operator {
             return Err(CompositeBuildError::OperatorMismatch {
@@ -307,7 +262,7 @@ impl OriginalCompositeEqContext {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
             };
-            let child = wire_node(&self.original, child)?;
+            let child = wire_node(&self.context.original, child)?;
             let bounds = match &operand.domain {
                 CheckedCompositeOperandDomain::Literal => Vec::new(),
                 CheckedCompositeOperandDomain::Parameter { .. } => harness_bounds.iter()
@@ -322,7 +277,7 @@ impl OriginalCompositeEqContext {
         if arguments.len() != 2 {
             return Err(CompositeBuildError::OperandShape);
         }
-        let node = wire_node(&self.original, node)?;
+        let node = wire_node(&self.context.original, node)?;
         let occurrence = origin(occurrence);
         let preimage = ParityPreimage {
             node: node.clone(),
@@ -343,7 +298,7 @@ impl OriginalCompositeEqContext {
                 .filter(|bound| matches!(bound.domain(), DomainKey::Node { .. }))
                 .cloned()
                 .collect(),
-            limits: self.inputs.accounting_limits,
+            limits: self.context.inputs.accounting_limits,
         };
         Ok(SelectedParityClaim {
             operands,
@@ -375,10 +330,10 @@ impl OriginalCompositeEqContext {
                 selected.preimage.occurrence.clone(),
             )),
             clause_node: Some(selected.preimage.node),
-            replay_target: ReplayTargetMembers::function(self.selection.clone()),
+            replay_target: ReplayTargetMembers::function(self.context.selection.clone()),
             profile_selections: Some(Vec::new()),
-            run_limits: Some(self.inputs.accounting_limits),
-            declared_domains: Some(self.inputs.declared_domains.clone()),
+            run_limits: Some(self.context.inputs.accounting_limits),
+            declared_domains: Some(self.context.inputs.declared_domains.clone()),
             backend: Some(PARITY_PRODUCER.to_owned()),
             trace_position: Some(None),
             source: Some(EnvelopeSource::Input(Vec::new())),
@@ -402,9 +357,10 @@ impl OriginalCompositeEqContext {
     ) -> Result<OriginalCompositeEqRequest, CompositeBuildError> {
         let selected =
             self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
-        let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
+        let envelope = WitnessEnvelope::reconstruct(packet, self.context.inputs.replay_limits)
             .map_err(|cause| CompositeBuildError::PacketAdmission(Box::new(cause)))?;
-        if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
+        if envelope.replay_target() != &ReplayTarget::function(self.context.selection.clone(), None)
+        {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Target,
             ));
@@ -429,12 +385,12 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Profiles,
             ));
         }
-        if envelope.run_limits() != self.inputs.accounting_limits {
+        if envelope.run_limits() != self.context.inputs.accounting_limits {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Limits,
             ));
         }
-        if envelope.declared_domains() != self.inputs.declared_domains.as_slice() {
+        if envelope.declared_domains() != self.context.inputs.declared_domains.as_slice() {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Domains,
             ));
@@ -459,7 +415,7 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Target,
             ));
         };
-        let mut wire = self.inputs.wire(
+        let mut wire = self.context.inputs.wire(
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
             envelope.obligation_identity().clone(),
@@ -468,62 +424,21 @@ impl OriginalCompositeEqContext {
         // ReplayInputs is shared with Kani witness paths; input parity's producer is this
         // checked-claim context, so retain the admitted packet's backend identity here.
         wire.backend = envelope.backend().as_str().to_owned();
-        let admitted = self.check_recompiled_context(&wire)?;
+        let admitted = self.context.check_recompiled_context(&wire)?;
         Ok(OriginalCompositeEqRequest {
             admitted,
             wire,
             claim: selected.claim,
             operands: selected.operands,
             preimage: selected.preimage,
-            replay_limits: self.inputs.replay_limits,
+            replay_limits: self.context.inputs.replay_limits,
         })
-    }
-
-    // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
-    #[allow(clippy::result_large_err)]
-    fn check_recompiled_context(
-        &self,
-        wire: &ReplayRequestWire,
-    ) -> Result<AdmittedCompilation, CompositeBuildError> {
-        let request = ReplayRequest::decode(wire.clone(), self.inputs.replay_limits)
-            .map_err(|cause| CompositeBuildError::RequestDecode(Box::new(cause)))?;
-        let compiled = compile_admitted(
-            CompileUnit {
-                source: self.inputs.source.source_identity(),
-                package_name: self.original.name().to_owned(),
-                path: &self.inputs.source.identity,
-                bytes: &self.inputs.source.bytes,
-            },
-            [],
-            &self.dependencies,
-            request.stage_limits().clone(),
-            self.inputs.replay_limits,
-        )
-        .map_err(recompile_failure)?;
-        let mut evidence = CheckedPackageEvidence::new();
-        for feature in &self.original.lock().required_features {
-            evidence.support_feature(feature.as_ref());
-        }
-        let recompiled =
-            match CheckedPackageV2::read(compiled.package().bytes(), self.read_limits, &evidence) {
-                CheckedPackageV2ReadResult::Admitted(package) => package,
-                CheckedPackageV2ReadResult::Refused(cause) => {
-                    return Err(CompositeBuildError::PackageRead(Box::new(cause)))
-                }
-                CheckedPackageV2ReadResult::Incomplete(cause) => {
-                    return Err(CompositeBuildError::PackageReadLimit(cause))
-                }
-            };
-        if self.original != *recompiled {
-            return Err(CompositeBuildError::ContextMismatch);
-        }
-        Ok(compiled)
     }
 }
 
 // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
 #[allow(clippy::result_large_err)]
-fn wire_node(
+pub(crate) fn wire_node(
     source: &CheckedPackageV2,
     node: &CheckedNodeId,
 ) -> Result<quire_exact::NodeKey, CompositeBuildError> {
@@ -532,7 +447,7 @@ fn wire_node(
     checked_node_key(key.structural_key()).ok_or(CompositeBuildError::NodeIdentity)
 }
 
-fn origin(occurrence: &CheckedOccurrence) -> Origin {
+pub(crate) fn origin(occurrence: &CheckedOccurrence) -> Origin {
     let role = match occurrence.role {
         CheckedOccurrenceRole::Declaration => "declaration",
         CheckedOccurrenceRole::Type => "type",
@@ -719,5 +634,112 @@ mod tests {
             node_equality_operator(Some("quire.op.structural.eq")),
             Ok(EqualityOperator::Equal)
         ));
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct OriginalReplayContext {
+    pub(crate) original: std::sync::Arc<CheckedPackageV2>,
+    pub(crate) inputs: std::sync::Arc<ReplayInputs>,
+    pub(crate) dependencies: DependencyInput,
+    pub(crate) selection: QualifiedName,
+    pub(crate) read_limits: CheckedPackageReadLimits,
+}
+
+impl OriginalReplayContext {
+    pub(crate) fn new(
+        original: CheckedPackageV2,
+        original_source: &LockedSource,
+        inputs: ReplayInputs,
+        function: &str,
+        read_limits: CheckedPackageReadLimits,
+    ) -> Result<Self, CompositeBuildError> {
+        let identifier =
+            Identifier::new(function).map_err(|_| CompositeBuildError::InvalidFunction)?;
+        let selection = QualifiedName::new(vec![identifier])
+            .map_err(|_| CompositeBuildError::InvalidFunction)?;
+        let source = &inputs.source;
+        if source != original_source {
+            return Err(CompositeBuildError::SourceMismatch);
+        }
+        let source_ref = CheckedSourceRef {
+            authority: source.authority.clone().into_boxed_str(),
+            identity: source.identity.clone().into_boxed_str(),
+        };
+        if original.name() != inputs.package_name || !original.lock().sources.contains(&source_ref)
+        {
+            return Err(CompositeBuildError::SourceMismatch);
+        }
+        let (inputs, dependencies) = inputs.admit().map_err(CompositeBuildError::Dependencies)?;
+        let selections = &original.lock().dependency_selections;
+        if selections.len() != inputs.dependencies.len()
+            || selections
+                .iter()
+                .zip(&inputs.dependencies)
+                .any(|(original, retained)| original.identity.as_ref() != retained.identity)
+        {
+            return Err(CompositeBuildError::ContextMismatch);
+        }
+        if !selections.is_empty() {
+            return Err(CompositeBuildError::ImportedContextUnsupported);
+        }
+        original
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "function"
+                    && node.declaration.as_ref().is_some_and(|declaration| {
+                        declaration.qualified_name.len() == 1
+                            && declaration.qualified_name[0].as_ref() == function
+                    })
+            })
+            .ok_or(CompositeBuildError::UnknownFunction)?;
+        Ok(Self {
+            original: std::sync::Arc::new(original),
+            inputs: std::sync::Arc::new(inputs),
+            dependencies,
+            selection,
+            read_limits,
+        })
+    }
+
+    pub(crate) fn check_recompiled_context(
+        &self,
+        wire: &ReplayRequestWire,
+    ) -> Result<AdmittedCompilation, CompositeBuildError> {
+        let request = ReplayRequest::decode(wire.clone(), self.inputs.replay_limits)
+            .map_err(|cause| CompositeBuildError::RequestDecode(Box::new(cause)))?;
+        let compiled = compile_admitted(
+            CompileUnit {
+                source: self.inputs.source.source_identity(),
+                package_name: self.original.name().to_owned(),
+                path: &self.inputs.source.identity,
+                bytes: &self.inputs.source.bytes,
+            },
+            [],
+            &self.dependencies,
+            request.stage_limits().clone(),
+            self.inputs.replay_limits,
+        )
+        .map_err(recompile_failure)?;
+        let mut evidence = CheckedPackageEvidence::new();
+        for feature in &self.original.lock().required_features {
+            evidence.support_feature(feature.as_ref());
+        }
+        let recompiled =
+            match CheckedPackageV2::read(compiled.package().bytes(), self.read_limits, &evidence) {
+                CheckedPackageV2ReadResult::Admitted(package) => package,
+                CheckedPackageV2ReadResult::Refused(cause) => {
+                    return Err(CompositeBuildError::PackageRead(Box::new(cause)))
+                }
+                CheckedPackageV2ReadResult::Incomplete(cause) => {
+                    return Err(CompositeBuildError::PackageReadLimit(cause))
+                }
+            };
+        if self.original.as_ref() != recompiled.as_ref() {
+            return Err(CompositeBuildError::ContextMismatch);
+        }
+        Ok(compiled)
     }
 }

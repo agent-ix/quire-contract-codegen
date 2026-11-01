@@ -646,7 +646,11 @@ pub struct KaniScalarObligationHarness {
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
     original_scalar_limits: Option<quire_exact::ScalarLimits>,
-    scalar_replay_body: Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError>,
+    original_scalar_package: Option<std::sync::Arc<quire_contract_model::CheckedPackageV2>>,
+    scalar_replay_body: Result<
+        crate::replay::scalar_authority::ScalarReplayBody,
+        crate::replay::scalar_authority::ScalarAuthorityError,
+    >,
 }
 
 // This value compares the per-harness public output and its origin seal. The routed package seal
@@ -682,7 +686,10 @@ impl KaniScalarObligationHarness {
             record,
             generated_artifacts: None,
             original_scalar_limits: None,
-            scalar_replay_body: Err(crate::replay::scalar_authority::ScalarAuthorityError::Unavailable),
+            original_scalar_package: None,
+            scalar_replay_body: Err(
+                crate::replay::scalar_authority::ScalarAuthorityError::Unavailable,
+            ),
         }
     }
 
@@ -702,12 +709,59 @@ impl KaniScalarObligationHarness {
     ///
     /// # Errors
     /// Refuses changed generated fields or unavailable/ambiguous admitted provenance.
-    pub fn scalar_replay_body(&self) -> Result<&crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError> {
-        if !self.has_valid_provenance() { return Err(crate::replay::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged); }
+    pub fn scalar_replay_body(
+        &self,
+    ) -> Result<
+        &crate::replay::scalar_authority::ScalarReplayBody,
+        crate::replay::scalar_authority::ScalarAuthorityError,
+    > {
+        if !self.has_valid_provenance() {
+            return Err(
+                crate::replay::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged,
+            );
+        }
         self.scalar_replay_body.as_ref().map_err(Clone::clone)
     }
 
-    pub(crate) fn bind_scalar_replay_body(&mut self, body: Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError>) {
+    pub(crate) fn scalar_original_package(
+        &self,
+    ) -> Result<
+        &std::sync::Arc<quire_contract_model::CheckedPackageV2>,
+        crate::replay::scalar_authority::ScalarAuthorityError,
+    > {
+        self.scalar_replay_body()?;
+        self.original_scalar_package
+            .as_ref()
+            .ok_or(crate::replay::scalar_authority::ScalarAuthorityError::Unavailable)
+    }
+
+    pub(crate) fn bind_scalar_replay_body(
+        &mut self,
+        body: Result<
+            crate::replay::scalar_authority::ScalarReplayBody,
+            crate::replay::scalar_authority::ScalarAuthorityError,
+        >,
+        source: std::sync::Arc<quire_contract_model::CheckedPackageV2>,
+    ) {
+        if let Ok(value) = &body {
+            let retained = serde_json::from_str::<serde_json::Value>(&self.record.contents)
+                .ok()
+                .and_then(|mut record| {
+                    record
+                        .as_object_mut()?
+                        .insert("scalarReplayBody".to_owned(), value.record());
+                    serde_json::to_string(&record).ok()
+                });
+            let Some(mut retained) = retained else {
+                self.scalar_replay_body =
+                    Err(crate::replay::scalar_authority::ScalarAuthorityError::Record);
+                return;
+            };
+            retained.push('\n');
+            self.record.contents = retained;
+            self.generated_record = self.record.clone();
+            self.original_scalar_package = Some(source);
+        }
         self.scalar_replay_body = body;
     }
 

@@ -21,6 +21,7 @@ pub(crate) mod obligation;
 // Bounded integer scalar playback and operand-domain validation.
 pub(crate) mod scalar;
 pub(crate) mod scalar_authority;
+pub(crate) mod scalar_builder;
 // Native replay of a postcondition state-clause counterexample.
 // Implements: FR-024-AC-11
 pub(crate) mod state_clause;

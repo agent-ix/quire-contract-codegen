@@ -628,7 +628,20 @@ fn stage_package(
     request: &KaniScalarNativeRequest<'_>,
     root: &Path,
 ) -> Result<Vec<(String, Vec<u8>)>, KaniScalarNativeError> {
-    let mut artifacts = request.oracle_artifacts.to_vec();
+    let staged = scalar_staged_entries(request.harness, request.oracle_artifacts)?;
+    for (path, bytes) in &staged {
+        write_private(&root.join(path), bytes)?;
+    }
+    Ok(staged)
+}
+
+/// Pure original scalar staging layout, shared by proof execution and checked replay.
+/// This constructs bytes only: no process, native invocation, or QSL evaluation occurs here.
+pub(crate) fn scalar_staged_entries(
+    harness: &KaniScalarObligationHarness,
+    oracle_artifacts: &[Artifact],
+) -> Result<Vec<(String, Vec<u8>)>, KaniScalarNativeError> {
+    let mut artifacts = oracle_artifacts.to_vec();
     artifacts.sort_by(|a, b| a.path.cmp(&b.path));
     let mut unique = artifacts
         .iter()
@@ -662,36 +675,26 @@ fn stage_package(
             ));
         }
         if artifact.path == "src/lib.rs" {
-            let retained = root.join("src/oracle-artifacts-lib.rs");
-            write_private(&retained, artifact.contents.as_bytes())?;
             staged.push((
                 "src/oracle-artifacts-lib.rs".to_owned(),
                 artifact.contents.into_bytes(),
             ));
-            write_private(
-                &root.join("src/lib.rs"),
-                request.harness.rust.contents.as_bytes(),
-            )?;
             staged.push((
                 "src/lib.rs".to_owned(),
-                request.harness.rust.contents.as_bytes().to_vec(),
+                harness.rust.contents.as_bytes().to_vec(),
             ));
         } else {
-            let full = root.join(path);
-            write_private(&full, artifact.contents.as_bytes())?;
             staged.push((artifact.path, artifact.contents.into_bytes()));
         }
     }
-    if !unique.insert(request.harness.record.path.clone()) {
+    if !unique.insert(harness.record.path.clone()) {
         return Err(KaniScalarNativeError::InvalidRequest(
             "harness record collides with emitted package path",
         ));
     }
-    let record_path = root.join(&request.harness.record.path);
-    write_private(&record_path, request.harness.record.contents.as_bytes())?;
     staged.push((
-        request.harness.record.path.clone(),
-        request.harness.record.contents.as_bytes().to_vec(),
+        harness.record.path.clone(),
+        harness.record.contents.as_bytes().to_vec(),
     ));
     Ok(staged)
 }

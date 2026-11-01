@@ -327,3 +327,9 @@ pub use kani::terminal::constrained::{
 };
 /// Original admitted scalar replay body and typed family authority.
 pub use replay::scalar_authority::{ScalarAuthorityError, ScalarReplayBody, ScalarReplayKind};
+
+/// Checked operator-level scalar replay construction; execution remains driver-owned.
+pub use replay::scalar_builder::{
+    CompletedScalarReplay, OriginalScalarContext, ScalarBuildError, ScalarDriverObservation,
+    ScalarReplayPlan,
+};

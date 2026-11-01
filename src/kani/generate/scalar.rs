@@ -336,11 +336,37 @@ pub(super) fn lower_scalar_claim(
 }
 
 impl LoweredScalarClaim {
-    pub(super) fn replay_body(&self, source: &quire_contract_model::CheckedPackageV2) -> Result<crate::replay::scalar_authority::ScalarReplayBody, crate::replay::scalar_authority::ScalarAuthorityError> {
-        use crate::replay::scalar_authority::{ScalarReplayBody, ScalarAuthorityError};
-        if self.operation == ScalarOperation::Implies { return Err(ScalarAuthorityError::Unavailable); }
-        let body = ScalarReplayBody::admitted(source, &self.node_id)?;
-        if body.operands.len() != self.operands.len() || body.operands.iter().zip(&self.operands).any(|(operand, (lower, upper))| operand.range.lower != i128::from(*lower) || operand.range.upper != i128::from(*upper)) { return Err(ScalarAuthorityError::Ranges); }
+    pub(super) fn replay_body(
+        &self,
+        source: &quire_contract_model::CheckedPackageV2,
+    ) -> Result<
+        crate::replay::scalar_authority::ScalarReplayBody,
+        crate::replay::scalar_authority::ScalarAuthorityError,
+    > {
+        use crate::replay::scalar_authority::{ScalarAuthorityError, ScalarReplayBody};
+        if self.operation == ScalarOperation::Implies {
+            return Err(ScalarAuthorityError::Unavailable);
+        }
+        let body = ScalarReplayBody::admitted(
+            source,
+            &self.node_id,
+            quire_contract_model::CheckedScalarOperandRange {
+                lower: i128::from(self.lower),
+                upper: i128::from(self.upper),
+            },
+        )?;
+        if body.operands.len() != self.operands.len()
+            || body
+                .operands
+                .iter()
+                .zip(&self.operands)
+                .any(|(operand, (lower, upper))| {
+                    operand.range.lower != i128::from(*lower)
+                        || operand.range.upper != i128::from(*upper)
+                })
+        {
+            return Err(ScalarAuthorityError::Ranges);
+        }
         Ok(body)
     }
 
