@@ -101,6 +101,8 @@ pub struct ConstrainedValueDomain {
 /// An effective operation ABI, independent of callable-body and dispatch reads.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ConstrainedOperationIdentity {
+    /// Symbolic operation selector in the canonical effective-operation order.
+    pub choice: u32,
     /// Actual declaring node, never reconstructed from an implementation body.
     pub declaring_node: CheckedNodeId,
     /// Effective operation name.

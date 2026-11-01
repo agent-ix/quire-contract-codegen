@@ -103,9 +103,8 @@ impl<'a> KaniExecutableHarness<'a> {
         match self {
             Self::Constrained(harness) => {
                 let mut arguments = Vec::new();
-                if !harness.identity.operations.is_empty() {
-                    let maximum = i64::try_from(harness.identity.operations.len() - 1)
-                        .expect("sealed lowering validates the complete census length");
+                if let Some(last) = harness.identity.operations.last() {
+                    let maximum = i64::from(last.choice);
                     arguments.push(SymbolicArgumentBounds {
                         identifier: "step[*].operation".into(),
                         bounds: SymbolicBounds::Integer {

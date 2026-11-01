@@ -310,7 +310,7 @@ pub(super) fn render(
     } else {
         writeln!(source,"let operation: usize = kani::any();\nkani::assume(operation < {}usize);\nmatch operation {{",identity.operations.len()).map_err(|_|R::Render)?;
         for (index, operation) in identity.operations.iter().enumerate() {
-            writeln!(source, "{index} => {{").map_err(|_| R::Render)?;
+            writeln!(source, "{} => {{", operation.choice).map_err(|_| R::Render)?;
             for (parameter, (_, domain)) in operation.parameters.iter().enumerate() {
                 draw(
                     &mut source,

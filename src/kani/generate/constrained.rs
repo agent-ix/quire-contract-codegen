@@ -210,7 +210,7 @@ pub(super) fn lower(
         return Err(R::OperationBindings);
     }
     let mut operations = Vec::new();
-    for operation in census.operations() {
+    for (choice, operation) in census.operations().iter().enumerate() {
         let matches = request
             .operations
             .iter()
@@ -240,6 +240,7 @@ pub(super) fn lower(
             .map(|member| binding_domain(member.ok_or(R::UnsupportedDomain)?))
             .transpose()?;
         operations.push(ConstrainedOperationIdentity {
+            choice: u32::try_from(choice).map_err(|_| R::Provision)?,
             declaring_node: operation.declaring_node_id().clone(),
             name: operation.name().into(),
             subject_path: binding.subject_path.into(),
