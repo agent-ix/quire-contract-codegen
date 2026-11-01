@@ -2007,9 +2007,9 @@ impl Default for SourceBuilder {
 }
 
 // Debug Rust codegen can retain temporaries from sequential statements in a
-// function frame. Keep each generated constructor small enough for a 512 KiB
-// caller stack independently of source-byte artifact partitioning.
-const MAX_DECLARATIONS_PER_FUNCTION: usize = 128;
+// function frame. Leave room for structural NodeKey comparison on a 512 KiB
+// worker stack independently of source-byte artifact partitioning.
+const MAX_DECLARATIONS_PER_FUNCTION: usize = 64;
 
 impl SourceBuilder {
     fn new(limit: usize) -> Result<Self, OracleGenerationError> {
@@ -2088,7 +2088,7 @@ impl SourceBuilder {
                 ))?;
             }
         } else {
-            let mut chunk_calls = String::new();
+            let mut chunk_functions = String::new();
             let mut chunk = String::new();
             let mut chunk_index = 0usize;
             let mut chunk_count = 0usize;
@@ -2104,7 +2104,7 @@ impl SourceBuilder {
                         &crate::core::provenance::node_subject(&item.node_id),
                         chunk_index,
                         &chunk,
-                        &mut chunk_calls,
+                        &mut chunk_functions,
                         &chunk_subjects,
                     )?;
                     chunk_index += 1;
@@ -2124,12 +2124,12 @@ impl SourceBuilder {
                     &crate::core::provenance::node_subject(&item.node_id),
                     chunk_index,
                     &chunk,
-                    &mut chunk_calls,
+                    &mut chunk_functions,
                     &chunk_subjects,
                 )?;
             }
             self.append_function(format!(
-                "\nfn composites_{symbol}(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
+                "\nfn composites_{symbol}(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n    let chunks: &[fn(Option<&qsl_replay::AdmittedContext>, &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError>] = &[\n{chunk_functions}    ];\n    for chunk in chunks {{\n        declarations.extend(chunk(_context, _enum_members)?);\n    }}\n    Ok(declarations)\n}}\n"
             ))?;
         }
 
@@ -2158,7 +2158,7 @@ impl SourceBuilder {
         subject: &str,
         index: usize,
         declarations: &str,
-        calls: &mut String,
+        functions: &mut String,
         composite_subjects: &[String],
     ) -> Result<(), OracleGenerationError> {
         let name = format!("composites_{symbol}_{index}");
@@ -2172,9 +2172,7 @@ impl SourceBuilder {
         self.charge(module_declaration.len().saturating_add(module_source.len()))?;
         self.module_declarations.push_str(&module_declaration);
         self.modules.push((format!("src/{name}.rs"), module_source));
-        calls.push_str(&format!(
-            "    declarations.extend({name}::declarations(_context, _enum_members)?);\n"
-        ));
+        functions.push_str(&format!("        {name}::declarations,\n"));
         Ok(())
     }
 
