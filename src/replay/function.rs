@@ -82,7 +82,7 @@ const BACKEND_IDENTITY: &str = "kani";
 pub struct ReplayParameter<'a> {
     /// The harness argument identifier the decoded value is named by.
     pub argument: &'a str,
-    /// The parameter's witness entry name: [`witness_entry_name`] of its node id in the proved
+    /// The parameter's witness entry name: `witness_entry_name` of its node id in the proved
     /// package. `parameters` slices list these in ascending node id order, the order QSL requires
     /// of a function witness's entries.
     pub node_id: &'a str,
