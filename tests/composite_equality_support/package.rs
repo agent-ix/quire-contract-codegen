@@ -61,7 +61,7 @@ impl FixtureIds {
         }
         for segment in &mut node.path {
             if let CheckedNodePathSegment::Node(child) = segment {
-                **child = self.resolve(child);
+                *child = std::sync::Arc::new(self.resolve(child));
             }
         }
         for (from, to) in &self.renames {
@@ -75,7 +75,7 @@ impl FixtureIds {
                 for segment in &mut node.path {
                     if let CheckedNodePathSegment::Node(child) = segment {
                         if child.as_ref() == from {
-                            **child = to.clone();
+                            *child = std::sync::Arc::new(to.clone());
                         }
                     }
                 }
