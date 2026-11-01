@@ -368,8 +368,18 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     {
         let mut meter = exact::Meter::new(UNLIMITED);
         let dangling = exact::ObjectReference::new(
-            exact::UniverseId::from_digest([6; 32]),
-            exact::EffectiveId::from_digest([7; 32]),
+            exact::UniverseId::new(
+                exact::NodeKey::new(
+                    "agreement",
+                    vec![exact::PathSegment::Text("universe".to_owned())],
+                    0,
+                )
+                .expect("universe root type node"),
+            ),
+            exact::EffectiveId::new(
+                None,
+                exact::OriginalDeclarationKey::new("agreement", "effective"),
+            ),
             exact::ObjectId::new("object").expect("object identity"),
         );
         let result = generated::oracle_add_fn(

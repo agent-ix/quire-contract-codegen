@@ -299,6 +299,8 @@ pub fn playback_text(harness: &StateFrameIdentity, check: &str, values: &[i64]) 
 pub struct Twin {
     unit: Vec<u8>,
     domain: Vec<u8>,
+    /// The source and package identity the unit is compiled under.
+    identity: &'static str,
 }
 
 /// One invocation of `deposit` on account `account`, with its pre and post snapshots.
@@ -699,7 +701,18 @@ impl Twin {
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
         let domain = domain_document(granted);
         let unit = unit_source(clauses, blank_lines).into_bytes();
-        Self { unit, domain }
+        Self {
+            unit,
+            domain,
+            identity: IDENTITY,
+        }
+    }
+
+    /// The same twin compiled under another source and package identity, so its checked package
+    /// is a different package (a lock names its sources by authority and identity only).
+    pub fn with_source_identity(mut self, identity: &'static str) -> Self {
+        self.identity = identity;
+        self
     }
 
     /// One QSL-authored numeric clause at the requested state-clause kind. Its condition has
@@ -731,9 +744,9 @@ impl Twin {
     /// read directly and not through the crate under test.
     pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
         call_site(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
-            IDENTITY.to_owned(),
-            IDENTITY,
+            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            self.identity.to_owned(),
+            self.identity,
             &self.unit,
             [self.domain.as_slice()],
             &DependencyInput::default(),
@@ -763,9 +776,9 @@ impl Twin {
             .map(|(name, point)| ((*name).to_owned(), point.clone()))
             .collect();
         let compiled = compile_package_with_execution_points(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
-            IDENTITY.to_owned(),
-            IDENTITY,
+            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            self.identity.to_owned(),
+            self.identity,
             &self.unit,
             [self.domain.as_slice()],
             &DependencyInput::default(),
@@ -817,7 +830,7 @@ impl Twin {
                         entry.role == CheckedOccurrenceRole::Claim
                             && entry.regions.iter().any(|region| {
                                 region.source.authority.as_ref() == AUTHORITY
-                                    && region.source.identity.as_ref() == IDENTITY
+                                    && region.source.identity.as_ref() == self.identity
                                     && region.start <= body
                                     && region.end > body
                             })
@@ -896,6 +909,7 @@ impl Twin {
         let twin = Self {
             unit: self.unit.clone(),
             domain,
+            identity: self.identity,
         };
         twin.emitted_package(clause)
     }
@@ -918,9 +932,9 @@ impl Twin {
     ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
-            IDENTITY.to_owned(),
-            IDENTITY,
+            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            self.identity.to_owned(),
+            self.identity,
             unit,
             [qsl_document],
             &DependencyInput::default(),
@@ -1111,10 +1125,10 @@ impl Twin {
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
             decode_limits: unbounded_decode_limits(),
-            package_name: IDENTITY.to_owned(),
+            package_name: self.identity.to_owned(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
-                identity: IDENTITY.to_owned(),
+                identity: self.identity.to_owned(),
                 namespace: "git".to_owned(),
                 revision: "1".to_owned(),
                 bytes: self.unit.clone(),
@@ -1142,9 +1156,9 @@ impl Twin {
     pub fn clause_site(&self, clause: &str) -> Result<ClauseSite, Box<CallSiteRefusal>> {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         call_site(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
-            IDENTITY.to_owned(),
-            IDENTITY,
+            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            self.identity.to_owned(),
+            self.identity,
             &self.unit,
             [self.domain.as_slice()],
             &DependencyInput::default(),
