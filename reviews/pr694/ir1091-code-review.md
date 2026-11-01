@@ -135,3 +135,9 @@ PASS for the scoped fix audit at 1383564b; no open review findings. No new cargo
 Inspected d4fe78fc and c928f303 after 1383564b. Quantifier discovery now skips non-reference Boolean operands of conjunctions; condition_operand retains inline scalar operands through the existing checked scalar lowering. Canonical Boolean values are read with as_bool rather than as_str, with no fallback or duplicate parser. The authentic QSL test compiles and executes both true-before-forall and forall-before-true authored bodies. Shared budget exhaustion remains a refusal; complete conditions remain in the single identity/render AST. No new defect found; all earlier findings remain fixed. Observed /tmp/ir1091-all-collection-final.log: 37 passed, 0 failed, 3 explicitly ignored backend-lane tests in 2.81s. This adds ordinary execution evidence only; full-head integration/Clippy/unit gates remain parent-owned.
 
 PASS for the scoped review at c928f303.
+
+## Cover-audit integration completion
+
+Inspected 8dd5756e after the clean rebase onto f04c8a83. The global cover audit now explicitly drives both whole-object precondition and postcondition via the real public negotiate_kani_obligations path. guard_sources requires exactly two emitted clause harnesses and derives family labels from their typed obligation kinds; the audit compares the complete emitted family set to FAMILIES. Existing syn inspection still requires exactly one proof function, exactly one cover in its complete body, and that cover as the final statement. The one new renderer template is counted exactly; spelling exclusions name only the exact shared renderer child file. No broader prefix exemption, skipped assertion, or weakened checker was introduced. Existing missing/duplicated/misplaced-cover mutant controls remain. No new finding; all earlier findings remain fixed. Final focused/full execution evidence is parent-owned.
+
+PASS for the scoped review at 8dd5756e.
