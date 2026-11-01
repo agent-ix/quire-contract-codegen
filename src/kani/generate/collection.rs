@@ -559,8 +559,12 @@ fn unique_element_capacity(element: CollectionElement) -> u128 {
     match element {
         CollectionElement::Boolean => 2,
         CollectionElement::Integer { minimum, maximum } => {
-            // Renderable i64 endpoints have a span of at most 2^64 values.
-            u128::from(maximum.abs_diff(minimum)) + 1
+            // Renderable i64 endpoints span at most 2^64 values; an inverted range holds none.
+            if maximum < minimum {
+                0
+            } else {
+                u128::from(maximum.abs_diff(minimum)) + 1
+            }
         }
     }
 }
@@ -569,8 +573,7 @@ fn unique_capacity_exceeded(element: CollectionElement, declared_maximum: u64) -
     let capacity = unique_element_capacity(element);
     // A refused capacity is below the declared maximum, so it fits a u64.
     (u128::from(declared_maximum) > capacity)
-        .then(|| u64::try_from(capacity).ok())
-        .flatten()
+        .then(|| u64::try_from(capacity).unwrap_or(declared_maximum))
 }
 
 fn collection_i64(value: i128, node_id: &CheckedNodeId) -> Result<i64, UnsupportedObligation> {

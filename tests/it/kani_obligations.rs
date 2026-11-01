@@ -1251,7 +1251,12 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
             .cloned()
             .collect::<Vec<_>>();
         if generated.is_empty() {
-            // A cohort of only refused requests has no obligation item to negotiate.
+            // A cohort of only refused requests has no obligation item to negotiate, but it
+            // must still account for every request it made.
+            assert!(
+                !claim_map.items.is_empty(),
+                "a skipped cohort still holds its refused requests"
+            );
             continue;
         }
         generated_count += generated.len();
