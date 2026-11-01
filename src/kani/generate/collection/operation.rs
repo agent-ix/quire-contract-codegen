@@ -301,7 +301,9 @@ pub(super) fn first_quantifier<'a>(
             "quire.op.collection.forall" | "quire.op.collection.exists" => return Some(node),
             "quire.op.boolean.and" => {
                 for argument in arguments.iter().rev() {
-                    pending.push(term_target(argument)?);
+                    if let Some(target) = term_target(argument) {
+                        pending.push(target);
+                    }
                 }
             }
             _ => {}
@@ -368,21 +370,11 @@ fn condition(
                 return None;
             };
             return Some(CollectionOperationConditionIdentity::And(
-                Box::new(condition(
-                    graph,
-                    clause,
-                    &term_target(left)?,
-                    context,
-                    current,
-                    budget,
+                Box::new(condition_operand(
+                    graph, clause, left, context, current, budget,
                 )?),
-                Box::new(condition(
-                    graph,
-                    clause,
-                    &term_target(right)?,
-                    context,
-                    current,
-                    budget,
+                Box::new(condition_operand(
+                    graph, clause, right, context, current, budget,
                 )?),
             ));
         }
@@ -431,6 +423,31 @@ fn condition(
         },
         context,
         &mut visiting,
+        budget,
+        current,
+    )?;
+    Some(CollectionOperationConditionIdentity::Scalar {
+        expression: ExprText::new(expression).ok()?.as_str().to_owned(),
+    })
+}
+
+fn condition_operand(
+    graph: &CollectionGraph<'_>,
+    clause: &CheckedNodeId,
+    term: &CheckedTerm,
+    context: &ConditionBindings<'_>,
+    current: &str,
+    budget: &mut usize,
+) -> Option<CollectionOperationConditionIdentity> {
+    if let CheckedTerm::Reference { target } = term {
+        return condition(graph, clause, target, context, current, budget);
+    }
+    let expression = scalar_condition(
+        graph,
+        clause,
+        term,
+        context,
+        &mut BTreeSet::new(),
         budget,
         current,
     )?;

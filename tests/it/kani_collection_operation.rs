@@ -924,3 +924,22 @@ fn identity_binds_nonquantifier_conjuncts_and_assumed_precondition_meaning() {
         context.precondition_bodies.len()
     );
 }
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+fn inline_boolean_conjuncts_preserve_the_complete_collection_clause() {
+    for body in [
+        "true and forall(item in self.z_items: item >= 0)",
+        "forall(item in self.z_items: item >= 0) and true",
+    ] {
+        let package = fixture_with_body(&document(), "", body);
+        let harness = postcondition(negotiate(&package, &clauses(&package)));
+        let executable = Executable::compile(&harness);
+        let output = executable.run("healthy", "2,1,2,0,1,2,2,1", "1,2");
+        assert!(
+            output.status.success(),
+            "inline Boolean before or after the quantifier: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
