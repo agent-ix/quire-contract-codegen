@@ -140,10 +140,14 @@ fn refusal_adapter_preserves_selected_document_pointer() {
     let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    // The selected document is the fixture's complete model (the reader resolves its imports
+    // from it) with one integer past 2^53.
+    let mut selected = exact_function_fixture::reference_model_document();
+    selected["package"]["count"] = serde_json::json!(9_007_199_254_740_993_u64);
     evidence
         .insert_domain_package_document(
-            "test/cg-exact-scalar".to_owned(),
-            br#"{"package":{"count":9007199254740993}}"#.to_vec(),
+            exact_function_fixture::REFERENCE_MODEL.to_owned(),
+            serde_json::to_vec(&selected).expect("selected document bytes"),
         )
         .expect("selected document evidence");
     let bytes = serde_json::to_vec(&resolved).expect("canonical fixture wire");
@@ -386,42 +390,56 @@ fn genuine_function_backend_refusals_stay_item_level() {
         ],
         &routed_contract_lowering_profile(),
     );
+    // The function's name is its structural identity, so the lowered package carries it in six
+    // places: this control reads under a byte budget sized to that, not the 1 MiB default.
+    let mut control_limits = CheckedPackageReadLimits::bounded();
+    control_limits.bytes = 4_000_000;
     assert!(
         matches!(
             ContractPackageWireV1::read(
                 lowered.package.canonical_bytes().expect("lowered bytes"),
-                CheckedPackageReadLimits::bounded(),
+                control_limits,
                 &ContractDependencies::new(),
             ),
             ContractPackageReadResult::Admitted(_)
         ),
         "no-claim control must pass the internal reader"
     );
-    for (label, (package, ids)) in [
-        ("structural", structural),
-        ("admitted-no-claim", too_large_to_render),
-    ] {
-        let settled = settle_one(
-            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
-            request_for(package, ids),
-        );
-        assert!(
-            matches!(
-                &settled.disposition,
-                Disposition::Unsupported {
-                    cause: Cause::KaniFormRefused {
-                        refusal: UnsupportedObligation::OperationNotRendered {
-                            operation_identity,
-                            ..
-                        },
-                        backend,
+    let settled = settle_one(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        request_for(structural.0, structural.1),
+    );
+    assert!(
+        matches!(
+            &settled.disposition,
+            Disposition::Unsupported {
+                cause: Cause::KaniFormRefused {
+                    refusal: UnsupportedObligation::OperationNotRendered {
+                        operation_identity,
                         ..
-                    }
-                } if operation_identity == "quire.op.function.call" && backend == "kani"
-            ),
-            "{label} should retain item-level OperationNotRendered: {settled:?}"
-        );
-    }
+                    },
+                    backend,
+                    ..
+                }
+            } if operation_identity == "quire.op.function.call" && backend == "kani"
+        ),
+        "structural should retain item-level OperationNotRendered: {settled:?}"
+    );
+    // A function name is its structural identity, so a name long enough to exceed the render
+    // budget also exceeds the reader's byte ceiling when the lowered package is read back: that
+    // read is the typed envelope-level incomplete outcome, never an untyped failure.
+    let (package, ids) = too_large_to_render;
+    let outcome = negotiate_backend_provider(&envelope(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        vec![request_for(package, ids)],
+    ));
+    let Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete }) = outcome else {
+        panic!("an oversized lowered function package is an incomplete read: {outcome:?}");
+    };
+    assert_eq!(
+        incomplete.limit_kind,
+        quire_contract_model::CheckedPackageLimit::Bytes
+    );
 }
 
 fn candidate(identity: &str) -> Candidate {

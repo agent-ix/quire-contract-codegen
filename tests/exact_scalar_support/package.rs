@@ -1053,6 +1053,16 @@ impl PackageBuilder {
         digest
     }
 
+    /// Lock one more source. Package identity is the name and the lock, so this makes the
+    /// package a different one from every package built without it.
+    pub fn lock_source(&mut self, identity: &str) -> &mut Self {
+        self.value["lock"]["sources"]
+            .as_array_mut()
+            .expect("sources")
+            .push(json!({"authority": "agent-ix", "identity": identity}));
+        self
+    }
+
     /// The fixture's authored wire before ID and package-identity resolution.
     pub fn raw_wire(&self) -> &Value {
         &self.value
@@ -3301,7 +3311,7 @@ pub fn literal_quantity_package() -> PackageBuilder {
 
 /// A reader-negative operation whose rounding disagrees with its decimal type.
 pub fn mode_mismatch_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_DECIMAL]);
     let decimal_bound = builder.bound(&DEC);
     let operand = builder.dedicated_operand("decimal", &[decimal_bound]);
     builder.application_bounded(
@@ -3557,7 +3567,8 @@ pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTo
     map.retain(|entry| {
         let id: CheckedNodeId =
             serde_json::from_value(entry["node_id"].clone()).expect("source-map node id");
-        !replaced.contains(&fixture_label(&id))
+        // The selected model root is keyed by the model's own package, not the fixture's.
+        id.package.as_ref() != BASE_PACKAGE_NAME || !replaced.contains(&fixture_label(&id))
     });
     map.extend(entries);
     (builder, source, sites)
@@ -3610,7 +3621,8 @@ pub const BOUNDED_PRODUCT: u32 = 2061;
 /// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
 /// two-parameter shapes of IR-298.
 pub fn two_parameter_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder =
+        corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL, V_PARAM_PLAIN]);
     let integer_type = key(T_INTEGER);
     let a = builder.bound(&Bound::Integer(0, 9));
     let b = builder.bound(&Bound::Integer(10, 20));
@@ -3860,7 +3872,7 @@ pub fn wrong_base_bound() -> Bound {
 ///   application with the identity `quire.op.numeric.narrow`, its `type_argument` member naming
 ///   the bound, and one argument, a reference to the arithmetic node.
 pub fn qsl_shaped_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT, T_RATIONAL, T_DECIMAL]);
     let integer_type = key(T_INTEGER);
     let x_bound = builder.bound(&Bound::Integer(0, 9));
     let y_bound = builder.bound(&Bound::Integer(10, 20));
@@ -4145,7 +4157,11 @@ pub const ADDER_NAME: &str = "nadder";
 /// [`corpus_package`] plus a function declared over a quantity conversion node and a quantity
 /// equality that reads a conversion node as an operand.
 pub fn conversion_operand_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package().focused(&[
+        code_id(T_BOOLEAN),
+        id(&key(V_QUANTITY)),
+        code_id(QUANTITY_CONVERSIONS[0]),
+    ]);
     let conversion = fixture_label(&code_id(QUANTITY_CONVERSIONS[0])).to_owned();
     builder.application_bounded(
         EQUALITY_OVER_CONVERSION,

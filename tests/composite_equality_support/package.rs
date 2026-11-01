@@ -466,12 +466,12 @@ impl FixtureIds {
 
 include!("../checked_package_support/base.rs");
 
-const REFERENCE_MODEL: &str = "test/cg-composite-reference";
+pub const REFERENCE_MODEL: &str = "test/cg-composite-reference";
 const REFERENCE_OBJECT: &str = "ix://test/cg-composite-reference/Point";
 const REFERENCE_MODEL_ROOT: u32 = 9200;
 const REFERENCE_OBJECT_TYPE: u32 = 9201;
 
-fn reference_model_document() -> Value {
+pub fn reference_model_document() -> Value {
     json!({
         "contractVersion": "2.0.0",
         "package": {"identity": REFERENCE_MODEL, "version": "1"},
