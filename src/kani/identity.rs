@@ -295,6 +295,14 @@ pub struct CollectionOperationValueIdentity {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectionOperationIdentity {
+    /// Exact admitted quantifier whose body is asserted or checked for totality.
+    pub quantifier_id: CheckedNodeId,
+    /// Exact admitted projection selecting the collection field.
+    pub projection_id: CheckedNodeId,
+    /// Exact admitted predicate node.
+    pub predicate_id: CheckedNodeId,
+    /// Checked predicate meaning retained by the generated oracle.
+    pub predicate: CollectionPredicateIdentity,
     /// Admitted operation anchor shared by sibling clauses.
     pub anchor_id: CheckedNodeId,
     /// Every admitted object field in checked declaration order.

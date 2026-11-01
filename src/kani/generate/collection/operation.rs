@@ -148,7 +148,7 @@ pub(super) fn lower(
 ) -> Result<LoweredOperation, CollectionDomainRefusal> {
     let failure = || refused(CollectionUnsupportedReason::UnsupportedClaimShape);
     let node = graph.index.node(clause).ok_or_else(failure)?;
-    let (kind, declared, _) = state_clause_parts(&graph.index, node).ok_or_else(failure)?;
+    let (kind, declared, body) = state_clause_parts(&graph.index, node).ok_or_else(failure)?;
     let anchor_id = anchor(graph, clause).ok_or_else(failure)?;
     let fields = graph
         .package
@@ -180,8 +180,20 @@ pub(super) fn lower(
     let mut result = None;
     for term in declared.iter().skip(1) {
         let id = term_target(term).ok_or_else(failure)?;
-        let mut value = parameter(graph, &id, parameters.len())?;
-        if kind == StateClauseKind::Postcondition && value.name == "result" {
+        let is_result = kind == StateClauseKind::Postcondition
+            && graph
+                .index
+                .node(&id)
+                .and_then(|node| parameter_name(&graph.index, node))
+                == Some("result");
+        let mut value = parameter(graph, &id, parameters.len()).map_err(|reason| {
+            if is_result {
+                refused(CollectionUnsupportedReason::UnsupportedOperationResult)
+            } else {
+                reason
+            }
+        })?;
+        if is_result {
             value.binding = "subject_result".to_owned();
             if result.replace(value).is_some() {
                 return Err(refused(
@@ -193,6 +205,10 @@ pub(super) fn lower(
         }
     }
     let identity = CollectionOperationIdentity {
+        quantifier_id: selected.quantifier.clone(),
+        projection_id: selected.projection.clone(),
+        predicate_id: selected.predicate_id.clone(),
+        predicate: selected.predicate.clone(),
         anchor_id: anchor_id.clone(),
         fields,
         selected_field,
@@ -200,7 +216,10 @@ pub(super) fn lower(
         result,
         preconditions: Vec::new(),
     };
+    let primary =
+        condition(graph, clause, &body, &identity, "state", &mut 256usize).ok_or_else(failure)?;
     let mut spec = CollectionOperationSpec {
+        condition: primary,
         identity,
         postcondition: kind == StateClauseKind::Postcondition,
         subject_path: String::new(),
@@ -218,10 +237,15 @@ pub(super) fn lower(
             else {
                 continue;
             };
-            let condition = sibling_condition(graph, &sibling.node_id, &body, &spec.identity)
-                .ok_or_else(|| {
-                    refused(CollectionUnsupportedReason::UnsupportedSiblingPrecondition)
-                })?;
+            let condition = condition(
+                graph,
+                &sibling.node_id,
+                &body,
+                &spec.identity,
+                "pre",
+                &mut 256usize,
+            )
+            .ok_or_else(|| refused(CollectionUnsupportedReason::UnsupportedSiblingPrecondition))?;
             spec.identity.preconditions.push(sibling.node_id.clone());
             spec.preconditions.push(condition);
         }
@@ -232,20 +256,135 @@ pub(super) fn lower(
     })
 }
 
-fn sibling_condition(
+pub(super) fn first_quantifier<'a>(
+    graph: &CollectionGraph<'a>,
+    body: &CheckedNodeId,
+) -> Option<&'a quire_contract_model::CheckedSemanticNodeV2> {
+    let mut pending = vec![body.clone()];
+    let mut budget = 256usize;
+    while let Some(id) = pending.pop() {
+        budget = budget.checked_sub(1)?;
+        let node = graph.index.node(&id)?;
+        let CheckedTerm::Application {
+            operation,
+            arguments,
+            ..
+        } = graph.index.term(node)?
+        else {
+            continue;
+        };
+        match operation.identity()? {
+            "quire.op.collection.forall" | "quire.op.collection.exists" => return Some(node),
+            "quire.op.boolean.and" => {
+                for argument in arguments.iter().rev() {
+                    pending.push(term_target(argument)?);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn collection_read(
+    graph: &CollectionGraph<'_>,
+    clause: &CheckedNodeId,
+    term: &CheckedTerm,
+    context: &CollectionOperationIdentity,
+    current: &str,
+) -> Option<String> {
+    let node = graph.index.node(&term_target(term)?)?;
+    let CheckedTerm::Application {
+        operation,
+        arguments,
+        ..
+    } = graph.index.term(node)?
+    else {
+        return None;
+    };
+    if operation.identity()? == "quire.op.state.pre" {
+        return collection_read(graph, clause, arguments.first()?, context, "pre");
+    }
+    if operation.identity()? != "quire.op.record.project" {
+        return None;
+    }
+    let (declaration, name) = operation.projection_field().ok()??;
+    super::verify_claim_receiver(&graph.index, graph.index.node(clause)?, node, declaration)
+        .ok()?;
+    let fields = graph.package.model_object_fields(declaration).ok()?;
+    let field = fields.field(name)?;
+    let index = context.fields.iter().position(|candidate| {
+        candidate.field_name == name && candidate.declaring_node_id == *field.declaring_node_id()
+    })?;
+    matches!(
+        context.fields[index].bounds,
+        SymbolicBounds::Sequence { .. }
+    )
+    .then(|| format!("&{current}.field_{index}"))
+}
+
+fn condition(
     graph: &CollectionGraph<'_>,
     clause: &CheckedNodeId,
     body: &CheckedNodeId,
     context: &CollectionOperationIdentity,
+    current: &str,
+    budget: &mut usize,
 ) -> Option<CollectionCondition> {
+    *budget = budget.checked_sub(1)?;
     let node = graph.index.node(body)?;
-    if let Ok(collection) = resolve_collection_field(
-        graph.package,
-        &graph.index,
-        clause,
-        node,
-        CollectionClaimRole::Precondition,
-    ) {
+    if let Some(CheckedTerm::Application {
+        operation,
+        arguments,
+        ..
+    }) = graph.index.term(node)
+    {
+        if operation.identity()? == "quire.op.boolean.and" {
+            let [left, right] = arguments.as_slice() else {
+                return None;
+            };
+            return Some(CollectionCondition::And(
+                Box::new(condition(
+                    graph,
+                    clause,
+                    &term_target(left)?,
+                    context,
+                    current,
+                    budget,
+                )?),
+                Box::new(condition(
+                    graph,
+                    clause,
+                    &term_target(right)?,
+                    context,
+                    current,
+                    budget,
+                )?),
+            ));
+        }
+        if operation.identity()? == "quire.op.structural.eq" {
+            let [left, right] = arguments.as_slice() else {
+                return None;
+            };
+            let (left, right) = (
+                collection_read(graph, clause, left, context, current)?,
+                collection_read(graph, clause, right, context, current)?,
+            );
+            return Some(CollectionCondition::Scalar(
+                ExprText::new(format!("structural_equal({left}, {right})")).ok()?,
+            ));
+        }
+    }
+    let role = if state_clause_parts(&graph.index, graph.index.node(clause)?)?.0
+        == StateClauseKind::Postcondition
+    {
+        CollectionClaimRole::Postcondition
+    } else {
+        CollectionClaimRole::Precondition
+    };
+    if let Ok(collection) =
+        resolve_collection_field(graph.package, &graph.index, clause, node, role)
+    {
         let field = context
             .fields
             .iter()
@@ -257,7 +396,6 @@ fn sibling_condition(
         });
     }
     let mut visiting = BTreeSet::new();
-    let mut budget = 256usize;
     let expression = scalar_condition(
         graph,
         clause,
@@ -266,7 +404,8 @@ fn sibling_condition(
         },
         context,
         &mut visiting,
-        &mut budget,
+        budget,
+        current,
     )?;
     Some(CollectionCondition::Scalar(ExprText::new(expression).ok()?))
 }
@@ -278,6 +417,7 @@ fn scalar_condition(
     context: &CollectionOperationIdentity,
     visiting: &mut BTreeSet<CheckedNodeId>,
     budget: &mut usize,
+    current: &str,
 ) -> Option<String> {
     *budget = budget.checked_sub(1)?;
     match term {
@@ -291,6 +431,7 @@ fn scalar_condition(
                 let value = context
                     .parameters
                     .iter()
+                    .chain(context.result.iter())
                     .find(|value| value.name == name && value.type_id == node.semantic_type)?;
                 match value.domain {
                     CollectionElementIdentity::Boolean => value.binding.clone(),
@@ -306,6 +447,7 @@ fn scalar_condition(
                     context,
                     visiting,
                     budget,
+                    current,
                 )?
             };
             visiting.remove(target);
@@ -364,16 +506,16 @@ fn scalar_condition(
                         && candidate.declaring_node_id == *field.declaring_node_id()
                 })?;
                 return match context.fields[index].bounds {
-                    SymbolicBounds::Boolean => Some(format!("boolean(&pre.field_{index})")),
+                    SymbolicBounds::Boolean => Some(format!("boolean(&{current}.field_{index})")),
                     SymbolicBounds::Integer { .. } => {
-                        Some(format!("integer(&pre.field_{index}).clone()"))
+                        Some(format!("integer(&{current}.field_{index}).clone()"))
                     }
                     SymbolicBounds::Sequence { .. } => None,
                 };
             }
             let args = arguments
                 .iter()
-                .map(|arg| scalar_condition(graph, clause, arg, context, visiting, budget))
+                .map(|arg| scalar_condition(graph, clause, arg, context, visiting, budget, current))
                 .collect::<Option<Vec<_>>>()?;
             match (identity, args.as_slice()) {
                 ("quire.op.boolean.not", [a]) => Some(format!("!({a})")),

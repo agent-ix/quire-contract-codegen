@@ -2404,6 +2404,10 @@ exit 0
             package,
             clause: id("clause"),
             collection_operation: Some(crate::kani::identity::CollectionOperationIdentity {
+                quantifier_id: collection.quantifier_id.clone(),
+                projection_id: collection.projection_id.clone(),
+                predicate_id: collection.predicate_id.clone(),
+                predicate: collection.predicate.clone(),
                 anchor_id: id("anchor"),
                 fields: vec![crate::kani::identity::CollectionObjectFieldIdentity {
                     declaring_node_id: collection.declaration_id.clone(),

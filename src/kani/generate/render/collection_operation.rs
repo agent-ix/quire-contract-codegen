@@ -166,6 +166,22 @@ fn quantifier(
     ))
 }
 
+fn condition_expression(condition: &CollectionCondition, state: &str) -> Option<String> {
+    match condition {
+        CollectionCondition::Scalar(expression) => Some(expression.as_str().to_owned()),
+        CollectionCondition::Quantifier {
+            field,
+            operation,
+            predicate,
+        } => quantifier(*field, operation, predicate, state),
+        CollectionCondition::And(left, right) => Some(format!(
+            "({}) && ({})",
+            condition_expression(left, state)?,
+            condition_expression(right, state)?
+        )),
+    }
+}
+
 fn emit(
     spec: &HarnessSpec,
     selected: &CollectionSpec,
@@ -180,17 +196,35 @@ fn emit(
     for field in &operation.identity.fields {
         collection_schema(&mut source, field)?;
     }
-    source.push_str("#[allow(dead_code)] enum ClauseEvaluation { Completed(bool), Undefined, Refused, Incomplete }\nfn oracle_clause(state: &CgObjectState) -> ClauseEvaluation {\n");
-    let operation_name = match selected.quantifier {
-        super::super::spec::CollectionQuantifier::ForAll => "quire.op.collection.forall",
-        super::super::spec::CollectionQuantifier::Exists => "quire.op.collection.exists",
+    source.push_str("fn structural_equal(left: &quire_exact::Value, right: &quire_exact::Value) -> bool { match quire_exact::planned_equality(left, right, &mut meter()) { quire_exact::Outcome::Completed(value) => value, _ => panic!(\"the admitted collection equality must complete\") } }\n");
+    let mut oracle_parameters = vec![
+        "state: &CgObjectState".to_owned(),
+        "pre: &CgObjectState".to_owned(),
+    ];
+    let mut oracle_arguments = operation
+        .identity
+        .parameters
+        .iter()
+        .map(|value| value.binding.clone())
+        .collect::<Vec<_>>();
+    for value in &operation.identity.parameters {
+        oracle_parameters.push(format!(
+            "{}: {}",
+            value.binding,
+            primitive_type(&value.domain)
+        ));
+    }
+    if let Some(value) = &operation.identity.result {
+        oracle_parameters.push(format!("subject_result: {}", primitive_type(&value.domain)));
+        oracle_arguments.push("subject_result".into());
+    }
+    let oracle_arguments = if oracle_arguments.is_empty() {
+        String::new()
+    } else {
+        format!(", {}", oracle_arguments.join(", "))
     };
-    let claim = quantifier(
-        operation.identity.selected_field,
-        operation_name,
-        &selected.predicate,
-        "state",
-    )?;
+    writeln!(source, "#[allow(dead_code)] enum ClauseEvaluation {{ Completed(bool), Undefined, Refused, Incomplete }}\nfn oracle_clause({}) -> ClauseEvaluation {{", oracle_parameters.join(", ")).ok()?;
+    let claim = condition_expression(&operation.condition, "state")?;
     writeln!(
         source,
         "ClauseEvaluation::Completed({claim})\n}}\n#[kani::proof]\nfn {}() {{",
@@ -214,14 +248,7 @@ fn emit(
     source.push_str("};\n");
     if operation.postcondition {
         for condition in &operation.preconditions {
-            let condition = match condition {
-                CollectionCondition::Scalar(expression) => expression.as_str().to_owned(),
-                CollectionCondition::Quantifier {
-                    field,
-                    operation,
-                    predicate,
-                } => quantifier(*field, operation, predicate, "pre")?,
-            };
+            let condition = condition_expression(condition, "pre")?;
             writeln!(source, "kani::assume({condition});").ok()?;
         }
         source.push_str("let mut post = pre.clone();\n");
@@ -266,13 +293,13 @@ fn emit(
                 writeln!(source, "assert!(subject_result >= {} && subject_result <= {}, \"the produced result retains its admitted domain\");", i64_literal(minimum), i64_literal(maximum)).ok()?;
             }
         }
-        source.push_str("let outcome = oracle_clause(&post);\nassert!(matches!(outcome, ClauseEvaluation::Completed(true)), \"the produced state satisfies the authored collection postcondition\");\n");
+        writeln!(source, "let outcome = oracle_clause(&post, &pre{oracle_arguments});\nassert!(matches!(outcome, ClauseEvaluation::Completed(true)), \"the produced state satisfies the authored collection postcondition\");").ok()?;
         let field = &operation.identity.fields[operation.identity.selected_field];
         writeln!(source, "kani::cover!(collection(&pre.{}).elements().len() == {} || collection(&pre.{}).elements().len() == {}, \"a selected field cardinality endpoint is reachable\");", field.slot, selected.minimum_length, field.slot, selected.maximum_length).ok()?;
     } else {
         writeln!(
             source,
-            "let outcome = oracle_clause(&pre);\n{}\nkani::cover!({}, \"{}\");",
+            "let outcome = oracle_clause(&pre, &pre{oracle_arguments});\n{}\nkani::cover!({}, \"{}\");",
             crate::kani::identity::collection_precondition_totality_assertion(),
             spec.cover().condition.as_str(),
             spec.cover().message

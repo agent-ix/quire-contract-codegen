@@ -56,8 +56,16 @@ fn document() -> Value {
 }
 
 fn fixture(doc: &Value, preconditions: &str) -> CheckedPackageV2 {
+    fixture_with_body(
+        doc,
+        preconditions,
+        "forall(item in self.z_items: item >= 0)",
+    )
+}
+
+fn fixture_with_body(doc: &Value, preconditions: &str, body: &str) -> CheckedPackageV2 {
     let bytes = quire_canonical::to_vec(doc, quire_canonical::Limits::new(1 << 20)).unwrap();
-    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\n{preconditions}\npost CollectionReady using v on M::Node::step {{ forall(item in self.z_items: item >= 0) }}\n");
+    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\n{preconditions}\npost CollectionReady using v on M::Node::step {{ {body} }}\n");
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir1091-operation.native", "git", "fixture"),
         "ir1091-operation".to_owned(),
@@ -228,29 +236,49 @@ fn subject(items: &mut quire_exact::Value, unread: &mut quire_exact::Value, coun
     assert!(matches!(count, quire_exact::Value::Integer(value) if value == &quire_exact::Integer::from(2_i64)), "declaration order binds the count field");
     let quire_exact::Value::Collection(collection) = items else { panic!("exact collection ABI"); };
     let expected = std::env::args().nth(3).unwrap_or_else(|| "1,2".into()).split(',').filter(|part| !part.is_empty())
-        .map(|part| quire_exact::Value::Integer(quire_exact::Integer::from(part.parse::<i64>().unwrap()))).collect::<Vec<_>>();
+        .map(|part| part.parse::<i64>().unwrap()).collect::<Vec<_>>();
     assert_eq!(collection.elements().len(), expected.len());
     for (actual, expected) in collection.elements().iter().zip(&expected) {
-        let (quire_exact::Value::Integer(actual), quire_exact::Value::Integer(expected)) = (actual, expected) else { panic!("integer elements"); };
-        assert_eq!(actual, expected, "the symbolic input order is retained");
+        match actual {
+            quire_exact::Value::Integer(actual) => assert_eq!(actual, &quire_exact::Integer::from(*expected), "the symbolic input order is retained"),
+            quire_exact::Value::Boolean(actual) => assert_eq!(*actual, *expected != 0, "Boolean occurrence order is retained"),
+            _ => panic!("supported exact primitive elements"),
+        }
     }
     let action = std::env::args().nth(1).unwrap();
     match action.as_str() {
         "field-type" => *unread = quire_exact::Value::Integer(quire_exact::Integer::from(0_i64)),
         "field-domain" => *count = quire_exact::Value::Integer(quire_exact::Integer::from(99_i64)),
-        "duplicate" | "element-domain" | "cardinality" | "collection-kind" => {
+        "duplicate" | "element-domain" | "cardinality" | "collection-kind" | "below-minimum" | "reorder" => {
             let mut ty = collection.collection_type().clone();
             let values = match action.as_str() {
-                "duplicate" => vec![1,1], "element-domain" => vec![99], "cardinality" => vec![0,1,2,3], _ => vec![1,2],
+                "duplicate" => vec![1,1], "element-domain" => vec![99], "cardinality" => vec![0,1,2,3], "below-minimum" => vec![], "reorder" => vec![2,1], _ => vec![1,2],
             }.into_iter().map(|value: i64| quire_exact::Value::Integer(quire_exact::Integer::from(value))).collect();
             if action == "collection-kind" { ty = quire_exact::CollectionType::new(quire_exact::CollectionKind::Sequence, ty.element().clone(), ty.bound()); }
             *items = quire_exact::from_admitted(ty, values);
         }
-        "healthy" => {},
+        "healthy" | "result-domain" => {},
         _ => panic!("unknown subject action"),
     }
 }
 "#;
+        let context = harness.identity.collection_operation.as_ref().unwrap();
+        let subject = if let Some(result) = &context.result {
+            let (ty, value) = match result.domain {
+                quire_contract_codegen::CollectionElementIdentity::Boolean => ("bool", "true"),
+                quire_contract_codegen::CollectionElementIdentity::Integer { .. } => {
+                    ("i64", "if action == \"result-domain\" { 99 } else { 2 }")
+                }
+            };
+            let subject = subject.replace(
+                "limit: i64, enabled: bool) {",
+                &format!("limit: i64, enabled: bool) -> {ty} {{"),
+            );
+            let last = subject.rfind('}').unwrap();
+            format!("{}\n{value}\n}}\n", &subject[..last])
+        } else {
+            subject.to_owned()
+        };
         let main = format!("\nfn main() {{ let draws = std::env::args().nth(2).unwrap().split(',').map(|part| part.parse::<i64>().unwrap()).collect(); kani::seed(draws); {}::{}(); kani::finish(); }}", harness.identity.module_symbol, harness.identity.harness_symbol);
         fs::write(
             scratch.path.join("main.rs"),
@@ -393,4 +421,382 @@ fn operation_context_requires_and_assumes_same_anchor_preconditions() {
             }
         }
     ));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+fn operation_context_checks_result_domain_and_the_authored_postcondition() {
+    let mut doc = document();
+    doc["types"][1]["operations"][0]["returns"] = json!({"typeRef":SMALL,"nullable":false,"multiplicity":{"lower":1,"upper":1,"ordered":false,"unique":true}});
+    let package = fixture(&doc, "");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    let context = harness.identity.collection_operation.as_ref().unwrap();
+    assert_eq!(context.result.as_ref().unwrap().name, "result");
+    assert_eq!(
+        context
+            .parameters
+            .iter()
+            .map(|value| value.name.as_str())
+            .collect::<Vec<_>>(),
+        ["limit", "enabled"]
+    );
+    let executable = Executable::compile(&harness);
+    let output = executable.run("healthy", "2,1,2,0,1,2,2,1", "1,2");
+    assert!(
+        output.status.success(),
+        "declared primitive result: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = executable.run("result-domain", "2,1,2,0,1,2,2,1", "1,2");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("the produced result retains its admitted domain"));
+
+    drop(executable);
+    let package = fixture_with_body(&document(), "", "exists(item in self.z_items: item = 2)");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    let executable = Executable::compile(&harness);
+    let output = executable.run("healthy", "2,1,3,0,1,2,2,1", "1,3");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("the produced state satisfies the authored collection postcondition"));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-97", "FR-015-AC-102")]
+fn unsupported_whole_object_axes_have_typed_refusals_and_no_harness() {
+    use quire_contract_codegen::{
+        CollectionUnsupportedReason as Reason, ObligationDisposition, UnsupportedObligation,
+    };
+    for (axis, reason) in [
+        ("state", Reason::UnsupportedObjectState),
+        ("parameter", Reason::UnsupportedOperationParameter),
+        ("result", Reason::UnsupportedOperationResult),
+        ("sibling", Reason::UnsupportedSiblingPrecondition),
+    ] {
+        let mut doc = document();
+        let pre = match axis {
+            "state" => {
+                doc["types"][1]["fields"][1]["presence"] = json!("optional");
+                ""
+            }
+            "parameter" => {
+                doc["types"][1]["operations"][0]["params"][0]["typeRef"] =
+                    json!("ix://quire/native/Integer");
+                ""
+            }
+            "result" => {
+                doc["types"][1]["operations"][0]["returns"] = json!({"typeRef":"ix://quire/native/String","nullable":false,"multiplicity":{"lower":1,"upper":1,"ordered":false,"unique":true}});
+                ""
+            }
+            "sibling" => {
+                "pre Ready using v on M::Node::step { exists(item in self.z_items: item > limit) }"
+            }
+            _ => unreachable!(),
+        };
+        let package = fixture(&doc, pre);
+        let post = clauses(&package).into_iter().find(|id| matches!(package.term(id), Some(CheckedTerm::Application { operation, .. }) if operation.state_clause_kind().ok().flatten() == Some(quire_contract_model::StateClauseKind::Postcondition))).unwrap();
+        let outcome = negotiate(&package, &[post]);
+        let KaniObligationOutcome::Emitted {
+            records,
+            v2_clause_harnesses,
+            collection_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("typed {axis} refusal")
+        };
+        assert!(v2_clause_harnesses.is_empty() && collection_harnesses.is_empty());
+        assert!(
+            matches!(&records[0].disposition, ObligationDisposition::Unsupported { reason: UnsupportedObligation::CollectionClaimNotRendered { reason: actual, .. } } if *actual == reason),
+            "{axis}: {:?}",
+            records[0].disposition
+        );
+    }
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99", "FR-029-AC-11")]
+fn whole_object_precondition_totality_and_playback_keep_all_state_and_parameters() {
+    let package = fixture(
+        &document(),
+        "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 1) }",
+    );
+    let ids = clauses(&package);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        records,
+        ..
+    } = negotiate(&package, &ids)
+    else {
+        panic!("valid request")
+    };
+    let harness = v2_clause_harnesses
+        .iter()
+        .find(|harness| {
+            harness.identity.kind == quire_contract_codegen::ObligationKind::Precondition
+        })
+        .unwrap_or_else(|| panic!("precondition context: {records:?}"));
+    let context = harness.identity.collection_operation.as_ref().unwrap();
+    assert_eq!(context.fields.len(), 3);
+    assert_eq!(context.parameters.len(), 2);
+    let executable = Executable::compile(harness);
+    for draws in ["2,1,2,0,1,2,2,1", "2,0,1,0,1,2,2,1"] {
+        let output = executable.run("must-not-call", draws, "");
+        assert!(
+            output.status.success(),
+            "both true and false preconditions complete without invoking the subject: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let entries = [2_i64, 0, 1, 0, 1, 2, 2, 1]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let bytes = if index == 4 || index == 7 {
+                vec![u8::try_from(*value).unwrap()]
+            } else {
+                value.to_le_bytes().to_vec()
+            };
+            format!(
+                "// {value}\nvec![{}],",
+                bytes
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let transcript = format!("/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"\"the selected precondition completes a Boolean\"\"\nlet concrete_vals: Vec<Vec<u8>> = vec![\n{entries}\n];", harness.identity.module_symbol, harness.identity.harness_symbol);
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: 4096,
+        values: 8,
+    };
+    let playback = quire_contract_codegen::parse_assertion_playback(
+        &transcript,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .unwrap();
+    let (witness, settlement) =
+        quire_contract_codegen::settle_v2_collection_precondition_falsification(
+            harness, &playback, limits,
+        )
+        .unwrap();
+    assert_eq!(
+        witness,
+        vec![
+            (
+                "self.z_items".into(),
+                qsl_replay::WitnessValue::OrderedSet(vec![
+                    qsl_replay::WitnessValue::Integer(0),
+                    qsl_replay::WitnessValue::Integer(1)
+                ])
+            ),
+            (
+                "self.a_unread".into(),
+                qsl_replay::WitnessValue::Boolean(true)
+            ),
+            ("self.m_count".into(), qsl_replay::WitnessValue::Integer(2)),
+            ("limit".into(), qsl_replay::WitnessValue::Integer(2)),
+            ("enabled".into(), qsl_replay::WitnessValue::Boolean(true)),
+        ]
+    );
+    assert!(matches!(
+        settlement,
+        quire_contract_codegen::ReplaySettlement::CgDefect
+    ));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-101")]
+fn unread_collection_bounds_and_full_width_integer_domains_are_not_replaced() {
+    let mut doc = document();
+    doc["types"][1]["fields"][2]["multiplicity"] =
+        json!({"lower":0,"upper":9,"ordered":true,"unique":false});
+    let package = fixture(&doc, "");
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = negotiate(&package, &clauses(&package))
+    else {
+        panic!("valid request")
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(matches!(records[0].disposition, quire_contract_codegen::ObligationDisposition::Unsupported {
+        reason: quire_contract_codegen::UnsupportedObligation::CollectionClaimNotRendered { reason: quire_contract_codegen::CollectionUnsupportedReason::UnwindBelowCollectionBound { required:10, supplied:8 }, .. }
+    }));
+    let mut doc = document();
+    doc["types"][0]["constraints"][0]["operands"]["value"] = json!(i64::MIN.to_string());
+    doc["types"][0]["constraints"][1]["operands"]["value"] = json!(i64::MAX.to_string());
+    let package = fixture(&doc, "");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    assert!(
+        harness.rust.contents.contains("i64::MIN")
+            || harness.rust.contents.contains("-9223372036854775808")
+    );
+    assert!(harness.rust.contents.contains("9223372036854775807"));
+    let context = harness.identity.collection_operation.as_ref().unwrap();
+    let encoded = serde_json::to_value(context).unwrap();
+    assert_eq!(
+        encoded["fields"][0]["bounds"]["element"]["minimum"],
+        i64::MIN
+    );
+    assert_eq!(
+        encoded["fields"][0]["bounds"]["element"]["maximum"],
+        i64::MAX
+    );
+    let executable = Executable::compile(&harness);
+    let output = executable.run(
+        "healthy",
+        "1,9223372036854775807,0,0,1,2,2,1",
+        "9223372036854775807",
+    );
+    assert!(
+        output.status.success(),
+        "the real maximum remains in the generated domain: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = executable.run(
+        "healthy",
+        "1,-9223372036854775808,0,0,1,2,2,1",
+        "-9223372036854775808",
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("the produced state satisfies the authored collection postcondition"),
+        "the real minimum reaches the authored assertion; it was not assumed away"
+    );
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+fn retained_prestate_order_is_an_authored_obligation_separate_from_collection_domain() {
+    let mut doc = document();
+    doc["types"][1]["fields"][0]["multiplicity"]["lower"] = json!(2);
+    let package = fixture_with_body(
+        &doc,
+        "",
+        "forall(item in self.z_items: item >= 0) and self.z_items = pre(self.z_items)",
+    );
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    let executable = Executable::compile(&harness);
+    let healthy = executable.run("healthy", "2,1,2,0,1,2,2,1", "1,2");
+    assert!(
+        healthy.status.success(),
+        "same ordered members: {}",
+        String::from_utf8_lossy(&healthy.stderr)
+    );
+    let reordered = executable.run("reorder", "2,1,2,0,1,2,2,1", "1,2");
+    assert!(!reordered.status.success());
+    let stderr = String::from_utf8_lossy(&reordered.stderr);
+    assert!(stderr.contains("the produced state satisfies the authored collection postcondition"), "a valid reordered set passes inspection and fails only its order-preservation clause: {stderr}");
+    assert!(!stderr.contains("every produced collection"));
+    let below = executable.run("below-minimum", "2,1,2,0,1,2,2,1", "1,2");
+    assert!(!below.status.success());
+    assert!(String::from_utf8_lossy(&below.stderr).contains("every produced collection"));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-100")]
+fn whole_object_identity_regenerates_and_changes_with_unread_domains() {
+    let package = fixture(&document(), "");
+    let ids = clauses(&package);
+    let first = postcondition(negotiate(&package, &ids));
+    let second = postcondition(negotiate(&package, &ids));
+    assert_eq!(first, second);
+    let mut doc = document();
+    doc["types"][1]["fields"][1]["typeRef"] = json!(SMALL);
+    let changed = fixture(&doc, "");
+    let changed = postcondition(negotiate(&changed, &clauses(&changed)));
+    assert_ne!(first.identity, changed.identity);
+    assert_ne!(first.identity.module_symbol, changed.identity.module_symbol);
+    let context = changed.identity.collection_operation.unwrap();
+    assert!(matches!(
+        context.fields[1].bounds,
+        quire_contract_codegen::SymbolicBounds::Integer {
+            minimum: 0,
+            maximum: 3
+        }
+    ));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96")]
+fn boolean_ordered_set_operation_draws_both_values_and_enforces_distinct_slots() {
+    let mut doc = document();
+    doc["types"][1]["fields"][0]["typeRef"] = json!("ix://quire/native/Boolean");
+    doc["types"][1]["fields"][0]["multiplicity"]["upper"] = json!(2);
+    let package = fixture_with_body(&doc, "", "exists(flag in self.z_items: flag != false)");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    let executable = Executable::compile(&harness);
+    for (draws, order) in [
+        ("1,1,0,1,2,2,1", "1"),
+        ("2,0,1,1,2,2,1", "0,1"),
+        ("2,1,0,1,2,2,1", "1,0"),
+    ] {
+        let output = executable.run("healthy", draws, order);
+        assert!(
+            output.status.success(),
+            "both Boolean values and both orders remain possible: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let output = executable.run("healthy", "1,0,1,1,2,2,1", "0");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("the produced state satisfies the authored collection postcondition"));
+    let output = executable.run("healthy", "2,1,1,1,2,2,1", "1,1");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("symbolic input excluded"));
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-100")]
+fn inherited_fields_retain_the_actual_declaring_node_in_whole_object_identity() {
+    let mut doc = document();
+    let base_id = "ix://ir1091.operation/domain/Base";
+    let mut base = doc["types"][1].clone();
+    base["identity"] = json!(base_id);
+    base["displayName"] = json!("Base");
+    base["origin"] = origin(base_id);
+    base["operations"] = json!([]);
+    let mut inherited = doc["types"][1]["fields"][0].clone();
+    inherited["identity"] = json!(format!("{base_id}/z_items"));
+    base["fields"] = json!([inherited]);
+    doc["types"][1]["fields"].as_array_mut().unwrap().remove(0);
+    doc["types"][1]["supertypes"] = json!([base_id]);
+    doc["types"][1]["operations"][0]["frame"]["modifies"][0] = json!(format!("{base_id}/z_items"));
+    doc["types"].as_array_mut().unwrap().push(base);
+    let package = fixture(&doc, "");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    let context = harness.identity.collection_operation.unwrap();
+    assert_eq!(context.fields.len(), 3);
+    let inherited = context
+        .fields
+        .iter()
+        .find(|field| field.field_name == "z_items")
+        .unwrap();
+    let own = context
+        .fields
+        .iter()
+        .find(|field| field.field_name == "a_unread")
+        .unwrap();
+    assert_ne!(inherited.declaring_node_id, own.declaring_node_id);
+    assert_eq!(
+        package
+            .model_object_fields(&inherited.declaring_node_id)
+            .unwrap()
+            .fields()
+            .iter()
+            .map(|field| field.name())
+            .collect::<Vec<_>>(),
+        ["z_items"]
+    );
 }

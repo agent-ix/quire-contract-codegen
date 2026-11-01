@@ -261,9 +261,7 @@ pub(super) fn lower_collection_operation(
         StateClauseKind::Postcondition => CollectionClaimRole::Postcondition,
         _ => return Err(CollectionDomainRefusal::UnsupportedShape),
     };
-    let quantifier = graph
-        .index
-        .node(&body)
+    let quantifier = operation::first_quantifier(graph, &body)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field = resolve_collection_field(graph.package, &graph.index, clause_id, quantifier, role)?;
     let operation = operation::lower(graph, clause_id, &field)?;
