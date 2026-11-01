@@ -2132,15 +2132,9 @@ mod tests {
                 .checked_bounds
                 .first()
                 .expect("selected checked bound");
-            let actual_index = admitted
-                .wire()
-                .source_keys
-                .iter()
-                .position(|key| key == actual)
-                .expect("checked bound has an admitted source key");
             assert_eq!(
-                admitted.source_key_at(actual_index),
-                quire_contract_model::ContractSourceKeyV1::from_v2_request(&checked, expected)
+                actual, expected,
+                "published checked bounds retain their original V2 identities"
             );
         }
         let admit_positions = |positions: &[ContractRequestPosition]| {
