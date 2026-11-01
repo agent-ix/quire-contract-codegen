@@ -129,7 +129,7 @@ impl KaniInstallation {
             path: self.launcher.clone(),
             error,
         };
-        let metadata = fs::metadata(&self.launcher).map_err(&fault)?;
+        let metadata = fs::metadata(&self.launcher).map_err(fault)?;
         #[cfg(unix)]
         let executable = metadata.permissions().mode() & 0o111 != 0;
         #[cfg(not(unix))]

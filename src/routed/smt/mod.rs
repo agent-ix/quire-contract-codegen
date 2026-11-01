@@ -161,7 +161,7 @@ static NEXT_ATTEMPT: AtomicU64 = AtomicU64::new(1);
 
 fn next_attempt() -> Result<NonZeroU64, SolverRunError> {
     let value = NEXT_ATTEMPT
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
             value.checked_add(1)
         })
         .map_err(|_| SolverRunError::AttemptExhausted)?;
