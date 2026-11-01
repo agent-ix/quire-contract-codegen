@@ -1604,11 +1604,13 @@ pub enum ContractNegotiationError {
 // FR-019 requires the typed projection by value in the public refusal.
 #[allow(clippy::result_large_err)]
 pub fn negotiate_contract_package(
+    source: &quire_contract_model::CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
     envelope: &BackendProviderEnvelope,
 ) -> Result<Vec<ContractItemSettlement>, ContractNegotiationError> {
-    let items = PackageItems::new(package, positions).map_err(ContractNegotiationError::Package)?;
+    let items =
+        PackageItems::new(source, package, positions).map_err(ContractNegotiationError::Package)?;
     validate_backend_provider_envelope(envelope).map_err(ContractNegotiationError::Envelope)?;
     if envelope.items.len() != items.bound_count() {
         return Err(ContractNegotiationError::EnvelopeItemCount {

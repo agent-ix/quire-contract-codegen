@@ -307,26 +307,29 @@ struct ArmItemOutput {
 /// Trace: TC-033
 // Implements: FR-022
 pub fn generate_routed(
+    source: &quire_contract_model::CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
-    generate_routed_with_integer_policy(package, positions, routed, contexts, false)
+    generate_routed_with_integer_policy(source, package, positions, routed, contexts, false)
 }
 
 /// Generate routed Kani scalar claims with the kernel-admitted native integer
 /// policy. Capacity ineligibility retains a typed unsupported disposition.
 pub fn generate_routed_native(
+    source: &quire_contract_model::CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
-    generate_routed_with_integer_policy(package, positions, routed, contexts, true)
+    generate_routed_with_integer_policy(source, package, positions, routed, contexts, true)
 }
 
 fn generate_routed_with_integer_policy(
+    source: &quire_contract_model::CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
     routed: &[RoutedGenerationItem],
@@ -343,7 +346,7 @@ fn generate_routed_with_integer_policy(
     });
     refuse_inconsistent_routing(&ordered, contexts)?;
     let package_items =
-        PackageItems::new(package, positions).map_err(RoutedGenerationError::Package)?;
+        PackageItems::new(source, package, positions).map_err(RoutedGenerationError::Package)?;
 
     for item in &ordered {
         if let Some(node_id) = package_items.excluded_node(item.request_index) {
@@ -450,7 +453,7 @@ fn generate_routed_with_integer_policy(
         let arm = match &kind {
             BackendKind::Kani => {
                 let (arm, kani_claim_map, kani_artifacts) =
-                    generate_kani(package, positions, &group, contexts, native)?;
+                    generate_kani(source, package, positions, &group, contexts, native)?;
                 claim_map = Some(kani_claim_map);
                 oracle_artifacts = Some(kani_artifacts);
                 arm
@@ -536,6 +539,7 @@ fn refuse_inconsistent_routing(
 
 /// The Kani arm, and the claim map and oracle crate it derived: one `negotiate_kani_obligations` call over `group`, in ascending request index.
 fn generate_kani(
+    source: &quire_contract_model::CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
     group: &[&RoutedGenerationItem],
@@ -554,6 +558,7 @@ fn generate_kani(
         },
         claim_indexes,
     ) = generate_contract_scalar_oracles(
+        source,
         package,
         positions,
         &group

@@ -2122,12 +2122,13 @@ pub(super) struct ContractScalarPlan {
 }
 
 pub(super) fn plan_contract_scalar_oracles(
+    source: &CheckedPackageV2,
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     positions: &[usize],
 ) -> Result<ContractScalarPlan, super::ContractScalarError> {
-    let items =
-        PackageItems::new(package, requested).map_err(super::ContractScalarError::Request)?;
+    let items = PackageItems::new(source, package, requested)
+        .map_err(super::ContractScalarError::Request)?;
     let graph = Graph::new(package);
     let mut claims = Vec::with_capacity(positions.len());
     let mut pending = Vec::new();

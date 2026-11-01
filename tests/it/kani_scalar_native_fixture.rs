@@ -113,6 +113,7 @@ fn scalar_with_policy(
         generate_routed
     };
     let generation = generate(
+        &package,
         &admitted,
         &positions,
         &[RoutedGenerationItem::from_descriptor(

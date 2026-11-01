@@ -1322,6 +1322,7 @@ fn generate_in_request(
         .map(|item| take_position(&item.call_node_id))
         .collect::<Vec<_>>();
     let output = generate_exact_function_oracles(
+        &package.checked,
         &input.contract,
         &input.roots,
         &function_positions,
@@ -1930,6 +1931,7 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
     let contract = admitted_function_contract(&package.checked, &roots);
     let plain = plain_read_function_contract(&contract);
     let combined = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[position(&body_id)],
@@ -1939,6 +1941,7 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
     )
     .unwrap();
     let healthy_only = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[position(&body_id)],
@@ -1990,6 +1993,7 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
     assert_eq!(combined.location_map, healthy_only.location_map);
     assert!(!contents(&combined, "src/lib.rs").contains(&format!("{requested_id:?}")));
     let plain_result = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[position(&body_id)],
@@ -2293,6 +2297,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     let requests = driver_positions(&roots);
     let contract = admitted_function_contract(&package, &roots);
     let combined = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[position(&body_id)],
@@ -2310,6 +2315,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     )
     .unwrap();
     let healthy_only = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[position(&body_id)],
@@ -2363,6 +2369,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     );
     let plain = plain_read_function_contract(&contract);
     let plain_result = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[position(&body_id)],
@@ -2396,6 +2403,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         plain_claim.result
     );
     let duplicate = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[position(&body_id)],
@@ -2412,6 +2420,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     ));
 
     let plain_healthy = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[position(&body_id)],
@@ -2436,6 +2445,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     };
     let body_position = position(&fairness_id);
     let authenticated_body = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[body_position],
@@ -2455,6 +2465,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     ));
     // As for the direct request, a plain read names the model as the cause of the declared body.
     let plain_body = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[body_position],
@@ -2488,6 +2499,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     let mut later_arity_refusal = declared_item.clone();
     later_arity_refusal.argument_node_ids.pop();
     let plain_arity = generate_exact_function_oracles(
+        &package,
         &plain,
         &requests,
         &[body_position],
@@ -2529,6 +2541,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
                     .map(|item| ordered_position(&item.call_node_id))
                     .collect::<Vec<_>>();
                 let result = generate_exact_function_oracles(
+                    &package,
                     &ordered_plain,
                     &ordered_requests,
                     &function_positions,
@@ -2580,6 +2593,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         argument_node_ids: direct_item.argument_node_ids.clone(),
     };
     let body_oracles = generate_exact_function_oracles(
+        &package,
         &contract,
         &requests,
         &[position(&fairness_id)],
@@ -3748,6 +3762,7 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let positions = package::driver_positions(&requested);
 
     let good = generate_exact_function_oracles(
+        &checked,
         &contract,
         &positions,
         &[0, 1],
@@ -3768,6 +3783,7 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let mut wrong_callee = item.clone();
     wrong_callee.function = other_name;
     let wrong = generate_exact_function_oracles(
+        &checked,
         &contract,
         &positions,
         &[0, 1],
@@ -3786,6 +3802,7 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let mut reordered = item;
     reordered.argument_node_ids.reverse();
     let reordered = generate_exact_function_oracles(
+        &checked,
         &contract,
         &positions,
         &[0],

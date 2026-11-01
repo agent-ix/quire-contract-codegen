@@ -942,7 +942,8 @@ pub(crate) fn classify_scalar_form<'a>(
     {
         return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarSourceMismatch);
     }
-    let items = match crate::core::contract_package::PackageItems::new(contract, positions) {
+    let items = match crate::core::contract_package::PackageItems::new(package, contract, positions)
+    {
         Ok(items) => items,
         Err(_) => {
             return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarPositionMismatch)
@@ -967,6 +968,7 @@ pub(crate) fn classify_scalar_form<'a>(
         return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarContextMismatch);
     }
     let outcome = match crate::oracle::scalar::preflight_contract_scalar_claim(
+        package,
         contract,
         positions,
         request_index,

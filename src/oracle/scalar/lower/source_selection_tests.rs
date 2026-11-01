@@ -94,7 +94,11 @@ fn own_result(
 fn admitted_case(
     requests: usize,
     unrelated: usize,
-) -> (ContractPackageV1, Vec<ContractRequestPosition>) {
+) -> (
+    CheckedPackageV2,
+    ContractPackageV1,
+    Vec<ContractRequestPosition>,
+) {
     let mut source = String::from(
         "language \"ix:native\" edition \"1-draft\";\n\
              profile v = \"quire.value.complete/v1\";\n",
@@ -171,7 +175,7 @@ fn admitted_case(
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("genuine boundary family must admit: {other:?}"),
     };
-    (*admitted, positions)
+    (checked, *admitted, positions)
 }
 
 /// Provenance: IR-988 AC1-3; SR-16303 FND-003.
@@ -181,11 +185,11 @@ fn ir_988_scalar_source_selections_use_retained_occurrences() {
     let mut measured = Vec::new();
     for requests in [2, 4, 8] {
         for unrelated in [4, 8, 16] {
-            let (admitted, positions) = admitted_case(requests, unrelated);
+            let (source, admitted, positions) = admitted_case(requests, unrelated);
             let selected = (0..requests).collect::<Vec<_>>();
             source_selection_work::take();
             let (generated, indexes) =
-                generate_contract_scalar_oracles(&admitted, &positions, &selected)
+                generate_contract_scalar_oracles(&source, &admitted, &positions, &selected)
                     .expect("genuine selected scalar generation");
             let work = source_selection_work::take();
             assert_eq!(indexes.len(), requests);

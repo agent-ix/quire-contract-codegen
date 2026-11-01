@@ -9,20 +9,6 @@ use quire_contract_codegen::{
     ClaimDisposition, CompositeEqualityLimits, CompositeEqualityRefusal, EqualityOperatorKind,
     OracleGenerationError,
 };
-use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
-use quire_exact::{NodeKey, PathSegment};
-
-fn node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
-}
 
 fn foreign_context() -> qsl_replay::AdmittedCompilation {
     qsl_replay::compile_admitted(
@@ -268,7 +254,12 @@ pub(super) fn assert_authentic_recursive_item_generation() {
         assert_eq!(actual.form(), qsl_replay::AdmittedCompositeForm::Record);
         assert_eq!(
             actual.node().to_string(),
-            node_key(&item.left.source_type).to_string()
+            compiled
+                .context()
+                .wire_graph()
+                .key(&item.left.source_type)
+                .expect("source type belongs to admitted graph")
+                .to_string()
         );
         // Structural identity (IR-1079): the kernel declaration key is the wire node identity.
         assert_eq!(
@@ -489,7 +480,16 @@ fn genuine_union_host_generation_closes_nested_owner_declarations() {
             .declaration_keys
             .iter()
             .zip(&claim.declaration_runtime_keys)
-            .map(|(node, key)| (node_key(node), key.clone()))
+            .map(|(node, key)| {
+                (
+                    compiled
+                        .context()
+                        .wire_graph()
+                        .key(node)
+                        .expect("declaration belongs to admitted graph"),
+                    key.clone(),
+                )
+            })
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
             actual, expected,

@@ -658,21 +658,11 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
-    let node_path = node_1001
-        .path
-        .iter()
-        .map(|segment| match segment {
-            quire_contract_model::CheckedNodePathSegment::Name(name) => {
-                quire_exact::PathSegment::Text(name.to_string())
-            }
-            quire_contract_model::CheckedNodePathSegment::Node(_) => {
-                panic!("the scalar fixture has a direct authored path")
-            }
-        })
-        .collect();
-    let node_key =
-        quire_exact::NodeKey::new(node_1001.package.to_string(), node_path, node_1001.ordinal)
-            .expect("admitted structural node key");
+    let graph = qsl_replay::WireGraph::new(scalar.graph().nodes.iter().map(|node| &node.node_id))
+        .expect("admitted graph has structural keys");
+    let node_key = graph
+        .key(&node_1001)
+        .expect("scalar fixture node belongs to graph");
     crate::generated_headers::assert_header(
         &scalar_harnesses[0].rust.path,
         source,

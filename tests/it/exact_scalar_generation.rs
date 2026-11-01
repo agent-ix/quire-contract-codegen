@@ -2580,6 +2580,7 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
         other => panic!("lowered function request should be admitted: {other:?}"),
     };
     let output = generate_exact_function_oracles(
+        &package,
         &contract,
         &[ContractRequestPosition::DriverItem {
             node_id: id.clone(),
@@ -4017,6 +4018,7 @@ fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_convers
         },
     ] {
         let output = generate_exact_function_oracles(
+            &package,
             &contract,
             &positions,
             &[0],
@@ -4176,6 +4178,7 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
         },
     };
     let output = generate_exact_function_oracles(
+        &package,
         &contract,
         &positions,
         &[0],

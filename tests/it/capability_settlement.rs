@@ -653,22 +653,6 @@ fn fixture_node(seed: u8) -> NodeKey {
     .expect("fixture structural node")
 }
 
-fn checked_node_key(id: &CheckedNodeId) -> NodeKey {
-    let path = id
-        .path
-        .iter()
-        .map(|segment| match segment {
-            quire_contract_model::CheckedNodePathSegment::Name(name) => {
-                PathSegment::Text(name.to_string())
-            }
-            quire_contract_model::CheckedNodePathSegment::Node(node) => {
-                PathSegment::Node(checked_node_key(node))
-            }
-        })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
-}
-
 fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
     let bound = match kind {
         DomainKind::Integer => {
@@ -721,9 +705,13 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .checked_bounds
         .first()
         .expect("integer addition has one source-derived bound");
+    let graph = qsl_replay::WireGraph::new(package.graph().nodes.iter().map(|node| &node.node_id))
+        .expect("admitted graph has structural keys");
     let source_bound = ProofBound::new(
         DomainKey::Node {
-            node: checked_node_key(checked_bound),
+            node: graph
+                .key(checked_bound)
+                .expect("checked bound belongs to graph"),
             path: Vec::new(),
         },
         Some(DomainKind::Integer),
@@ -2248,6 +2236,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     .with_scalar_selection(contract, result_selection.clone());
     let plain_route = routed.clone();
     let generated = quire_contract_codegen::generate_routed(
+        &plain_source,
         contract,
         positions,
         &[routed],
@@ -2305,6 +2294,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     let plain_route = plain_route.with_scalar_selection(&plain, result_selection.clone());
     assert!(matches!(
         quire_contract_codegen::generate_routed(
+            &plain_source,
             &plain,
             positions,
             &[plain_route],

@@ -568,8 +568,9 @@ mod tests {
     #[trace("TC-053", "FR-039-AC-9")]
     #[test]
     fn excluded_position_keeps_accounting_and_driver_index() {
-        let (_, admitted, positions, function, excluded) = excluded_fixture();
-        let items = PackageItems::new(&admitted, &positions).expect("all positions correspond");
+        let (source, admitted, positions, function, excluded) = excluded_fixture();
+        let items =
+            PackageItems::new(&source, &admitted, &positions).expect("all positions correspond");
         assert!(items.driver_node(3).is_none());
         assert_eq!(items.bound_count(), 2);
         assert_eq!(items.driver_node(1), Some(&excluded));
@@ -606,11 +607,12 @@ mod tests {
                 }
             };
             assert_eq!(
-                PackageItems::new(&admitted, &changed).err(),
+                PackageItems::new(&source, &admitted, &changed).err(),
                 Some(expected.clone())
             );
             assert_eq!(
                 negotiate_contract_package(
+                    &source,
                     &admitted,
                     &changed,
                     &empty_backend_request(2, &admitted_source(SOURCE), &function)
@@ -623,6 +625,27 @@ mod tests {
 
     #[trace("TC-053", "FR-039-AC-9")]
     #[test]
+    fn source_name_and_lock_must_match_admitted_accounting() {
+        let (source, admitted, positions, _, _) = excluded_fixture();
+        let other_name = admitted_named_source("other-package", SOURCE);
+        let other_lock = admitted_source(&format!("{SOURCE}\n// different source bytes\n"));
+        assert_ne!(other_name.name(), source.name());
+        assert_ne!(other_lock.lock(), source.lock());
+
+        for wrong in [&other_name, &other_lock] {
+            assert!(matches!(
+                PackageItems::new(wrong, &admitted, &positions),
+                Err(PackageRequestError::SourceMismatch { expected, actual })
+                    if expected.name.as_ref() == source.name()
+                        && expected.lock == *source.lock()
+                        && actual.name.as_ref() == wrong.name()
+                        && actual.lock == *wrong.lock()
+            ));
+        }
+    }
+
+    #[trace("TC-053", "FR-039-AC-9")]
+    #[test]
     fn excluded_position_refuses_function_oracle_before_claim_or_artifact() {
         use crate::oracle::claim::OracleGenerationError;
         use crate::oracle::function::{
@@ -630,8 +653,9 @@ mod tests {
             ExactFunctionItem,
         };
         use crate::oracle::operator_catalog::IntegerOperator;
-        let (_, admitted, positions, _, excluded) = excluded_fixture();
+        let (source, admitted, positions, _, excluded) = excluded_fixture();
         let result = generate_exact_function_oracles(
+            &source,
             &admitted,
             &positions,
             &[],
@@ -656,8 +680,15 @@ mod tests {
             },
             capability_requirements: Vec::new(),
         };
-        let declaration_result =
-            generate_exact_function_oracles(&admitted, &positions, &[1], &[declaration], &[], &[]);
+        let declaration_result = generate_exact_function_oracles(
+            &source,
+            &admitted,
+            &positions,
+            &[1],
+            &[declaration],
+            &[],
+            &[],
+        );
         assert!(
             matches!(declaration_result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
         );
@@ -671,10 +702,10 @@ mod tests {
             generate_composite_equality_oracles, CompositeEqualityItem, EqualityOperandDescriptor,
             EqualityOperatorKind,
         };
-        let (_, admitted, positions, _, excluded) = excluded_fixture();
+        let (source, admitted, positions, _, excluded) = excluded_fixture();
         let result = generate_composite_equality_oracles(
             &admitted,
-            None,
+            Some(&source),
             None,
             &positions,
             &[1],
@@ -695,8 +726,8 @@ mod tests {
     #[test]
     fn excluded_position_refuses_scalar_oracle_before_claim_or_artifact() {
         use crate::oracle::scalar::{generate_contract_scalar_oracles, ContractScalarError};
-        let (_, admitted, positions, _, excluded) = excluded_fixture();
-        let result = generate_contract_scalar_oracles(&admitted, &positions, &[1]);
+        let (source, admitted, positions, _, excluded) = excluded_fixture();
+        let result = generate_contract_scalar_oracles(&source, &admitted, &positions, &[1]);
         assert!(
             matches!(result, Err(ContractScalarError::Request(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
         );
@@ -729,7 +760,7 @@ mod tests {
             },
         );
         let admitted_before = admit(&before);
-        let items = PackageItems::new(&admitted_before, &before).expect("owned context");
+        let items = PackageItems::new(&source, &admitted_before, &before).expect("owned context");
         assert!(items.has_context_root(0, &function));
         assert_eq!(items.bound_driver_index(1), Some(2));
 
@@ -742,11 +773,12 @@ mod tests {
         );
         let admitted_after = admit(&after);
         assert!(matches!(
-            PackageItems::new(&admitted_after, &after),
+            PackageItems::new(&source, &admitted_after, &after),
             Err(PackageRequestError::OrphanContextRoot { accounting_index: 2, node_id }) if node_id == function
         ));
         assert!(matches!(
             negotiate_contract_package(
+                &source,
                 &admitted_after,
                 &after,
                 &empty_backend_request(2, &source, &function)
@@ -771,8 +803,8 @@ mod tests {
             ContractFeatureRecordV1::Lowered { node_id } if node_id == &excluded
         ));
         let envelope = empty_backend_request(2, &source, &function);
-        let settled =
-            negotiate_contract_package(&admitted, &positions, &envelope).expect("two bound items");
+        let settled = negotiate_contract_package(&source, &admitted, &positions, &envelope)
+            .expect("two bound items");
         assert_eq!(settled.len(), 2);
         assert!(settled.iter().all(|item| item.node_id != excluded));
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
@@ -810,8 +842,9 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("FR-330 admission: {other:?}"),
         };
-        let contextual_settled = negotiate_contract_package(&contextual, &with_context, &envelope)
-            .expect("context root has no envelope item");
+        let contextual_settled =
+            negotiate_contract_package(&source, &contextual, &with_context, &envelope)
+                .expect("context root has no envelope item");
         assert_eq!(contextual_settled.len(), 2);
         assert_eq!(
             contextual_settled
@@ -829,6 +862,7 @@ mod tests {
         );
         for count in [1, 3] {
             let error = negotiate_contract_package(
+                &source,
                 &admitted,
                 &positions,
                 &empty_backend_request(count, &source, &function),
@@ -841,7 +875,7 @@ mod tests {
         let mut invalid_version = empty_backend_request(1, &source, &function);
         invalid_version.contract_version = "unsupported-version".to_owned();
         assert!(matches!(
-            negotiate_contract_package(&admitted, &positions, &invalid_version),
+            negotiate_contract_package(&source, &admitted, &positions, &invalid_version),
             Err(
                 crate::routed::capability::ContractNegotiationError::Envelope(
                     EnvelopeRefusal::InvalidCapability {
@@ -948,7 +982,11 @@ mod tests {
         assert!(crate::routed::capability::take_package_classifier_indices().is_empty());
         assert!(crate::oracle::function::take_function_preflight_indices().is_empty());
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
-        let settled = negotiate_contract_package(&admitted, &positions, &envelope)
+        let checked = match &envelope.items[1].kani_form {
+            KaniForm::V2FunctionApplication { package, .. } => package.as_ref(),
+            _ => unreachable!("bound call has a V2 source"),
+        };
+        let settled = negotiate_contract_package(checked, &admitted, &positions, &envelope)
             .expect("Kani settles bound call");
         assert_eq!(settled.len(), 2);
         assert_eq!(settled[0].request_index, usize::from(before_body));
@@ -974,7 +1012,7 @@ mod tests {
     #[trace("TC-033", "FR-022-AC-29", "FR-039-AC-9")]
     #[test]
     fn routed_excluded_driver_index_is_refused_before_generation() {
-        let (_, admitted, positions, function, excluded) = excluded_fixture();
+        let (source, admitted, positions, function, excluded) = excluded_fixture();
         let process = BackendDescriptor {
             identity: "process".to_owned(),
             advertised: Vec::new(),
@@ -995,15 +1033,16 @@ mod tests {
         };
         let invalid = route(1, excluded.clone());
         assert!(
-            matches!(generate_routed(&admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded)
+            matches!(generate_routed(&source, &admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded)
         );
         let mismatched = route(1, function.clone());
         assert!(matches!(
-            generate_routed(&admitted, &positions, &[mismatched], &GenerationContexts::default()),
+            generate_routed(&source, &admitted, &positions, &[mismatched], &GenerationContexts::default()),
             Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded
         ));
         let valid = [route(0, function.clone()), route(2, function)];
         let generated = generate_routed(
+            &source,
             &admitted,
             &positions,
             &valid,
@@ -1119,7 +1158,11 @@ mod tests {
                 node_id: function.clone(),
             };
         }
-        let result = negotiate_contract_package(&admitted, &positions, &envelope)
+        let checked = match &envelope.items[1].kani_form {
+            KaniForm::V2FunctionApplication { package, .. } => package.as_ref(),
+            _ => unreachable!("bound call has a V2 source"),
+        };
+        let result = negotiate_contract_package(checked, &admitted, &positions, &envelope)
             .expect("admitted package settles");
         assert!(
             matches!(result[1].backend.as_ref().map(|item| &item.disposition), Some(crate::routed::capability::Disposition::Supported { backend }) if backend == "kani")
@@ -1516,8 +1559,10 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("FR-330 reader must admit IR output: {other:?}"),
         };
-        let items = PackageItems::new(&admitted, &positions).expect("positions and keys match");
+        let items =
+            PackageItems::new(&source, &admitted, &positions).expect("positions and keys match");
         let settled = negotiate_contract_package(
+            &source,
             &admitted,
             &positions,
             &empty_backend_request(3, &source, &function),
@@ -1583,6 +1628,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let generated = generate_routed(
+            &source,
             &admitted,
             &positions,
             &routes,
@@ -1647,7 +1693,7 @@ mod tests {
             result_selection: ContractDriverResultSelection::NotApplicable,
         };
         assert!(matches!(
-            PackageItems::new(&admitted, &swapped),
+            PackageItems::new(&source, &admitted, &swapped),
             Err(PackageRequestError::AccountingIdentity {
                 accounting_index: 0,
                 ..
@@ -1661,14 +1707,14 @@ mod tests {
             node_id: requested[2].clone(),
         };
         assert!(matches!(
-            PackageItems::new(&admitted, &swapped),
+            PackageItems::new(&source, &admitted, &swapped),
             Err(PackageRequestError::AccountingIdentity {
                 accounting_index: 1,
                 ..
             })
         ));
         assert!(matches!(
-            PackageItems::new(&admitted, &drivers(&requested[..3])),
+            PackageItems::new(&source, &admitted, &drivers(&requested[..3])),
             Err(PackageRequestError::Count {
                 requested: 3,
                 accounted: 4,
@@ -1708,7 +1754,7 @@ mod tests {
                 other => panic!("IR must admit its own FR-330 output: {other:?}"),
             };
             let positions = drivers(std::slice::from_ref(&expression));
-            let items = PackageItems::new(&admitted, &positions).expect("exact request");
+            let items = PackageItems::new(&source, &admitted, &positions).expect("exact request");
             match items.at(0, &expression).expect("first position") {
                 PackageItem::Lowered { closure, .. } => {
                     assert_eq!(
@@ -1820,7 +1866,7 @@ mod tests {
                     route.with_scalar_selection(&admitted, result_selection.clone())
                 })
                 .collect::<Vec<_>>();
-            let generated = generate_routed(&admitted, &positions, &routes, &contexts)
+            let generated = generate_routed(&checked, &admitted, &positions, &routes, &contexts)
                 .expect("routed generation consumes admitted package");
             assert_eq!(generated.items[0].request_index, 0);
             assert_eq!(generated.items[1].request_index, 1);
@@ -1898,6 +1944,7 @@ mod tests {
             other => panic!("IR must admit ordering: {other:?}"),
         };
         let (omitted, _) = generate_contract_scalar_oracles(
+            &checked,
             &admitted,
             &drivers(std::slice::from_ref(&expression)),
             &[0],
@@ -1913,7 +1960,7 @@ mod tests {
             node_id: expression.clone(),
             result_selection: own_result(&checked, &expression, None),
         }];
-        let (generated, _) = generate_contract_scalar_oracles(&admitted, &selected, &[0])
+        let (generated, _) = generate_contract_scalar_oracles(&checked, &admitted, &selected, &[0])
             .expect("selected scalar generation");
         let lib = generated
             .artifacts
@@ -2055,8 +2102,9 @@ mod tests {
                 node_id: second_conversion.clone(),
             },
         ];
-        let (result, _) = generate_contract_scalar_oracles(&admitted, &positions, &[0, 1])
-            .expect("two selected scalar items");
+        let (result, _) =
+            generate_contract_scalar_oracles(&checked, &admitted, &positions, &[0, 1])
+                .expect("two selected scalar items");
         for (item, expected) in result
             .claim_map
             .items
@@ -2095,7 +2143,7 @@ mod tests {
         );
         let admitted_before = admit_positions(&before_excluded);
         let (with_excluded, _) =
-            generate_contract_scalar_oracles(&admitted_before, &before_excluded, &[0, 2])
+            generate_contract_scalar_oracles(&checked, &admitted_before, &before_excluded, &[0, 2])
                 .expect("selected root before excluded position remains owned");
         assert!(with_excluded
             .claim_map
@@ -2107,7 +2155,7 @@ mod tests {
         after_next_bound.insert(3, first_root);
         let admitted_after = admit_positions(&after_next_bound);
         let (outside_span, _) =
-            generate_contract_scalar_oracles(&admitted_after, &after_next_bound, &[0])
+            generate_contract_scalar_oracles(&checked, &admitted_after, &after_next_bound, &[0])
                 .expect("typed incomplete result context");
         assert!(matches!(
             &outside_span.claim_map.items[0].result,
@@ -2306,6 +2354,7 @@ mod tests {
         .expect("Kani route")
         .with_scalar_selection(&admitted_before, second_selection);
         let after_excluded_output = generate_routed(
+            &checked,
             &admitted_before,
             &before_excluded,
             &[route_after_excluded],
@@ -2366,6 +2415,7 @@ mod tests {
         ];
         assert!(matches!(
             generate_routed(
+                &checked,
                 &admitted,
                 &cross_context,
                 &changed_routes,
@@ -2388,6 +2438,7 @@ mod tests {
             )
         ));
         let routed = generate_routed(
+            &checked,
             &admitted,
             &positions,
             &routes,
@@ -2446,7 +2497,7 @@ mod tests {
                 conversion: Some(occurrence(&checked, first_conversion)),
             };
         }
-        let (refusal, _) = generate_contract_scalar_oracles(&admitted, &forged, &[1])
+        let (refusal, _) = generate_contract_scalar_oracles(&checked, &admitted, &forged, &[1])
             .expect("cross-context choice is a per-item refusal");
         assert!(matches!(
             &refusal.claim_map.items[0].result,
@@ -2480,7 +2531,7 @@ mod tests {
             positions[1].clone(),
         ];
         let (duplicate, _) =
-            generate_contract_scalar_oracles(&repeated, &repeated_positions, &[0, 1])
+            generate_contract_scalar_oracles(&checked, &repeated, &repeated_positions, &[0, 1])
                 .expect("duplicate pair receives typed refusals");
         assert!(duplicate.claim_map.items.iter().all(|item| matches!(
             &item.result,
@@ -2535,9 +2586,13 @@ mod tests {
                 node_id: conversion,
             },
         ];
-        let (generated, _) =
-            crate::oracle::scalar::generate_contract_scalar_oracles(&admitted, &positions, &[0])
-                .expect("admitted bounded operation generates");
+        let (generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
+            &checked,
+            &admitted,
+            &positions,
+            &[0],
+        )
+        .expect("admitted bounded operation generates");
         let claim = &generated.claim_map.items[0];
         let crate::oracle::claim::ClaimDisposition::Generated(generated_claim) = &claim.result
         else {
@@ -2563,6 +2618,7 @@ mod tests {
     fn repeated_bounded_scalar_fixture(
         maximum: u32,
     ) -> (
+        CheckedPackageV2,
         quire_contract_model::ContractPackageV1,
         Vec<ContractRequestPosition>,
         CheckedNodeId,
@@ -2615,7 +2671,7 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => *package,
             other => panic!("repeated bounded scalar package must admit: {other:?}"),
         };
-        (admitted, positions, expression)
+        (checked, admitted, positions, expression)
     }
 
     #[trace("FR-039-AC-2", "FR-049-AC-1", "TC-053")]
@@ -2624,9 +2680,9 @@ mod tests {
         use crate::oracle::claim::ClaimDisposition;
         use crate::oracle::scalar::{generate_contract_scalar_oracles, ExactScalarRefusal};
 
-        let (admitted, positions, _) = repeated_bounded_scalar_fixture(18);
+        let (checked, admitted, positions, _) = repeated_bounded_scalar_fixture(18);
         let (baseline, baseline_indexes) =
-            generate_contract_scalar_oracles(&admitted, &positions, &[0])
+            generate_contract_scalar_oracles(&checked, &admitted, &positions, &[0])
                 .expect("one selected scalar baseline");
         assert!(matches!(
             baseline.claim_map.items[baseline_indexes[0]].result,
@@ -2661,7 +2717,7 @@ mod tests {
                 selected.ordinal = u64::MAX;
             }
             let (generated, indexes) =
-                generate_contract_scalar_oracles(&admitted, &changed, &[0, 1])
+                generate_contract_scalar_oracles(&checked, &admitted, &changed, &[0, 1])
                     .expect("malformed selection is a per-item refusal");
             assert_eq!(generated.claim_map.items.len(), 2, "{case}");
             assert_eq!(
@@ -2698,8 +2754,10 @@ mod tests {
         use crate::oracle::claim::ClaimDisposition;
         use crate::oracle::scalar::generate_contract_scalar_oracles;
 
-        let (first, first_positions, first_expression) = repeated_bounded_scalar_fixture(18);
-        let (second, second_positions, second_expression) = repeated_bounded_scalar_fixture(19);
+        let (first_source, first, first_positions, first_expression) =
+            repeated_bounded_scalar_fixture(18);
+        let (second_source, second, second_positions, second_expression) =
+            repeated_bounded_scalar_fixture(19);
         assert_eq!(
             first_expression, second_expression,
             "shared application identity"
@@ -2709,10 +2767,12 @@ mod tests {
             package_node_ids(&second),
             "distinct admitted authorities"
         );
-        let generate = |package: &quire_contract_model::ContractPackageV1,
+        let generate = |source: &CheckedPackageV2,
+                        package: &quire_contract_model::ContractPackageV1,
                         positions: &[ContractRequestPosition]| {
-            let (generated, indexes) = generate_contract_scalar_oracles(package, positions, &[0])
-                .expect("selected package-local scalar");
+            let (generated, indexes) =
+                generate_contract_scalar_oracles(source, package, positions, &[0])
+                    .expect("selected package-local scalar");
             let claim = &generated.claim_map.items[indexes[0]];
             let ClaimDisposition::Generated(value) = &claim.result else {
                 panic!("package-local scalar must generate: {:?}", claim.result);
@@ -2741,9 +2801,9 @@ mod tests {
             assert_eq!(value.checked_bounds.first(), Some(&target));
             generated
         };
-        let first_output = generate(&first, &first_positions);
-        let second_output = generate(&second, &second_positions);
-        let first_again = generate(&first, &first_positions);
+        let first_output = generate(&first_source, &first, &first_positions);
+        let second_output = generate(&second_source, &second, &second_positions);
+        let first_again = generate(&first_source, &first, &first_positions);
         assert_ne!(
             first_output.claim_map.items[0].result, second_output.claim_map.items[0].result,
             "the shared application retains each package's result bound and authority"
@@ -2788,6 +2848,7 @@ mod tests {
             .occurrences
             .clone();
         let (generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
+            &checked,
             &admitted,
             &drivers(std::slice::from_ref(&expression)),
             &[0],
@@ -2886,6 +2947,7 @@ mod tests {
             argument_node_ids: call_arguments,
         };
         let generated = generate_exact_function_oracles(
+            &checked,
             &admitted,
             &drivers(&requested),
             &[0],
@@ -2907,8 +2969,11 @@ mod tests {
             admitted.wire().package.source
         );
         assert_eq!(claim.node_id, requested[1]);
+        let source_key =
+            quire_contract_model::ContractSourceKeyV1::from_v2_request(&checked, &requested[1])
+                .expect("admitted source-frame key");
         let ContractRootViewV1::Lowered(closure) = admitted
-            .reached_closure(&requested[1])
+            .reached_closure(&source_key)
             .expect("authoritative call closure")
         else {
             panic!("requested call must be lowered");
@@ -3066,6 +3131,7 @@ mod tests {
             capability_requirements: Vec::new(),
         };
         let functions = generate_exact_function_oracles(
+            &checked,
             &admitted,
             &drivers(&requested),
             &[0],
@@ -3106,7 +3172,7 @@ mod tests {
             node_id: unbounded.clone(),
             result_selection: own_result(&checked, &unbounded, None),
         };
-        let (scalar, _) = generate_contract_scalar_oracles(&admitted, &positions, &[3])
+        let (scalar, _) = generate_contract_scalar_oracles(&checked, &admitted, &positions, &[3])
             .expect("scalar settlement");
         assert!(
             matches!(
@@ -3138,7 +3204,7 @@ mod tests {
         .expect("linked Kani route")
         .with_scalar_selection(
             &admitted,
-            PackageItems::new(&admitted, &positions)
+            PackageItems::new(&checked, &admitted, &positions)
                 .expect("admitted positions")
                 .result_selection(3)
                 .expect("fourth driver selection")
@@ -3155,7 +3221,7 @@ mod tests {
                 unwind: 1,
             }),
         };
-        let generated = generate_routed(&admitted, &positions, &routed, &contexts)
+        let generated = generate_routed(&checked, &admitted, &positions, &routed, &contexts)
             .expect("Kani produces a typed backend refusal");
         let [output] = generated.items.as_slice() else {
             panic!("one routed driver item");
@@ -3355,7 +3421,8 @@ mod tests {
             other => panic!("FR-330 reader must admit selected call: {other:?}"),
         };
         let positions = drivers(std::slice::from_ref(&call));
-        let items = PackageItems::new(&admitted, &positions).expect("exact request identity");
+        let items =
+            PackageItems::new(&checked, &admitted, &positions).expect("exact request identity");
         let PackageItem::Lowered { closure, .. } = items.at(0, &call).expect("root view") else {
             panic!("selected call must lower");
         };
@@ -3377,6 +3444,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
+            &checked,
             &admitted,
             &drivers(std::slice::from_ref(&call)),
             &[0],
@@ -3407,6 +3475,7 @@ mod tests {
             other => panic!("unselected evidence must not replace selected targets: {other:?}"),
         };
         let (extra_generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
+            &checked,
             &extra,
             &drivers(std::slice::from_ref(&call)),
             &[0],
