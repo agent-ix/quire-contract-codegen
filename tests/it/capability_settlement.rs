@@ -262,7 +262,7 @@ fn admitted_function_read_keeps_supported_settlement() {
         Candidates::Set(vec![candidate("kani")]),
     );
     request.kani_form = KaniForm::V2FunctionApplication {
-        package: Box::new(package),
+        package: std::sync::Arc::new(package),
         function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
         call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
         argument_node_ids: vec![
@@ -318,7 +318,7 @@ fn oversized_admitted_function_read_stops_the_envelope() {
         Candidates::Set(vec![candidate("kani")]),
     );
     request.kani_form = KaniForm::V2FunctionApplication {
-        package: Box::new(package),
+        package: std::sync::Arc::new(package),
         function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
         call_node_id: call_id,
         argument_node_ids: vec![
@@ -356,7 +356,7 @@ fn genuine_function_backend_refusals_stay_item_level() {
             Candidates::Set(vec![candidate("kani")]),
         );
         request.kani_form = KaniForm::V2FunctionApplication {
-            package: Box::new(package),
+            package: std::sync::Arc::new(package),
             function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
             call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
             argument_node_ids: vec![
@@ -546,7 +546,7 @@ fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> Ka
         other => panic!("scalar selection package must admit: {other:?}"),
     };
     KaniForm::V2ScalarClaim {
-        package: Box::new(package),
+        package: std::sync::Arc::new(package),
         contract,
         positions: {
             let mut positions = vec![ContractRequestPosition::DriverItem {
@@ -626,7 +626,7 @@ fn outside_form() -> KaniForm {
         .node_id
         .clone();
     KaniForm::OutsideSet {
-        package: Box::new(package),
+        package: std::sync::Arc::new(package),
         node_id,
     }
 }
@@ -1936,7 +1936,7 @@ fn kani_source_call_preflight_binds_callee_and_ordered_arguments() {
     let argument_b = ids.resolve(&code_id(SOURCE_PARAM_B));
     let kani_manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
     let form = |function_node_id, argument_node_ids| KaniForm::V2FunctionApplication {
-        package: Box::new(package.clone()),
+        package: std::sync::Arc::new(package.clone()),
         function_node_id,
         call_node_id: call.clone(),
         argument_node_ids,
@@ -2328,7 +2328,7 @@ fn v2_state_frame_form(
     role: quire_contract_codegen::KaniObligationRole,
 ) -> KaniForm {
     KaniForm::V2StateFrame {
-        package: Box::new(fixture.package),
+        package: std::sync::Arc::new(fixture.package),
         clause: fixture.clause,
         role,
         state_path: "crate::subject::Account".to_owned(),
