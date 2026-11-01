@@ -1,5 +1,5 @@
 ---
-id: SR-202610310145
+id: SR-202610310153
 title: "code-review review of constrained method implementation"
 type: SpecReview
 analysis: code-review
@@ -305,3 +305,7 @@ Disposition round 1 inspected fix head 043d398c9dc520e04c504a92455f67ceda75bce6 
 ## Final disposition verdict
 
 PASS. Every finding is fixed within the original PR; no new finding was found in the fixes. The source is mergeable subject to the parent-owned final integration gate. Focused fixes pass 10 integration controls plus the conversion unit; installed four-control authored-clause lane passes in 1.94s. Final fmt and all-target/all-feature Clippy logs pass. Reviewer ran no Cargo or Kani and did not edit source.
+
+## Merge synchronization
+
+This PR700 artifact was remapped from SR-202610310145 to SR-202610310153 because main PR699 independently introduced the prior id. Original findings and round-1 dispositions above are unchanged. At rebased head 8054ccc3c5c666dd8a5e142aa01193a372ac5009 against main 0989d178, the previously dispositioned constrained generation, identity, execution, terminal and authored-clause test source is byte-identical to 043d398c. The prior PASS disposition therefore applies unchanged to this source. QSL dependency synchronization and the parent-owned rerun gates remain pending qualification; the stopped earlier aggregate gate is not a pass. This is an id correction, not a second broad review.
