@@ -699,6 +699,20 @@ fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals()
     };
     let declared = interval_of("0", "9");
     let (good, bad) = (node('2'), node('7'));
+    let mut missing = node('2');
+    missing.bounds.clear();
+    assert_eq!(
+        Bounds {
+            graph: &graph,
+            node: BoundView::complete(&missing)
+        }
+        .read(BoundForm::TextBounds, read_text_bounds),
+        Err(ExactScalarRefusal::MissingBound {
+            bounded_type: missing.semantic_type.clone(),
+            expected_form: BoundForm::TextBounds,
+        })
+    );
+
     assert_eq!(
         Bounds {
             graph: &graph,

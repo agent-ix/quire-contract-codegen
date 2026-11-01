@@ -3284,7 +3284,31 @@ pub fn corpus_package() -> PackageBuilder {
     builder.omit_code(EXPRESSION_OPERAND);
     builder.omit_code(WRONG_OPERAND);
     builder.omit_code(LITERAL_QUANTITY);
+    builder.omit_code(WRONG_BOUND_FORM);
+    // Wrong-form bounds are reader-negative inputs after IR-772. Retain them in
+    // wrong_form_bound_package(), never in a reader-admitted scalar corpus.
+    let wrong = wrong_form_bound();
+    let rejected_keys = std::iter::once(wrong.key())
+        .chain(wrong.foreign().iter().map(Bound::key))
+        .map(|key| node_ref(&key))
+        .collect::<Vec<_>>();
+    for field in ["semantic_graph", "source_map"] {
+        let entries = if field == "semantic_graph" {
+            &mut builder.value[field]["nodes"]
+        } else {
+            &mut builder.value[field]
+        };
+        entries
+            .as_array_mut()
+            .expect("fixture entries")
+            .retain(|entry| !rejected_keys.contains(&entry["node_id"]));
+    }
     builder
+}
+
+/// Deliberately malformed TextBounds over Integer, tested at the strict reader.
+pub fn wrong_form_bound_package() -> PackageBuilder {
+    corpus_package_with_expression_operand().focused(&[code_id(WRONG_BOUND_FORM)])
 }
 
 /// A mutable scalar corpus slice for tests that extend one or more authored
@@ -4538,7 +4562,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         DUPLICATED,
         UNBOUNDED,
         AMBIGUOUS,
-        WRONG_BOUND_FORM,
         UNTYPED_OPERAND,
     ]
     .into_iter()

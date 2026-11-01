@@ -830,13 +830,6 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             },
         ),
         (
-            WRONG_BOUND_FORM,
-            ExactScalarRefusal::MissingBound {
-                bounded_type: resolve(T_INTEGER),
-                expected_form: BoundForm::IntegerRange,
-            },
-        ),
-        (
             DOMAIN_MISMATCH,
             ExactScalarRefusal::BoundMismatch {
                 bound: ids.resolve(&id(&INT5.key())),
@@ -1778,38 +1771,14 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// deliberately undrivable), not just a name `refusal_variant_name` happens
 /// to mention.
 ///
-/// Sixteen variants are driven through the real admitted-package generation
-/// pipeline -- fifteen share the golden corpus's one `generate` call (see
-/// `tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged`,
-/// which asserts the full typed reason for each of these same codes; this
-/// test only needs the variant, not the reason's payload), and
-/// `LoweringWorkExhausted` needs `work_exhausted_fixture`'s own package.
-///
-/// Four variants are documented, on both sides of the crate boundary, as
-/// unreachable through any package this crate's public API can admit, so no
-/// admitted-package fixture for them exists to drive:
-/// `MissingOperationIdentity` (`catalogued_operation_identity`'s own doc:
-/// "this generator should never receive a node for which this member is
-/// absent" -- quire-contract-ir's `validate_operations` guarantees it before
-/// admission) and `InvalidBody`/`BodyIncomplete` (quire-contract-ir's own
-/// `CompleteLoweringRecordV2` doc: "A package the V2 reader admitted never
-/// yields this" / "Like `InvalidBody`, an admitted package never yields
-/// this"). `UnreadableBound` is unreachable because Contract IR's strict
-/// reader rejects the noncanonical endpoint before CG sees the package;
-/// `tc_024_unreadable_integer_bound_is_a_strict_reader_refusal` asserts that
-/// public boundary. Real function-path coverage of the other three exists as
-/// unit tests inside the crate that call the real private functions this
-/// integration-test crate cannot reach:
-/// `tc_024_invalid_and_incomplete_bodies_are_typed_refusals` drives
-/// `InvalidBody`/`BodyIncomplete` through the real `lowered()`, and
-/// `tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity`
-/// drives `MissingOperationIdentity` through the real
-/// `catalogued_operation_identity` (both in `src/oracle/scalar/lower.rs`, both
-/// private to `quire_contract_codegen` and so unreachable from here). The
-/// four assertions below construct each variant directly instead; they only
-/// exercise `refusal_variant_name`'s own match arms for these four variants
-/// -- they are not evidence that production code produces them, which is the
-/// two unit tests' job.
+/// Reader-admitted variants are driven through the golden cohorts and the
+/// work-exhaustion fixture. Malformed bounds and operation metadata belong at
+/// the strict reader boundary. Their defensive CG branches are exercised by
+/// private unit controls, including
+/// `tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals`
+/// for MissingBound/UnreadableBound and
+/// `tc_024_invalid_and_incomplete_bodies_are_typed_refusals` for body failures.
+/// Direct enum constructions below test only the variant-name formatter.
 #[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
@@ -1833,7 +1802,6 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
         (COMPOSITE, "Unsupported"),
         (FUNCTION, "BlockedOnUpstream"),
         (UNBOUNDED, "RequiresBound"),
-        (WRONG_BOUND_FORM, "MissingBound"),
         (AMBIGUOUS, "AmbiguousBound"),
         (MATHEMATICAL, "BoundMismatch"),
         (V_BOOLEAN, "NotExpression"),
@@ -4428,4 +4396,13 @@ fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings(
             FunctionScheduleRefusal::UnsupportedOperation(unsupported.function_node_id)
         );
     }
+}
+
+#[trace("FR-014-AC-10", "FR-014-AC-52", "TC-024")]
+#[test]
+fn wrong_bound_form_is_rejected_before_scalar_generation() {
+    assert!(matches!(
+        wrong_form_bound_package().read().0,
+        CheckedPackageV2ReadResult::Refused(_)
+    ));
 }

@@ -84,8 +84,54 @@ fn read_lowered(bytes: &[u8], source: &CheckedPackageV2) -> ContractPackageV1 {
     }
 }
 
+// Compare retained metadata after joining the two admitted identity frames.
+fn source_framed_value(
+    keys: &std::collections::BTreeMap<CheckedNodeId, CheckedNodeId>,
+    mut value: serde_json::Value,
+) -> serde_json::Value {
+    if let Ok(id) = serde_json::from_value::<CheckedNodeId>(value.clone()) {
+        if let Some(key) = keys.get(&id) {
+            return serde_json::to_value(key).expect("source key");
+        }
+    }
+    match &mut value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                *item = source_framed_value(keys, item.take());
+            }
+        }
+        serde_json::Value::Object(items) => {
+            for item in items.values_mut() {
+                *item = source_framed_value(keys, item.take());
+            }
+        }
+        _ => {}
+    }
+    value
+}
+
 fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
     let graph = CheckedGraph::new(package);
+    let keys = source
+        .graph()
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let key =
+                quire_contract_model::ContractSourceKeyV1::from_v2_request(source, &node.node_id)
+                    .expect("source request");
+            match package
+                .reached_closure(&key)
+                .expect("admitted source closure")
+            {
+                quire_contract_model::ContractRootViewV1::Lowered(view) => {
+                    Some((view.root.node_id.clone(), node.node_id.clone()))
+                }
+                _ => None,
+            }
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
     assert!(
         graph.len() > 0,
         "lowering must represent genuine source nodes"
@@ -109,10 +155,13 @@ fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
             .graph()
             .nodes
             .iter()
-            .find(|original| &original.node_id == key)
+            .find(|original| Some(&original.node_id) == keys.get(key))
             .expect("represented key must exist in the original admitted source");
         assert_eq!(
-            serde_json::to_value(node).expect("lowered node serializes"),
+            source_framed_value(
+                &keys,
+                serde_json::to_value(node).expect("lowered node serializes")
+            ),
             serde_json::to_value(original).expect("source node serializes"),
             "complete metadata association for {key:?}"
         );
@@ -123,8 +172,11 @@ fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
         );
         assert!(ptr::eq(selected, package.node(key).expect("owner node")));
         assert_eq!(
-            graph.term(key),
-            source.term(key),
+            source_framed_value(
+                &keys,
+                serde_json::to_value(graph.term(key)).expect("lowered term")
+            ),
+            serde_json::to_value(source.term(&original.node_id)).expect("source term"),
             "source term association for {key:?}"
         );
         match (graph.term(key), package.term(key)) {

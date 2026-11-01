@@ -4462,7 +4462,10 @@ fn deep_matches_shallow() {
             panic!("fixture must generate");
         };
         let value = serde_json::to_value(generated).expect("generated claim serializes");
-        assert_eq!(value["source"], serde_json::json!(source_identity()));
+        assert_eq!(
+            value["contract_package_identity"],
+            serde_json::json!(source_identity())
+        );
         assert_eq!(value["node_id"], serde_json::json!(claim.node_id));
         assert_eq!(value["bounds"], serde_json::json!([]));
         assert_eq!(value["dependencies"], serde_json::json!([]));

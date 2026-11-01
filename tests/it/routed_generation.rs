@@ -2700,7 +2700,6 @@ fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
         }
     };
     requires_bound(package::UNBOUNDED, Some(node(package::T_INTEGER)));
-    requires_bound(package::WRONG_BOUND_FORM, None);
 
     let unsupported = |code| {
         let (record, rejected) = routed_alone(&package, &node(code));

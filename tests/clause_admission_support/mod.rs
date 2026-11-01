@@ -395,7 +395,11 @@ impl Twin {
             .graph()
             .nodes
             .iter()
-            .find(|node| matches_site(&node.node_id, located.site.node.view()))
+            .find(|node| {
+                package
+                    .structural_key(&node.node_id)
+                    .is_some_and(|key| matches_site(key, located.site.node.view()))
+            })
             .expect("QSL clause site names an admitted structural node")
             .node_id
             .clone();
