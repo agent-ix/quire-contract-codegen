@@ -408,7 +408,7 @@ pub enum Candidates {
 
 /// A typed identity for a Kani lowering form.
 ///
-/// This is CG's in-process projection of the admitted IR form. It is not a
+/// This is CG's in-process projection of the admitted IR form.
 /// Cloning a form shares its immutable admitted package, so envelope lookups index
 /// that instance once. Independently admitted packages retain separate allocations.
 /// This is not a wire member; identity is never reconstructed from `Debug` or
