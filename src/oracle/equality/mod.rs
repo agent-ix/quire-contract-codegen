@@ -570,7 +570,7 @@ pub struct GeneratedCompositeEqualityClaim {
     /// Generated oracle function name.
     pub oracle_symbol: String,
     /// Exact source package name and admitted lock for this claim.
-    pub source: ContractSourceV1,
+    pub contract_package_identity: ContractSourceV1,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
     /// Semantic type key of the expression node.
@@ -870,7 +870,7 @@ pub fn generate_composite_equality_oracles(
                             GeneratedCompositeEqualityClaim {
                                 environment_symbol: String::new(),
                                 oracle_symbol: String::new(),
-                                source: package.wire().package.source.clone(),
+                                contract_package_identity: package.wire().package.source.clone(),
                                 node_id: item.node_id.clone(),
                                 semantic_type: closure.root.semantic_type.clone(),
                                 source_map: occurrences.to_vec(),
@@ -4433,7 +4433,7 @@ fn deep_matches_shallow() {
             result: ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
                 environment_symbol: String::new(),
                 oracle_symbol: String::new(),
-                source: source_identity(),
+                contract_package_identity: source_identity(),
                 node_id: node_id(node),
                 semantic_type: node_id('c'),
                 source_map: Vec::new(),
@@ -4602,7 +4602,7 @@ fn deep_matches_shallow() {
             let ClaimDisposition::Generated(claim) = &mut claim.result else {
                 panic!("the fixture starts generated");
             };
-            claim.source.name = package.into();
+            claim.contract_package_identity.name = package.into();
         }
         let unit = admitted
             .context()

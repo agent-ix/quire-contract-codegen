@@ -1815,10 +1815,17 @@ mod tests {
                 ContractPackageReadResult::Admitted(package) => package,
                 other => panic!("IR must admit the ordering package: {other:?}"),
             };
-            assert!(matches!(
-                &admitted.wire().feature_accounting[0],
-                ContractFeatureRecordV1::Lowered { node_id } if *node_id == requested[0]
-            ));
+            let accounted = admitted.wire().feature_accounting[0].node_id();
+            let accounted_index = admitted
+                .wire()
+                .source_keys
+                .iter()
+                .position(|key| key == accounted)
+                .expect("admitted accounting key has a source entry");
+            assert_eq!(
+                admitted.source_key_at(accounted_index),
+                quire_contract_model::ContractSourceKeyV1::from_v2_request(&checked, &requested[0])
+            );
             let descriptor = BackendDescriptor {
                 identity: "kani".to_owned(),
                 advertised: Vec::new(),
@@ -2121,7 +2128,20 @@ mod tests {
                     item.result
                 );
             };
-            assert_eq!(claim.checked_bounds.first(), Some(expected));
+            let actual = claim
+                .checked_bounds
+                .first()
+                .expect("selected checked bound");
+            let actual_index = admitted
+                .wire()
+                .source_keys
+                .iter()
+                .position(|key| key == actual)
+                .expect("checked bound has an admitted source key");
+            assert_eq!(
+                admitted.source_key_at(actual_index),
+                quire_contract_model::ContractSourceKeyV1::from_v2_request(&checked, expected)
+            );
         }
         let admit_positions = |positions: &[ContractRequestPosition]| {
             let roots = positions
@@ -2545,7 +2565,7 @@ mod tests {
         )));
     }
 
-    #[trace("FR-039-AC-1", "TC-053")]
+    #[trace("FR-039-AC-1", "FR-039-AC-11", "TC-053")]
     #[test]
     fn admitted_bounded_integer_operation_generates_from_reached_bounds() {
         let source = SOURCE.replace("Boolean pure { a = a }", "Int[0, 18] pure { a + a }");
@@ -2610,6 +2630,18 @@ mod tests {
             generated_claim.contract_package_identity,
             admitted.wire().package.source
         );
+        assert_eq!(claim.node_id, expression);
+        assert_eq!(generated_claim.node_id, expression);
+        let serialized = serde_json::to_value(generated_claim).expect("scalar claim serializes");
+        assert_eq!(
+            serialized["contract_package_identity"],
+            serde_json::to_value(&admitted.wire().package.source).expect("source serializes")
+        );
+        assert_eq!(
+            serialized["node_id"],
+            serde_json::to_value(&expression).expect("V2 request serializes")
+        );
+        assert!(serialized.get("ir_id").is_none());
         assert!(generated
             .artifacts
             .iter()
@@ -2752,7 +2784,7 @@ mod tests {
         }
     }
 
-    #[trace("FR-039-AC-7", "FR-049-AC-1", "TC-053")]
+    #[trace("FR-039-AC-7", "FR-039-AC-11", "FR-049-AC-1", "TC-053")]
     #[test]
     fn scalar_selected_occurrences_remain_package_local() {
         use crate::oracle::claim::ClaimDisposition;
@@ -2786,19 +2818,27 @@ mod tests {
                 &package.wire().package.source
             );
             assert_eq!(value.node_id, first_expression);
+            let items = PackageItems::new(source, package, positions)
+                .expect("selected package-local positions");
+            let admitted_expression = items
+                .admitted_node(&first_expression)
+                .expect("source-bound expression key");
             assert_eq!(
                 value.source_map,
                 package
-                    .source_occurrences(&first_expression)
+                    .source_occurrences(admitted_expression)
                     .expect("admitted sources")
             );
             let conversion = positions[1].node_id();
+            let admitted_conversion = items
+                .admitted_node(conversion)
+                .expect("source-bound conversion key");
             let target = package
                 .wire()
                 .semantic_graph
                 .nodes
                 .iter()
-                .find(|node| &node.node_id == conversion)
+                .find(|node| &node.node_id == admitted_conversion)
                 .expect("admitted result conversion")
                 .semantic_type
                 .clone();
@@ -2819,6 +2859,11 @@ mod tests {
             panic!("both admitted authorities must generate");
         };
         assert_ne!(first_claim.checked_bounds, second_claim.checked_bounds);
+        assert_eq!(
+            first_claim.contract_package_identity, second_claim.contract_package_identity,
+            "body-only changes retain the same source-bound package identity"
+        );
+        assert_eq!(first_claim.node_id, second_claim.node_id);
         assert_ne!(first_claim.oracle_source, second_claim.oracle_source);
         assert_eq!(first_output, first_again, "B cannot contaminate A's lookup");
     }
@@ -2876,7 +2921,7 @@ mod tests {
             .contains("pub fn oracle_"));
     }
 
-    #[trace("FR-039-AC-7", "FR-039-AC-8", "TC-053")]
+    #[trace("FR-039-AC-7", "FR-039-AC-8", "FR-039-AC-11", "TC-053")]
     #[test]
     fn genuine_qsl_function_claim_uses_admitted_package_identity_and_reached_keys() {
         use crate::oracle::function::{
@@ -2973,6 +3018,22 @@ mod tests {
             admitted.wire().package.source
         );
         assert_eq!(claim.node_id, requested[1]);
+        assert_eq!(generated.claim_map.items[0].node_id, requested[1]);
+        assert_ne!(
+            admitted.wire().feature_accounting[1].node_id(),
+            &requested[1],
+            "the public V2 request differs from the V1 accounting frame"
+        );
+        let serialized = serde_json::to_value(claim).expect("function claim serializes");
+        assert_eq!(
+            serialized["contract_package_identity"],
+            serde_json::to_value(&admitted.wire().package.source).expect("source serializes")
+        );
+        assert_eq!(
+            serialized["node_id"],
+            serde_json::to_value(&requested[1]).expect("V2 request serializes")
+        );
+        assert!(serialized.get("ir_id").is_none());
         let source_key =
             quire_contract_model::ContractSourceKeyV1::from_v2_request(&checked, &requested[1])
                 .expect("admitted source-frame key");
@@ -2997,7 +3058,7 @@ mod tests {
             .contains("pub fn oracle_"));
     }
 
-    #[trace("FR-039-AC-2", "FR-039-AC-7", "TC-053")]
+    #[trace("FR-039-AC-2", "FR-039-AC-7", "FR-039-AC-11", "TC-053")]
     #[test]
     fn one_routed_profile_admits_function_and_equality_beside_scalar_bound_refusal() {
         use crate::oracle::claim::ClaimDisposition;
@@ -3167,10 +3228,27 @@ mod tests {
             Default::default(),
         )
         .expect("equality generation");
-        assert!(matches!(
-            equality.claim_map.items[0].result,
-            ClaimDisposition::Generated(_)
-        ));
+        let ClaimDisposition::Generated(equality_claim) = &equality.claim_map.items[0].result
+        else {
+            panic!("mixed equality must generate");
+        };
+        assert_eq!(equality.claim_map.items[0].node_id, requested[2]);
+        assert_eq!(equality_claim.node_id, requested[2]);
+        assert_eq!(
+            equality_claim.contract_package_identity,
+            admitted.wire().package.source
+        );
+        let serialized = serde_json::to_value(equality_claim).expect("equality claim serializes");
+        assert_eq!(
+            serialized["contract_package_identity"],
+            serde_json::to_value(&admitted.wire().package.source).expect("source serializes")
+        );
+        assert_eq!(
+            serialized["node_id"],
+            serde_json::to_value(&requested[2]).expect("V2 request serializes")
+        );
+        assert!(serialized.get("source").is_none());
+        assert!(serialized.get("ir_id").is_none());
         let mut positions = drivers(&requested);
         positions[3] = ContractRequestPosition::DriverItem {
             node_id: unbounded.clone(),
