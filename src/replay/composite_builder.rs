@@ -24,7 +24,7 @@ use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
     CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageEvidence,
     CheckedPackageIncomplete, CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef,
+    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef, ContractSourceKeyV1,
 };
 
 use crate::core::ir::{frame::application_identity, node_key::checked_node_key};
@@ -307,7 +307,7 @@ impl OriginalCompositeEqContext {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
             };
-            let child = wire_node(child)?;
+            let child = wire_node(&self.original, child)?;
             let bounds = match &operand.domain {
                 CheckedCompositeOperandDomain::Literal => Vec::new(),
                 CheckedCompositeOperandDomain::Parameter { .. } => harness_bounds.iter()
@@ -322,7 +322,7 @@ impl OriginalCompositeEqContext {
         if arguments.len() != 2 {
             return Err(CompositeBuildError::OperandShape);
         }
-        let node = wire_node(node)?;
+        let node = wire_node(&self.original, node)?;
         let occurrence = origin(occurrence);
         let preimage = ParityPreimage {
             node: node.clone(),
@@ -523,8 +523,13 @@ impl OriginalCompositeEqContext {
 
 // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
 #[allow(clippy::result_large_err)]
-fn wire_node(node: &CheckedNodeId) -> Result<quire_exact::NodeKey, CompositeBuildError> {
-    checked_node_key(node).ok_or(CompositeBuildError::NodeIdentity)
+fn wire_node(
+    source: &CheckedPackageV2,
+    node: &CheckedNodeId,
+) -> Result<quire_exact::NodeKey, CompositeBuildError> {
+    let key = ContractSourceKeyV1::from_v2_request(source, node)
+        .ok_or(CompositeBuildError::NodeIdentity)?;
+    checked_node_key(key.structural_key()).ok_or(CompositeBuildError::NodeIdentity)
 }
 
 fn origin(occurrence: &CheckedOccurrence) -> Origin {

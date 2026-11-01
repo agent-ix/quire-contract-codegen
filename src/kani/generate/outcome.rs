@@ -100,6 +100,8 @@ pub enum ObligationItem<'a> {
     },
     /// One selected occurrence in an FR-014 exact scalar claim map.
     ScalarClaim {
+        /// The admitted V2 source whose indexed identities the claim map retains.
+        source: &'a CheckedPackageV2,
         /// The admitted package the claim map was generated from.
         package: &'a ContractPackageV1,
         /// The claim map.

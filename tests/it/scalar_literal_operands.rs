@@ -147,7 +147,7 @@ fn assert_generated(
     .unwrap()
     .with_scalar_selection(&admitted, selection);
     let generated = generate_routed(
-        &package,
+        package,
         &admitted,
         &positions,
         &[route],

@@ -664,6 +664,7 @@ fn fr015(
     let items = nodes
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            source: &fixture.package,
             package: &admitted,
             claim_map,
             node_id,

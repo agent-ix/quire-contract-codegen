@@ -261,12 +261,6 @@ pub(super) fn assert_authentic_recursive_item_generation() {
                 .expect("source type belongs to admitted graph")
                 .to_string()
         );
-        // Structural identity (IR-1079): the kernel declaration key is the wire node identity.
-        assert_eq!(
-            actual.key(),
-            actual.node(),
-            "wire identity is the kernel declaration key"
-        );
         assert_eq!(item.left.source_type, item.right.source_type);
         let output = generate_items(
             &package,

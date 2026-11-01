@@ -20,11 +20,10 @@ use quire_contract_codegen::{
     COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
-    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageWireV1,
+    CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits, CheckedPackageRefusalCause,
+    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2, ContractDependencies,
+    ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageWireV1,
 };
 use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
 use quire_exact::{CollectionType, Presence, ValueType};

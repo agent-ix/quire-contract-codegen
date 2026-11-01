@@ -28,20 +28,22 @@ use quire_exact::PathSegment;
 fn node_key(package: &CheckedPackageV2, id: &CheckedNodeId) -> NodeKey {
     let key = ContractSourceKeyV1::from_v2_request(package, id)
         .expect("admitted V2 graph resolves the requested key");
-    structural_node_key(key.structural_key())
+    structural_node_key(key.structural_key()).expect("admitted structural node")
 }
 
-fn structural_node_key(id: &CheckedNodeId) -> NodeKey {
+fn structural_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
     let path = id
         .path
         .iter()
         .map(|segment| match segment {
-            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
-            CheckedNodePathSegment::Node(child) => PathSegment::Node(structural_node_key(child)),
-            CheckedNodePathSegment::Index(_) => unreachable!("resolved structural key"),
+            CheckedNodePathSegment::Name(name) => Some(PathSegment::Text(name.to_string())),
+            CheckedNodePathSegment::Node(child) => {
+                Some(PathSegment::Node(structural_node_key(child)?))
+            }
+            CheckedNodePathSegment::Index(_) => None,
         })
-        .collect();
-    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+        .collect::<Option<Vec<_>>>()?;
+    NodeKey::new(id.package.to_string(), path, id.ordinal).ok()
 }
 
 fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
@@ -268,7 +270,7 @@ fn parameter_bounds(
                 let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                     panic!("graph child")
                 };
-                Some(node_key(&package, child))
+                Some(node_key(package, child))
             } else {
                 None
             }

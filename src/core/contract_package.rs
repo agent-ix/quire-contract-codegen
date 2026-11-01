@@ -102,9 +102,9 @@ pub enum PackageRequestError {
     /// The supplied source package differs from the admitted package's source identity or lock.
     SourceMismatch {
         /// Source identity and lock recorded by the admitted package.
-        expected: ContractSourceV1,
+        expected: Box<ContractSourceV1>,
         /// Source identity and lock supplied by the caller.
-        actual: ContractSourceV1,
+        actual: Box<ContractSourceV1>,
     },
     /// The caller supplied a different number of descriptors and request positions.
     ItemPositions {
@@ -120,7 +120,7 @@ pub enum PackageRequestError {
         /// Number of admitted accounting records.
         accounted: usize,
     },
-    /// An accounting record names a different exact requested key.
+    /// An accounting record has a different source-frame structural key.
     Identity {
         /// Position of the disagreement.
         request_index: usize,
@@ -129,7 +129,7 @@ pub enum PackageRequestError {
         /// Exact key in the admitted accounting record.
         accounted: CheckedNodeId,
     },
-    /// A lowering root, driver or context, disagrees with IR accounting.
+    /// A lowering root, driver or context, disagrees with IR source-key accounting.
     AccountingIdentity {
         /// Position in the full lowering request.
         accounting_index: usize,
@@ -224,7 +224,7 @@ pub(crate) struct PackageItems<'a> {
 }
 
 impl<'a> PackageItems<'a> {
-    /// Match every position and exact key before any item can be consumed.
+    /// Match every position through its admitted source key before any item can be consumed.
     pub(crate) fn new(
         source: &'a CheckedPackageV2,
         package: &'a ContractPackageV1,
@@ -237,8 +237,8 @@ impl<'a> PackageItems<'a> {
         let expected = &package.wire().package.source;
         if &actual != expected {
             return Err(PackageRequestError::SourceMismatch {
-                expected: expected.clone(),
-                actual,
+                expected: Box::new(expected.clone()),
+                actual: Box::new(actual),
             });
         }
         let accounted = &package.wire().feature_accounting;

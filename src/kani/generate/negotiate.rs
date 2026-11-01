@@ -74,7 +74,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
-    CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
+    CheckedTerm, ContractPackageV1, ContractSourceKeyV1, ContractSourceV1, StateClauseKind,
 };
 
 use crate::{
@@ -116,12 +116,16 @@ use crate::{
 /// One admitted scalar package's node and source lookups, shared by its request items.
 /// A node's first graph entry and all source entries retain their original wire order.
 struct ContractLookup<'a> {
+    source: &'a CheckedPackageV2,
+    package: &'a ContractPackageV1,
     graph: CheckedGraph<'a>,
     sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
+    source_indices: BTreeMap<CheckedNodeId, usize>,
+    original_nodes: BTreeMap<&'a CheckedNodeId, Option<&'a CheckedNodeId>>,
 }
 
 impl<'a> ContractLookup<'a> {
-    fn new(package: &'a ContractPackageV1) -> Self {
+    fn new(source: &'a CheckedPackageV2, package: &'a ContractPackageV1) -> Self {
         let graph = CheckedGraph::new(package);
         let mut sources = BTreeMap::<_, Vec<_>>::new();
         for entry in &package.wire().source_map.nodes {
@@ -130,7 +134,52 @@ impl<'a> ContractLookup<'a> {
                 .or_default()
                 .extend(entry.occurrences.iter());
         }
-        Self { graph, sources }
+        let source_indices: BTreeMap<CheckedNodeId, usize> = (0..package.wire().source_keys.len())
+            .filter_map(|index| {
+                package
+                    .source_key_at(index)
+                    .map(|key| (key.structural_key().clone(), index))
+            })
+            .collect();
+        let mut original_nodes = BTreeMap::new();
+        for node in &source.graph().nodes {
+            let mapped = (|| {
+                let key = ContractSourceKeyV1::from_v2_request(source, &node.node_id)?;
+                let index = source_indices.get(key.structural_key())?;
+                Some((package.wire().source_keys.get(*index)?, &node.node_id))
+            })();
+            if let Some((admitted, original)) = mapped {
+                original_nodes
+                    .entry(admitted)
+                    .and_modify(|entry| *entry = None)
+                    .or_insert(Some(original));
+            }
+        }
+        Self {
+            source,
+            package,
+            graph,
+            sources,
+            source_indices,
+            original_nodes,
+        }
+    }
+
+    fn admitted_node(&self, id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        let key = ContractSourceKeyV1::from_v2_request(self.source, id)?;
+        let index = self.source_indices.get(key.structural_key())?;
+        self.package.wire().source_keys.get(*index)
+    }
+
+    fn original_node(&self, id: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
+        self.original_nodes.get(id).copied().flatten()
+    }
+
+    fn source_node(
+        &self,
+        id: &CheckedNodeId,
+    ) -> Option<&'a CheckedSemanticNodeV2<serde_json::Value>> {
+        self.node(self.admitted_node(id)?)
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<serde_json::Value>> {
@@ -141,6 +190,11 @@ impl<'a> ContractLookup<'a> {
         self.sources.get(id).map_or_else(Vec::new, |entries| {
             entries.iter().map(|entry| (*entry).clone()).collect()
         })
+    }
+
+    fn source_occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
+        self.admitted_node(id)
+            .map_or_else(Vec::new, |node| self.occurrences(node))
     }
 }
 
@@ -205,7 +259,7 @@ fn checked_lookup<'a, 'lookup>(
 pub(crate) struct ScalarFormLookups<'a> {
     checked:
         BTreeMap<*const CheckedPackageV2, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
-    contract: BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
+    contract: BTreeMap<(*const CheckedPackageV2, *const ContractPackageV1), ContractLookup<'a>>,
 }
 
 impl<'a> ScalarFormLookups<'a> {
@@ -234,10 +288,14 @@ impl<'a> ScalarFormLookups<'a> {
             .copied()
     }
 
-    fn contract(&mut self, package: &'a ContractPackageV1) -> &ContractLookup<'a> {
+    fn contract(
+        &mut self,
+        source: &'a CheckedPackageV2,
+        package: &'a ContractPackageV1,
+    ) -> &ContractLookup<'a> {
         self.contract
-            .entry(std::ptr::from_ref(package))
-            .or_insert_with(|| ContractLookup::new(package))
+            .entry((std::ptr::from_ref(source), std::ptr::from_ref(package)))
+            .or_insert_with(|| ContractLookup::new(source, package))
     }
 }
 
@@ -571,7 +629,10 @@ fn classify<'a>(
     item: &ObligationItem<'a>,
     unwind: u32,
     ceilings: crate::kani::identity::ProofCeilings,
-    scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
+    scalar_lookups: &mut BTreeMap<
+        (*const CheckedPackageV2, *const ContractPackageV1),
+        ContractLookup<'a>,
+    >,
     checked_lookups: &mut CheckedLookups<'a>,
     native: bool,
 ) -> ItemState {
@@ -587,6 +648,7 @@ fn classify<'a>(
             native,
         ),
         ObligationItem::ScalarClaim {
+            source,
             package,
             claim_map,
             node_id,
@@ -594,8 +656,8 @@ fn classify<'a>(
             result_selection,
         } => {
             let lookup = scalar_lookups
-                .entry(std::ptr::from_ref(package))
-                .or_insert_with(|| ContractLookup::new(package));
+                .entry((std::ptr::from_ref(source), std::ptr::from_ref(package)))
+                .or_insert_with(|| ContractLookup::new(source, package));
             classify_node(
                 package,
                 lookup,
@@ -889,21 +951,25 @@ fn classify_node(
     claim_index: usize,
     result_selection: &ContractDriverResultSelection,
 ) -> ItemState {
-    let graph_node = lookup.node(node_id);
+    let graph_node = lookup.source_node(node_id);
     let kind = graph_node.and_then(|node| {
         (&*node.node_tag == "state" && &*node.semantic_form == "frame")
             .then_some(ObligationKind::Frame)
     });
     let subject = ObligationSubject::CheckedNode {
         node_id: node_id.clone(),
-        source_map: lookup.occurrences(node_id),
+        source_map: lookup.source_occurrences(node_id),
     };
     let identity = Some(ItemIdentity::Node {
         package: package.wire().package.source.clone(),
         node: node_id.clone(),
         result_selection: result_selection.clone(),
     });
-    let outcome = if claim_map.source != package.wire().package.source {
+    let outcome = if package.wire().package.source.name.as_ref() != lookup.source.name()
+        || package.wire().package.source.lock != *lookup.source.lock()
+    {
+        Outcome::Invalid(InvalidObligationItem::ScalarSourceMismatch)
+    } else if claim_map.source != package.wire().package.source {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
@@ -973,7 +1039,7 @@ pub(crate) fn classify_scalar_form<'a>(
         positions,
         request_index,
     ) {
-        Ok(claim) => classify_claim(lookups.contract(contract), &claim),
+        Ok(claim) => classify_claim(lookups.contract(package, contract), &claim),
         Err(_) => Outcome::Invalid(InvalidObligationItem::ScalarDerivationFailed),
     };
     let graph_node = lookups.checked_node(package, node_id);
@@ -1091,9 +1157,20 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
                     })
                 }
                 OperationProvenance::IrConfirmed => {
-                    let operand_ranges = operand_ranges(&lookup.graph, &claim.node_id);
+                    let Some(admitted_node) = lookup.admitted_node(&claim.node_id) else {
+                        return Outcome::Invalid(InvalidObligationItem::UnknownNode);
+                    };
+                    let operand_ranges = operand_ranges(&lookup.graph, admitted_node);
                     match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
-                        Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
+                        Ok(mut lowered) => {
+                            if lowered
+                                .reframe_inferred_nodes(|id| lookup.original_node(id).cloned())
+                            {
+                                Outcome::LoweredScalar(Box::new(lowered))
+                            } else {
+                                Outcome::Invalid(InvalidObligationItem::UnknownNode)
+                            }
+                        }
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
                                 operation_identity: claim.operation.identity.clone(),

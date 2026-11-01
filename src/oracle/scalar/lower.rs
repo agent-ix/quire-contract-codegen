@@ -1972,38 +1972,55 @@ pub(super) fn selected_scalar_key(
     else {
         return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
     };
+    if application.node_id != *node_id || application.role != CheckedOccurrenceRole::Expression {
+        return None;
+    }
+    let admitted_node = items.admitted_node(node_id)?;
+    let admitted_application = ContractOccurrenceKeyV1 {
+        node_id: admitted_node.clone(),
+        role: application.role.clone(),
+        ordinal: application.ordinal,
+    };
     #[cfg(test)]
     source_selection_work::source(true);
-    package.source_occurrences(node_id)?.iter().find(|source| {
-        #[cfg(test)]
-        source_selection_work::occurrence(false);
-        application.node_id == *node_id
-            && application.role == CheckedOccurrenceRole::Expression
-            && source.role == application.role
-            && source.ordinal == application.ordinal
-    })?;
-    if let Some(conversion) = conversion {
+    package
+        .source_occurrences(admitted_node)?
+        .iter()
+        .find(|source| {
+            #[cfg(test)]
+            source_selection_work::occurrence(false);
+            source.role == application.role && source.ordinal == application.ordinal
+        })?;
+    let admitted_conversion = if let Some(conversion) = conversion {
         if conversion.role != CheckedOccurrenceRole::Expression
             || !items.has_context_root(request_index, &conversion.node_id)
         {
             return None;
         }
+        let admitted_conversion_node = items.admitted_node(&conversion.node_id)?;
         #[cfg(test)]
         source_selection_work::source(true);
         package
-            .source_occurrences(&conversion.node_id)?
+            .source_occurrences(admitted_conversion_node)?
             .iter()
             .find(|entry| {
                 #[cfg(test)]
                 source_selection_work::occurrence(true);
                 entry.role == conversion.role && entry.ordinal == conversion.ordinal
             })?;
-    }
+        Some(ContractOccurrenceKeyV1 {
+            node_id: admitted_conversion_node.clone(),
+            role: conversion.role.clone(),
+            ordinal: conversion.ordinal,
+        })
+    } else {
+        None
+    };
     let ContractResultViewV1::Lowered(view) = package
         .result_context(
-            node_id,
-            application,
-            conversion.as_ref(),
+            admitted_node,
+            &admitted_application,
+            admitted_conversion.as_ref(),
             BoundedDomainForm::IntegerRange,
         )
         .ok()?
@@ -2027,6 +2044,7 @@ pub(super) fn contract_checked_operation<'a>(
     closure: &'a quire_contract_model::ContractReachedClosureV1<'_>,
     tag: Option<CheckedNodeTag>,
     node_id: &CheckedNodeId,
+    items: &PackageItems<'_>,
     package: &'a ContractPackageV1,
     selection: &'a ContractDriverResultSelection,
 ) -> Result<
@@ -2052,12 +2070,32 @@ pub(super) fn contract_checked_operation<'a>(
     if &application.node_id != node_id {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     }
+    let Some(admitted_node) = items.admitted_node(node_id) else {
+        return Ok(Err(ExactScalarRefusal::IncompleteContext));
+    };
+    let admitted_application = ContractOccurrenceKeyV1 {
+        node_id: admitted_node.clone(),
+        role: application.role.clone(),
+        ordinal: application.ordinal,
+    };
+    let admitted_conversion = if let Some(key) = conversion {
+        let Some(admitted_node) = items.admitted_node(&key.node_id) else {
+            return Ok(Err(ExactScalarRefusal::IncompleteContext));
+        };
+        Some(ContractOccurrenceKeyV1 {
+            node_id: admitted_node.clone(),
+            role: key.role.clone(),
+            ordinal: key.ordinal,
+        })
+    } else {
+        None
+    };
     let bounds = BoundView::admitted(
         closure,
         SelectedResult {
             package,
-            application,
-            conversion: conversion.as_ref(),
+            application: &admitted_application,
+            conversion: admitted_conversion.as_ref(),
         },
     );
     let operation = match derive_operation_from_view(graph, closure.root, bounds.clone()) {
@@ -2171,10 +2209,17 @@ pub(super) fn plan_contract_scalar_oracles(
                 },
             ),
             PackageItem::Lowered { closure, .. } => {
+                let admitted_node = items.admitted_node(node_id).ok_or_else(|| {
+                    super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
+                        request_index,
+                        node_id: node_id.clone(),
+                        cause: Box::new(ContractRootViewError::Inconsistent),
+                    })
+                })?;
                 let root_sources = closure
                     .nodes
                     .iter()
-                    .find(|entry| entry.node.node_id == *node_id)
+                    .find(|entry| entry.node.node_id == *admitted_node)
                     .map(|entry| entry.sources)
                     .ok_or_else(|| {
                         super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
@@ -2224,7 +2269,7 @@ pub(super) fn plan_contract_scalar_oracles(
                         }),
                     )?;
                     match contract_checked_operation(
-                        &graph, &closure, tag, node_id, package, selection,
+                        &graph, &closure, tag, node_id, &items, package, selection,
                     )
                     .map_err(super::ContractScalarError::Oracle)?
                     {
@@ -2232,7 +2277,7 @@ pub(super) fn plan_contract_scalar_oracles(
                             let dependencies = closure
                                 .nodes
                                 .iter()
-                                .filter(|entry| entry.node.node_id != *node_id)
+                                .filter(|entry| entry.node.node_id != *admitted_node)
                                 .map(|entry| entry.node.node_id.clone())
                                 .collect();
                             pending.push((

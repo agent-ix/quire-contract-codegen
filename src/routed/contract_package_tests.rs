@@ -449,10 +449,14 @@ mod tests {
     /// Admits `source` as the package `name`, whose one source file is `<name>.native`. Package
     /// identity is its name and lock, so another name is another admitted package.
     fn admitted_named_source(name: &str, source: &str) -> CheckedPackageV2 {
+        admitted_source_with_identity(name, &format!("{name}.native"), source)
+    }
+
+    fn admitted_source_with_identity(name: &str, identity: &str, source: &str) -> CheckedPackageV2 {
         let path = format!("{name}.native");
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", &path, "git", "fixture"),
+                source: SourceIdentity::new("test", identity, "git", "fixture"),
                 package_name: name.to_owned(),
                 path: &path,
                 bytes: source.as_bytes(),
@@ -628,7 +632,7 @@ mod tests {
     fn source_name_and_lock_must_match_admitted_accounting() {
         let (source, admitted, positions, _, _) = excluded_fixture();
         let other_name = admitted_named_source("other-package", SOURCE);
-        let other_lock = admitted_source(&format!("{SOURCE}\n// different source bytes\n"));
+        let other_lock = admitted_source_with_identity("package-items", "other.native", SOURCE);
         assert_ne!(other_name.name(), source.name());
         assert_ne!(other_lock.lock(), source.lock());
 

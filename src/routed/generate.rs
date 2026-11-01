@@ -593,6 +593,7 @@ fn generate_kani(
                     )))
                 })?;
             Ok(ObligationItem::ScalarClaim {
+                source,
                 package,
                 claim_map: &claim_map,
                 node_id: &item.node_id,
