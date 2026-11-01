@@ -38,7 +38,6 @@ const NODE_ID: &str = "ix://ir268.test/domain/Node";
 const SMALL_ID: &str = "ix://ir268.test/domain/SmallInt";
 const POPULATION_ID: &str = "ix://ir268.test/domain/CollectionNodes";
 const SOURCE_ID: &str = "ix://ir268.test/spec";
-const ZERO_SHA256: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = &node.body else {
@@ -125,29 +124,27 @@ fn model_document() -> Value {
     };
     json!({
         "contractVersion": "2.0.0",
-        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
+        "canonicalization": {"algorithm": "rfc8785-v1"},
         "source": {
             "identity": SOURCE_ID,
             "version": "1.0.0",
-            "dialect": "spec-bundle",
-            "digest": ZERO_SHA256
+            "dialect": "spec-bundle"
         },
         "package": {
             "identity": "ir268.test/domain", "version": "1.0.0",
-            "manifestDigest": ZERO_SHA256,
-            "mappingVersions": [], "profileVersions": [], "lockDigest": ZERO_SHA256
+            "mappingVersions": [], "profileVersions": []
         },
         "constructs": [
             {"kind": {"module": "ir268.test/domain", "name": "entity"},
-             "moduleVersion": "1.0.0", "manifestDigest": ZERO_SHA256,
+             "moduleVersion": "1.0.0",
              "construct": {"identity": "none", "shape": "record", "members": {},
                             "meaning": "quire.meaning.model.object-type/v1"}},
             {"kind": {"module": "ir268.test/domain", "name": "value_type"},
-             "moduleVersion": "1.0.0", "manifestDigest": ZERO_SHA256,
+             "moduleVersion": "1.0.0",
              "construct": {"identity": "none", "shape": "record", "members": {},
                             "meaning": "quire.meaning.model.value-type/v1"}},
             {"kind": {"module": "ir268.test/domain", "name": "population"},
-             "moduleVersion": "1.0.0", "manifestDigest": ZERO_SHA256,
+             "moduleVersion": "1.0.0",
              "construct": {"identity": "none", "shape": "record", "members": {},
                             "meaning": "quire.meaning.model.population/v1"}}
         ],
@@ -255,20 +252,20 @@ fn model_document_with_step() -> Value {
 }
 
 // `deref(input)` is object navigation, admitted under QSL's model layer.
-fn source_unit_with_body(model_digest: &str, body: &str) -> String {
+fn source_unit_with_body(body: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.model.complete/v1\";\n\
-         model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
+         model M = \"ir268.test/domain\";\n\
          predicate inspect using v (input: M::Node): Boolean {{ {body} }}\n"
     )
 }
 
-fn source_unit_with_clause(model_digest: &str, declaration: &str, body: &str) -> String {
+fn source_unit_with_clause(declaration: &str, body: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.model.complete/v1\";\n\
-         model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
+         model M = \"ir268.test/domain\";\n\
          {declaration} {{ {body} }}\n"
     )
 }
@@ -751,10 +748,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     let limits = quire_canonical::Limits::new(1 << 20);
     let document_bytes = quire_canonical::to_vec(&document, limits)
         .expect("the authored model document has bounded JCS bytes");
-    let model_digest_value = quire_canonical::sha256(&document, limits)
-        .expect("the authored model document has a JCS digest");
-    let model_digest = model_digest_value.to_string();
-    let unit = source_unit_with_body(&model_digest, body);
+    let unit = source_unit_with_body(body);
     let selection = QualifiedName::new(vec![Identifier::new("inspect").expect("function name")])
         .expect("qualified function name");
     let site = call_site(
@@ -779,10 +773,7 @@ fn try_emitted_from_document_and_clause(
     let limits = quire_canonical::Limits::new(1 << 20);
     let document_bytes = quire_canonical::to_vec(&document, limits)
         .expect("the authored model document has bounded JCS bytes");
-    let model_digest_value = quire_canonical::sha256(&document, limits)
-        .expect("the authored model document has a JCS digest");
-    let model_digest = model_digest_value.to_string();
-    let unit = source_unit_with_clause(&model_digest, declaration, body);
+    let unit = source_unit_with_clause(declaration, body);
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
         "ir1091-clause".to_owned(),
@@ -2801,12 +2792,18 @@ fn boolean_ordered_set_minimum_above_capacity_is_refused() {
     flags["multiplicity"]["unique"] = json!(true);
     flags["multiplicity"]["lower"] = json!(3);
     flags["multiplicity"]["upper"] = json!(3);
-    assert_ordered_set_capacity_refusal(
+    // A unique Boolean set can hold two distinct values, so a minimum of three is infeasible. The
+    // public strict reader refuses that shape before any package exists, so no obligation item and
+    // no harness can be reached (the CG capacity refusal is exercised by the integer set above).
+    let refusal = try_emitted_from_document_and_body(
         document,
-        "flags",
         "forall(flag in deref(input).flags: flag != false)",
-        2,
-        3,
+    )
+    .err()
+    .expect("a unique Boolean set with minimum three is not admitted");
+    assert!(
+        refusal.contains("IllTyped") && refusal.contains("OperatorIneligible"),
+        "the reader refuses the infeasible set as an ineligible operator: {refusal}"
     );
 }
 
