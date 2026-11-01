@@ -3512,7 +3512,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
         .filter(|function| generated_names.contains(function.name.as_str()))
     {
         let node_id = package.ids.resolve(&function.node_id);
-        let subject = format!("// Subject: {node_id:?}");
+        let subject = format!("// Subject: {}", format!("{node_id:?}").escape_debug());
         assert!(
             header.contains(subject.as_str()),
             "function library lacks declaration {subject}"

@@ -16,6 +16,11 @@ use quire_contract_model::{
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf};
 
+// The published-fixture evidence helpers, mounted here as this module's own instance.
+#[allow(clippy::duplicate_mod)] // each tests module holds its own instance of the shared helper
+#[path = "../../../../tests/checked_package_support/evidence.rs"]
+mod checked_package_evidence;
+
 // Exact full-key substitution in an authored draft; no IDs are fabricated.
 fn replace_key(value: &mut Value, old: &Value, new: &Value) {
     if value == old {
@@ -79,7 +84,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     evidence.support_feature("quire.value.complete/v1");
     // The fixture's model-root owner is resolved from the domain document QSpec publishes
     // for it, as for every published fixture read.
-    crate::checked_package_evidence::retain_selected_document(
+    checked_package_evidence::retain_selected_document(
         &PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout")),
         "positive-operation-identities.json",
         &mut evidence,

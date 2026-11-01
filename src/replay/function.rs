@@ -234,8 +234,26 @@ pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
         text(out, view.package());
         out.push_str(",\"path\":[");
     }
+    // A JSON string literal spelled as serde_json spells it: `"` `\\` and the control
+    // characters escaped, everything else (including non-ASCII) verbatim.
     fn text(out: &mut String, value: &str) {
-        out.push_str(&serde_json::to_string(value).expect("a string spells as JSON"));
+        out.push('"');
+        for character in value.chars() {
+            match character {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\u{08}' => out.push_str("\\b"),
+                '\u{0c}' => out.push_str("\\f"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                control if u32::from(control) < 0x20 => {
+                    out.push_str(&format!("\\u{:04x}", u32::from(control)));
+                }
+                other => out.push(other),
+            }
+        }
+        out.push('"');
     }
     let mut json = String::new();
     let root = key.view();
@@ -261,15 +279,18 @@ pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
             }
         }
     }
-    let mut name = Vec::with_capacity(json.len());
-    for byte in json.bytes() {
-        if matches!(byte, b'%' | b'=' | b';' | b'|' | b'<' | b'>') || byte < 0x20 || byte == 0x7f {
-            name.extend_from_slice(format!("%{byte:02X}").as_bytes());
+    let mut name = String::with_capacity(json.len());
+    for character in json.chars() {
+        if matches!(character, '%' | '=' | ';' | '|' | '<' | '>')
+            || u32::from(character) < 0x20
+            || character == '\u{7f}'
+        {
+            name.push_str(&format!("%{:02X}", u32::from(character)));
         } else {
-            name.push(byte);
+            name.push(character);
         }
     }
-    String::from_utf8(name).expect("escapes are ASCII and the rest is the JSON's UTF-8")
+    name
 }
 
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.

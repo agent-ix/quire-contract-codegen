@@ -9,7 +9,7 @@ use quire_contract_model::{
     CheckedOccurrence, CheckedPackageV2,
 };
 
-use super::bound::relation::{ComparisonOperator, Domain, OperandPosition, Relation};
+use super::bound::relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation};
 use super::v2_selected_claim::V2SelectedClaimKey;
 
 /// A direct comparison and its exact checked source context, ready for population generation.
@@ -194,7 +194,16 @@ pub fn admit_v2_integer_comparison(
     let oracle = V2IntegerOracle {
         source: crate::oracle::integer_comparison::lower_typed_integer_comparison(
             &projection,
-            relation,
+            match relation.primary() {
+                OperandPosition::Left => crate::oracle::integer_comparison::PrimaryOperand::Left,
+                OperandPosition::Right => crate::oracle::integer_comparison::PrimaryOperand::Right,
+            },
+            match relation.partner() {
+                Partner::Read => crate::oracle::integer_comparison::PartnerOperand::Read,
+                Partner::Literal(value) => {
+                    crate::oracle::integer_comparison::PartnerOperand::Literal(value)
+                }
+            },
         ),
     };
     Ok(V2ComparisonAdmission {

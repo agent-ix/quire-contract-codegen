@@ -105,7 +105,7 @@ use crate::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
     },
-    kani::identity::{ObligationKind, StateFrameHarness},
+    kani::identity::{ObligationKind, ProofDependencySnapshot, StateFrameHarness},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -699,7 +699,7 @@ fn classify_v2_clause<'a>(
                 if let Outcome::LoweredV2Clause(lowered) = &mut outcome {
                     lowered.set_dependencies(edges);
                 } else if let Outcome::LoweredCollectionPrecondition(lowered) = &mut outcome {
-                    lowered.set_dependencies(edges);
+                    lowered.set_dependencies(ProofDependencySnapshot::not_run(edges));
                 }
             }
             Err(reason) => outcome = Outcome::Invalid(reason),

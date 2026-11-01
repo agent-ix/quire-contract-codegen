@@ -14,7 +14,7 @@ pub(super) fn assert_header(path: &str, source: &str, subjects: &[&str]) {
         if subject.starts_with("// ") {
             subject.to_owned()
         } else {
-            format!("// Subject: {subject}")
+            format!("// Subject: {}", subject.escape_debug())
         }
     };
     let valid = |text: &str| {

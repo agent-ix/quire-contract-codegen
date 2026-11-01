@@ -154,6 +154,13 @@ fn scalar_package_with_occurrences(
         package::QUANTITY_CONVERSIONS[0],
         package::QUANTITY_CONVERSIONS[1],
         package::QUANTITY_CONVERSIONS[2],
+        // One operation per scalar family the capability settlement selectors name.
+        1031,
+        1051,
+        1061,
+        package::TEXT_COMPARISONS[0],
+        package::ENUM_COMPARISONS[0],
+        1081,
     ]);
     // IR-280's FR-322 application-node dependency join means this bound must
     // anchor on a node no other expression's differing bound also reaches
@@ -669,7 +676,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
         source,
         &[&format!(
             "// Obligation: exact-scalar {} `quire.op.integer.add`",
-            node_key
+            message_safe_label(&node_key.to_string())
         )],
     );
     assert!(
@@ -1243,6 +1250,15 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
             .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
             .cloned()
             .collect::<Vec<_>>();
+        if generated.is_empty() {
+            // A cohort of only refused requests has no obligation item to negotiate, but it
+            // must still account for every request it made.
+            assert!(
+                !claim_map.items.is_empty(),
+                "a skipped cohort still holds its refused requests"
+            );
+            continue;
+        }
         generated_count += generated.len();
         assert!(
             generated
@@ -1474,6 +1490,8 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     // A claim map from another package is a mismatch, not a lookup.
     let (_, foreign_map) = {
         let mut builder = corpus_package_for_codes(&[1001]);
+        // Package identity is its name and lock, so another locked source makes another package.
+        builder.lock_source("foreign-source");
         builder.code(
             4001,
             "value",
@@ -2748,4 +2766,15 @@ fn tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity(
     };
     let _typed_accessor = request_limits;
     let _kernel_limits: quire_exact::ScalarLimits = limits;
+}
+
+/// The structural key as a generated message renders it: `%` and the characters that would
+/// break a Rust message or comment line are percent-escaped, so the label stays reversible.
+fn message_safe_label(raw: &str) -> String {
+    raw.chars()
+        .map(|character| match character {
+            '%' | '"' | '\\' | '{' | '}' | '\n' | '\r' => format!("%{:02X}", u32::from(character)),
+            other => other.to_string(),
+        })
+        .collect()
 }

@@ -15,7 +15,6 @@ use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
         abi::{adapter_options, readable_component, KaniSolver},
-        census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
             outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -29,7 +28,7 @@ use crate::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
             CollectionPreconditionIdentity, CollectionPredicateIdentity,
             KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
-            ScalarIntegerRepresentation, V2ClauseObligationIdentity,
+            ProofDependencySnapshot, ScalarIntegerRepresentation, V2ClauseObligationIdentity,
         },
     },
 };
@@ -91,7 +90,7 @@ pub(crate) enum CollectionDomainRefusal {
 
 /// A completely checked collection claim ready for deterministic rendering.
 pub(super) struct LoweredCollectionClaim {
-    pub(super) dependencies: Vec<ProofDependencyEdge>,
+    pub(super) dependencies: ProofDependencySnapshot,
     pub(super) package: ContractSourceV1,
     pub(super) field: CollectionFieldDomain,
 }
@@ -229,7 +228,7 @@ pub(super) fn lower_collection_claim(
         CollectionClaimRole::Direct,
     )?;
     Ok(LoweredCollectionClaim {
-        dependencies: Vec::new(),
+        dependencies: ProofDependencySnapshot::default(),
         package: ContractSourceV1 {
             name: graph.package.name().into(),
             lock: graph.package.lock().clone(),
@@ -268,7 +267,7 @@ pub(super) fn lower_collection_precondition(
         CollectionClaimRole::Precondition,
     )?;
     Ok(LoweredCollectionClaim {
-        dependencies: Vec::new(),
+        dependencies: ProofDependencySnapshot::default(),
         package: ContractSourceV1 {
             name: graph.package.name().into(),
             lock: graph.package.lock().clone(),
@@ -278,7 +277,7 @@ pub(super) fn lower_collection_precondition(
 }
 
 impl LoweredCollectionClaim {
-    pub(super) fn set_dependencies(&mut self, dependencies: Vec<ProofDependencyEdge>) {
+    pub(super) fn set_dependencies(&mut self, dependencies: ProofDependencySnapshot) {
         self.dependencies = dependencies;
     }
 }
@@ -528,9 +527,9 @@ pub(super) fn render_collection_precondition(
         return Err(UnsupportedObligation::RenderFailed);
     };
     let identity = V2ClauseObligationIdentity {
-        dependencies: lowered.dependencies.clone(),
-        readiness: dependency_readiness(&lowered.dependencies),
-        proof_execution_state: ProofExecutionState::NotRun,
+        dependencies: lowered.dependencies.dependencies.clone(),
+        readiness: lowered.dependencies.readiness,
+        proof_execution_state: lowered.dependencies.proof_execution_state,
         integer_representation: ScalarIntegerRepresentation::General,
         native_integer_selection: None,
         ceilings: request.ceilings,
@@ -560,17 +559,21 @@ fn unique_element_capacity(element: CollectionElement) -> u128 {
     match element {
         CollectionElement::Boolean => 2,
         CollectionElement::Integer { minimum, maximum } => {
-            // Renderable i64 endpoints have a nonempty span of at most 2^64 values.
-            u128::try_from(i128::from(maximum) - i128::from(minimum) + 1)
-                .expect("admitted IntRange has nonempty representable endpoints")
+            // Renderable i64 endpoints span at most 2^64 values; an inverted range holds none.
+            if maximum < minimum {
+                0
+            } else {
+                u128::from(maximum.abs_diff(minimum)) + 1
+            }
         }
     }
 }
 
 fn unique_capacity_exceeded(element: CollectionElement, declared_maximum: u64) -> Option<u64> {
     let capacity = unique_element_capacity(element);
+    // A refused capacity is below the declared maximum, so it fits a u64.
     (u128::from(declared_maximum) > capacity)
-        .then(|| u64::try_from(capacity).expect("refused capacity is below a u64 maximum"))
+        .then(|| u64::try_from(capacity).unwrap_or(declared_maximum))
 }
 
 fn collection_i64(value: i128, node_id: &CheckedNodeId) -> Result<i64, UnsupportedObligation> {
@@ -1480,7 +1483,7 @@ pub(crate) mod tests {
 
     fn base_claim() -> LoweredCollectionClaim {
         LoweredCollectionClaim {
-            dependencies: Vec::new(),
+            dependencies: ProofDependencySnapshot::default(),
             package: package("package-a"),
             field: CollectionFieldDomain {
                 function: node("function"),
