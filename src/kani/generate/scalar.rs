@@ -48,21 +48,6 @@ pub(super) struct LoweredScalarClaim {
     pub(super) harness_symbol: String,
 }
 
-impl LoweredScalarClaim {
-    pub(super) fn reframe_inferred_nodes(
-        &mut self,
-        mut original: impl FnMut(&CheckedNodeId) -> Option<CheckedNodeId>,
-    ) -> bool {
-        for inferred in &mut self.inferred_operands {
-            let Some(node_id) = original(&inferred.source_node_id) else {
-                return false;
-            };
-            inferred.source_node_id = node_id;
-        }
-        true
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ScalarOperation {
     Add,

@@ -1124,10 +1124,19 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
                 .collect::<BTreeSet<_>>();
             for bound in bound_ids.into_iter().filter_map(graph) {
                 let term = lookup.graph.term(&bound.node_id);
-                let domain = derive_domain(bound, term);
+                let mut domain = derive_domain(bound, term);
+                let Some(original_bound) = lookup.original_node(&bound.node_id) else {
+                    return Outcome::Invalid(InvalidObligationItem::UnknownNode);
+                };
+                match &mut domain {
+                    super::outcome::DerivedDomain::IntegerRange { bound, .. }
+                    | super::outcome::DerivedDomain::NotSymbolic { bound, .. } => {
+                        *bound = original_bound.clone()
+                    }
+                }
                 if let Some((lower, upper)) = unsatisfiable(bound, term) {
                     return Outcome::Unsupported(UnsupportedObligation::UnsatisfiableBound {
-                        bound: bound.node_id.clone(),
+                        bound: original_bound.clone(),
                         form: bound.semantic_form.to_string(),
                         lower,
                         upper,
@@ -1157,17 +1166,25 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
                     let Some(admitted_node) = lookup.admitted_node(&claim.node_id) else {
                         return Outcome::Invalid(InvalidObligationItem::UnknownNode);
                     };
-                    let operand_ranges = operand_ranges(&lookup.graph, admitted_node);
-                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
-                        Ok(mut lowered) => {
-                            if lowered
-                                .reframe_inferred_nodes(|id| lookup.original_node(id).cloned())
-                            {
-                                Outcome::LoweredScalar(Box::new(lowered))
-                            } else {
-                                Outcome::Invalid(InvalidObligationItem::UnknownNode)
+                    let mut operand_ranges = operand_ranges(&lookup.graph, admitted_node);
+                    for range in &mut operand_ranges {
+                        match range {
+                            crate::oracle::scalar::lower::OperandRange::Bound(id)
+                            | crate::oracle::scalar::lower::OperandRange::Inferred {
+                                source: id,
+                                ..
+                            } => {
+                                let Some(original) = lookup.original_node(id) else {
+                                    return Outcome::Invalid(InvalidObligationItem::UnknownNode);
+                                };
+                                *id = original.clone();
                             }
+                            crate::oracle::scalar::lower::OperandRange::Literal(_)
+                            | crate::oracle::scalar::lower::OperandRange::Result => {}
                         }
+                    }
+                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
+                        Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
                                 operation_identity: claim.operation.identity.clone(),
