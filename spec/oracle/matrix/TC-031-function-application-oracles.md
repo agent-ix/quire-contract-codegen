@@ -309,6 +309,16 @@ required dependency or target path.
     negative controls; keep step 2's malformed source edges and AC-27 typed
     refusals as separate negative controls. This is a public strict-reader
     case, not step 1's lowered-graph seam or step 11's inspection.
+15. Kani build shape (FR-021-AC-42). Render each body form (scalar,
+    equality, nested call) through the production emitter and inspect the
+    emitted text: each `mod body_{symbol}` is `pub(crate)` with a `pub(crate)`
+    `Factory`, each `oracle_{symbol}` is preceded by `#[cfg(not(kani))]`, and
+    the generated source parses. Inspect that no test, doc comment or matrix
+    row credits registry, selection or `begin_call` behaviour to a Kani proof;
+    that behaviour stays with the host tests named in FR-021 Behavior. Run the
+    `--only-codegen` Kani probe over a real emitted owner-path crate whose
+    harness drives the body directly beside the genuinely read package and
+    record the compiler outcome; no backend proof is run for this step.
 
 ## Verification Status
 
