@@ -1,5 +1,7 @@
 //! Pure ordered emission of validated harness descriptions (FR-015).
 
+mod collection_operation;
+
 use super::{
     outcome::UnsupportedObligation,
     spec::{
@@ -83,10 +85,11 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
             proof,
             body,
         } => render_statements(spec, label, oracle_source, *proof, body),
-        HarnessShape::Collection {
+        HarnessShape::Collection(collection) => render_collection(spec, collection),
+        HarnessShape::CollectionOperation {
             collection,
-            precondition,
-        } => render_collection(spec, collection, *precondition),
+            operation,
+        } => collection_operation::render(spec, collection, operation),
         HarnessShape::Frame(frame) => render_frame(spec, frame),
     }
 }
@@ -274,7 +277,6 @@ fn render_statements(
 fn render_collection(
     spec: &HarnessSpec,
     collection: &CollectionSpec,
-    precondition: bool,
 ) -> Result<Artifact, UnsupportedObligation> {
     let path = spec.path();
     let quantifier = collection.quantifier.name();
@@ -306,27 +308,12 @@ fn render_collection(
          {predicate}\n\
          }});"
     );
-    let (oracle_source, claim_source, evaluation, assertion) = if precondition {
-        (
-            format!(
-                "             #[allow(dead_code)] enum ClauseEvaluation {{ Completed(bool), Undefined, Refused, Incomplete }}\n\
-                 fn oracle_clause({item_name}: &[{element_type}; {array_len}], {length_name}: i64) -> ClauseEvaluation {{\n\
-                     {claim_loop}\n\
-                     ClauseEvaluation::Completed(claim)\n\
-                 }}\n"
-            ),
-            String::new(),
-            format!("                 let outcome = oracle_clause(&{item_name}, {length_name});\n"),
-            crate::kani::identity::collection_precondition_totality_assertion(),
-        )
-    } else {
-        (
-            String::new(),
-            format!("                 {claim_loop}\n"),
-            String::new(),
-            format!("assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");"),
-        )
-    };
+    let oracle_source = String::new();
+    let claim_source = format!("                 {claim_loop}\n");
+    let evaluation = String::new();
+    let assertion = format!(
+        "assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");"
+    );
     let source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
          // Claim: {quantifier} over admitted model field `{}`\n\

@@ -2403,6 +2403,7 @@ exit 0
             ceilings,
             package,
             clause: id("clause"),
+            collection_operation: None,
             collection_precondition: Some(CollectionPreconditionIdentity {
                 collection,
                 totality_assertion_line: 4,

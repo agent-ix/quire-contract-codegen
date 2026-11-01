@@ -471,6 +471,16 @@ pub enum CollectionUnsupportedReason {
     FieldNotAdmitted,
     /// The field is not a supported bounded ordered collection of Boolean or bounded integer elements.
     UnsupportedFieldType,
+    /// An unread or selected object field cannot be constructed and validated exactly.
+    UnsupportedObjectState,
+    /// An operation parameter has no supported finite primitive subject ABI.
+    UnsupportedOperationParameter,
+    /// The operation result has no supported primitive subject ABI.
+    UnsupportedOperationResult,
+    /// A same-anchor precondition has no supported whole-object evaluation.
+    UnsupportedSiblingPrecondition,
+    /// The request omitted a same-anchor precondition required by the subject call.
+    MissingSiblingPrecondition,
     /// The element interval has no values.
     UnsatisfiableElementDomain,
     /// A unique field's declared maximum exceeds its finite distinct-value capacity.

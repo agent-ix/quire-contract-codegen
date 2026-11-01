@@ -4,6 +4,8 @@
 //! declaration by type. The projection's admitted declaration identity and member name select
 //! the retained field table; unsupported shapes remain typed refusals for the negotiator.
 
+mod operation;
+
 use quire_contract_model::{
     ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
     CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, ContractSourceV1, LiteralKind,
@@ -86,6 +88,8 @@ pub(crate) enum CollectionDomainRefusal {
     UnsupportedFieldType,
     /// The checked range has no inhabitants.
     UnsatisfiableElementDomain,
+    /// The whole operation context has no exact supported construction or evaluation.
+    OperationContext(CollectionUnsupportedReason),
 }
 
 /// A completely checked collection claim ready for deterministic rendering.
@@ -93,6 +97,7 @@ pub(super) struct LoweredCollectionClaim {
     pub(super) dependencies: ProofDependencySnapshot,
     pub(super) package: ContractSourceV1,
     pub(super) field: CollectionFieldDomain,
+    operation: Option<operation::LoweredOperation>,
 }
 
 /// First admitted graph entries, retained in source order for collection lowering.
@@ -234,13 +239,14 @@ pub(super) fn lower_collection_claim(
             lock: graph.package.lock().clone(),
         },
         field,
+        operation: None,
     })
 }
 
 /// Resolve a whole authored precondition quantifier for its operation-clause harness.
 /// A conjunct is never promoted into a separate precondition: the selected quantifier must
 /// be the clause body itself, so the cover keeps the authored clause's complete meaning.
-pub(super) fn lower_collection_precondition(
+pub(super) fn lower_collection_operation(
     graph: &CollectionGraph<'_>,
     clause_id: &CheckedNodeId,
 ) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
@@ -248,24 +254,19 @@ pub(super) fn lower_collection_precondition(
         .index
         .node(clause_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let (kind, parameters, body) =
+    let (kind, _, body) =
         state_clause_parts(&graph.index, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    // The collection renderer currently binds the receiver state alone. Refuse an operation
-    // with additional parameters rather than silently omitting its symbolic arguments.
-    if kind != StateClauseKind::Precondition || parameters.len() != 1 {
-        return Err(CollectionDomainRefusal::UnsupportedShape);
-    }
+    let role = match kind {
+        StateClauseKind::Precondition => CollectionClaimRole::Precondition,
+        StateClauseKind::Postcondition => CollectionClaimRole::Postcondition,
+        _ => return Err(CollectionDomainRefusal::UnsupportedShape),
+    };
     let quantifier = graph
         .index
         .node(&body)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let field = resolve_collection_field(
-        graph.package,
-        &graph.index,
-        clause_id,
-        quantifier,
-        CollectionClaimRole::Precondition,
-    )?;
+    let field = resolve_collection_field(graph.package, &graph.index, clause_id, quantifier, role)?;
+    let operation = operation::lower(graph, clause_id, &field)?;
     Ok(LoweredCollectionClaim {
         dependencies: ProofDependencySnapshot::default(),
         package: ContractSourceV1 {
@@ -273,6 +274,7 @@ pub(super) fn lower_collection_precondition(
             lock: graph.package.lock().clone(),
         },
         field,
+        operation: Some(operation),
     })
 }
 
@@ -374,6 +376,10 @@ fn prepare_collection(
         }
     };
     let symbol_material = serde_json::to_vec(&(
+        lowered
+            .operation
+            .as_ref()
+            .map(|operation| &operation.spec.identity),
         (
             &lowered.package,
             request.subject_path,
@@ -507,12 +513,34 @@ fn render_collection_artifact(
 
 /// Render a source-backed collection precondition as its one V2 operation-clause harness.
 /// The shared collection domain is validated before the operation-clause source is rendered.
-pub(super) fn render_collection_precondition(
+pub(super) fn render_collection_operation(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
     let (spec, collection) = prepare_collection(request, lowered)?;
-    let spec = spec.into_collection_precondition()?;
+    let operation = lowered
+        .operation
+        .as_ref()
+        .ok_or(UnsupportedObligation::RenderFailed)?;
+    let context = &operation.spec.identity;
+    if operation.spec.postcondition {
+        for sibling in &context.preconditions {
+            let present = request.items.iter().any(|item| {
+                matches!(item,
+                super::outcome::ObligationItem::V2Clause { package, clause, .. }
+                    if std::ptr::eq(*package, operation.package_instance) && *clause == sibling)
+            });
+            if !present {
+                return Err(UnsupportedObligation::CollectionClaimNotRendered {
+                    node_id: collection.function_id.clone(),
+                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition,
+                });
+            }
+        }
+    }
+    let mut operation_spec = operation.spec.clone();
+    operation_spec.subject_path = request.subject_path.to_owned();
+    let spec = spec.into_collection_operation(operation_spec)?;
     let rust = render_collection_artifact(&spec, &collection)?;
     let assertion = crate::kani::identity::collection_precondition_totality_assertion();
     let lines = rust
@@ -523,8 +551,13 @@ pub(super) fn render_collection_precondition(
         .map(|(index, _)| u32::try_from(index + 1))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let [totality_assertion_line] = lines.as_slice() else {
-        return Err(UnsupportedObligation::RenderFailed);
+    let totality_assertion_line = if operation.spec.postcondition {
+        None
+    } else {
+        let [line] = lines.as_slice() else {
+            return Err(UnsupportedObligation::RenderFailed);
+        };
+        Some(*line)
     };
     let identity = V2ClauseObligationIdentity {
         dependencies: lowered.dependencies.dependencies().to_vec(),
@@ -535,11 +568,18 @@ pub(super) fn render_collection_precondition(
         ceilings: request.ceilings,
         package: lowered.package.clone(),
         clause: collection.function_id.clone(),
-        collection_precondition: Some(CollectionPreconditionIdentity {
-            collection,
-            totality_assertion_line: *totality_assertion_line,
+        collection_precondition: totality_assertion_line.map(|totality_assertion_line| {
+            CollectionPreconditionIdentity {
+                collection,
+                totality_assertion_line,
+            }
         }),
-        kind: ObligationKind::Precondition,
+        collection_operation: Some(context.clone()),
+        kind: if operation.spec.postcondition {
+            ObligationKind::Postcondition
+        } else {
+            ObligationKind::Precondition
+        },
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: Vec::new(),
@@ -677,6 +717,7 @@ fn state_clause_parts<'a>(
 enum CollectionClaimRole {
     Direct,
     Precondition,
+    Postcondition,
 }
 
 /// The authored parameters of a function or supported state clause, in checked graph order.
@@ -738,6 +779,7 @@ fn resolve_collection_field(
         let expected = match role {
             CollectionClaimRole::Direct => StateClauseKind::Invariant,
             CollectionClaimRole::Precondition => StateClauseKind::Precondition,
+            CollectionClaimRole::Postcondition => StateClauseKind::Postcondition,
         };
         if kind != expected {
             return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -1493,6 +1535,7 @@ pub(crate) mod tests {
         LoweredCollectionClaim {
             dependencies: ProofDependencySnapshot::default(),
             package: package("package-a"),
+            operation: None,
             field: CollectionFieldDomain {
                 function: node("function"),
                 quantifier: node("quantifier"),

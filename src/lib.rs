@@ -251,7 +251,8 @@ pub use kani::generate::outcome::{
     UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
-    CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
+    CollectionElementIdentity, CollectionKindIdentity, CollectionObjectFieldIdentity,
+    CollectionObligationIdentity, CollectionOperationIdentity, CollectionOperationValueIdentity,
     CollectionPreconditionIdentity, CollectionPredicateIdentity, EmbeddedOracle,
     KaniCollectionObligationHarness, KaniObligationHarness, KaniObligationIdentity,
     KaniScalarObligationHarness, KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind,
