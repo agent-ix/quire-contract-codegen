@@ -5,16 +5,33 @@
 
 use quire_contract_model::{CheckedClauseComparison, CheckedComparisonOperator};
 
-use crate::strategy::bound::relation::{OperandPosition, Partner, Relation};
+/// Which side of the comparison, as written, the primary read occupies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrimaryOperand {
+    /// The primary read is the left operand.
+    Left,
+    /// The primary read is the right operand.
+    Right,
+}
+
+/// What the primary read is compared with.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PartnerOperand {
+    /// A second read.
+    Read,
+    /// An integer literal.
+    Literal(i64),
+}
 
 /// Render the selected checked comparison without reading its node body.
 ///
-/// The relation is admitted from this same projection before the call. The generated
+/// The primary and partner operands are admitted from this same projection before the call. The generated
 /// function accepts the primary read and an optional partner read; absence/presence
 /// disagreeing with the admitted shape returns `None`, never a false oracle verdict.
 pub(crate) fn lower_typed_integer_comparison(
     projection: &CheckedClauseComparison,
-    relation: Relation,
+    primary: PrimaryOperand,
+    partner: PartnerOperand,
 ) -> String {
     let symbol = match projection.operator {
         CheckedComparisonOperator::Eq => "==",
@@ -24,15 +41,15 @@ pub(crate) fn lower_typed_integer_comparison(
         CheckedComparisonOperator::Gt => ">",
         CheckedComparisonOperator::Ge => ">=",
     };
-    let other = match relation.partner() {
-        Partner::Read => "let Some(other) = partner else { return None; };".to_owned(),
-        Partner::Literal(value) => {
+    let other = match partner {
+        PartnerOperand::Read => "let Some(other) = partner else { return None; };".to_owned(),
+        PartnerOperand::Literal(value) => {
             format!("if partner.is_some() {{ return None; }} let other: i64 = {value};")
         }
     };
-    let (left, right) = match relation.primary() {
-        OperandPosition::Left => ("primary", "other"),
-        OperandPosition::Right => ("other", "primary"),
+    let (left, right) = match primary {
+        PrimaryOperand::Left => ("primary", "other"),
+        PrimaryOperand::Right => ("other", "primary"),
     };
     format!(
         "/// Evaluates the selected checked integer comparison.\n\

@@ -156,6 +156,36 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
+/// The validated dependency census of a generated proof and the facts derived from it before
+/// any backend run, held together so a renderer carries them without naming the census.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ProofDependencySnapshot {
+    /// Validated declared dependencies, sorted by proof identity.
+    pub(crate) dependencies: Vec<ProofDependencyEdge>,
+    /// Readiness derived from the declared dependencies.
+    pub(crate) readiness: ProofReadiness,
+    /// Generation records no backend execution.
+    pub(crate) proof_execution_state: ProofExecutionState,
+}
+
+impl ProofDependencySnapshot {
+    /// The snapshot of a proof with these dependencies that no backend has run.
+    pub(crate) fn not_run(dependencies: Vec<ProofDependencyEdge>) -> Self {
+        let readiness = crate::kani::census::dependency_readiness(&dependencies);
+        Self {
+            dependencies,
+            readiness,
+            proof_execution_state: ProofExecutionState::NotRun,
+        }
+    }
+}
+
+impl Default for ProofDependencySnapshot {
+    fn default() -> Self {
+        Self::not_run(Vec::new())
+    }
+}
+
 /// One admitted V2 clause and the execution facts of its generated harness.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

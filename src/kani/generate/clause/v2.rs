@@ -1,7 +1,5 @@
 //! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
 
-use std::fmt::Write as _;
-
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
 use quote::ToTokens;
 
@@ -54,8 +52,7 @@ fn escape_message_label(raw: &str) -> String {
     for character in raw.chars() {
         match character {
             '%' | '"' | '\\' | '{' | '}' | '\n' | '\r' => {
-                write!(&mut label, "%{:02X}", u32::from(character))
-                    .expect("writing to a String cannot fail");
+                label.push_str(&format!("%{:02X}", u32::from(character)));
             }
             other => label.push(other),
         }
