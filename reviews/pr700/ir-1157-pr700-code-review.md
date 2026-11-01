@@ -291,3 +291,17 @@ Plan completion: not assessed. Parent owns final-head gates after fixes. Inspect
   }
 ]
 ```
+
+## Dispositions
+
+Disposition round 1 inspected fix head 043d398c9dc520e04c504a92455f67ceda75bce6 against the frozen reviewed head bcc64367.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Full owner oracle content is canonically bound before the method preimage; same-label safety/constraint/precondition modulo controls demonstrate the old collision and differing new identities. |
+| FND-002 | fixed | Narrow typed cancellation, failure_cause, diagnostics and memory accessors preserve original evidence without exposing raw Verified; Requested/Deadline and original diagnostic payload controls pass. |
+| FND-003 | fixed | Original CallFailure and facade ClauseRefusal::Fault clear boundary credit; complete reached/not-reached report controls exercise safety and constraint faults. |
+
+## Final disposition verdict
+
+PASS. Every finding is fixed within the original PR; no new finding was found in the fixes. The source is mergeable subject to the parent-owned final integration gate. Focused fixes pass 10 integration controls plus the conversion unit; installed four-control authored-clause lane passes in 1.94s. Final fmt and all-target/all-feature Clippy logs pass. Reviewer ran no Cargo or Kani and did not edit source.
