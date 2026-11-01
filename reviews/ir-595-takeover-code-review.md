@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-PASS — all review findings are resolved. Focused all-target clippy and 16/16 native function agreement tests pass through e010c62b; the final aggregate gate and full integration target remain pending.
+PASS — all original, fix-round and aggregate-discovered findings are resolved through 464d46da. Clippy and focused regressions pass; qualifying full integration on the changed production head remains pending.
 
 ## Findings
 
@@ -100,3 +100,50 @@ Inspected at e010c62b480477764b53d5b93f7d7b2583ae3a2e. Changes since the reviewe
 - CG baseline remains f3d328e37d28a381e68bb4b7bbe248218e712f95; QSpec fixture baseline remains 3405bdb8c5355adef03202d4573a95c4219178d9.
 
 The lead has started the single aggregate gate. `/tmp/ir595-aggregate-summary.txt` had no completed stage entries when inspected; no aggregate or full-IT success is claimed here. Historical pending notes in the earlier disposition rounds describe their evidence at that time. No reviewer Cargo commands or source edits were performed.
+
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | Routed function-claim regression compared original metadata with the lowered occurrence frame. | src/routed/contract_package_tests.rs:3045-3048 (d0d4f039) |
+| FND-004 | medium | Signature typing displaced the required body-form refusal for quantity-conversion bodies. | src/oracle/function/mod.rs:2944-2960 (d0d4f039) |
+| FND-005 | medium | The owner-path re-export in function/mod.rs violated the root-only export boundary. | src/oracle/function/mod.rs:113-118 (d0d4f039) |
+| FND-006 | high | The new preflight duplicates body-form validation still present in classify_body_shape. | src/oracle/function/mod.rs:2720-2724,2742-2746,2773-2777,2946-2960 |
+
+### FND-003 aggregate detail
+
+The aggregate library target reproduced one failure: valid original V2 source-map metadata was compared against V1 requested_items occurrences with different graph-local indexes. The fixed test must verify the original checked.source_map and prove the frames actually differ.
+
+### FND-004 aggregate detail
+
+The aggregate integration target reproduced UnsupportedOperandType instead of the existing FormMismatch(conversion) contract. The preflight at 874f9863 restores supported-body form refusal before signature typing and retains unsupported-scalar-operator precedence; the unchanged conversion fixture now passes.
+
+### FND-005 aggregate detail
+
+The aggregate layout target rejected pub use owner_path in an intermediate directory. At 874f9863 owner_path is pub(crate), the helpers are re-exported directly by lib.rs, and the layout and rustdoc checks pass without changing the root API.
+
+### FND-006 aggregate detail
+
+Searching classify_body_shape finds one production call. The new required_form preflight maps supported scalar/equality to binary and nested calls to call, but classify_body_shape independently checks the same three forms and constructs the same FormMismatch result. Two owners now encode one rule. Retain the required pre-signature ordering while removing the redundant inner guards, or centralize the policy once; preserve unsupported-operator precedence. The code-review duplication rule requires one home for a rule.
+
+
+### Round 3
+
+Inspected the complete aggregate logs at d0d4f039 and the fixes at 874f9863315b77f8bdef1479c355e1f569d530bd. The aggregate completed fmt/spec/clippy/check/deny/docs/gate-build/QSpec-selftest successfully. Library result was 487 pass/1 fail/8 ignored; integration was 744 pass/3 fail/34 ignored. Those were discovery results, not final qualification. The source-map, conversion-form and export-boundary fixes are verified statically and by the supplied focused logs (33/33 library, 23/23 integration, clippy and rustdoc PASS). The remaining tc_025_model_member_types_without_i64_ranges_remain_unranged error is the explicitly accepted existing QSL model.value-type/v1 baseline, not new delivery credit. Full integration qualification on the changed production head is pending. No reviewer Cargo commands or source edits occurred.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | The aggregate library target reproduced one failure: valid original V2 source-map metadata was compared against V1 requested_items occurrences with different graph-local indexes. The fixed test must verify the original checked.source_map and prove the frames actually differ. |
+| FND-004 | fixed | The aggregate integration target reproduced UnsupportedOperandType instead of the existing FormMismatch(conversion) contract. The preflight at 874f9863 restores supported-body form refusal before signature typing and retains unsupported-scalar-operator precedence; the unchanged conversion fixture now passes. |
+| FND-005 | fixed | The aggregate layout target rejected pub use owner_path in an intermediate directory. At 874f9863 owner_path is pub(crate), the helpers are re-exported directly by lib.rs, and the layout and rustdoc checks pass without changing the root API. |
+| FND-006 | still-open | The form-policy duplication remains at frozen 874f9863; consolidate it before the qualifying full IT. |
+
+
+### Round 4
+
+Inspected 464d46da44ed66513359aee0af6c16b72bf9e94c: the two binary and one call semantic-form guards were removed from classify_body_shape, along with its now-unused node/generic argument. The single supported-body required_form preflight remains before signature typing. The unsupported scalar operator path still defers to its existing signature/operator refusal order. The independent call-item form guard serves a different obligation and remains appropriate. Supplied all-target clippy and 23/23 focused integration checks pass, including conversion, Negate, isolation, signature, compiled own/imported agreement and root-only exports. Full changed-head integration qualification remains pending.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-006 | fixed | Required body-form policy has one home; classify_body_shape consumes the preflight result without repeating its form checks. |

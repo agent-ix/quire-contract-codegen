@@ -86,3 +86,13 @@ Inspected at e010c62b480477764b53d5b93f7d7b2583ae3a2e. Changes since the reviewe
 - CG baseline remains f3d328e37d28a381e68bb4b7bbe248218e712f95; QSpec fixture baseline remains 3405bdb8c5355adef03202d4573a95c4219178d9.
 
 The lead has started the single aggregate gate. `/tmp/ir595-aggregate-summary.txt` had no completed stage entries when inspected; no aggregate or full-IT success is claimed here. Historical pending notes in the earlier disposition rounds describe their evidence at that time. No reviewer Cargo commands or source edits were performed.
+
+
+## Aggregate evidence update
+
+Reviewed aggregate d0d4f039: non-test stages pass; library 487 pass/1 fail/8 ignored; IT 744 pass/3 fail/34 ignored. The three new scoped defects were fixed at 874f9863 and supplied focused clippy, docs, 33/33 library and 23/23 integration checks pass. Code-review SR-202610310132 records those findings and a new still-open duplicated form-validation policy. This method has no new independent finding. Full changed-head integration qualification remains pending; this method PASS does not override the open code-review finding.
+
+
+### Aggregate fix closure
+
+At 464d46da44ed66513359aee0af6c16b72bf9e94c code-review FND-006 is fixed: required body-form validation has one home. All code findings are now resolved. All-target clippy and 23/23 focused integration checks pass on this head. Full changed-head integration qualification remains pending. The earlier open-finding note records the 874f9863 observation and is superseded by this closure; no history was rewritten.
