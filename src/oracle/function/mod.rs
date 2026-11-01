@@ -26,9 +26,9 @@
 //!   `Subtract` and `Multiply` (binary; `Negate` is unary and out of scope,
 //!   since FR-021's Inputs names only *binary* scalar expressions).
 //! - Composite-equality bodies: [`crate::oracle::equality::EqualityOperatorKind`]
-//!   (both `Equal` and `NotEqual`, fully supported) over `Boolean` or
-//!   unbounded `Integer` operands only -- not the full record/tuple/
-//!   collection declaration closure FR-018 itself reconstructs.
+//!   (both `Equal` and `NotEqual`) over `Boolean`, unbounded `Integer`, or
+//!   checked owner record/tuple/union operands. Nominal environments retain
+//!   the owner's exact field presence, member types and sealed identities.
 //!
 //! The classifier has a bounded operator vocabulary. Its claim and location
 //! maps remain deterministic over the admitted request. A function whose body
@@ -1154,7 +1154,7 @@ pub enum ExactFunctionBody {
         operator: IntegerOperator,
     },
     /// A `binary` equality expression body (FR-018's forms), scoped to
-    /// `Boolean`/`Integer` operands.
+    /// `Boolean`/`Integer` or checked owner record/tuple/union operands.
     CompositeEquality {
         /// `=` or `!=`.
         operator: EqualityOperatorKind,
@@ -2353,6 +2353,7 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
 enum OperandKind {
     Boolean,
     Integer,
+    Nominal,
 }
 
 /// A declared function that survived Stage 1 classification, ready to enter
@@ -2642,6 +2643,11 @@ fn resolve_operand_type(
                 type_node_id: type_node_id.clone(),
             }),
         },
+        Some(CheckedNodeTag::CompositeType)
+            if matches!(&*node.semantic_form, "record" | "tuple" | "union") =>
+        {
+            Ok(OperandKind::Nominal)
+        }
         Some(CheckedNodeTag::CompositeType) if &*node.semantic_form == "reference" => {
             Err(ExactFunctionRefusal::BlockedOnUpstream {
                 unsupported_node_id: type_node_id.clone(),
@@ -2749,6 +2755,12 @@ fn classify_body_shape<'r>(
                 }
                 ([OperandKind::Boolean, OperandKind::Boolean], EqualityOperatorKind::NotEqual) => {
                     "quire.op.boolean.ne"
+                }
+                ([OperandKind::Nominal, OperandKind::Nominal], EqualityOperatorKind::Equal) => {
+                    "quire.op.structural.eq"
+                }
+                ([OperandKind::Nominal, OperandKind::Nominal], EqualityOperatorKind::NotEqual) => {
+                    "quire.op.structural.ne"
                 }
                 _ => return Err(ExactFunctionRefusal::BodyMismatch),
             };
@@ -3326,7 +3338,21 @@ pub fn generate_exact_function_oracles(
                 ExactFunctionRefusal::BodyMismatch,
             ))
             .and_then(|function| {
-                owner_render::classified_item(&source_index, &names, &symbol, function, &accounting)
+                let index =
+                    source_location(declaration).ok_or(OracleGenerationError::InvalidPlanState)?;
+                let name = serde_json::to_string(&declaration.name)
+                    .map_err(|_| OracleGenerationError::InvalidPlanState)?;
+                let origin = format!(
+                    "sv::location::Origin::Body {{ function: {name}.to_owned(), index: {index} }}"
+                );
+                owner_render::classified_item(
+                    &source_index,
+                    &names,
+                    &symbol,
+                    function,
+                    &accounting,
+                    &origin,
+                )
             });
         match rendered {
             Ok(item_source) => {

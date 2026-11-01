@@ -5,7 +5,8 @@ use qsl_replay::{
     acquire_checked_closure, AdmittedRefusal, ApplicationBeginRefusal, ApplicationEnvironment,
     CallableLookupRefusal, CallableSelection, CheckedClosureCompilation, ClosureOwnerRefusal,
     CompileUnit, DependencyInput, LibraryName, NestedCallOccurrence, NestedCallSite,
-    NestedCallSiteRefusal, ReplayLimits, SelectionRefusal, SourceIdentity, StageLimits,
+    NestedCallSiteRefusal, NominalDeclaration, NominalDeclarationMember, NominalDeclarationRefusal,
+    ReplayLimits, SelectionRefusal, SourceIdentity, StageLimits,
 };
 use quire_contract_model::{
     encode_checked_package_v2, CheckedNodeId, CheckedOccurrenceRole,
@@ -17,7 +18,16 @@ use quire_semantic_value::object_closure::ObjectClosure;
 
 use super::ExactFunctionRefusal;
 
-/// The seven caller-owned inputs to one checked-closure acquisition.
+/// Caller-owned limits and cancellation for the generated body's QSV work.
+#[derive(Clone, Default)]
+pub struct CheckedFunctionResources {
+    /// Limits for assembling the selected owner's nominal environment.
+    pub environment_limits: quire_semantic_value::declaration::TypeEnvironmentLimits,
+    /// The original cancellation handle, retained for typed work-stop attribution.
+    pub cancel: quire_exact::Cancel,
+}
+
+/// The caller-owned inputs to one checked-closure acquisition.
 pub struct CheckedFunctionSource<'a> {
     /// Identity of the supplied unit source.
     pub source: SourceIdentity,
@@ -33,6 +43,8 @@ pub struct CheckedFunctionSource<'a> {
     pub limits: StageLimits,
     /// Replay-stage limits.
     pub replay_limits: ReplayLimits,
+    /// Body-side QSV limits, cancellation and reservation policy.
+    pub body_resources: CheckedFunctionResources,
 }
 
 /// Stable categories of a checked-function application failure.
@@ -40,6 +52,8 @@ pub struct CheckedFunctionSource<'a> {
 pub enum CheckedFunctionErrorCode {
     /// Acquisition boundary.
     Acquisition,
+    /// Checked nominal declaration boundary.
+    NominalDeclaration,
     /// InvalidIdentity boundary.
     InvalidIdentity,
     /// PackageEncoding boundary.
@@ -70,6 +84,9 @@ pub enum CheckedFunctionError {
     /// QSL did not admit the supplied closure; no handle was issued.
     #[error("checked closure acquisition refused: {0:?}")]
     Acquisition(AdmittedRefusal),
+    /// The selected owner did not issue its reachable nominal declaration.
+    #[error(transparent)]
+    NominalDeclaration(NominalDeclarationRefusal),
     /// An admitted source identity could not be resolved in its own graph frame.
     #[error("node identity cannot be resolved in its admitted source frame")]
     InvalidIdentity,
@@ -110,6 +127,7 @@ impl CheckedFunctionError {
     pub fn code(&self) -> CheckedFunctionErrorCode {
         match self {
             Self::Acquisition(_) => CheckedFunctionErrorCode::Acquisition,
+            Self::NominalDeclaration(_) => CheckedFunctionErrorCode::NominalDeclaration,
             Self::InvalidIdentity => CheckedFunctionErrorCode::InvalidIdentity,
             Self::PackageEncoding => CheckedFunctionErrorCode::PackageEncoding,
             Self::OwnerPackage(_) => CheckedFunctionErrorCode::OwnerPackage,
@@ -156,7 +174,10 @@ impl CheckedFunctionError {
                 map_registration(admission).ok_or(Self::RegistrationNotAccepted(admission))
             }
             Self::ApplicationBeginRefused(cause) => Ok(map_begin_refusal(cause)),
-            Self::Acquisition(_) | Self::InvalidIdentity | Self::PackageEncoding => Err(self),
+            Self::Acquisition(_)
+            | Self::NominalDeclaration(_)
+            | Self::InvalidIdentity
+            | Self::PackageEncoding => Err(self),
         }
     }
 }
@@ -367,6 +388,97 @@ pub fn selected_nested_call_site(
     }
 }
 
+/// Read each distinct nominal declaration reachable from the selected signature
+/// through the owning checked closure. Keys, member order and sealed union
+/// witnesses are returned unchanged; no declaration is invented or recompiled.
+///
+/// # Errors
+/// Returns QSL's typed owner refusal if a reachable declaration is unavailable.
+pub fn checked_function_declarations(
+    declaring_package: &CheckedPackageV2,
+    acquired: &CheckedClosureCompilation,
+    selection: &CallableSelection,
+) -> Result<Vec<NominalDeclaration>, CheckedFunctionError> {
+    let handle = acquired.handle();
+    let actual = match handle.selection_owner_package_bytes(selection) {
+        Ok(bytes) => bytes,
+        Err(ClosureOwnerRefusal::OwnUnit) => acquired.package().bytes(),
+        Err(cause) => return Err(CheckedFunctionError::OwnerPackage(cause)),
+    };
+    if selection.owner_package_name() != &owner_name(declaring_package)?
+        || actual != package_bytes(declaring_package)?
+    {
+        return Err(CheckedFunctionError::OwnerIdentityMismatch);
+    }
+    let mut declarations = Vec::new();
+    let mut keys = std::collections::BTreeSet::new();
+    for node in declaring_package.graph().nodes.iter().filter(|node| {
+        node.node_tag.as_ref() == "composite_type"
+            && matches!(node.semantic_form.as_ref(), "record" | "tuple" | "union")
+    }) {
+        // The facade takes wire node identities. Union ValueType identities
+        // instead carry kernel handles; retain the owner's explicit mapping.
+        let node_key = checked_function_key(declaring_package, &node.node_id)?;
+        match handle.nominal_declaration(selection, &node_key) {
+            Ok(declaration) => {
+                keys.insert(declaration.key().clone());
+                keys.insert(declaration.node().clone());
+                declarations.push(declaration);
+            }
+            // This authentic owner declaration is not reachable from this
+            // selected signature. QSL owns and checks that reachability.
+            Err(NominalDeclarationRefusal::Unknown) => {}
+            Err(cause) => return Err(CheckedFunctionError::NominalDeclaration(cause)),
+        }
+    }
+    let mut pending = selection
+        .signature()
+        .parameters()
+        .iter()
+        .chain(std::iter::once(selection.signature().result()))
+        .collect::<Vec<_>>();
+    for declaration in &declarations {
+        for member in declaration.members() {
+            match member {
+                NominalDeclarationMember::RecordField { value_type, .. }
+                | NominalDeclarationMember::TuplePosition { value_type, .. } => {
+                    pending.push(value_type)
+                }
+                NominalDeclarationMember::UnionMember { payload, .. } => pending.extend(payload),
+            }
+        }
+    }
+    while let Some(value_type) = pending.pop() {
+        match value_type {
+            quire_exact::ValueType::Option(payload) => pending.push(payload),
+            quire_exact::ValueType::Collection(collection) => pending.push(collection.element()),
+            quire_exact::ValueType::Map(map) => pending.push(map.values()),
+            quire_exact::ValueType::Composite(key) if !keys.contains(key) => {
+                return Err(CheckedFunctionError::NominalDeclaration(
+                    NominalDeclarationRefusal::Unknown,
+                ));
+            }
+            quire_exact::ValueType::Composite(_)
+            | quire_exact::ValueType::Boolean
+            | quire_exact::ValueType::Integer
+            | quire_exact::ValueType::Int(_)
+            | quire_exact::ValueType::Rational(_)
+            | quire_exact::ValueType::Decimal(_)
+            | quire_exact::ValueType::Float(_)
+            | quire_exact::ValueType::Quantity(_)
+            | quire_exact::ValueType::BoundedQuantity(_)
+            | quire_exact::ValueType::Text(_)
+            | quire_exact::ValueType::String
+            | quire_exact::ValueType::Uuid
+            | quire_exact::ValueType::Timestamp
+            | quire_exact::ValueType::Enum(_)
+            | quire_exact::ValueType::Reference(_)
+            | quire_exact::ValueType::Population(_) => {}
+        }
+    }
+    Ok(declarations)
+}
+
 /// Acquire one genuine checked closure, bind a generated body, and run its selected callable.
 /// The returned inner `CallFailure` is the leaf's terminal result, never a CG reinterpretation.
 pub fn apply_checked_function<Factory, Build>(
@@ -384,6 +496,7 @@ where
     Build: FnOnce(
         &CheckedClosureCompilation,
         &CallableSelection,
+        &CheckedFunctionResources,
     ) -> Result<Factory, CheckedFunctionError>,
 {
     let acquired = acquire_checked_closure(
@@ -401,7 +514,7 @@ where
     .map_err(CheckedFunctionError::Acquisition)?;
     let handle = acquired.handle();
     let selection = select_checked_callable(admitted_unit, declaring_package, function, &acquired)?;
-    let factory = build_factory(&acquired, &selection)?;
+    let factory = build_factory(&acquired, &selection, &source.body_resources)?;
     let mut registry = handle.registry();
     let admission = registry
         .register(&selection, selection.signature(), factory)
@@ -709,6 +822,7 @@ mod tests {
                 dependencies: &dependencies,
                 limits: StageLimits::default(),
                 replay_limits: ReplayLimits::default(),
+                body_resources: CheckedFunctionResources::default(),
             },
             &package,
             &package,
@@ -716,7 +830,7 @@ mod tests {
             vec![value],
             ObjectClosure::default(),
             &mut meter,
-            |_, _| Ok(EchoFactory),
+            |_, _, _| Ok(EchoFactory),
         )
         .expect("same source and admitted identities")
         .expect("leaf terminal result");
@@ -747,6 +861,7 @@ mod tests {
                 dependencies: &dependencies,
                 limits: StageLimits::default(),
                 replay_limits: ReplayLimits::default(),
+                body_resources: CheckedFunctionResources::default(),
             },
             &unit,
             &library,
@@ -754,7 +869,7 @@ mod tests {
             vec![Value::Integer(Integer::from(6_u64))],
             ObjectClosure::default(),
             &mut meter,
-            |handle, selection| {
+            |handle, selection, _| {
                 assert_eq!(
                     selection.owner_package_name(),
                     &owner_name(&library).expect("IR library identity")
@@ -944,6 +1059,7 @@ mod tests {
                 dependencies: &dependencies,
                 limits: StageLimits::default(),
                 replay_limits: ReplayLimits::default(),
+                body_resources: CheckedFunctionResources::default(),
             };
             let argument = || vec![Value::Integer(Integer::from(6_u64))];
 
@@ -956,7 +1072,7 @@ mod tests {
                 argument(),
                 ObjectClosure::default(),
                 &mut baseline_meter,
-                |_, _| Ok(EchoFactory),
+                |_, _, _| Ok(EchoFactory),
             )
             .expect("root selection and registration")
             .expect("root completes without a child");
@@ -972,7 +1088,7 @@ mod tests {
                 argument(),
                 ObjectClosure::default(),
                 &mut full_meter,
-                |handle, caller_selection| {
+                |handle, caller_selection, _| {
                     let callee_selection =
                         select_checked_callable(&unit, &library, &callee, handle)?;
                     let site =
@@ -1006,7 +1122,7 @@ mod tests {
                 argument(),
                 ObjectClosure::default(),
                 &mut limited_meter,
-                |handle, caller_selection| {
+                |handle, caller_selection, _| {
                     let callee_selection =
                         select_checked_callable(&unit, &library, &callee, handle)?;
                     let site =
@@ -1044,6 +1160,7 @@ mod tests {
                 dependencies: &dependencies,
                 limits: StageLimits::default(),
                 replay_limits: ReplayLimits::default(),
+                body_resources: CheckedFunctionResources::default(),
             },
             &package,
             &package,
@@ -1051,7 +1168,7 @@ mod tests {
             vec![Value::Integer(Integer::from(4_u64))],
             ObjectClosure::default(),
             &mut meter,
-            |_, _| Ok(EchoFactory),
+            |_, _, _| Ok(EchoFactory),
         )
         .expect_err("malformed source must issue no checked handle");
         assert!(matches!(refusal, CheckedFunctionError::Acquisition(_)));
@@ -1078,6 +1195,7 @@ mod tests {
                 dependencies: &dependencies,
                 limits: StageLimits::default(),
                 replay_limits: ReplayLimits::default(),
+                body_resources: CheckedFunctionResources::default(),
             },
             &other,
             &package,
@@ -1085,7 +1203,7 @@ mod tests {
             vec![Value::Integer(Integer::from(4_u64))],
             ObjectClosure::default(),
             &mut meter,
-            |_, _| Ok(EchoFactory),
+            |_, _, _| Ok(EchoFactory),
         )
         .expect_err("another admitted unit cannot authorize this source");
         assert!(matches!(

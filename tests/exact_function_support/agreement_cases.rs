@@ -37,6 +37,7 @@ fn source<'a>(dependencies: &'a DependencyInput) -> CheckedFunctionSource<'a> {
         dependencies,
         limits: StageLimits::default(),
         replay_limits: ReplayLimits::default(),
+        body_resources: Default::default(),
     }
 }
 

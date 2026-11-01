@@ -106,9 +106,9 @@ pub use oracle::equality::{
 };
 
 pub use oracle::function::owner_path::{
-    apply_checked_function, checked_function_key, select_checked_callable,
-    selected_nested_call_site, CheckedFunctionError, CheckedFunctionErrorCode,
-    CheckedFunctionSource,
+    apply_checked_function, checked_function_declarations, checked_function_key,
+    select_checked_callable, selected_nested_call_site, CheckedFunctionError,
+    CheckedFunctionErrorCode, CheckedFunctionResources, CheckedFunctionSource,
 };
 
 pub use oracle::function::{

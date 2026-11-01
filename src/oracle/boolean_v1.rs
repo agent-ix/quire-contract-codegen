@@ -1479,3 +1479,79 @@ fn diagnostic(
         message: message.into(),
     }]
 }
+
+#[cfg(test)]
+mod checked_invariant_tests {
+    use super::{native_helper_lines, Helpers};
+    use ix_trace_rs::trace;
+    use std::{fs, process::Command};
+
+    /// Compile and execute the actual emitted helper, with ordinary valid and
+    /// reversed bound inputs. The error is produced by IntegerInterval::new.
+    #[trace("TC-057", "FR-042-AC-1")]
+    #[test]
+    fn generated_interval_guard_retains_the_exact_constructor_cause() {
+        let dependencies = std::env::current_exe()
+            .expect("test binary")
+            .parent()
+            .expect("dependency directory")
+            .to_owned();
+        let library = fs::read_dir(&dependencies)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("libquire_exact-"))
+                    && path
+                        .extension()
+                        .is_some_and(|extension| extension == "rlib")
+            })
+            .max_by_key(|path| fs::metadata(path).unwrap().modified().unwrap())
+            .expect("current exact dependency");
+        let directory = dependencies.join(format!("cg-interval-guard-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let helpers = native_helper_lines(Helpers {
+            bound: true,
+            equality: false,
+            boolean_retain: false,
+        })
+        .join("\n");
+        let source = format!(
+            r#"use quire_exact as rt;
+{helpers}
+fn main() {{
+    assert!(bound::<bool>(3, 4).is_ok());
+    assert_eq!(bound::<bool>(4, 3), Err(rt::Outcome::Refused(rt::Refusal::CheckedInvariant {{
+        cause: rt::CheckedInvariantCause::GeneratedIntervalInvalid,
+    }})));
+}}
+"#
+        );
+        let input = directory.join("interval_guard.rs");
+        fs::write(&input, source).unwrap();
+        let binary = directory.join("interval_guard");
+        let output = Command::new("rustc")
+            .args(["--edition=2021", "--crate-type", "bin"])
+            .arg("--extern")
+            .arg(format!("quire_exact={}", library.display()))
+            .arg("-L")
+            .arg(format!("dependency={}", dependencies.display()))
+            .arg("-o")
+            .arg(&binary)
+            .arg(input)
+            .output()
+            .expect("compile emitted helper");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = Command::new(binary).output().expect("run emitted helper");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+}

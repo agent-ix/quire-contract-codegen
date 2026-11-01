@@ -48,12 +48,20 @@ pub(super) fn checked_item<Body: GraphBody>(
         .source_function_node_id(&declaration.name, &declaration.node_id)
         .ok_or(ExactFunctionRefusal::BodyMismatch)?;
     match body {
-        DirectBody::Scalar(operator) => {
-            scalar_item(symbol, callable, operator).map_err(RenderError::Generation)
-        }
-        DirectBody::Equality(operator) => {
-            equality_item(symbol, callable, operator).map_err(RenderError::Generation)
-        }
+        DirectBody::Scalar(operator) => scalar_item(
+            symbol,
+            callable,
+            operator,
+            "sv::location::Origin::Expression",
+        )
+        .map_err(RenderError::Generation),
+        DirectBody::Equality(operator) => equality_item(
+            symbol,
+            callable,
+            operator,
+            "sv::location::Origin::Expression",
+        )
+        .map_err(RenderError::Generation),
     }
 }
 
@@ -64,6 +72,7 @@ pub(super) fn classified_item<Body: GraphBody>(
     symbol: &str,
     function: &ClassifiedFunction<'_>,
     accounting: &PackageItems<'_>,
+    result_origin: &str,
 ) -> Result<String, RenderError> {
     let declaration = function.declaration;
     let body = accounting
@@ -77,10 +86,10 @@ pub(super) fn classified_item<Body: GraphBody>(
         .ok_or(ExactFunctionRefusal::BodyMismatch)?;
     match &function.body {
         ClassifiedBody::Scalar(operator) => {
-            scalar_item(symbol, caller, *operator).map_err(RenderError::Generation)
+            scalar_item(symbol, caller, *operator, result_origin).map_err(RenderError::Generation)
         }
         ClassifiedBody::Equality(operator) => {
-            equality_item(symbol, caller, *operator).map_err(RenderError::Generation)
+            equality_item(symbol, caller, *operator, result_origin).map_err(RenderError::Generation)
         }
         ClassifiedBody::Call(callee) => {
             let callee_body = names.unique_node_id(callee).ok_or_else(|| {
@@ -100,7 +109,8 @@ pub(super) fn classified_item<Body: GraphBody>(
             let call = accounting
                 .original_represented_node(&function.body_node_id)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
-            call_item(symbol, caller, callee_function, call).map_err(RenderError::Generation)
+            call_item(symbol, caller, callee_function, call, result_origin)
+                .map_err(RenderError::Generation)
         }
     }
 }
@@ -119,6 +129,99 @@ use quire_semantic_value::{self as sv, object_closure::ObjectClosure};
 fn evaluated(outcome: Outcome<Value>) -> eval::Evaluation {
     eval::Evaluation { outcome: FamilyOutcome::Evaluated(outcome), location: None, losses: Vec::new() }
 }
+#[derive(Clone)]
+struct PreparedFunction {
+    environment: Result<sv::declaration::TypeEnvironment, sv::declaration::EnvironmentFailure>,
+    parameters: Vec<exact::ValueType>,
+    result: exact::ValueType,
+    location: sv::location::Location,
+    cancel: exact::Cancel,
+}
+impl PreparedFunction {
+    fn new(
+        declaring_package: &CheckedPackageV2,
+        acquired: &qsl_replay::CheckedClosureCompilation,
+        selection: &qsl_replay::CallableSelection,
+        resources: &quire_contract_codegen::CheckedFunctionResources,
+        location: sv::location::Location,
+    ) -> Result<Self, CheckedFunctionError> {
+        use qsl_replay::{NominalDeclarationForm as Form, NominalDeclarationMember as Member};
+        use sv::declaration::{CompositeDeclaration, CompositeShape, FieldDeclaration, UnionMemberDeclaration, TypeEnvironment};
+        let owner = quire_contract_codegen::checked_function_declarations(declaring_package, acquired, selection)?;
+        let mut declarations = Vec::new();
+        for view in &owner {
+            let shape = match view.form() {
+                Form::Record => CompositeShape::Record(view.members().iter().map(|member| {
+                    match member {
+                        Member::RecordField { identifier, value_type, presence } => Ok(FieldDeclaration::new(identifier.as_str(), value_type.clone(), *presence)),
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    }
+                }).collect::<Result<_, _>>()?),
+                Form::Tuple => CompositeShape::Tuple(view.members().iter().map(|member| {
+                    match member {
+                        Member::TuplePosition { value_type, .. } => Ok(value_type.clone()),
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    }
+                }).collect::<Result<_, _>>()?),
+                Form::Union => CompositeShape::Union(view.members().iter().map(|member| {
+                    match member {
+                        Member::UnionMember { member, payload, .. } => Ok(UnionMemberDeclaration::resolved(exact::Identifier::new(member.identifier()).map_err(|_| CheckedFunctionError::InvalidIdentity)?, payload.clone())),
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    }
+                }).collect::<Result<_, _>>()?),
+            };
+            declarations.push(CompositeDeclaration::new(view.key().clone(), view.qualified_name().iter().map(exact::Identifier::as_str).collect::<Vec<_>>().join("."), shape));
+        }
+        let environment = TypeEnvironment::bounded_with_cancel(
+                declarations, [], resources.environment_limits, &resources.cancel)
+        .and_then(|mut environment| {
+            for view in &owner {
+                if view.form() == Form::Union {
+                    let bindings = view.members().iter().filter_map(|member| match member {
+                        Member::UnionMember { member, .. } => Some(member.clone()),
+                        Member::RecordField { .. } | Member::TuplePosition { .. } => None,
+                    }).collect();
+                    environment.seal_union_verified(view.key().clone(), view.node().clone(), bindings)?;
+                }
+            }
+            Ok(environment)
+        });
+        Ok(Self {
+            environment, parameters: selection.signature().parameters().to_vec(),
+            result: selection.signature().result().clone(), location, cancel: resources.cancel.clone(),
+        })
+    }
+    fn ready(&self) -> Result<Option<eval::Evaluation>, eval::BodyFailure> {
+        match &self.environment {
+            Ok(_) => Ok(None),
+            Err(sv::declaration::EnvironmentFailure::Refused(invalid)) => {
+                let mut evaluation = evaluated(Outcome::Refused(Refusal::CheckedInvariant {
+                    cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected,
+                }));
+                evaluation.location = Some(sv::location::Location::root(sv::location::Origin::TypeDeclaration { name: invalid.declaration.clone() }));
+                Ok(Some(evaluation))
+            }
+            Err(failure) => Err(self.failure(failure.clone())),
+        }
+    }
+    fn failure(&self, failure: sv::declaration::EnvironmentFailure) -> eval::BodyFailure {
+        eval::BodyFailure::qsv_environment(failure, Some(&self.cancel))
+    }
+    fn finish(&self, mut evaluation: eval::Evaluation) -> Result<eval::Evaluation, eval::BodyFailure> {
+        let FamilyOutcome::Evaluated(Outcome::Completed(value)) = &evaluation.outcome else { return Ok(evaluation); };
+        let environment = self.environment.as_ref().map_err(|failure| self.failure(failure.clone()))?;
+        let admitted = environment.admits(&self.result, value)
+            .map_err(|failure| self.failure(failure))?;
+        if !admitted {
+            evaluation.outcome = FamilyOutcome::Evaluated(Outcome::Refused(Refusal::CheckedInvariant {
+                cause: exact::CheckedInvariantCause::GeneratedUnexpectedOutcome,
+            }));
+            evaluation.location = Some(self.location.clone());
+        }
+        Ok(evaluation)
+    }
+}
+
 "#;
 
 /// Render an own-package scalar body through the generated-body registration path.
@@ -126,6 +229,7 @@ pub(super) fn scalar_item(
     symbol: &str,
     function: &CheckedNodeId,
     operator: BinaryIntegerOperator,
+    result_origin: &str,
 ) -> Result<String, OracleGenerationError> {
     let variant = operator.variant();
     let body = format!(
@@ -141,7 +245,7 @@ match exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(lef
     Outcome::Incomplete(value) => Outcome::Incomplete(value),
 }}"#
     );
-    render_item(symbol, function, &body)
+    render_item(symbol, function, &body, result_origin)
 }
 
 /// Render an own-package Boolean or Integer equality body over the QSV leaf.
@@ -149,6 +253,7 @@ pub(super) fn equality_item(
     symbol: &str,
     function: &CheckedNodeId,
     operator: EqualityOperatorKind,
+    result_origin: &str,
 ) -> Result<String, OracleGenerationError> {
     let variant = match operator {
         EqualityOperatorKind::Equal => "Equal",
@@ -160,18 +265,16 @@ pub(super) fn equality_item(
         cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
     }});
 }};
-let operand_type = match left {{
-    Value::Boolean(_) => exact::ValueType::Boolean,
-    Value::Integer(_) => exact::ValueType::Integer,
-    _ => return Outcome::Refused(Refusal::CheckedInvariant {{
-        cause: exact::CheckedInvariantCause::GeneratedOperandKindUnsupported,
-    }}),
+if !matches!(left, Value::Boolean(_) | Value::Integer(_) | Value::Composite(_) | Value::Union(_)) {{
+    return Outcome::Refused(Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedOperandKindUnsupported }});
 }};
-let environment = sv::declaration::TypeEnvironment::default();
+let [left_type, right_type] = parameters else {{
+    return Outcome::Refused(Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});
+}};
 let checked = match environment.check_equality(
     sv::declaration::EqualityOperator::{variant},
-    sv::declaration::EqualityOperand::typed(operand_type.clone()),
-    sv::declaration::EqualityOperand::typed(operand_type),
+    sv::declaration::EqualityOperand::typed(left_type.clone()),
+    sv::declaration::EqualityOperand::typed(right_type.clone()),
     &sv::enumeration::EnumMemberIndex::default(),
 ) {{
     Ok(checked) => checked,
@@ -179,20 +282,21 @@ let checked = match environment.check_equality(
         cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }},
     }}),
 }};
-match checked.evaluate(&environment, left, right, meter) {{
+match checked.evaluate(environment, left, right, meter) {{
     Outcome::Completed(value) => Outcome::Completed(Value::Boolean(value)),
     Outcome::Undefined(value) => Outcome::Undefined(value),
     Outcome::Refused(value) => Outcome::Refused(value),
     Outcome::Incomplete(value) => Outcome::Incomplete(value),
 }}"#
     );
-    render_item(symbol, function, &body)
+    render_item(symbol, function, &body, result_origin)
 }
 
 fn render_item(
     symbol: &str,
     function: &CheckedNodeId,
     body: &str,
+    result_origin: &str,
 ) -> Result<String, OracleGenerationError> {
     let function =
         render_checked_node_id(function).ok_or(OracleGenerationError::InvalidPlanState)?;
@@ -200,23 +304,28 @@ fn render_item(
         r#"
 pub(crate) mod body_{symbol} {{
     use super::*;
-    pub(crate) struct Factory;
+    pub(crate) struct Factory(pub(super) std::sync::Arc<PreparedFunction>);
     impl BodyFactory for Factory {{
-        fn begin(&self) -> Box<dyn Body> {{ Box::new(Invocation) }}
+        fn begin(&self) -> Box<dyn Body> {{ Box::new(Invocation(self.0.clone())) }}
     }}
-    struct Invocation;
+    struct Invocation(std::sync::Arc<PreparedFunction>);
     impl Body for Invocation {{
         fn resume(&mut self, input: Resume, meter: &mut Meter)
             -> Result<Transition, eval::BodyFailure>
         {{
             match input {{
-                Resume::Start(args) => Ok(Transition::Done(evaluated(run(args, meter)))),
+                Resume::Start(args) => {{
+                    if let Some(rejected) = self.0.ready()? {{ return Ok(Transition::Done(rejected)); }}
+                    let environment = self.0.environment.as_ref().map_err(|failure| self.0.failure(failure.clone()))?;
+                    Ok(Transition::Done(self.0.finish(evaluated(run(args, meter, &self.0.parameters, environment)))?))
+                }},
                 Resume::Again | Resume::Child(_) =>
                     Err(sv::catalog::InternalFault::new("generated_function", "unexpected_resume").into()),
             }}
         }}
     }}
-    fn run(args: Vec<Value>, meter: &mut Meter) -> Outcome<Value> {{
+    fn run(args: Vec<Value>, meter: &mut Meter, parameters: &[exact::ValueType], environment: &sv::declaration::TypeEnvironment) -> Outcome<Value> {{
+        let _ = (parameters, environment);
         {body}
     }}
 }}
@@ -234,7 +343,9 @@ pub fn oracle_{symbol}(
     let function = {function};
     apply_checked_function(
         source, admitted_unit, declaring_package, &function, arguments, objects, meter,
-        |_, _| Ok(body_{symbol}::Factory),
+        |acquired, selection, resources| Ok(body_{symbol}::Factory(std::sync::Arc::new(PreparedFunction::new(
+            declaring_package, acquired, selection, resources, sv::location::Location::root({result_origin}),
+        )?))),
     )
 }}
 "#,
@@ -248,6 +359,7 @@ pub(super) fn call_item(
     caller: &CheckedNodeId,
     callee: &CheckedNodeId,
     call: &CheckedNodeId,
+    result_origin: &str,
 ) -> Result<String, OracleGenerationError> {
     let caller = render_checked_node_id(caller).ok_or(OracleGenerationError::InvalidPlanState)?;
     let callee = render_checked_node_id(callee).ok_or(OracleGenerationError::InvalidPlanState)?;
@@ -257,20 +369,22 @@ pub(super) fn call_item(
 pub(crate) mod body_{symbol} {{
     use super::*;
     pub(crate) struct Factory {{
+        prepared: std::sync::Arc<PreparedFunction>,
         callee: exact::NodeKey,
         site: sv::location::Location,
     }}
     impl Factory {{
-        pub(crate) fn new(callee: exact::NodeKey, site: sv::location::Location) -> Self {{
-            Self {{ callee, site }}
+        pub(crate) fn new(prepared: PreparedFunction, callee: exact::NodeKey, site: sv::location::Location) -> Self {{
+            Self {{ prepared: std::sync::Arc::new(prepared), callee, site }}
         }}
     }}
     impl BodyFactory for Factory {{
         fn begin(&self) -> Box<dyn Body> {{
-            Box::new(Invocation {{ callee: self.callee.clone(), site: self.site.clone() }})
+            Box::new(Invocation {{ prepared: self.prepared.clone(), callee: self.callee.clone(), site: self.site.clone() }})
         }}
     }}
     struct Invocation {{
+        prepared: std::sync::Arc<PreparedFunction>,
         callee: exact::NodeKey,
         site: sv::location::Location,
     }}
@@ -279,12 +393,15 @@ pub(crate) mod body_{symbol} {{
             -> Result<Transition, eval::BodyFailure>
         {{
             match input {{
-                Resume::Start(arguments) => Ok(Transition::Call(ChildRequest {{
+                Resume::Start(arguments) => {{
+                    if let Some(rejected) = self.prepared.ready()? {{ return Ok(Transition::Done(rejected)); }}
+                    Ok(Transition::Call(ChildRequest {{
                     callee: self.callee.clone(),
                     arguments,
                     site: self.site.clone(),
-                }})),
-                Resume::Child(result) => Ok(Transition::Done(*result)),
+                }}))
+                }},
+                Resume::Child(result) => Ok(Transition::Done(self.prepared.finish(*result)?)),
                 Resume::Again => Err(sv::catalog::InternalFault::new(
                     "generated_function", "unexpected_resume",
                 ).into()),
@@ -309,12 +426,13 @@ pub fn oracle_{symbol}(
     let call = {call};
     apply_checked_function(
         source, admitted_unit, declaring_package, &caller, arguments, objects, meter,
-        |acquired, selection| {{
+        |acquired, selection, resources| {{
             let callee_selection =
                 select_checked_callable(admitted_unit, callee_package, &callee, acquired)?;
             let site =
                 selected_nested_call_site(declaring_package, &call, acquired, selection)?;
             Ok(body_{symbol}::Factory::new(
+                PreparedFunction::new(declaring_package, acquired, selection, resources, sv::location::Location::root({result_origin}))?,
                 callee_selection.key().clone(), site.location().clone(),
             ))
         }},
@@ -345,9 +463,28 @@ mod tests {
         let source = format!(
             "{}{}{}{}",
             HEADER,
-            scalar_item("add", &function(), BinaryIntegerOperator::Add).expect("scalar source"),
-            equality_item("eq", &function(), EqualityOperatorKind::Equal).expect("equality source"),
-            call_item("nested", &function(), &function(), &function()).expect("call source"),
+            scalar_item(
+                "add",
+                &function(),
+                BinaryIntegerOperator::Add,
+                "sv::location::Origin::Expression"
+            )
+            .expect("scalar source"),
+            equality_item(
+                "eq",
+                &function(),
+                EqualityOperatorKind::Equal,
+                "sv::location::Origin::Expression"
+            )
+            .expect("equality source"),
+            call_item(
+                "nested",
+                &function(),
+                &function(),
+                &function(),
+                "sv::location::Origin::Expression"
+            )
+            .expect("call source"),
         );
         syn::parse_file(&source).expect("generated direct-function source parses");
         assert_eq!(source.matches("apply_checked_function(").count(), 3);
@@ -368,9 +505,28 @@ mod tests {
     #[test]
     fn kani_build_keeps_body_modules_and_drops_host_entries() {
         for source in [
-            scalar_item("add", &function(), BinaryIntegerOperator::Add).expect("scalar source"),
-            equality_item("eq", &function(), EqualityOperatorKind::Equal).expect("equality source"),
-            call_item("nested", &function(), &function(), &function()).expect("call source"),
+            scalar_item(
+                "add",
+                &function(),
+                BinaryIntegerOperator::Add,
+                "sv::location::Origin::Expression",
+            )
+            .expect("scalar source"),
+            equality_item(
+                "eq",
+                &function(),
+                EqualityOperatorKind::Equal,
+                "sv::location::Origin::Expression",
+            )
+            .expect("equality source"),
+            call_item(
+                "nested",
+                &function(),
+                &function(),
+                &function(),
+                "sv::location::Origin::Expression",
+            )
+            .expect("call source"),
         ] {
             assert!(source.contains("\npub(crate) mod body_"));
             assert!(source.contains("    pub(crate) struct Factory"));

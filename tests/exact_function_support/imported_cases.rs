@@ -131,6 +131,7 @@ fn generated_library_body_matches_importer_facade_application() {
         dependencies: &dependencies,
         limits: StageLimits::default(),
         replay_limits: ReplayLimits::default(),
+        body_resources: Default::default(),
     };
     let mut generated_meter = meter();
     let actual = generated::oracle_imported(

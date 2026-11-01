@@ -12,7 +12,7 @@ relationships:
 
 ## Description
 
-Planned owner control for FR-042-AC-1 through AC-3 and FR-021-AC-38 through
+Owner control for FR-042-AC-1 through AC-3 and FR-021-AC-38 through
 AC-40 in IR-709's generated producer migration.
 
 ## Test Procedure
@@ -32,17 +32,25 @@ AC-40 in IR-709's generated producer migration.
    `Err(InternalFault)`. Run the unmutated Boolean body
    and separate `Undefined`, `Refused` and `Incomplete` controls; assert that
    only the wrong completed value changes cause and that admitted charges are
-   unchanged. Inspect the generated `admits` result match and the public QSV
-   API to verify that an `Err(EnvironmentFailure)` cannot enter the
-   `Ok(false)` cause arm. After QSL-1107 supplies a public reservation-control
-   seam for this exact body-side call, run an allocation/capacity stop through
-   the unchanged `admits` call and assert it is neither
-   `GeneratedUnexpectedOutcome` nor `Completed`, with the owner-defined typed
-   leaf result. This executable storage control remains PLANNED; the current
-   public QSV API cannot inject its private `GlobalReservations` policy.
-   Nominal result values
-   also wait for QSL-1105; this Boolean control does not claim nominal coverage.
-3. Once QSL-1105 exposes the selected owner's record/tuple members, use a
+   unchanged.
+   Inspect the generated `admits` result match and typed leaf mapping: an
+   `Err(EnvironmentFailure)` must never enter the `Ok(false)` cause arm.
+   Execute both Boolean and Integer primitive result bodies through the public
+   reservation-boundary entry in the test-only emitted copy. Deny every actual
+   request, observe zero callbacks, and assert the original completed values:
+   these primitive walks allocate nothing. This is **inspection with no
+   Allocation/Capacity execution credit**, not a storage-failure test.
+   The first shipped body family whose real checker-issued result type and
+   completed value make membership request storage activates
+   [IR-1235](https://linear.app/agent-ix/issue/IR-1235). In that family's delivery,
+   observe a real request and separately deny it as Allocation and Capacity
+   through the public QSV seam, retaining the complete typed leaf failure,
+   charge prefix and location through the unchanged emitted guard. No fake
+   request/failure, substituted result type, production hook or unrelated new
+   body family is permitted. Merely allocating the result value does not count
+   if its membership walk still reserves nothing.
+
+3. Use a
    checker-admitted source with real nominal declarations to exercise the
    emitted function's QSV environment construction. Record the declaration
    keys, forms, ordered members, presence and types read from that checked
@@ -59,11 +67,10 @@ AC-40 in IR-709's generated producer migration.
    `Limit(WorkUnits)` control with the cancel handle both tripped and
    untripped. Inspect the emitted match and public QSV API to confirm that
    `Allocation` and `Capacity` are separate arms and cannot map to a
-   checked-invariant refusal. After QSL-1107 supplies a public
-   reservation-control seam for this exact constructor, execute both storage
-   failures through the unchanged constructor and assert the owner-defined
-   typed leaf result. Those executable storage controls remain PLANNED;
-   current public QSV constructors use private `GlobalReservations`.
+   checked-invariant refusal. Execute both storage failures through the actual constructor reservation
+   boundary and assert the owner-defined typed leaf result. Use the public QSV reservation-boundary entry in the test-only emitted
+   copy. Preserve the constructor implementation and cause guards; only
+   the actual reservation policy is controlled.
    No invented declaration, empty default environment, injected constructor
    error or production test hook counts. The healthy source shall retain the
    same checked owner declaration set and succeed.
@@ -72,8 +79,17 @@ AC-40 in IR-709's generated producer migration.
 
 ## Expected Results
 
-All eight CG producer guards retain their table causes and original nested payloads without changing charge or failure behavior; test-only emitted-source mutations reach the shipped wrong-result and owner-declaration construction guards without injecting a failure. The environment-rejection leg remains PLANNED and blocked by QSL-1105 and QSL-1107 until its owner contracts and the healthy/mutant controls are verified.
+All eight live CG producer guards retain their table causes and original nested
+payloads without changing charge or failure behavior. The wrong-result and
+authentic duplicate-declaration controls reach the unchanged shipped guards.
+Required and optional owner field presence survives native assembly. Genuine
+constructor work/cancel and Allocation/Capacity stops retain typed leaf failures.
+Primitive result membership has inspection evidence and explicitly no storage
+failure execution credit; the first genuinely allocating membership result
+family activates the retained IR-1235 obligation above.
 
 ## Status
 
-PLANNED under IR-709.
+Native controls implement the current-family obligations under IR-709.
+Result-membership storage execution credit is conditional as stated above,
+not claimed for the allocation-free Boolean/Integer path.

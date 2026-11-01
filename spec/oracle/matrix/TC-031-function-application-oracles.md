@@ -236,7 +236,7 @@ required dependency or target path.
      callables, compare the returned root location to the declaring checked
      graph's body root, separate from the CG static location path. Do not
      present this same-leaf comparison as IR-842 QSL value-authority parity.
-12c. PLANNED (FR-021-AC-38 to AC-40, IR-709): use TC-057's emitted-source
+12c. Generated-body guards (FR-021-AC-38 to AC-40): use TC-057's emitted-source
      mutation only in the test copy of a genuine FR-485 Boolean callable;
      run the unchanged generated result check through the registered body
      and assert the wrong completed value becomes the located
@@ -250,10 +250,13 @@ required dependency or target path.
      `Refused(InvalidDeclaration)` as `GeneratedEnvironmentRejected`; the
      healthy production assembly submits each declaration once and succeeds.
      `admits` and construction resource errors require a separate typed
-     QSL-1107 owner body-resource channel, and no environment rejection
+     QSL-1107 owner body-resource channel (BodyFailure::QsvEnvironment / CallFailure::Body), and no environment rejection
      receives credit without the checker-admitted healthy source and actual
      mutated constructor run. TC-057 specifies the
-     controls and all eight-cause comparison.
+     controls and all eight-cause comparison. Primitive result membership has inspection
+     evidence with no Allocation/Capacity execution credit; TC-057 / IR-1235
+     activates execution when a shipped result family actually requests membership
+     storage.
 13. Direct unsupported roots (FR-021-AC-11, FR-021-AC-33 and FR-021-AC-41).
     Admit formula, fairness and case roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
