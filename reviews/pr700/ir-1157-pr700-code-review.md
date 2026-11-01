@@ -309,3 +309,27 @@ PASS. Every finding is fixed within the original PR; no new finding was found in
 ## Merge synchronization
 
 This PR700 artifact was remapped from SR-202610310145 to SR-202610310153 because main PR699 independently introduced the prior id. Original findings and round-1 dispositions above are unchanged. At rebased head 8054ccc3c5c666dd8a5e142aa01193a372ac5009 against main 0989d178, the previously dispositioned constrained generation, identity, execution, terminal and authored-clause test source is byte-identical to 043d398c. The prior PASS disposition therefore applies unchanged to this source. QSL dependency synchronization and the parent-owned rerun gates remain pending qualification; the stopped earlier aggregate gate is not a pass. This is an id correction, not a second broad review.
+
+## New findings (disposition pass 2)
+
+The first completed full integration gate at 596977bf reported 772 passed, 3 failed, 35 ignored in 1470.93s. Two PR regressions were measured and fixed; the third is the explicitly allowed unchanged upstream TC-025 intake baseline.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The original constrained symbolic metadata introduced expect on the production generation/analysis path, violating NFR-005-AC-1 and failing tc_042_ac1_src_holds_no_panic_token in the first full integration gate. | src/kani/run/harness.rs:106-107 at 596977bf |
+| FND-005 | medium | The existing admitted inline Boolean fixture and consumer were not migrated with the Boolean literal/direct-oracle ABI change, so admitted_inline_clause_keeps_the_clause_identity failed with UnsupportedCondition before retaining its identity and compiling the generated oracle. | tests/it/kani_obligations_state_frame.rs:264-280 at 596977bf |
+
+## Dispositions — round 2
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | d55a5a2d lowers a checked u32 operation choice once and uses that same choice in renderer and metadata; metadata uses infallible i64::from. All 7 no-generation-panic controls pass. |
+| FND-005 | fixed | d55a5a2d uses canonical JSON Boolean in the two local fixture sites and direct bool ABI for this zero-operation oracle. Identity/provenance/empty-input/source-map assertions remain; native -Dwarnings compilation/execution passes. |
+
+## Gate-fix disposition verdict
+
+PASS on the narrowly inspected d55a5a2d7532ed188a6912246642ed1be5eaa349 changes; all five code findings and the earlier gap finding have fixed dispositions. No new finding in the fixes. Source is mergeable subject to the parent-owned final integration rerun.
+
+The first gate is not green: its remaining `tc_025_model_member_types_without_i64_ranges_remain_unranged` failure occurs at QSL ModelIntake before IR/CG: UnsupportedConstruct, `quire.meaning.model.value-type/v1:profile` has no reader. Its native_twin.rs source is unchanged against 0989d178 and the QSL lock is the same e9e7cdfc; this is the user-authorized baseline, retained explicitly rather than counted as passing.
+
+Read qualification-logs/titan-ir1157/{full-it-first-complete.log,no-panic-fix.log,inline-fix.log,gate-fixes-clippy.log,gate-fixes-focused.log,gate-fixes-installed.log}: no-panic 7 pass; inline 1 pass; focused integration 10 pass; Clippy passes; installed four-control lane passes in 1.93s with ConstraintReached, BoundedSuccess and actual initial/later Falsified playback. Reviewer ran no Cargo and edited no source.
