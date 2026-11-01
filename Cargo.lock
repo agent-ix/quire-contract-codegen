@@ -1316,6 +1316,7 @@ dependencies = [
  "qsl-cst",
  "qsl-foundation",
  "quire-exact",
+ "quire-semantic-value",
  "quire-walk",
 ]
 
@@ -1324,6 +1325,7 @@ name = "qsl-foundation"
 version = "0.1.0"
 source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#353dcea47dc213c29d470667f0a4bb8f0f02be09"
 dependencies = [
+ "hashbrown 0.17.1",
  "ix-trace-rs",
  "quire-exact",
  "quire-semantic-value",
