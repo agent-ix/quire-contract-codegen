@@ -77,12 +77,14 @@ impl ReplayHarnessIdentity {
 const BACKEND_IDENTITY: &str = "kani";
 
 /// One parameter of the function the replay selects: the harness argument name a decoded value
-/// carries, and the parameter's structural node identity rendered by QSL.
+/// carries, and the parameter's structural node identity spelled as QSL names a witness entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReplayParameter<'a> {
     /// The harness argument identifier the decoded value is named by.
     pub argument: &'a str,
-    /// The parameter's node id in the proved package.
+    /// The parameter's witness entry name: [`witness_entry_name`] of its node id in the proved
+    /// package. `parameters` slices list these in ascending node id order, the order QSL requires
+    /// of a function witness's entries.
     pub node_id: &'a str,
 }
 
@@ -219,6 +221,57 @@ pub(crate) fn render_witness(
     ))
 }
 
+/// The name a witness entry carries for the structural node `key`, as `qsl-replay` decodes it:
+/// the node's compact JSON object (`ordinal`, `package`, `path`, nested nodes as nested objects),
+/// with `%`, the transcript separators `=` `;` `|` `<` `>` and control bytes percent-escaped, so
+/// the name is injective and holds no separator.
+pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
+    use quire_exact::{NodeKeyView, PathSegmentView};
+    fn open(out: &mut String, view: NodeKeyView<'_>) {
+        out.push_str("{\"ordinal\":");
+        out.push_str(&view.ordinal().to_string());
+        out.push_str(",\"package\":");
+        text(out, view.package());
+        out.push_str(",\"path\":[");
+    }
+    fn text(out: &mut String, value: &str) {
+        out.push_str(&serde_json::to_string(value).expect("a string spells as JSON"));
+    }
+    let mut json = String::new();
+    let root = key.view();
+    open(&mut json, root);
+    let mut stack = vec![(root.path(), false)];
+    while let Some((path, wrote)) = stack.last_mut() {
+        match path.next() {
+            Some(segment) => {
+                if std::mem::replace(wrote, true) {
+                    json.push(',');
+                }
+                match segment {
+                    PathSegmentView::Text(value) => text(&mut json, value),
+                    PathSegmentView::Node(child) => {
+                        open(&mut json, child);
+                        stack.push((child.path(), false));
+                    }
+                }
+            }
+            None => {
+                json.push_str("]}");
+                stack.pop();
+            }
+        }
+    }
+    let mut name = Vec::with_capacity(json.len());
+    for byte in json.bytes() {
+        if matches!(byte, b'%' | b'=' | b';' | b'|' | b'<' | b'>') || byte < 0x20 || byte == 0x7f {
+            name.extend_from_slice(format!("%{byte:02X}").as_bytes());
+        } else {
+            name.push(byte);
+        }
+    }
+    String::from_utf8(name).expect("escapes are ASCII and the rest is the JSON's UTF-8")
+}
+
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
 type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, SpineReplayError>;
 
@@ -239,12 +292,13 @@ fn replay_falsification_through(
     let mut bindings = values
         .iter()
         .map(|(argument, value)| {
-            let parameter = parameters
+            let position = parameters
                 .iter()
-                .find(|parameter| parameter.argument == argument)
+                .position(|parameter| parameter.argument == argument)
                 .ok_or_else(|| SpineReplayError::UnboundArgument {
                     argument: argument.clone(),
                 })?;
+            let parameter = &parameters[position];
             let integer = match value {
                 WitnessValue::Integer(integer) => *integer,
                 WitnessValue::Boolean(boolean) => i128::from(*boolean),
@@ -273,11 +327,16 @@ fn replay_falsification_through(
                     })
                 }
             };
-            Ok((parameter.node_id, integer))
+            Ok((position, parameter.node_id, integer))
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;
-    // QSL joins function witness entries by parameter node id and requires ascending id order.
-    bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
+    // QSL joins function witness entries by parameter node id and requires ascending id order,
+    // which `parameters` lists; the entry names' text order is not that order.
+    bindings.sort_unstable_by_key(|binding| binding.0);
+    let bindings = bindings
+        .into_iter()
+        .map(|(_, name, integer)| (name, integer))
+        .collect::<Vec<_>>();
     let witness = render_witness(harness, check_text, &bindings)?;
     let request = request(EnvelopeSource::Witness(witness))?;
     match execute(request) {
@@ -510,6 +569,7 @@ pub struct ReplayPackage {
     selected_dependencies: Vec<DependencyEntryWire>,
     selection: QualifiedName,
     site: CallSite<FunctionSite>,
+    /// Each parameter's name and witness entry name, in ascending node id order.
     parameters: Vec<(String, String)>,
     kani_binding: Option<KaniProofBinding>,
 }
@@ -643,11 +703,11 @@ impl ReplayPackage {
                 sources: vec![dependency.source.wire()],
             })
             .collect();
-        let parameters = site
-            .site
-            .parameters
-            .iter()
-            .map(|(name, node)| (name.as_str().to_owned(), node.to_string()))
+        let mut ordered = site.site.parameters.iter().collect::<Vec<_>>();
+        ordered.sort_unstable_by(|left, right| left.1.cmp(&right.1));
+        let parameters = ordered
+            .into_iter()
+            .map(|(name, node)| (name.as_str().to_owned(), witness_entry_name(node)))
             .collect();
         Ok(Self {
             inputs,

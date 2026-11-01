@@ -29,9 +29,9 @@ use quire_contract_codegen::{
     FunctionParameter,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2,
-    CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1, LoweringProfileRef,
+    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageReadLimits,
+    CheckedPackageV2, CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
+    ContractPackageV1, ContractPackageWireV1, LoweringProfileRef,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -477,7 +477,7 @@ pub fn source_bound_call_package() -> PackageBuilder {
 /// A V2-admitted source function whose lowered FR-330 package exceeds the
 /// function preflight reader's bounded byte ceiling.
 pub fn oversized_source_bound_call_package() -> (CheckedPackageV2, FixtureIds) {
-    source_bound_call_package_with_name_len(1_100_000)
+    source_bound_call_package_with_name_len(400_000)
 }
 
 /// Admit a source-backed function after changing only its declared name length.
@@ -511,9 +511,72 @@ pub fn source_bound_call_package_with_name_segments(
         .find(|node| node["declaration"]["qualified_name"][0] == function_name[0].as_ref())
         .expect("source function node");
     function["declaration"]["qualified_name"] = serde_json::json!(segments);
+    // A function's structural identity is its declared name: re-identify the node, and every
+    // reference to it, with the new name before the reader checks them against each other.
+    let old_id = serde_json::to_value(&function_id).expect("function ID");
+    let mut new_id = function_id.clone();
+    new_id.path = segments
+        .iter()
+        .map(|segment| CheckedNodePathSegment::Name(segment.as_str().into()))
+        .collect();
+    replace_node_id(
+        &mut wire,
+        &old_id,
+        &serde_json::to_value(&new_id).expect("new ID"),
+    );
+    sort_by_node_id(&mut wire);
     let mut limits = CheckedPackageReadLimits::bounded();
     limits.bytes = 4_000_000;
-    PackageBuilder::from_wire(wire).admit_with_resolved(limits)
+    let (package, renamed) = PackageBuilder::from_wire(wire).admit_with_resolved(limits);
+    (package, renamed.renamed(&function_id, new_id))
+}
+
+/// Restore the canonical order the reader requires after IDs changed: graph nodes and source map
+/// by node ID, and each node's dependencies.
+fn sort_by_node_id(wire: &mut serde_json::Value) {
+    let id = |value: &serde_json::Value| -> CheckedNodeId {
+        serde_json::from_value(value.clone()).expect("node ID")
+    };
+    for pointer in ["/semantic_graph/nodes", "/source_map"] {
+        wire.pointer_mut(pointer)
+            .and_then(serde_json::Value::as_array_mut)
+            .expect("wire array")
+            .sort_by_key(|entry| id(&entry["node_id"]));
+    }
+    for node in wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("graph nodes")
+    {
+        node["dependencies"]
+            .as_array_mut()
+            .expect("node dependencies")
+            .sort_by_key(|dependency| id(dependency));
+    }
+}
+
+/// Substitute `new` for every node ID equal to `old`, including IDs nested in other IDs.
+fn replace_node_id(
+    value: &mut serde_json::Value,
+    old: &serde_json::Value,
+    new: &serde_json::Value,
+) {
+    if value == old {
+        *value = new.clone();
+        return;
+    }
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                replace_node_id(item, old, new);
+            }
+        }
+        serde_json::Value::Object(members) => {
+            for member in members.values_mut() {
+                replace_node_id(member, old, new);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub fn source_function(name: &str, body_code: u32) -> ExactFunctionDeclaration {

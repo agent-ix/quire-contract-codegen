@@ -52,6 +52,36 @@ pub(crate) fn retain_selected_extensions(
     }
 }
 
+/// Hold the domain package document QSpec's `selected-documents.json` pairs with `fixture`
+/// (a path under `fixtures/`), so the reader can resolve the fixture's selected model owner.
+/// A fixture with no published pairing needs no document and retains none.
+#[allow(dead_code)] // Each test binary including this module uses a different subset.
+pub(crate) fn retain_selected_document(
+    qspec: &Path,
+    fixture: &str,
+    evidence: &mut CheckedPackageEvidence,
+) {
+    let root = qspec.join("proposals/checked-package-v2");
+    let selections: Value = serde_json::from_slice(
+        &fs::read(root.join("selected-documents.json"))
+            .expect("published fixture document selections"),
+    )
+    .expect("published selection JSON");
+    let fixture_path = format!("fixtures/{fixture}");
+    if let Some(selected_path) = selections["selected_documents"][fixture_path.as_str()].as_str() {
+        let bytes = fs::read(root.join(selected_path)).expect("published selected domain document");
+        let selected: Value = serde_json::from_slice(&bytes).expect("selected domain JSON");
+        evidence
+            .insert_domain_package_document(
+                selected["package"]["identity"]
+                    .as_str()
+                    .expect("selected domain identity"),
+                bytes,
+            )
+            .expect("retain published evidence");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3341,7 +3341,7 @@ pub const BOUNDED_BINARY_SUBTRACTION: u32 = 2037;
 /// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
 /// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
 pub fn bounded_increment_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
@@ -3369,7 +3369,7 @@ pub fn bounded_increment_package() -> PackageBuilder {
 
 /// A package holding `x - 1` over `Int[0, 9]`, parallel to [`bounded_increment_package`].
 pub fn bounded_decrement_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
@@ -3397,7 +3397,7 @@ pub fn bounded_decrement_package() -> PackageBuilder {
 
 /// A package holding `x - y` where both symbolic operands independently admit `[0, 9]`.
 pub fn bounded_binary_subtraction_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
     let operand_bound = Bound::Integer(0, 9);
     let operand_bound_key = builder.bound(&operand_bound);
     let minuend_key = key(V_PARAM_X);
@@ -4282,7 +4282,7 @@ pub fn conversion_operand_package() -> PackageBuilder {
 /// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
 /// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
 pub fn derivation_package() -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[T_BOOLEAN, T_INTEGER, T_RATIONAL]);
     let int5 = builder.bound(&INT5);
     let int = builder.bound(&INT);
     let rat = builder.bound(&RAT);

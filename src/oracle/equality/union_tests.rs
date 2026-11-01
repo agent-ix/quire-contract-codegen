@@ -108,10 +108,12 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     let mut nested = Vec::new();
     for name in ["Shape", "Other"] {
         let actual = declaration(&context, name);
-        assert_ne!(
+        // Structural identity (QSL admitted composites): a Union's type handle is derived from
+        // its declaration node, so the facade key and the settled node are the same NodeKey.
+        assert_eq!(
             actual.key(),
             actual.node(),
-            "type handle and settled node differ"
+            "type handle and settled node share one structural identity"
         );
         assert_eq!(
             environment.union_key(actual.key().clone()),
@@ -280,7 +282,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         })
     );
     let library = qsl_replay::SuppliedLibrary {
-        identity: "test/union".to_owned(),
+        identity: "admitted-composites".to_owned(),
         source: qsl_replay::SourceIdentity::new(
             "test",
             "admitted-composites.native",
@@ -303,7 +305,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
             path: "union-importer.native",
             bytes:
                 br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
-        import "test/union" as u;
+        import "admitted-composites" as u;
         function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }"#,
         },
         [],
@@ -320,7 +322,10 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
             package_name: owner.as_str().to_owned(),
         })
     );
-    // Swap a genuine owner declaration under a different handle: no forged member/key.
+    // Swap a genuine owner declaration under a different handle: no forged member/key. With
+    // structural identity every settled node is itself a declared composite key, so the
+    // kernel refuses the forged settlement as a duplicate key before it reaches the member
+    // binding comparison.
     let mut bindings = healthy.composite_bindings.clone();
     bindings.get_mut(shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
     bindings.remove(declaration(&context, "Wrap").key());
@@ -333,9 +338,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         failure,
         Err(ItemCheckError::Refusal(
             CompositeEqualityRefusal::Declaration {
-                cause: DeclarationRefusalCause::Type {
-                    cause: IllTypedCauseKind::TypeMismatch
-                },
+                cause: DeclarationRefusalCause::DuplicateKey,
                 ..
             }
         ))

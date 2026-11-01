@@ -77,6 +77,13 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     .unwrap();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    // The fixture's model-root owner is resolved from the domain document QSpec publishes
+    // for it, as for every published fixture read.
+    crate::checked_package_evidence::retain_selected_document(
+        &PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout")),
+        "positive-operation-identities.json",
+        &mut evidence,
+    );
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
     let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
@@ -122,13 +129,14 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let mut narrow = target.clone();
     narrow.semantic_form = "conversion".into();
     narrow.semantic_type = bound.node_id.clone();
-    narrow.body = serde_json::from_value(json!({
+    // `CheckedTerm` is read from node-id RawValues, which a buffered tagged-enum decode cannot
+    // supply, so the authored body is written onto the node's wire form directly.
+    let narrow_body = json!({
         "term": "application", "operator": entry["operator"],
         "operation": {"identity": entry["identity"], "laws": entry["laws"],
             "mode": entry["mode"], "member": member, "leaves": []},
         "result_type": bound.node_id, "arguments": [{"term":"reference", "target":target.node_id}]
-    }))
-    .expect("authored narrowing is a typed checked term");
+    });
     narrow.dependencies = vec![target.node_id.clone(), bound.node_id.clone()];
     narrow.dependencies.sort();
     // The source key here is only a provisional selector on a detached draft.
@@ -139,10 +147,12 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     .unwrap();
     narrow.node_id = key.clone();
     assert!(original.graph().nodes.iter().all(|n| n.node_id != key));
+    let mut narrow_wire = serde_json::to_value(&narrow).unwrap();
+    narrow_wire["body"] = narrow_body;
     wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
-        .push(serde_json::to_value(&narrow).unwrap());
+        .push(narrow_wire);
     // This is an authored fixture extension, not a claim that QSL compiled it.
     // Reuse a genuine published expression locus for the additional occurrence.
     for occurrence in original
