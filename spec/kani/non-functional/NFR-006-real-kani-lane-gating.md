@@ -194,11 +194,12 @@ NFR-006-AC-8 retains the post-run dirty-tree refusal without a Git revision comp
 NFR-006-AC-14 is retired under IR-1105 because it compared Git revisions.
 No equivalent revision or digest gate replaces AC-14. The actual current-candidate Kani runs remain required.
 
-NFR-006-AC-19 remains Open. IR-1105 retires the frozen V1 claim inventory and
-its hold; neither provides module proof credit. The original FR-003@4 transition
-and a distinct V2 implication claim each require genuine current-build module
-claims and installed-Kani positive and falsifying controls. IR-1047 Acceptance 4
-remains unmet.
+NFR-006-AC-19 remains Open pending IR-1047's current-build claim source,
+compiled-module census and helper controls. The V2 implication claim qualifies
+that machinery independently of IR-1049's later new V2 Boolean transition claim.
+Each requires its own installed-Kani positive and falsifying evidence. The
+[V1 retirement record](../functional/FR-041-claimed-module-proof-gate.md#v1-claim-retirement)
+creates no exception for a current V2 claim.
 
 ## Open decisions
 
