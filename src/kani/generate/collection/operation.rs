@@ -226,12 +226,7 @@ pub(super) fn lower(
         preconditions: Vec::new(),
     };
     if spec.postcondition {
-        for sibling in &graph.package.graph().nodes {
-            if sibling.node_id == *clause
-                || anchor(graph, &sibling.node_id).as_ref() != Some(&anchor_id)
-            {
-                continue;
-            }
+        for sibling in graph.preconditions.get(&anchor_id).into_iter().flatten() {
             let Some((StateClauseKind::Precondition, _, body)) =
                 state_clause_parts(&graph.index, sibling)
             else {
@@ -557,7 +552,10 @@ pub(super) fn validate(
         node_id: node_id.clone(),
         reason,
     };
+    let value_bytes = u64::try_from(std::mem::size_of::<quire_exact::Value>())
+        .map_err(|_| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
     let mut bytes = 0u64;
+    let mut capacity_failure = None;
     for field in &operation.spec.identity.fields {
         let storage = match &field.bounds {
             SymbolicBounds::Sequence {
@@ -579,37 +577,48 @@ pub(super) fn validate(
                         },
                     ));
                 }
-                if field.collection_kind == Some(CollectionKindIdentity::OrderedSet) {
-                    let element = match element.as_ref() {
-                        SymbolicBounds::Boolean => CollectionElement::Boolean,
-                        SymbolicBounds::Integer { minimum, maximum } => {
-                            CollectionElement::Integer {
-                                minimum: *minimum,
-                                maximum: *maximum,
-                            }
-                        }
-                        _ => {
-                            return Err(failure(
-                                CollectionUnsupportedReason::UnsupportedObjectState,
-                            ))
-                        }
-                    };
-                    if let Some(capacity) = super::unique_capacity_exceeded(element, maximum) {
-                        return Err(failure(
+                let (primitive, input_bytes) = match element.as_ref() {
+                    SymbolicBounds::Boolean => (CollectionElement::Boolean, 1),
+                    SymbolicBounds::Integer { minimum, maximum } => (
+                        CollectionElement::Integer {
+                            minimum: *minimum,
+                            maximum: *maximum,
+                        },
+                        8,
+                    ),
+                    _ => return Err(failure(CollectionUnsupportedReason::UnsupportedObjectState)),
+                };
+                if field.collection_kind == Some(CollectionKindIdentity::OrderedSet)
+                    && capacity_failure.is_none()
+                {
+                    capacity_failure =
+                        super::unique_capacity_exceeded(primitive, maximum).map(|capacity| {
                             CollectionUnsupportedReason::UniqueElementCapacityExceeded {
                                 capacity,
                                 declared_maximum: maximum,
-                            },
-                        ));
-                    }
+                            }
+                        });
                 }
-                maximum
-                    .checked_mul(3 * (std::mem::size_of::<quire_exact::Value>() as u64 + 16))
-                    .and_then(|value| value.checked_add(64))
+                // Both retained exact states, their elements, the symbolic array and length.
+                value_bytes
+                    .checked_mul(2)
+                    .and_then(|state| state.checked_add(input_bytes))
+                    .and_then(|element| maximum.checked_mul(element))
+                    .and_then(|elements| elements.checked_add(2 * value_bytes + 8))
             }
-            _ => Some(3 * (std::mem::size_of::<quire_exact::Value>() as u64 + 16)),
+            SymbolicBounds::Boolean => Some(2 * value_bytes + 1),
+            SymbolicBounds::Integer { .. } => Some(2 * value_bytes + 8),
         }
         .ok_or_else(|| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
+        bytes = bytes
+            .checked_add(storage)
+            .ok_or_else(|| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
+    }
+    for parameter in &operation.spec.identity.parameters {
+        let storage = match parameter.domain {
+            CollectionElementIdentity::Boolean => 1,
+            CollectionElementIdentity::Integer { .. } => 8,
+        };
         bytes = bytes
             .checked_add(storage)
             .ok_or_else(|| failure(CollectionUnsupportedReason::DomainNotRepresentableInHarness))?;
@@ -621,6 +630,9 @@ pub(super) fn validate(
                 ceiling_bytes: request.ceilings.memory_bytes.get(),
             },
         ));
+    }
+    if let Some(reason) = capacity_failure {
+        return Err(failure(reason));
     }
     Ok(())
 }

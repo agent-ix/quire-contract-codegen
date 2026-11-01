@@ -104,6 +104,7 @@ pub(super) struct LoweredCollectionClaim {
 pub(super) struct CollectionGraph<'a> {
     package: &'a CheckedPackageV2,
     index: CollectionNodeIndex<'a>,
+    preconditions: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSemanticNodeV2>>,
 }
 
 struct CollectionNodeIndex<'a> {
@@ -152,7 +153,27 @@ impl<'a> CollectionGraph<'a> {
         COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut index = CollectionNodeIndex::from_nodes(package.graph().nodes.iter());
         index.package = Some(package);
-        Self { package, index }
+        let mut preconditions = BTreeMap::<_, Vec<_>>::new();
+        for node in &package.graph().nodes {
+            let Some(CheckedTerm::Application {
+                operation,
+                arguments,
+                ..
+            }) = package.term(&node.node_id)
+            else {
+                continue;
+            };
+            if operation.state_clause_kind().ok().flatten() == Some(StateClauseKind::Precondition) {
+                if let Some(CheckedTerm::Reference { target }) = arguments.get(1) {
+                    preconditions.entry(target).or_default().push(node);
+                }
+            }
+        }
+        Self {
+            package,
+            index,
+            preconditions,
+        }
     }
 }
 
@@ -243,9 +264,8 @@ pub(super) fn lower_collection_claim(
     })
 }
 
-/// Resolve a whole authored precondition quantifier for its operation-clause harness.
-/// A conjunct is never promoted into a separate precondition: the selected quantifier must
-/// be the clause body itself, so the cover keeps the authored clause's complete meaning.
+/// Resolve a complete collection operation clause and its whole admitted object state.
+/// A selected quantifier identifies its field; the oracle retains every supported conjunct.
 pub(super) fn lower_collection_operation(
     graph: &CollectionGraph<'_>,
     clause_id: &CheckedNodeId,
@@ -509,18 +529,18 @@ fn render_collection_artifact(
     Ok(crate::core::artifact::Artifact::new(rendered.path, source))
 }
 
-/// Render a source-backed collection precondition as its one V2 operation-clause harness.
+/// Render a source-backed collection clause as its one whole-object operation harness.
 /// The shared collection domain is validated before the operation-clause source is rendered.
 pub(super) fn render_collection_operation(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let (spec, collection) = prepare_collection(request, lowered)?;
     let operation = lowered
         .operation
         .as_ref()
         .ok_or(UnsupportedObligation::RenderFailed)?;
-    operation::validate(request, operation, &collection.function_id)?;
+    operation::validate(request, operation, &lowered.field.function)?;
+    let (spec, collection) = prepare_collection(request, lowered)?;
     let context = &operation.spec.identity;
     if operation.spec.postcondition {
         for sibling in &context.preconditions {

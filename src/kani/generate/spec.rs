@@ -351,7 +351,7 @@ pub(super) enum HarnessShape {
     Collection(CollectionSpec),
     CollectionOperation {
         collection: CollectionSpec,
-        operation: CollectionOperationSpec,
+        operation: Box<CollectionOperationSpec>,
     },
     Frame(FrameSpec),
 }
@@ -633,7 +633,7 @@ impl HarnessSpec {
         }
         self.shape = HarnessShape::CollectionOperation {
             collection,
-            operation,
+            operation: Box::new(operation),
         };
         Ok(self)
     }
