@@ -366,8 +366,10 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
 
     let (foreign_package, _, _) = admitted("self.balance > pre(self.balance)");
     let mut mismatched_owner = request(&package, &clause, &claim);
+    // A package is identified by its name and lock; the lock names its sources by authority and
+    // identity only, so a foreign package of the same source carries a name of its own.
     let foreign_source = quire_contract_model::ContractSourceV1 {
-        name: foreign_package.name().into(),
+        name: format!("foreign-{}", foreign_package.name()).into(),
         lock: foreign_package.lock().clone(),
     };
     mismatched_owner.process_source = Some(&foreign_source);
@@ -392,8 +394,8 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(diagnostic.code, V2NumericErrorCode::MissingClaimOccurrence);
     assert!(generate_v2_numeric_strategy(&request(&package, &clause, &claim)).is_ok());
 
-    let (other_package, absent_clause, _) = admitted("self.balance < pre(self.balance)");
-    assert_ne!(package.lock(), other_package.lock());
+    let (_, absent_clause, _) = admitted("self.balance < pre(self.balance)");
+    assert_ne!(clause, absent_clause);
     let absent = V2NumericRequest {
         key: V2SelectedClaimKey {
             clause: &absent_clause,

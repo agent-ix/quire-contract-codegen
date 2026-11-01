@@ -2362,10 +2362,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
         crate::generated_headers::assert_header(
             &harness.rust.path,
             &harness.rust.contents,
-            &[
-                "deposit",
-                &format!("{:?}", fixture.clause).escape_debug().to_string(),
-            ],
+            &["deposit", &format!("{:?}", fixture.clause)],
         );
         for node in [
             &harness.identity.scope.object,
@@ -2375,7 +2372,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
             crate::generated_headers::assert_header(
                 &harness.rust.path,
                 &harness.rust.contents,
-                &[&format!("{node:?}").escape_debug().to_string()],
+                &[&format!("{node:?}")],
             );
         }
     }
@@ -3447,7 +3444,10 @@ fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
     let spare_a = twin.emitted_package("SpareA").1;
     let spare_b = twin.emitted_package("SpareB").1;
     let spare_c = twin.emitted_package("SpareC").1;
-    let other = emitted_fixture(&Twin::build(&[], &CLAUSES, 0), "BalanceNeverDrops");
+    let other = emitted_fixture(
+        &Twin::build(&[], &CLAUSES, 0).with_source_identity("test:state-frame-other"),
+        "BalanceNeverDrops",
+    );
     let absent = package::id(&key(9999));
     let items = [
         selected_spec(&fixture.package, &fixture.clause, Contract, &STATE_FIELDS).item(),

@@ -126,8 +126,13 @@ fn distinct_pointed_invariants_render_distinct_verdict_points_and_identities() {
         ));
     }
     for pair in results.windows(2) {
-        assert_ne!(pair[0].0, pair[1].0, "point changes node identity");
-        assert_ne!(pair[0].1, pair[1].1, "point changes package identity");
+        // The lock names sources and selections only, so the point lives in the package's
+        // execution-point table and the verdict context, not in clause or package identity.
+        assert_eq!(
+            pair[0].0, pair[1].0,
+            "point leaves the clause node identity"
+        );
+        assert_eq!(pair[0].1, pair[1].1, "point leaves the package lock");
         assert_ne!(
             pair[0].2, pair[1].2,
             "point changes runtime verdict context"

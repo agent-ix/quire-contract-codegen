@@ -38,7 +38,7 @@ fn source_path(id: &quire_contract_model::CheckedNodeId) -> String {
 fn fixture_code_id(wire: &serde_json::Value, code: u32) -> quire_contract_model::CheckedNodeId {
     serde_json::from_value(serde_json::json!({
         "package": wire["name"],
-        "path": [key(code)],
+        "path": [format!("n{}", key(code))],
         "ordinal": 0,
     }))
     .expect("fixture code key")
@@ -2199,6 +2199,11 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     });
     let dependencies = clause["dependencies"].as_array_mut().unwrap();
     dependencies.push(json!(fairness_placeholder));
+    // The reader requires a node's dependencies in node-ID order.
+    dependencies.sort_by_key(|dependency| {
+        serde_json::from_value::<quire_contract_model::CheckedNodeId>(dependency.clone())
+            .expect("dependency ID")
+    });
     builder = PackageBuilder::from_wire(wire);
 
     let body = json!({
