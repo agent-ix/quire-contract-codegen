@@ -261,15 +261,15 @@ pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
             }
         }
     }
-    let mut name = String::with_capacity(json.len());
+    let mut name = Vec::with_capacity(json.len());
     for byte in json.bytes() {
         if matches!(byte, b'%' | b'=' | b';' | b'|' | b'<' | b'>') || byte < 0x20 || byte == 0x7f {
-            name.push_str(&format!("%{byte:02X}"));
+            name.extend_from_slice(format!("%{byte:02X}").as_bytes());
         } else {
-            name.push(char::from(byte));
+            name.push(byte);
         }
     }
-    name
+    String::from_utf8(name).expect("escapes are ASCII and the rest is the JSON's UTF-8")
 }
 
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
