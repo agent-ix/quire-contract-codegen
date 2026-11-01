@@ -1517,3 +1517,179 @@ fn operand_type_refusal_retains_the_original_v2_frame() {
         ClaimDisposition::Refused { refusal: quire_contract_codegen::ExactFunctionRefusal::UnsupportedOperandType { type_node_id } }
         if type_node_id == &bounded));
 }
+
+/// Real owner declarations and body mutations run together in one emitted crate.
+#[trace(
+    "TC-057",
+    "FR-042-AC-2",
+    "FR-042-AC-3",
+    "FR-021-AC-38",
+    "FR-021-AC-39",
+    "FR-021-AC-40"
+)]
+#[test]
+fn tc_057_generated_checked_invariant_guards_use_checked_owner_inputs() {
+    const SOURCE: &str = concat!(
+        "language \"ix:native\" edition \"1-draft\";\n",
+        "profile v = \"quire.value.complete/v1\";\n",
+        "tuple Pair(Boolean, Integer);\n",
+        "union Choice { Empty, Some(Pair) }\n",
+        "record Holder { pair: Pair; shape: Choice; flag: Boolean?; }\n",
+        "function eq using v(x: Holder, y: Holder): Boolean pure { x = y }\n",
+        "function bool_eq using v(x: Boolean, y: Boolean): Boolean pure { x = y }\n",
+        "function add using v(x: Integer, y: Integer): Integer pure { x + y }\n",
+        "function probe_eq using v(x: Holder, y: Holder): Boolean pure { eq(x, y) }\n",
+        "function probe_bool using v(x: Boolean, y: Boolean): Boolean pure { bool_eq(x, y) }\n",
+        "function probe_add using v(x: Integer, y: Integer): Integer pure { add(x, y) }\n",
+    );
+    let package = admitted_source_text(SOURCE);
+    let holder = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.node_tag.as_ref() == "composite_type"
+                && node
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|d| d.qualified_name == [Box::<str>::from("Holder")])
+        })
+        .expect("checked Holder declaration")
+        .node_id
+        .clone();
+    let boolean = type_id(&package, "boolean");
+    let mut declarations = [("eq", holder), ("bool_eq", boolean.clone())]
+        .map(|(name, operand)| {
+            let mut declaration = declared_source_body(
+                &package,
+                name,
+                boolean.clone(),
+                ExactFunctionBody::CompositeEquality {
+                    operator: EqualityOperatorKind::Equal,
+                },
+            );
+            for parameter in &mut declaration.parameters {
+                parameter.type_node_id = operand.clone();
+            }
+            declaration
+        })
+        .to_vec();
+    declarations.push(declared_source_body(
+        &package,
+        "add",
+        type_id(&package, "integer"),
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Add,
+        },
+    ));
+    let generated = generated_for_source_items(
+        &package,
+        &declarations,
+        &[
+            item(&package, "probe_eq", "eq"),
+            item(&package, "probe_bool", "bool_eq"),
+            item(&package, "probe_add", "add"),
+        ],
+    );
+    let boolean_body_symbol = generated
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(item) if item.function == "bool_eq" => item
+                .oracle_symbol
+                .strip_prefix("oracle_")
+                .map(str::to_owned),
+            _ => None,
+        })
+        .expect("emitted Boolean body identity");
+    let aliases = generated
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| {
+            let ClaimDisposition::Generated(item) = &claim.result else {
+                panic!("checked nominal equality renders: {:?}", claim.result);
+            };
+            format!(
+                "pub use {} as oracle_{};\n",
+                item.oracle_symbol, item.function
+            )
+        })
+        .collect::<String>();
+    let codegen_dependency = format!(
+        "quire-contract-codegen = {{ path = {:?} }}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let mut artifacts = generated.artifacts.iter().map(|artifact| {
+        let contents = if artifact.path == "Cargo.toml" {
+            artifact.contents.replace("quire-contract-codegen = { git = \"https://github.com/agent-ix/quire-contract-codegen\", branch = \"main\" }", &codegen_dependency)
+        } else { artifact.contents.clone() };
+        (artifact.path.clone(), contents)
+    }).collect::<Vec<_>>();
+    let source = artifacts
+        .iter()
+        .find(|(path, _)| path == "src/lib.rs")
+        .expect("generated library")
+        .1
+        .clone();
+    assert!(source.contains("selection.signature().result().clone()"));
+    let complete = "Outcome::Completed(value) => Outcome::Completed(Value::Boolean(value))";
+    assert!(
+        source.contains(complete),
+        "mutations change only real completed-body values"
+    );
+    for (label, replacement) in [
+        ("healthy", None),
+        ("wrong", Some("Outcome::Completed(value) => { let _ = value; Outcome::Completed(Value::Integer(exact::Integer::from(7_i64))) }")),
+        ("undefined", Some("Outcome::Completed(value) => { let _ = value; Outcome::Undefined(exact::Undefined::DivisionByZero) }")),
+        ("refused", Some("Outcome::Completed(value) => { let _ = value; Outcome::Refused(Refusal::CheckedInvariant { cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }) }")),
+        ("incomplete", Some("Outcome::Completed(value) => { let _ = value; Outcome::Incomplete(exact::Incomplete { limit_kind: exact::LimitKind::WorkUnits, limit: 9, consumed: 9, next_charge: exact::Integer::from(1_i64), charge_point: exact::ChargePoint::BooleanResultRetain }) }")),
+        ("duplicate", None),
+        ("constructor_allocation", None), ("constructor_capacity", None),
+        ("membership_allocation", None), ("membership_capacity", None),
+    ] {
+        let mut contents = replacement.map_or_else(|| source.clone(), |replacement| source.replace(complete, replacement));
+        if label == "duplicate" {
+            let assembly = "        let environment = TypeEnvironment::bounded_with_cancel(";
+            assert_eq!(contents.matches(assembly).count(), 1);
+            contents = contents.replacen(assembly, &format!("        if let Some(declaration) = declarations.first().cloned() {{ declarations.push(declaration); }}\n{assembly}"), 1);
+        }
+        // Only the test copy selects QSV's public reservation seam. The
+        // constructor/membership implementation and emitted cause guards stay
+        // unchanged, and production code gains no test-policy input.
+        if label.starts_with("constructor_") {
+            contents = contents.replace("TypeEnvironment::bounded_with_cancel(", "TypeEnvironment::bounded_with_reservation(");
+            let decision = if label.ends_with("capacity") { "CapacityExceeded" } else { "AllocationDenied" };
+            contents = contents.replace("resources.environment_limits, &resources.cancel)", &format!("resources.environment_limits, &|_| sv::declaration::ReservationDecision::{decision})"));
+        }
+        if label.starts_with("membership_") {
+            let decision = if label.ends_with("capacity") { "CapacityExceeded" } else { "AllocationDenied" };
+            contents = contents.replace("environment.admits(&self.result, value)", &format!("environment.admits_with_reservation(&self.result, value, &|_| {{ REQUESTS.fetch_add(1, std::sync::atomic::Ordering::SeqCst); sv::declaration::ReservationDecision::{decision} }})"));
+            contents.push_str("\npub(super) static REQUESTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);\n");
+        }
+        contents.push_str(&format!(r#"
+pub(super) fn invoke_native_body(
+    declaring_package: &CheckedPackageV2,
+    acquired: &qsl_replay::CheckedClosureCompilation,
+    selection: &qsl_replay::CallableSelection,
+    arguments: Vec<Value>, meter: &mut Meter,
+) -> Result<Transition, eval::BodyFailure> {{
+    let prepared = PreparedFunction::new(declaring_package, acquired, selection, &Default::default(),
+        sv::location::Location::root(sv::location::Origin::Expression)).expect("same checked owner");
+    let factory = body_{boolean_body_symbol}::Factory(std::sync::Arc::new(prepared));
+    factory.begin().resume(Resume::Start(arguments), meter)
+}}
+"#));
+        contents.push_str(&aliases);
+        contents.push_str(include_str!("../exact_function_support/invariant_inspection.rs"));
+        artifacts.push((format!("{label}.rs"), contents));
+    }
+    let constants = format!("pub const SOURCE: &str = {SOURCE:?};\n");
+    super::exact_scalar_agreement::run_agreement_cases(
+        "exact-function-checked-invariants",
+        artifacts.iter().map(|(p, c)| (p.as_str(), c.as_str())),
+        &[("fixture.rs", constants.as_str())],
+        "tests/exact_function_support/invariant_cases.rs",
+    );
+}
