@@ -196,6 +196,7 @@ impl Executable {
 use std::sync::{Mutex, atomic::{AtomicUsize, Ordering}};
 static DRAWS: Mutex<std::collections::VecDeque<i64>> = Mutex::new(std::collections::VecDeque::new());
 static COVERS: AtomicUsize = AtomicUsize::new(0);
+static COVER_REACHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub trait Draw { fn draw() -> Self; }
 impl Draw for i64 { fn draw() -> Self { DRAWS.lock().unwrap().pop_front().expect("all symbolic draws supplied") } }
 impl Draw for bool { fn draw() -> Self { match <i64 as Draw>::draw() { 0 => false, 1 => true, _ => panic!("Boolean draw") } } }
@@ -203,8 +204,8 @@ impl<T: Draw, const N: usize> Draw for [T; N] { fn draw() -> Self { std::array::
 pub fn any<T: Draw>() -> T { T::draw() }
 pub fn assume(condition: bool) { assert!(condition, "symbolic input excluded"); }
 pub fn seed(values: Vec<i64>) { *DRAWS.lock().unwrap() = values.into(); }
-pub fn cover(_condition: bool) { COVERS.fetch_add(1, Ordering::SeqCst); }
-pub fn finish() { assert!(DRAWS.lock().unwrap().is_empty(), "every declared state and parameter draw is consumed"); assert_eq!(COVERS.load(Ordering::SeqCst), 1); }
+pub fn cover(condition: bool) { COVERS.fetch_add(1, Ordering::SeqCst); if condition { COVER_REACHED.store(true, Ordering::SeqCst); } }
+pub fn finish() { assert!(DRAWS.lock().unwrap().is_empty(), "every declared state and parameter draw is consumed"); assert_eq!(COVERS.load(Ordering::SeqCst), 1); if std::env::args().nth(4).as_deref() == Some("cover") { assert!(COVER_REACHED.load(Ordering::SeqCst), "an admitted draw reaches the actual generated cover"); } }
 #[macro_export] macro_rules! cover { ($condition:expr, $message:expr) => { $crate::cover($condition) }; }
 "#;
         fs::write(scratch.path.join("kani.rs"), driver).unwrap();
@@ -798,5 +799,39 @@ fn inherited_fields_retain_the_actual_declaring_node_in_whole_object_identity() 
             .map(|field| field.name())
             .collect::<Vec<_>>(),
         ["z_items"]
+    );
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+fn postcondition_nonvacuity_accepts_intermediate_lengths_selected_by_sibling_preconditions() {
+    let mut doc = document();
+    doc["types"][1]["fields"][0]["typeRef"] = json!("ix://quire/native/Boolean");
+    doc["types"][1]["fields"][0]["multiplicity"]["upper"] = json!(2);
+    let package = fixture_with_body(&doc,
+        "pre OnlyTrue using v on M::Node::step { forall(flag in self.z_items: flag != false) }\npre NonEmpty using v on M::Node::step { exists(flag in self.z_items: flag != false) }",
+        "exists(flag in self.z_items: flag != false)");
+    let harness = postcondition(negotiate(&package, &clauses(&package)));
+    assert_eq!(
+        harness
+            .identity
+            .collection_operation
+            .as_ref()
+            .unwrap()
+            .preconditions
+            .len(),
+        2
+    );
+    let executable = Executable::compile(&harness);
+    let output = std::process::Command::new("timeout")
+        .arg("30s")
+        .arg(executable.scratch.path.join("operation"))
+        .args(["healthy", "1,1,0,1,2,2,1", "1", "cover"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "only length1 satisfies both sibling preconditions; it must witness the real cover: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }

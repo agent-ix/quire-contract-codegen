@@ -184,7 +184,7 @@ fn condition_expression(condition: &CollectionCondition, state: &str) -> Option<
 
 fn emit(
     spec: &HarnessSpec,
-    selected: &CollectionSpec,
+    _selected: &CollectionSpec,
     operation: &CollectionOperationSpec,
 ) -> Option<String> {
     let path = spec.path();
@@ -294,8 +294,13 @@ fn emit(
             }
         }
         writeln!(source, "let outcome = oracle_clause(&post, &pre{oracle_arguments});\nassert!(matches!(outcome, ClauseEvaluation::Completed(true)), \"the produced state satisfies the authored collection postcondition\");").ok()?;
-        let field = &operation.identity.fields[operation.identity.selected_field];
-        writeln!(source, "kani::cover!(collection(&pre.{}).elements().len() == {} || collection(&pre.{}).elements().len() == {}, \"a selected field cardinality endpoint is reachable\");", field.slot, selected.minimum_length, field.slot, selected.maximum_length).ok()?;
+        writeln!(
+            source,
+            "kani::cover!({}, \"{}\");",
+            spec.cover().condition.as_str(),
+            spec.cover().message
+        )
+        .ok()?;
     } else {
         writeln!(
             source,

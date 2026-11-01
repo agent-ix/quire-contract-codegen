@@ -624,13 +624,15 @@ impl HarnessSpec {
         let HarnessShape::Collection(collection) = self.shape else {
             return Err(HarnessSpecError::InvalidDomain);
         };
-        if !operation.postcondition {
-            self.cover = Cover {
-                condition: ExprText::new("matches!(outcome, ClauseEvaluation::Completed(true))")?,
-                message: "the selected precondition is satisfiable in its admitted domain"
-                    .to_owned(),
-            };
-        }
+        self.cover = Cover {
+            condition: ExprText::new("matches!(outcome, ClauseEvaluation::Completed(true))")?,
+            message: if operation.postcondition {
+                "a state satisfying the operation preconditions reaches its postcondition"
+            } else {
+                "the selected precondition is satisfiable in its admitted domain"
+            }
+            .to_owned(),
+        };
         self.shape = HarnessShape::CollectionOperation {
             collection,
             operation: Box::new(operation),
