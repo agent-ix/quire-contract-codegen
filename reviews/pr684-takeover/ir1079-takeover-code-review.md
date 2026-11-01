@@ -56,3 +56,27 @@ Plan completion: not assessed
 ### Round 1 validation limits
 
 Inspected all 10 changed files from 229b043f to 7dbadd42. Source structural-key joins and reached_closure metadata mapping preserve the two identity frames. Opaque operation metadata remains reader-negative and has a detached-term references control; a genuine admitted argument reference remains the mixed-consumer discriminator. No new defect found in this disposition pass. Parent reports repaired focused unit cases and clean clippy; full integration target is running. The original FAIL above records the original review state. The finding is now fixed, but neither full integration success nor CI Test green is claimed; those merge gates remain pending. No Cargo or Kani rerun by reviewer.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | high | Repair rerun still reports three non-baseline integration failures at cbf5d0e9 | tests/it/composite_equality_generation.rs:2318, tests/it/exact_function_generation.rs:2171 |
+
+The running /tmp/ir1079-failed-repair.log reports FAILED for tc_029_nominal_owner_lookups_use_only_structural_wire_identities and tc_031_ac33_direct_case_call_node_is_unsupported / tc_031_ac33_direct_fairness_call_node_is_unsupported. These are outside the three specifically accepted baseline exceptions. Their final panic diagnostics are not yet available because the target remains running. Resolve these tests with preserved identity/refusal obligations before the final full integration run.
+
+### Disposition pass 2 inspection
+
+Examined e295d831..cbf5d0e9 production identity joins, shared Arc frame-key map, source claim remapping, replay projection, schema and fixture changes. WireGraph::new preserves supplied node graph order; map construction uses unsorted owner node order, matching its index frame. Composite descriptor types are mapped source-to-output before checking and public bindings remapped back; source-map lookup uses original source. Frame replay resolves harness IDs using the located producer document. No independently proven incorrect identity mapping found in this inspection. Wrong-form/wrong-base private controls assert typed MissingBound through both generation and derivation; public reader-negative controls remain. FND-001 stays fixed. FND-002 is still open pending the repair rerun and final full target. No aggregate gate rerun requested and no Cargo/Kani run by reviewer.
+
+## Dispositions (round 3)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | Inspected cbf5d0e9..bcb60b40: owner lookup assertion now requires context.wire_graph().key and current owner API while banning consumer key synthesis; source accounting and represented output IDs are distinct in PackageItems; fairness fixture retains its model dependency and authenticated cause precedence. Parent targeted runs repair the three failures; final depth log also passes. |
+
+### Round 3 evidence and limits
+
+Examined all 12 changed files for frame correctness and coverage preservation. PackageItems constructs graph-frame maps once from graph-ordered WireGraph keys; accounted_node remains exclusively source-table occurrence accounting, represented_node is used for graph body/argument lookup, and reverse maps translate public scalar semantic types, bounds, checked bounds and dependencies to original V2 IDs. ContractLookup uses output IDs for graph/term lookup and original V2 IDs for source occurrences; derived domain IDs and operand range IDs are translated before comparison, replacing the obsolete partial inferred-only remap. The frame artifact digest includes authenticated structural identity rather than a diagnostic label. No compatibility shim or acceptance-criterion narrowing was found. The private wrong-form operand/result controls retain exact typed MissingBound assertions for both generation and derivation.
+
+The round-2 121-test repair log had 114 passes and seven failures; subsequent repairs and targeted runs resolve the reported failure paths. /tmp/ir1079-final-depth.log shows the TC-033 nested depth test passed; /tmp/ir1079-final-unit.log shows 30 units passed. Parent reports fairness and private controls passed and fmt/all-target clippy clean. No new finding identified. Full final local integration remains required; the aggregate gate was not rerun, and this review does not claim whole-target success. No Cargo or Kani commands run by reviewer.
