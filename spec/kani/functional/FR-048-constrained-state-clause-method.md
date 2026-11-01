@@ -160,9 +160,13 @@ invent a second outcome mapping.
 These rows specify semantic correspondence, not a cast of QSL verdict names to
 Kani outcome variants. A QSL `Holds` alone cannot establish a Kani success, and
 a `ConstraintReached` alone cannot fabricate installed-backend evidence.
-CG SHALL require agreement of the selected method identity across the backend,
-QSL observation and replay before conversion. If they disagree, then CG SHALL
-return a typed binding refusal with no terminal or proof credit.
+CG SHALL require agreement of the selected method identity across the backend
+and QSL observation before conversion. For a falsified or Undefined violation
+whose terminal requires replay, CG SHALL additionally bind that replay to the
+same method under FR-029. Non-falsified constrained outcomes convert without
+a replay settlement; an unexpected settlement retains FR-029's typed pair
+refusal. If a required binding disagrees, then CG SHALL return a typed binding
+refusal with no terminal or proof credit.
 
 QSL owns the terminal value/cause vocabulary and serialization. Until its
 public API can retain the constrained method and represent these
