@@ -240,7 +240,13 @@ pub(super) fn lower(
                 "pre",
                 &mut 256usize,
             )
-            .ok_or_else(|| refused(CollectionUnsupportedReason::UnsupportedSiblingPrecondition))?;
+            .ok_or_else(|| {
+                refused(
+                    CollectionUnsupportedReason::UnsupportedSiblingPrecondition {
+                        precondition: sibling.node_id.clone(),
+                    },
+                )
+            })?;
             spec.identity.preconditions.push(sibling.node_id.clone());
             spec.preconditions.push(condition);
         }

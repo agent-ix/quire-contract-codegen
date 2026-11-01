@@ -552,7 +552,9 @@ pub(super) fn render_collection_operation(
             if !present {
                 return Err(UnsupportedObligation::CollectionClaimNotRendered {
                     node_id: collection.function_id.clone(),
-                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition,
+                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition {
+                        precondition: sibling.clone(),
+                    },
                 });
             }
         }

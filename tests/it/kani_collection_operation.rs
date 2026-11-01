@@ -134,7 +134,13 @@ fn postcondition(outcome: KaniObligationOutcome) -> KaniV2ClauseObligationHarnes
 }
 
 #[test]
-#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+#[trace(
+    "TC-025",
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-96",
+    "FR-015-AC-99"
+)]
 fn operation_context_retains_every_field_and_parameter_in_declared_order() {
     let package = fixture(&document(), "");
     let ids = clauses(&package);
@@ -333,7 +339,7 @@ fn subject(items: &mut quire_exact::Value, unread: &mut quire_exact::Value, coun
 }
 
 #[test]
-#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+#[trace("TC-025", "FR-015-AC-39", "FR-015-AC-96", "FR-015-AC-99")]
 fn operation_context_executes_exact_state_and_rejects_every_bad_produced_axis() {
     let package = fixture(&document(), "");
     let harness = postcondition(negotiate(&package, &clauses(&package)));
@@ -376,7 +382,7 @@ fn operation_context_executes_exact_state_and_rejects_every_bad_produced_axis() 
 }
 
 #[test]
-#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-99")]
+#[trace("TC-025", "FR-015-AC-43", "FR-015-AC-96", "FR-015-AC-99")]
 fn operation_context_requires_and_assumes_same_anchor_preconditions() {
     let package = fixture(&document(), "pre Ready using v on M::Node::step { self.m_count >= limit and enabled }\npre ItemsReady using v on M::Node::step { forall(item in self.z_items: item >= 0) }");
     let ids = clauses(&package);
@@ -417,10 +423,11 @@ fn operation_context_requires_and_assumes_same_anchor_preconditions() {
         quire_contract_codegen::ObligationDisposition::Unsupported {
             reason: quire_contract_codegen::UnsupportedObligation::CollectionClaimNotRendered {
                 reason:
-                    quire_contract_codegen::CollectionUnsupportedReason::MissingSiblingPrecondition,
+                    quire_contract_codegen::CollectionUnsupportedReason::MissingSiblingPrecondition { ref precondition },
                 ..
             }
         }
+        if precondition == &harness.identity.collection_operation.as_ref().unwrap().preconditions[0]
     ));
 }
 
@@ -473,7 +480,6 @@ fn unsupported_whole_object_axes_have_typed_refusals_and_no_harness() {
         ("state", Reason::UnsupportedObjectState),
         ("parameter", Reason::UnsupportedOperationParameter),
         ("result", Reason::UnsupportedOperationResult),
-        ("sibling", Reason::UnsupportedSiblingPrecondition),
     ] {
         let mut doc = document();
         let pre = match axis {
@@ -489,9 +495,6 @@ fn unsupported_whole_object_axes_have_typed_refusals_and_no_harness() {
             "result" => {
                 doc["types"][1]["operations"][0]["returns"] = json!({"typeRef":"ix://quire/native/String","nullable":false,"multiplicity":{"lower":1,"upper":1,"ordered":false,"unique":true}});
                 ""
-            }
-            "sibling" => {
-                "pre Ready using v on M::Node::step { exists(item in self.z_items: item > limit) }"
             }
             _ => unreachable!(),
         };
@@ -833,5 +836,33 @@ fn postcondition_nonvacuity_accepts_intermediate_lengths_selected_by_sibling_pre
         output.status.success(),
         "only length1 satisfies both sibling preconditions; it must witness the real cover: {}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-43", "FR-015-AC-96", "FR-015-AC-102")]
+fn unsupported_sibling_refusal_names_the_exact_admitted_precondition() {
+    let package = fixture(
+        &document(),
+        "pre Ready using v on M::Node::step { exists(item in self.z_items: item > limit) }",
+    );
+    let ids = clauses(&package);
+    let pre = ids.iter().find(|id| matches!(package.term(id), Some(CheckedTerm::Application { operation, .. }) if operation.state_clause_kind().ok().flatten() == Some(quire_contract_model::StateClauseKind::Precondition))).unwrap();
+    let post = ids.iter().find(|id| matches!(package.term(id), Some(CheckedTerm::Application { operation, .. }) if operation.state_clause_kind().ok().flatten() == Some(quire_contract_model::StateClauseKind::Postcondition))).unwrap();
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = negotiate(&package, std::slice::from_ref(post))
+    else {
+        panic!("valid request")
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(
+        matches!(&records[0].disposition, quire_contract_codegen::ObligationDisposition::Unsupported {
+        reason: quire_contract_codegen::UnsupportedObligation::CollectionClaimNotRendered {
+            reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedSiblingPrecondition { precondition }, ..
+        }
+    } if precondition == pre)
     );
 }

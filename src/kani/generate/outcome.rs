@@ -460,7 +460,7 @@ pub enum ObligationDisposition {
 }
 
 /// Typed reasons a collection claim has no exact symbolic layout or predicate renderer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CollectionUnsupportedReason {
     /// The function, quantifier, projection, or binder shape is not a supported closed form.
@@ -478,9 +478,15 @@ pub enum CollectionUnsupportedReason {
     /// The operation result has no supported primitive subject ABI.
     UnsupportedOperationResult,
     /// A same-anchor precondition has no supported whole-object evaluation.
-    UnsupportedSiblingPrecondition,
+    UnsupportedSiblingPrecondition {
+        /// The exact admitted precondition whose body cannot be evaluated.
+        precondition: CheckedNodeId,
+    },
     /// The request omitted a same-anchor precondition required by the subject call.
-    MissingSiblingPrecondition,
+    MissingSiblingPrecondition {
+        /// The exact admitted precondition omitted by the request.
+        precondition: CheckedNodeId,
+    },
     /// The element interval has no values.
     UnsatisfiableElementDomain,
     /// A unique field's declared maximum exceeds its finite distinct-value capacity.
