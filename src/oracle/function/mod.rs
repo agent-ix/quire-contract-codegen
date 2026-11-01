@@ -2392,6 +2392,11 @@ fn check_position(
 /// Preserve an authenticated direct temporal root's unsupported provenance.
 /// The V1 represented graph omits refused roots; a plain V1 read cannot
 /// distinguish a formula or fairness request from a temporal clause.
+/// A directly requested formula or fairness root, authenticated by its V2 source kind, is
+/// `Unsupported` with the cause the IR lowering record names (FR-021-AC-33, TC-031): the first
+/// unsupported reachable node in ascending node-id order (FR-330), which is a model when the root
+/// declares one. The claim stays keyed by the requested node, not by the cause. The tag falls back
+/// to `"unknown"` for a wire tag outside the closed vocabulary, as at the other record sites.
 fn authenticated_direct_temporal_refusal(
     package: &ContractPackageV1,
     accounting_index: usize,
@@ -2406,18 +2411,21 @@ fn authenticated_direct_temporal_refusal(
         return None;
     }
     let PackageItem::Refused {
-        record: ContractFeatureRecordV1::Unsupported { node_id, .. },
+        record:
+            ContractFeatureRecordV1::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            },
         ..
     } = item
     else {
         return None;
     };
-    // The record names the first unsupported node the request reaches, which can be a dependency
-    // such as a model. The authenticated source kind says the requested root is itself the
-    // temporal formula or fairness, so the refusal names that root.
     Some(ExactFunctionRefusal::Unsupported {
-        unsupported_node_id: node_id.clone(),
-        node_tag: CheckedNodeTag::Temporal.as_wire(),
+        unsupported_node_id: unsupported_node_id.clone(),
+        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+            .map_or("unknown", CheckedNodeTag::as_wire),
     })
 }
 
