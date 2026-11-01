@@ -2244,7 +2244,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .expect("reader-admitted fairness node");
     assert_eq!(fairness.node_tag.as_ref(), "temporal");
     assert_eq!(fairness.semantic_form.as_ref(), "fairness");
-    assert_eq!(fairness.dependencies, vec![model_id]);
+    assert_eq!(fairness.dependencies, vec![model_id.clone()]);
 
     let function = quire_contract_codegen::ExactFunctionDeclaration {
         node_id: body_id.clone(),
@@ -2318,6 +2318,10 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         std::slice::from_ref(&healthy_item),
     )
     .unwrap();
+    // FR-330: an `unsupported` record names the requested node and the first unsupported
+    // reachable node in ascending node-id order. A fairness root reaches the model that owns its
+    // declaration, which sorts first, so the claim keeps the request's identity and the cause is
+    // that model (FR-021-AC-33, TC-031: the cause is the IR lowering record's).
     let direct = combined
         .claim_map
         .items
@@ -2330,9 +2334,9 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
             ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::Unsupported {
                 unsupported_node_id,
-                node_tag: "temporal",
+                node_tag: "model",
             }
-            } if unsupported_node_id == &fairness_id
+            } if unsupported_node_id == &model_id
         ),
         "direct result: {:?}",
         direct.result
@@ -2348,11 +2352,11 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
             &clause.result,
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                    node_tag: "temporal",
-                    issue: UpstreamBlocker::QuireSpecLanguage121,
-                    ..
+                    unsupported_node_id,
+                    node_tag: "model",
+                    issue: UpstreamBlocker::QuireSpecLanguage120,
                 }
-            }
+            } if unsupported_node_id == &model_id
         ),
         "clause result: {:?}",
         clause.result
@@ -2366,12 +2370,30 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         &[position(&fairness_id)],
         std::slice::from_ref(&direct_item),
     );
-    assert_eq!(
-        plain_result,
-        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
-            request_index: position(&fairness_id),
-            node_id: fairness_id.clone(),
-        })
+    // A plain V1 read keeps no V2 source kind and no unsupported nodes, only the lowering record.
+    // That record names the model as the cause (FR-330), so the plain claim is the same typed
+    // Unsupported(model) claim keyed by the request, with no schedule root; the
+    // `UnauthenticatedRequestedRootKind` guard applies where the record's cause is itself temporal.
+    let plain_oracles = plain_result.expect("a model cause leaves the plain request classifiable");
+    let plain_claim = plain_oracles
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == fairness_id)
+        .expect("plain claim retains requested identity");
+    assert!(
+        matches!(
+            &plain_claim.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                    unsupported_node_id,
+                    node_tag: "model",
+                    issue: UpstreamBlocker::QuireSpecLanguage120,
+                }
+            } if unsupported_node_id == &model_id
+        ),
+        "plain result: {:?}",
+        plain_claim.result
     );
     let duplicate = generate_exact_function_oracles(
         &plain,
@@ -2427,39 +2449,57 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::Unsupported {
                 unsupported_node_id,
-                node_tag: "temporal"
+                node_tag: "model"
             }
-        } if unsupported_node_id == &fairness_id
+        } if unsupported_node_id == &model_id
     ));
-    assert_eq!(
-        generate_exact_function_oracles(
-            &plain,
-            &requests,
-            &[body_position],
-            std::slice::from_ref(&temporal_function),
-            &[position(&call_id)],
-            std::slice::from_ref(&declared_item),
-        ),
-        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
-            request_index: body_position,
-            node_id: fairness_id.clone(),
-        })
-    );
+    // As for the direct request, a plain read names the model as the cause of the declared body.
+    let plain_body = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[body_position],
+        std::slice::from_ref(&temporal_function),
+        &[position(&call_id)],
+        std::slice::from_ref(&declared_item),
+    )
+    .expect("a model cause leaves the plain declared body classifiable");
+    assert!(matches!(
+        &plain_body.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                unsupported_node_id,
+                node_tag: "model",
+                issue: UpstreamBlocker::QuireSpecLanguage120,
+            }
+        } if unsupported_node_id == &model_id
+    ));
+    let is_model_blocker = |result: &ClaimDisposition<_, _>| {
+        matches!(
+            result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                    unsupported_node_id,
+                    node_tag: "model",
+                    issue: UpstreamBlocker::QuireSpecLanguage120,
+                }
+            } if unsupported_node_id == &model_id
+        )
+    };
     let mut later_arity_refusal = declared_item.clone();
     later_arity_refusal.argument_node_ids.pop();
-    assert_eq!(
-        generate_exact_function_oracles(
-            &plain,
-            &requests,
-            &[body_position],
-            std::slice::from_ref(&temporal_function),
-            &[position(&call_id)],
-            std::slice::from_ref(&later_arity_refusal),
-        ),
-        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
-            request_index: body_position,
-            node_id: fairness_id.clone(),
-        })
+    let plain_arity = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[body_position],
+        std::slice::from_ref(&temporal_function),
+        &[position(&call_id)],
+        std::slice::from_ref(&later_arity_refusal),
+    )
+    .expect("a model cause precedes the later arity refusal in a plain read");
+    assert!(
+        is_model_blocker(&plain_arity.claim_map.items[0].result),
+        "plain arity result: {:?}",
+        plain_arity.claim_map.items[0].result
     );
     for (first, second) in [
         (fairness_id.clone(), clause_id.clone()),
@@ -2496,13 +2536,17 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
                     &item_positions,
                     &items,
                 );
-                assert_eq!(
-                    result,
-                    Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
-                        request_index: 0,
-                        node_id: first.clone(),
-                    })
-                );
+                // Both the temporal clause and the fairness-bodied function reach the model,
+                // so each claim carries the model's blocker whatever the input order.
+                let result = result.expect("a model cause leaves every plain claim classifiable");
+                assert_eq!(result.claim_map.items.len(), 2);
+                for claim in &result.claim_map.items {
+                    assert!(
+                        is_model_blocker(&claim.result),
+                        "plain ordered result: {:?}",
+                        claim.result
+                    );
+                }
             }
         }
     }
@@ -2556,9 +2600,9 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::Unsupported {
                     unsupported_node_id,
-                    node_tag: "temporal",
+                    node_tag: "model",
                 }
-            } if unsupported_node_id == &fairness_id
+            } if unsupported_node_id == &model_id
         ),
         "declared fairness body result: {:?}",
         body_claim.result

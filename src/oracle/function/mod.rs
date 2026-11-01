@@ -2406,18 +2406,21 @@ fn authenticated_direct_temporal_refusal(
         return None;
     }
     let PackageItem::Refused {
-        record: ContractFeatureRecordV1::Unsupported { node_id, .. },
+        record:
+            ContractFeatureRecordV1::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            },
         ..
     } = item
     else {
         return None;
     };
-    // The record names the first unsupported node the request reaches, which can be a dependency
-    // such as a model. The authenticated source kind says the requested root is itself the
-    // temporal formula or fairness, so the refusal names that root.
     Some(ExactFunctionRefusal::Unsupported {
-        unsupported_node_id: node_id.clone(),
-        node_tag: CheckedNodeTag::Temporal.as_wire(),
+        unsupported_node_id: unsupported_node_id.clone(),
+        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+            .map_or("unknown", CheckedNodeTag::as_wire),
     })
 }
 
