@@ -323,7 +323,8 @@ impl KaniScalarNativeError {
             | Self::NativeResult(_)
             | Self::SnapshotChanged => EnvironmentFault,
             Self::Kani(refusal) => match refusal {
-                KaniExecutionRefusal::HarnessNotInCrate { .. }
+                KaniExecutionRefusal::WrongMethodExecutionRoute
+                | KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
                 | KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. }
                 | KaniExecutionRefusal::OutputOverLimit { .. }
