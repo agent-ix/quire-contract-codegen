@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-The code generator SHALL assign the shared quire-exact typed checked-invariant cause at each generated Boolean, equality, function and pre-check placeholder constructor.
+The code generator SHALL assign the shared quire-exact typed checked-invariant cause at each generated Boolean, equality and function constructor.
 
 ## Inputs
 
