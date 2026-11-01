@@ -113,3 +113,9 @@ PASS for the scoped PR findings at 565ce888. Original findings remain unchanged.
 ## Completion delta audit
 
 At 1383564b, the added identity control authenticates the typed exported conjunction/scalar API and distinguishes nonquantifier and sibling-literal meanings. Existing operation-fixture/source/playback expectations now use the whole-state ABI. AC-38/39/43 trace bindings remain in place. No additional scoped gap finding; parent owns final-head execution gates.
+
+## Final execution-fix audit
+
+Inspected d4fe78fc and c928f303 after 1383564b. Quantifier discovery now skips non-reference Boolean operands of conjunctions; condition_operand retains inline scalar operands through the existing checked scalar lowering. Canonical Boolean values are read with as_bool rather than as_str, with no fallback or duplicate parser. The authentic QSL test compiles and executes both true-before-forall and forall-before-true authored bodies. Shared budget exhaustion remains a refusal; complete conditions remain in the single identity/render AST. No new defect found; all earlier findings remain fixed. Observed /tmp/ir1091-all-collection-final.log: 37 passed, 0 failed, 3 explicitly ignored backend-lane tests in 2.81s. This adds ordinary execution evidence only; full-head integration/Clippy/unit gates remain parent-owned.
+
+PASS for the scoped review at c928f303.

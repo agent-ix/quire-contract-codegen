@@ -129,3 +129,9 @@ Inspected 565ce888..ea1f91a9. The one typed condition representation is shared b
 ## Completion delta verdict
 
 PASS for the scoped fix audit at 1383564b; no open review findings. No new cargo gate was run by the reviewer. Parent owns pending final-head gate evidence.
+
+## Final execution-fix audit
+
+Inspected d4fe78fc and c928f303 after 1383564b. Quantifier discovery now skips non-reference Boolean operands of conjunctions; condition_operand retains inline scalar operands through the existing checked scalar lowering. Canonical Boolean values are read with as_bool rather than as_str, with no fallback or duplicate parser. The authentic QSL test compiles and executes both true-before-forall and forall-before-true authored bodies. Shared budget exhaustion remains a refusal; complete conditions remain in the single identity/render AST. No new defect found; all earlier findings remain fixed. Observed /tmp/ir1091-all-collection-final.log: 37 passed, 0 failed, 3 explicitly ignored backend-lane tests in 2.81s. This adds ordinary execution evidence only; full-head integration/Clippy/unit gates remain parent-owned.
+
+PASS for the scoped review at c928f303.
