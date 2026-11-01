@@ -111,7 +111,7 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
         // Point's), so the reached key is still absent.
         rt::TypeEnvironment::new(
             vec![rt::CompositeDeclaration::new(
-                support::context().composites().find(|declaration| declaration.qualified_name().iter().map(|part| part.as_str()).eq(["OtherPoint"])).expect("genuine distinct admitted record").key(),
+                support::context().composites().find(|declaration| declaration.qualified_name().iter().map(|part| part.as_str()).eq(["OtherPoint"])).expect("genuine distinct admitted record").key().clone(),
                 "R_POINT-under-a-different-key",
                 rt::CompositeShape::Record(vec![
                     rt::FieldDeclaration::new("x", rt::ValueType::Integer, rt::Presence::Required),

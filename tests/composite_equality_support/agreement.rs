@@ -149,7 +149,7 @@ macro_rules! shared_helpers {
             };
             super::context().composites().find(|declaration|
                 declaration.qualified_name().iter().map(|part| part.as_str()).eq([name])
-            ).expect("the selected original source declares this exact type").key()
+            ).expect("the selected original source declares this exact type").key().clone()
         }
 
         pub fn composite_type(code: u32) -> ValueType {
@@ -372,9 +372,9 @@ macro_rules! shared_helpers {
         pub fn enum_members() -> quire_semantic_value::enumeration::EnumMemberIndex {
             let mut index = quire_semantic_value::enumeration::EnumMemberIndex::default();
             for actual in super::context().enums() {
-                let declaration = EnumDeclaration::new(actual.key(), actual.is_ordered(), actual.cases().iter().map(|case| case.case().as_str().to_owned()).collect())
+                let declaration = EnumDeclaration::new(actual.key().clone(), actual.is_ordered(), actual.cases().iter().map(|case| case.case().as_str().to_owned()).collect())
                     .expect("genuine full enum declaration");
-                for case in actual.cases() { index.record(declaration.member(case.case().as_str(), case.key()).expect("actual admitted member")); }
+                for case in actual.cases() { index.record(declaration.member(case.case().as_str(), case.key().clone()).expect("actual admitted member")); }
             }
             index
         }
@@ -464,16 +464,15 @@ pub mod rt_side {
     pub fn enum_status() -> EnumStatus {
         let admitted = super::context().enums().find(|item| item.qualified_name().iter().map(|part| part.as_str()).eq(["Phase"]))
             .expect("the original source declared Phase").clone();
-        let declaration = EnumDeclaration::new(admitted.key(), admitted.is_ordered(), admitted.cases().iter().map(|case| case.case().as_str().to_owned()).collect()).expect("real original enum declaration");
+        let declaration = EnumDeclaration::new(admitted.key().clone(), admitted.is_ordered(), admitted.cases().iter().map(|case| case.case().as_str().to_owned()).collect()).expect("real original enum declaration");
         EnumStatus { declaration, admitted }
     }
 
     impl EnumStatus {
         pub fn member(&self, case: &str) -> EnumValue {
-            let wire = qsl_replay::WireNodeId::from_digest(*self.admitted.key().as_bytes());
             let name = Identifier::new(case).expect("case identifier");
-            let actual = super::context().enum_case(wire, &name).expect("real admitted case");
-            self.declaration.member(case, actual.key()).expect("member belongs to original declaration")
+            let actual = super::context().enum_case(self.admitted.key(), &name).expect("real admitted case");
+            self.declaration.member(case, actual.key().clone()).expect("member belongs to original declaration")
         }
         pub fn value(&self, case: &str) -> Value {
             let member = self.member(case);
