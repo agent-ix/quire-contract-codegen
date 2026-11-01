@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-PASS — all original, fix-round and aggregate-discovered findings are resolved through 464d46da. Clippy and focused regressions pass; qualifying full integration on the changed production head remains pending.
+PASS — all review findings are resolved. The qualifying full local integration target at d5033b30 matches the explicitly authorized existing baseline: 746 passed, 1 named existing QSL failure, 34 ignored; there are no new failures. This is qualified delivery evidence, not an all-green Cargo test result.
 
 ## Findings
 
@@ -147,3 +147,15 @@ Inspected 464d46da44ed66513359aee0af6c16b72bf9e94c: the two binary and one call 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-006 | fixed | Required body-form policy has one home; classify_body_shape consumes the preflight result without repeating its form checks. |
+
+
+## Final qualification
+
+Inspected the completed qualification at d5033b30818df46ef692800962e63103d54a6f99. The diff from production source head 464d46da44ed66513359aee0af6c16b72bf9e94c contains review artifacts only. CG origin/main remains f3d328e37d28a381e68bb4b7bbe248218e712f95 and QSpec main remains 3405bdb8c5355adef03202d4573a95c4219178d9.
+
+- The single aggregate gate at d0d4f039 passed fmt, spec validation, all-target clippy, check, deny, rustdoc, gate build and QSpec preflight selftest. Its initial full library target measured 487 passed, 1 failed and 8 ignored; the sole stale source-map expectation was corrected with 33/33 targeted library tests passing. The original full integration target measured 744 passed, 3 failed and 34 ignored and discovered the conversion-form and root-export defects; these are recorded and fixed, not hidden or waived.
+- Fix-head checks passed all-target clippy, rustdoc, 33/33 targeted library tests, and 23/23 focused integration tests. The last focused run follows the removal of redundant body-form guards and includes conversion refusal, Negate precedence, signatures, isolation, compiled own/imported native agreement and root-only exports.
+- `/tmp/ir595-qualifying-it.log` is the complete changed-production-head integration target: **746 passed, 1 failed, 34 ignored**, 644.50 seconds. The sole failure is `kani_obligations_state_frame::tc_025_model_member_types_without_i64_ranges_remain_unranged`, with QSL `ModelIntake` / `UnsupportedConstruct`: `quire.meaning.model.value-type/v1:profile` has no reader yet. This is the explicitly accepted existing baseline from the merged cohort, not a new failure. Cargo exits 101 for that failure; this review does not label the full test suite green.
+- The changed-head full target passes the conversion refusal, architectural layout, 100000-node/512KiB split schedule compilation and compiled own/imported owner-path parity tests. No test graph size or AC was narrowed, and the forbidden 16 GiB Kani proof was not run.
+
+All original and subsequent findings have a latest fixed disposition. No remaining review concern was found in the final changes. Earlier pending and open notes above are historical evidence at their stated heads and are superseded by this final qualification. Admin merge is the lead's action under the user's authorized baseline rule; the reviewer made no source edits, Cargo runs or merge action.
