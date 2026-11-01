@@ -2700,12 +2700,11 @@ fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
     }
 }
 
-/// Classify one declared function's own body shape against its lowered
-/// node, independent of any other function (Stage 1, non-`Call` bodies), and
+/// Classify one declared function's own body after its required-form preflight,
+/// independent of any other function (Stage 1, non-`Call` bodies), and
 /// return the body with its operator resolved: the one place a scalar operator
 /// is checked, so the rendered body cannot disagree with the refusal.
-fn classify_body_shape<'r, Body>(
-    node: &CheckedSemanticNodeV2<Body>,
+fn classify_body_shape<'r>(
     body: Option<&CheckedTerm>,
     declaration: &'r ExactFunctionDeclaration,
     parameter_kinds: &[OperandKind],
@@ -2717,11 +2716,6 @@ fn classify_body_shape<'r, Body>(
                     detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
                 },
             )?;
-            if &*node.semantic_form != "binary" {
-                return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.semantic_form.to_string(),
-                });
-            }
             let arguments = body
                 .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
@@ -2739,11 +2733,6 @@ fn classify_body_shape<'r, Body>(
             Ok(ClassifiedBody::Scalar(operator))
         }
         ExactFunctionBody::CompositeEquality { operator } => {
-            if &*node.semantic_form != "binary" {
-                return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.semantic_form.to_string(),
-                });
-            }
             let arguments = body
                 .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
@@ -2769,14 +2758,7 @@ fn classify_body_shape<'r, Body>(
             let _ = arguments;
             Ok(ClassifiedBody::Equality(*operator))
         }
-        ExactFunctionBody::Call { callee } => {
-            if &*node.semantic_form != "call" {
-                return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.semantic_form.to_string(),
-                });
-            }
-            Ok(ClassifiedBody::Call(callee))
-        }
+        ExactFunctionBody::Call { callee } => Ok(ClassifiedBody::Call(callee)),
     }
 }
 
@@ -2977,7 +2959,6 @@ pub fn generate_exact_function_oracles(
                 resolve_operand_type(graph, represented_result, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             let body = classify_body_shape(
-                closure.root,
                 graph.term(&closure.root.node_id),
                 declaration,
                 &parameter_kinds,
