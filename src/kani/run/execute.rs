@@ -2427,6 +2427,13 @@ exit 0
                 parameters: Vec::new(),
                 result: None,
                 preconditions: Vec::new(),
+                condition:
+                    crate::kani::identity::CollectionOperationConditionIdentity::Quantifier {
+                        field: 0,
+                        operation: collection.quantifier_operation.clone(),
+                        predicate: collection.predicate.clone(),
+                    },
+                precondition_bodies: Vec::new(),
             }),
             collection_precondition: Some(CollectionPreconditionIdentity {
                 collection,

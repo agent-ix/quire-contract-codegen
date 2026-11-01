@@ -8,11 +8,12 @@ use super::{
 use crate::kani::{
     generate::{
         outcome::CollectionUnsupportedReason,
-        spec::{CollectionCondition, CollectionOperationSpec, ExprText},
+        spec::{CollectionOperationSpec, ExprText},
     },
     identity::{
         CollectionElementIdentity, CollectionKindIdentity, CollectionObjectFieldIdentity,
-        CollectionOperationIdentity, CollectionOperationValueIdentity, SymbolicBounds,
+        CollectionOperationConditionIdentity, CollectionOperationIdentity,
+        CollectionOperationValueIdentity, SymbolicBounds,
     },
 };
 use quire_contract_model::{
@@ -20,6 +21,12 @@ use quire_contract_model::{
     LiteralKind, StateClauseKind,
 };
 use std::collections::BTreeSet;
+
+struct ConditionBindings<'a> {
+    fields: &'a [CollectionObjectFieldIdentity],
+    parameters: &'a [CollectionOperationValueIdentity],
+    result: Option<&'a CollectionOperationValueIdentity>,
+}
 
 pub(super) struct LoweredOperation {
     pub(super) spec: CollectionOperationSpec,
@@ -204,6 +211,19 @@ pub(super) fn lower(
             parameters.push(value);
         }
     }
+    let primary = condition(
+        graph,
+        clause,
+        &body,
+        &ConditionBindings {
+            fields: &fields,
+            parameters: &parameters,
+            result: result.as_ref(),
+        },
+        "state",
+        &mut 256usize,
+    )
+    .ok_or_else(failure)?;
     let identity = CollectionOperationIdentity {
         quantifier_id: selected.quantifier.clone(),
         projection_id: selected.projection.clone(),
@@ -215,15 +235,13 @@ pub(super) fn lower(
         parameters,
         result,
         preconditions: Vec::new(),
-    };
-    let primary =
-        condition(graph, clause, &body, &identity, "state", &mut 256usize).ok_or_else(failure)?;
-    let mut spec = CollectionOperationSpec {
         condition: primary,
+        precondition_bodies: Vec::new(),
+    };
+    let mut spec = CollectionOperationSpec {
         identity,
         postcondition: kind == StateClauseKind::Postcondition,
         subject_path: String::new(),
-        preconditions: Vec::new(),
     };
     if spec.postcondition {
         for sibling in graph.preconditions.get(&anchor_id).into_iter().flatten() {
@@ -236,7 +254,11 @@ pub(super) fn lower(
                 graph,
                 &sibling.node_id,
                 &body,
-                &spec.identity,
+                &ConditionBindings {
+                    fields: &spec.identity.fields,
+                    parameters: &spec.identity.parameters,
+                    result: None,
+                },
                 "pre",
                 &mut 256usize,
             )
@@ -248,7 +270,7 @@ pub(super) fn lower(
                 )
             })?;
             spec.identity.preconditions.push(sibling.node_id.clone());
-            spec.preconditions.push(condition);
+            spec.identity.precondition_bodies.push(condition);
         }
     }
     Ok(LoweredOperation {
@@ -291,7 +313,7 @@ fn collection_read(
     graph: &CollectionGraph<'_>,
     clause: &CheckedNodeId,
     term: &CheckedTerm,
-    context: &CollectionOperationIdentity,
+    context: &ConditionBindings<'_>,
     current: &str,
 ) -> Option<String> {
     let node = graph.index.node(&term_target(term)?)?;
@@ -328,10 +350,10 @@ fn condition(
     graph: &CollectionGraph<'_>,
     clause: &CheckedNodeId,
     body: &CheckedNodeId,
-    context: &CollectionOperationIdentity,
+    context: &ConditionBindings<'_>,
     current: &str,
     budget: &mut usize,
-) -> Option<CollectionCondition> {
+) -> Option<CollectionOperationConditionIdentity> {
     *budget = budget.checked_sub(1)?;
     let node = graph.index.node(body)?;
     if let Some(CheckedTerm::Application {
@@ -344,7 +366,7 @@ fn condition(
             let [left, right] = arguments.as_slice() else {
                 return None;
             };
-            return Some(CollectionCondition::And(
+            return Some(CollectionOperationConditionIdentity::And(
                 Box::new(condition(
                     graph,
                     clause,
@@ -371,9 +393,12 @@ fn condition(
                 collection_read(graph, clause, left, context, current)?,
                 collection_read(graph, clause, right, context, current)?,
             );
-            return Some(CollectionCondition::Scalar(
-                ExprText::new(format!("structural_equal({left}, {right})")).ok()?,
-            ));
+            return Some(CollectionOperationConditionIdentity::Scalar {
+                expression: ExprText::new(format!("structural_equal({left}, {right})"))
+                    .ok()?
+                    .as_str()
+                    .to_owned(),
+            });
         }
     }
     let role = if state_clause_parts(&graph.index, graph.index.node(clause)?)?.0
@@ -390,7 +415,7 @@ fn condition(
             .fields
             .iter()
             .position(|field| field.field_name == collection.field_name)?;
-        return Some(CollectionCondition::Quantifier {
+        return Some(CollectionOperationConditionIdentity::Quantifier {
             field,
             operation: collection.quantifier_operation,
             predicate: collection.predicate,
@@ -408,14 +433,16 @@ fn condition(
         budget,
         current,
     )?;
-    Some(CollectionCondition::Scalar(ExprText::new(expression).ok()?))
+    Some(CollectionOperationConditionIdentity::Scalar {
+        expression: ExprText::new(expression).ok()?.as_str().to_owned(),
+    })
 }
 
 fn scalar_condition(
     graph: &CollectionGraph<'_>,
     clause: &CheckedNodeId,
     term: &CheckedTerm,
-    context: &CollectionOperationIdentity,
+    context: &ConditionBindings<'_>,
     visiting: &mut BTreeSet<CheckedNodeId>,
     budget: &mut usize,
     current: &str,
@@ -432,7 +459,7 @@ fn scalar_condition(
                 let value = context
                     .parameters
                     .iter()
-                    .chain(context.result.iter())
+                    .chain(context.result)
                     .find(|value| value.name == name && value.type_id == node.semantic_type)?;
                 match value.domain {
                     CollectionElementIdentity::Boolean => value.binding.clone(),

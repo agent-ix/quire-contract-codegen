@@ -866,3 +866,45 @@ fn unsupported_sibling_refusal_names_the_exact_admitted_precondition() {
     } if precondition == pre)
     );
 }
+
+#[test]
+#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-100")]
+fn identity_binds_nonquantifier_conjuncts_and_assumed_precondition_meaning() {
+    let variants = [
+        (
+            "",
+            "forall(item in self.z_items: item >= 0) and self.m_count >= 1",
+        ),
+        (
+            "",
+            "forall(item in self.z_items: item >= 0) and self.m_count >= 2",
+        ),
+        (
+            "pre Ready using v on M::Node::step { self.m_count >= 1 }",
+            "forall(item in self.z_items: item >= 0)",
+        ),
+        (
+            "pre Ready using v on M::Node::step { self.m_count >= 2 }",
+            "forall(item in self.z_items: item >= 0)",
+        ),
+    ]
+    .map(|(pre, body)| {
+        let package = fixture_with_body(&document(), pre, body);
+        postcondition(negotiate(&package, &clauses(&package)))
+    });
+    assert_ne!(variants[0].identity, variants[1].identity);
+    assert_ne!(
+        variants[0].identity.module_symbol,
+        variants[1].identity.module_symbol
+    );
+    assert_ne!(variants[2].identity, variants[3].identity);
+    assert_ne!(
+        variants[2].identity.module_symbol,
+        variants[3].identity.module_symbol
+    );
+    let context = variants[2].identity.collection_operation.as_ref().unwrap();
+    assert_eq!(
+        context.preconditions.len(),
+        context.precondition_bodies.len()
+    );
+}

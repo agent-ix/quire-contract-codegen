@@ -274,23 +274,10 @@ pub(super) struct CollectionSpec {
     pub(super) predicate: CollectionPredicateIdentity,
 }
 #[derive(Clone, Debug)]
-pub(super) enum CollectionCondition {
-    And(Box<Self>, Box<Self>),
-    Scalar(ExprText),
-    Quantifier {
-        field: usize,
-        operation: String,
-        predicate: CollectionPredicateIdentity,
-    },
-}
-
-#[derive(Clone, Debug)]
 pub(super) struct CollectionOperationSpec {
     pub(super) identity: crate::kani::identity::CollectionOperationIdentity,
     pub(super) postcondition: bool,
     pub(super) subject_path: String,
-    pub(super) preconditions: Vec<CollectionCondition>,
-    pub(super) condition: CollectionCondition,
 }
 
 #[derive(Clone, Debug)]

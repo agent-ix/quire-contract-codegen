@@ -230,6 +230,11 @@ fn model_document_with_step() -> Value {
         .iter_mut()
         .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
         .unwrap();
+    // This operation fixture has only exact finite state that its subject ABI can carry.
+    node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|field| matches!(field["name"].as_str(), Some("items" | "flags")));
     node["operations"] = json!([{
         "identity": format!("{NODE_ID}/step"),
         "name": "step",
@@ -1924,11 +1929,16 @@ fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationH
 fn collection_totality_playback_binds_the_generated_assertion_in_the_default_lane() {
     let fixture = precondition_collection_fixture("forall(item in self.items: item >= 0)");
     let harness = precondition_collection_harness(&fixture);
-    let entries = [2_i64, 0, 1, 0]
+    let entries = [2_i64, 0, 1, 0, 0, 0, 0]
         .iter()
-        .map(|value| {
-            let bytes = value
-                .to_le_bytes()
+        .enumerate()
+        .map(|(index, value)| {
+            let bytes = if index >= 5 {
+                vec![u8::try_from(*value).unwrap()]
+            } else {
+                value.to_le_bytes().to_vec()
+            };
+            let bytes = bytes
                 .iter()
                 .map(u8::to_string)
                 .collect::<Vec<_>>()
@@ -1944,7 +1954,7 @@ fn collection_totality_playback_binds_the_generated_assertion_in_the_default_lan
     );
     let limits = quire_contract_codegen::WitnessDecodeLimits {
         bytes: 4096,
-        values: 4,
+        values: 7,
     };
     let playback = quire_contract_codegen::parse_assertion_playback(
         &transcript,
@@ -1959,10 +1969,13 @@ fn collection_totality_playback_binds_the_generated_assertion_in_the_default_lan
             .expect("the bound assertion and typed receiver settle");
     assert_eq!(
         witness,
-        vec![(
-            "items".to_owned(),
-            WitnessValue::OrderedSet(vec![WitnessValue::Integer(0), WitnessValue::Integer(1)])
-        )]
+        vec![
+            (
+                "self.items".to_owned(),
+                WitnessValue::OrderedSet(vec![WitnessValue::Integer(0), WitnessValue::Integer(1)])
+            ),
+            ("self.flags".to_owned(), WitnessValue::Sequence(Vec::new())),
+        ]
     );
     assert!(matches!(
         settlement,
@@ -2042,11 +2055,11 @@ fn precondition_collection_source_is_admitted() {
     assert!(harness
         .rust
         .contents
-        .contains("kani::assume(item != selected_items[prior as usize]);"));
+        .contains("kani::assume(item != field_0_items[prior as usize]);"));
     assert!(harness
         .rust
         .contents
-        .contains("let outcome = oracle_clause(&selected_items, selected_items_len);"));
+        .contains("let outcome = oracle_clause(&pre, &pre);"));
     assert!(harness
         .rust
         .contents
@@ -2109,7 +2122,7 @@ fn precondition_collection_source_controls_quantifier_element_and_census() {
     assert!(exists_harness
         .rust
         .contents
-        .contains("(0..selected_items_len).any(|index|"));
+        .contains(".elements().iter().any(|item|"));
     assert_eq!(
         exists_harness
             .identity
@@ -2139,7 +2152,7 @@ fn precondition_collection_source_controls_quantifier_element_and_census() {
     assert!(boolean_harness
         .rust
         .contents
-        .contains("let selected_flags: [bool; 2] = kani::any();"));
+        .contains("let field_1_items: [bool; 2] = kani::any();"));
 
     let required = [ProofDependencyRequest {
         proof_id: "upstream-proof",
@@ -2246,14 +2259,12 @@ fn precondition_collection_source_refusals_emit_no_harness() {
         ..
     } = outcome
     else {
-        panic!("unsupported whole clause");
+        panic!("supported complete conjunction");
     };
-    assert!(v2_clause_harnesses.is_empty());
+    assert_eq!(v2_clause_harnesses.len(), 1);
     assert!(matches!(
         records[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseConditionNotRendered { .. }
-        }
+        ObligationDisposition::Supported { .. }
     ));
 
     let mut extra_parameter = model_document_with_step();
@@ -2287,14 +2298,12 @@ fn precondition_collection_source_refusals_emit_no_harness() {
         ..
     } = outcome
     else {
-        panic!("extra operation parameter is an unsupported item");
+        panic!("bounded operation parameter has an exact draw");
     };
-    assert!(v2_clause_harnesses.is_empty());
+    assert_eq!(v2_clause_harnesses.len(), 1);
     assert!(matches!(
         records[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseConditionNotRendered { .. }
-        }
+        ObligationDisposition::Supported { .. }
     ));
 
     let mut unsupported = model_document_with_step();
@@ -2357,8 +2366,8 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
         write_manifest(
             &scratch.path,
             &format!(
-                "[package]\nname = \"generated-kani-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-                runtime_dependency(&["exact"])
+                "[package]\nname = \"generated-kani-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+                runtime_dependency(&["exact"]), quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
             ),
         );
         fs::write(
@@ -2413,8 +2422,8 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
         write_manifest(
             &scratch.path,
             &format!(
-                "[package]\nname = \"generated-kani-precondition-mutant\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-                runtime_dependency(&["exact"])
+                "[package]\nname = \"generated-kani-precondition-mutant\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+                runtime_dependency(&["exact"]), quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
             ),
         );
         fs::write(
@@ -2456,7 +2465,7 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             "collection precondition",
             variant,
             64 * 1024,
-            4,
+            7,
         )
         .expect("Kani's bound totality assertion has one concrete playback");
         let (decoded, settlement) = settle_v2_collection_precondition_falsification(
@@ -2464,14 +2473,23 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             &playback,
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: 64 * 1024,
-                values: 4,
+                values: 7,
             },
         )
         .expect("collection receiver witness is in its admitted domain");
-        let [(field, WitnessValue::OrderedSet(items))] = decoded.as_slice() else {
-            panic!("{variant}: expected one typed OrderedSet receiver witness: {decoded:?}");
+        let [(field, WitnessValue::OrderedSet(items)), (other, WitnessValue::Sequence(flags))] =
+            decoded.as_slice()
+        else {
+            panic!("{variant}: expected the whole typed receiver witness: {decoded:?}");
         };
-        assert_eq!(field, "items");
+        assert_eq!(field, "self.items");
+        assert_eq!(other, "self.flags");
+        assert!(
+            flags.len() <= 2
+                && flags
+                    .iter()
+                    .all(|value| matches!(value, WitnessValue::Boolean(_)))
+        );
         assert!((2..=3).contains(&items.len()));
         assert!(items
             .iter()
@@ -2497,7 +2515,7 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             "collection precondition",
             variant,
             64 * 1024,
-            4,
+            7,
         )
         .expect("mutated assertion text remains a valid playback");
         let decode_error = settle_v2_collection_precondition_falsification(
@@ -2505,7 +2523,7 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             &wrong_playback,
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: 64 * 1024,
-                values: 4,
+                values: 7,
             },
         )
         .unwrap_err();

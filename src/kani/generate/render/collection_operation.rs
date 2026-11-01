@@ -2,7 +2,7 @@
 
 use super::super::{
     outcome::UnsupportedObligation,
-    spec::{CollectionCondition, CollectionOperationSpec, CollectionSpec, HarnessSpec},
+    spec::{CollectionOperationSpec, CollectionSpec, HarnessSpec},
 };
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
@@ -10,7 +10,7 @@ use crate::{
         abi::i64_literal,
         identity::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObjectFieldIdentity,
-            CollectionPredicateIdentity, SymbolicBounds,
+            CollectionOperationConditionIdentity, CollectionPredicateIdentity, SymbolicBounds,
         },
     },
 };
@@ -166,15 +166,20 @@ fn quantifier(
     ))
 }
 
-fn condition_expression(condition: &CollectionCondition, state: &str) -> Option<String> {
+fn condition_expression(
+    condition: &CollectionOperationConditionIdentity,
+    state: &str,
+) -> Option<String> {
     match condition {
-        CollectionCondition::Scalar(expression) => Some(expression.as_str().to_owned()),
-        CollectionCondition::Quantifier {
+        CollectionOperationConditionIdentity::Scalar { expression } => {
+            Some(expression.as_str().to_owned())
+        }
+        CollectionOperationConditionIdentity::Quantifier {
             field,
             operation,
             predicate,
         } => quantifier(*field, operation, predicate, state),
-        CollectionCondition::And(left, right) => Some(format!(
+        CollectionOperationConditionIdentity::And(left, right) => Some(format!(
             "({}) && ({})",
             condition_expression(left, state)?,
             condition_expression(right, state)?
@@ -224,10 +229,10 @@ fn emit(
         format!(", {}", oracle_arguments.join(", "))
     };
     writeln!(source, "#[allow(dead_code)] enum ClauseEvaluation {{ Completed(bool), Undefined, Refused, Incomplete }}\nfn oracle_clause({}) -> ClauseEvaluation {{", oracle_parameters.join(", ")).ok()?;
-    let claim = condition_expression(&operation.condition, "state")?;
+    let claim = condition_expression(&operation.identity.condition, "state")?;
     writeln!(
         source,
-        "ClauseEvaluation::Completed({claim})\n}}\n#[kani::proof]\nfn {}() {{",
+        "let claim = {claim};\nClauseEvaluation::Completed(claim)\n}}\n#[kani::proof]\nfn {}() {{",
         path.harness
     )
     .ok()?;
@@ -247,7 +252,7 @@ fn emit(
     }
     source.push_str("};\n");
     if operation.postcondition {
-        for condition in &operation.preconditions {
+        for condition in &operation.identity.precondition_bodies {
             let condition = condition_expression(condition, "pre")?;
             writeln!(source, "kani::assume({condition});").ok()?;
         }

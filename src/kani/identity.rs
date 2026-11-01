@@ -291,6 +291,28 @@ pub struct CollectionOperationValueIdentity {
     pub domain: CollectionElementIdentity,
 }
 
+/// Checked generator meaning of a whole-object collection condition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionOperationConditionIdentity {
+    /// A validated scalar expression over bound exact fields and primitive parameters.
+    Scalar {
+        /// The validated generated expression, including every scalar literal and read side.
+        expression: String,
+    },
+    /// A checked collection predicate over one declaration-order field slot.
+    Quantifier {
+        /// Index of the exact state field in the operation context.
+        field: usize,
+        /// Admitted forall or exists identity.
+        operation: String,
+        /// Checked element predicate.
+        predicate: CollectionPredicateIdentity,
+    },
+    /// The complete conjunction in authored operand order.
+    And(Box<Self>, Box<Self>),
+}
+
 /// Complete whole-object operation context of a collection-clause harness.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -315,6 +337,10 @@ pub struct CollectionOperationIdentity {
     pub result: Option<CollectionOperationValueIdentity>,
     /// Every same-anchor precondition assumed before a postcondition subject call.
     pub preconditions: Vec<CheckedNodeId>,
+    /// Complete authored condition, including supported non-quantifier conjuncts.
+    pub condition: CollectionOperationConditionIdentity,
+    /// Checked meanings of the assumed preconditions, in matching identity order.
+    pub precondition_bodies: Vec<CollectionOperationConditionIdentity>,
 }
 
 /// The one message identifying a collection precondition's totality assertion in Kani output.
