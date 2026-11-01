@@ -1335,11 +1335,11 @@ fn route_qsl_shaped_in(
     (record.clone(), harness.cloned())
 }
 
-fn qsl_shaped_routing_input_in(
-    package: &CheckedPackageV2,
+fn qsl_shaped_routing_input_in<'a>(
+    package: &'a CheckedPackageV2,
     ids: &package::FixtureIds,
     requests: &[(usize, u32)],
-) -> (Vec<RoutedGenerationItem>, AdmittedRoutingInput<'_>) {
+) -> (Vec<RoutedGenerationItem>, AdmittedRoutingInput<'a>) {
     let routed = requests
         .iter()
         .map(|(index, code)| route(*index, &ids.resolve(&package::code_id(*code))))
