@@ -142,3 +142,36 @@ scope:
     diagnostic evidence. Successful construction does not yield it; `Limit`, `Allocation`
     and `Capacity` are never
 ```
+
+## Follow-up review round 2
+
+**PASS** — Inspected head 480ee49e2d8849be5f540ce3ce00d733d469d25c against 7ece8cdd. Production is unchanged. AC14 now matches the already-borrowed environment argument. AC19 retains unwrap/expect and panic-macro prohibitions and checks bounded owner construction instead of an empty default. AC16 retains the ban on dynamic invocation-field reads/dependencies in schedules and maps, while explicitly allowing the AC38/39 static annotations. The syntax visitor visits assignment bases and right sides, so invocation-field reads in either still fail, and checks all evaluation binding names. Its self.location exemption matches the actual PreparedFunction static origin field inspected in owner_render.rs; no dynamic self.location/losses read exists in this candidate. Both current evaluation.location assignments use static origins, and stopped evaluations are forwarded intact. Restored adversarial rows remain intact. No new defect or gate narrowing found.
+
+Author-reported aggregate/focused logs are not independent execution evidence. No Cargo, rustc, Kani or proof run was performed. Original finding and disposition history remain unchanged.
+
+```yaml
+scope:
+- id: FR-021-AC-14
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: The schedule crate declares `publish = false`, compiles without a Contract
+    Runtime `exact` dependency, contains no charge amount or literal outcome/value
+    standing in for owner execution, and stays within caller-selected source bytes
+    and publication artifact limits.
+- id: FR-021-AC-16
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: The schedule and its claim/location maps neither read nor depend on dynamic
+    invocation `location` or `losses` fields, and make no assumption that QSL populates
+    them. The concrete AC-38/AC-39 guards assign their statically bound result/declaration
+    occurrence at those explicit failure boundaries; these writes do not derive schedule
+    metadata from invocation fields. Forwarding an existing evaluation preserves its
+    fields without reading them into the maps.
+- id: FR-021-AC-19
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: The emitted schedule crate for scalar, equality and nested-call corpus
+    cases contains zero `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!`
+    and `unimplemented!` tokens; the emitted concrete FR-485 scalar, equality and
+    nested-call oracle source obeys the same prohibition.
+```
