@@ -2140,8 +2140,20 @@ struct Derived {
 
 fn derived() -> Derived {
     let fixture = fixture();
-    let mut builder = package::derivation_package();
     let corpus = package::corpus();
+    let selected = fixture
+        .rendered
+        .iter()
+        .chain(std::iter::once(&fixture.unrendered))
+        .map(|node| {
+            corpus
+                .iter()
+                .find(|expression| fixture.ids.resolve(&package::code_id(expression.code)) == *node)
+                .map(|expression| expression.code)
+                .expect("selected scalar expression belongs to corpus")
+        })
+        .collect::<Vec<_>>();
+    let mut builder = package::derivation_package_with(&selected);
     for (index, node) in fixture
         .rendered
         .iter()
