@@ -91,10 +91,16 @@ decisions the original checked graph or detached lowering records would make.
    for every entry, the two bound items' original driver indexes, and the
    absence of a claim and artifact for the excluded position.
    Repeat with different raw V2 and V1 indexes that resolve to the same
-   structural key; settlement remains accepted. Remove or duplicate the
-   excluded position, change its resolved key, or supply an unresolvable V2
-   key while holding the admitted package fixed; each mismatch must refuse the
-   whole request before any artifact.
+   structural key and the same source name and complete lock; settlement
+   remains accepted. Separately supply a reader-admitted V2 source with the
+   same resolved request key but a different top-level name, then one with the
+   same name and a different complete lock, while holding the admitted V1
+   package fixed. Each must yield a typed whole-request refusal before any
+   artifact, or a typed Contract IR authenticated-handoff error with no
+   admitted package. Remove or duplicate the excluded position, change its
+   resolved key, or supply an unresolvable V2 key while holding the matched
+   source and admitted package fixed; each mismatch must refuse the whole
+   request before any artifact.
 8. For FR-039-AC-10, place a selected conversion context root immediately
    before the excluded position and confirm that the preceding bound item
    retains its selected result context. In a separate otherwise valid request,
@@ -119,8 +125,11 @@ Generated scalar, equality and function claim maps serialize the admitted
 structural package name and lock plus original requested V2 node ID as the public claim identity, retain
 the originating checked-package ID and their existing source/provenance fields,
 and omit `ir_id`. Different raw V2 and V1 frame indexes with an equal resolved
-source key settle successfully and retain the V2 request ID as the only public
-claim node ID. The same-node/different-lock and different-node/same-package controls both change the identity pair. Reached
+source key and matching source name and lock settle successfully and retain
+the V2 request ID as the only public claim node ID. Equal structural keys with
+a foreign source name or lock refuse before generation. The
+same-node/different-lock and different-node/same-package controls both change
+the identity pair. Reached
 keys agree with Contract IR's total traversal of admitted lowered items;
 unresolved required references never reach CG as lowered items, and reader
 refusals stop the request.
