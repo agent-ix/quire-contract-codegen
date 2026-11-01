@@ -18,7 +18,7 @@ Ticket: IR-595. Independent frozen-head takeover review. No source edits or Carg
 
 ## Verdict
 
-CONDITIONAL — original trace gap fixed; new FND-002 remains open.
+PASS — all findings statically fixed through deffec57. Runtime/clippy and final aggregate qualification remain pending.
 
 ## Findings
 
@@ -91,3 +91,12 @@ Round 1: static verification of 610c342485023504fd513efb9d239a168b327e3e. No Car
 | --- | --- | --- |
 | FND-001 | fixed | Owner-path uses imported bare trace attributes. The refreshed computed matrix lists real mismatch/post-lookup tests and compiled support evidence for AC-37. |
 | FND-002 | still-open | operand_type_refusal_retains_the_original_v2_frame supplies a bounded_domain parameter and asserts UnsupportedOperandType, but is tagged FR-021-AC-10, whose obligation is a reference composite blocker. This creates incorrect AC-10 matrix evidence. Bind it to a criterion it actually verifies (for example FR-039-AC-2 with explicit original requested-identity/backend-refusal assertions), or trace it only to its owning requirement until a precise criterion exists; retain the regression. |
+
+
+### Round 2
+
+Static verification of deffec57e92272fc166832c2c6ba7f6b3b2d3c01. The regression now traces FR-021-AC-1, asserts exactly one refused disposition, empty location map and no concrete oracle function; original-versus-represented type-key distinction and exact refusal payload assertions remain. This does not claim reference-blocker coverage. Runtime/clippy checks remain queued and were not run by the reviewer.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | The trace now matches the concrete refused-disposition/no-artifact assertions under AC-1; the source-frame regression remains intact. |
