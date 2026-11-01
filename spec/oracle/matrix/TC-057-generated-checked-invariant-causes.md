@@ -17,7 +17,7 @@ AC-40 in IR-709's generated producer migration.
 
 ## Test Procedure
 
-1. Exercise every generated Boolean, equality, function and pre-check placeholder checked-invariant constructor listed in the second cause table of quire-exact FR-369. Inspect the emitted source for each of the nine named paths; do not count an unreachable branch or a fabricated failure as evidence.
+1. Confirm the retired placeholder is absent and unexpected body resumes retain their fault channel. Exercise every generated Boolean, equality, function checked-invariant constructor listed in the second cause table of quire-exact FR-369. Inspect the emitted source for each of the eight named paths; do not count an unreachable branch or a fabricated failure as evidence.
 2. After IR-595, select an authentic admitted callable with a Boolean result
    from the FR-485 facade. Register a reachable generated body with that
    selection. Mutate only the test's copy of the emitted body source to return
@@ -72,7 +72,7 @@ AC-40 in IR-709's generated producer migration.
 
 ## Expected Results
 
-All nine CG producer guards retain their table causes and original nested payloads without changing charge or failure behavior; test-only emitted-source mutations reach the shipped wrong-result and owner-declaration construction guards without injecting a failure. The environment-rejection leg remains PLANNED and blocked by QSL-1105 and QSL-1107 until its owner contracts and the healthy/mutant controls are verified.
+All eight CG producer guards retain their table causes and original nested payloads without changing charge or failure behavior; test-only emitted-source mutations reach the shipped wrong-result and owner-declaration construction guards without injecting a failure. The environment-rejection leg remains PLANNED and blocked by QSL-1105 and QSL-1107 until its owner contracts and the healthy/mutant controls are verified.
 
 ## Status
 

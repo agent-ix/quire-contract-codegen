@@ -253,7 +253,7 @@ required dependency or target path.
      QSL-1107 owner body-resource channel, and no environment rejection
      receives credit without the checker-admitted healthy source and actual
      mutated constructor run. TC-057 specifies the
-     controls and all nine-cause comparison.
+     controls and all eight-cause comparison.
 13. Direct unsupported roots (FR-021-AC-11, FR-021-AC-33 and FR-021-AC-41).
     Admit formula, fairness and case roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
