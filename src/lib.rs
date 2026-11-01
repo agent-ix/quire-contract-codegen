@@ -251,14 +251,16 @@ pub use kani::generate::outcome::{
     UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
-    CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-    CollectionPreconditionIdentity, CollectionPredicateIdentity, EmbeddedOracle,
-    KaniCollectionObligationHarness, KaniObligationHarness, KaniObligationIdentity,
-    KaniScalarObligationHarness, KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind,
-    ScalarIntegerRepresentation, ScalarObligationArgument, ScalarObligationIdentity,
-    ScalarOriginalLimitsError, StateComparison, StateFieldDomain, StateFrameHarness,
-    StateFrameIdentity, StateFrameProperty, StateFrameRecordError, StateFrameScope,
-    StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
+    CollectionElementIdentity, CollectionKindIdentity, CollectionObjectFieldIdentity,
+    CollectionObligationIdentity, CollectionOperationConditionIdentity,
+    CollectionOperationIdentity, CollectionOperationValueIdentity, CollectionPreconditionIdentity,
+    CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
+    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
+    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarIntegerRepresentation,
+    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
+    V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,

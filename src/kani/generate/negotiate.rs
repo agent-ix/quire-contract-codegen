@@ -90,9 +90,9 @@ use crate::{
         lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
     },
     kani::generate::collection::{
-        collection_symbols_conflict, lower_collection_claim, lower_collection_precondition,
-        render_collection, render_collection_precondition, CollectionDomainRefusal,
-        CollectionGraph, LoweredCollectionClaim,
+        collection_symbols_conflict, lower_collection_claim, lower_collection_operation,
+        render_collection, render_collection_operation, CollectionDomainRefusal, CollectionGraph,
+        LoweredCollectionClaim,
     },
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
@@ -385,8 +385,8 @@ fn negotiate_integer_policy(
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
-                Outcome::LoweredCollectionPrecondition(lowered) => {
-                    match render_collection_precondition(request, &lowered) {
+                Outcome::LoweredCollectionOperation(lowered) => {
+                    match render_collection_operation(request, &lowered) {
                         Ok(harness) => {
                             let collides = v2_clause_harnesses.iter().any(|existing| {
                                 collection_symbols_conflict(
@@ -541,7 +541,7 @@ enum ItemIdentity {
 enum Outcome {
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
-    LoweredCollectionPrecondition(Box<LoweredCollectionClaim>),
+    LoweredCollectionOperation(Box<LoweredCollectionClaim>),
     LoweredV2Clause(Box<LoweredV2Clause>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
@@ -564,7 +564,7 @@ impl Outcome {
             ),
             Self::LoweredScalar(_)
             | Self::LoweredCollection(_)
-            | Self::LoweredCollectionPrecondition(_)
+            | Self::LoweredCollectionOperation(_)
             | Self::LoweredV2Clause(_)
             | Self::StateFrame(_)
             | Self::RequiresBound(_)
@@ -583,8 +583,8 @@ impl Outcome {
                 Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
                 Err(reason) => ObligationDisposition::Unsupported { reason },
             },
-            Self::LoweredCollectionPrecondition(lowered) => {
-                match render_collection_precondition(request, &lowered) {
+            Self::LoweredCollectionOperation(lowered) => {
+                match render_collection_operation(request, &lowered) {
                     Ok(harness) => {
                         supported_without_harness(harness.identity.harness_symbol.as_str())
                     }
@@ -730,7 +730,7 @@ fn classify_v2_clause<'a>(
         }
         Some(_)
             if kind != Some(ObligationKind::Precondition)
-                && !(native && kind == Some(ObligationKind::Postcondition)) =>
+                && kind != Some(ObligationKind::Postcondition) =>
         {
             Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
@@ -739,9 +739,9 @@ fn classify_v2_clause<'a>(
         Some(_) => match kind {
             Some(kind) => match lower_v2_clause(view, clause, kind) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-                Err(reason) if kind == ObligationKind::Precondition && !native => {
-                    match lower_collection_precondition(lookup.collection(), clause) {
-                        Ok(lowered) => Outcome::LoweredCollectionPrecondition(Box::new(lowered)),
+                Err(reason) if !native => {
+                    match lower_collection_operation(lookup.collection(), clause) {
+                        Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
                         Err(refusal) => collection_domain_refusal(clause, refusal, Some(reason)),
                     }
                 }
@@ -757,7 +757,7 @@ fn classify_v2_clause<'a>(
             Ok(edges) => {
                 if let Outcome::LoweredV2Clause(lowered) = &mut outcome {
                     lowered.set_dependencies(edges);
-                } else if let Outcome::LoweredCollectionPrecondition(lowered) = &mut outcome {
+                } else if let Outcome::LoweredCollectionOperation(lowered) = &mut outcome {
                     lowered.set_dependencies(ProofDependencySnapshot::not_run(edges));
                 }
             }
@@ -854,6 +854,7 @@ fn collection_domain_refusal(
             .unwrap_or_else(|| {
                 collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedClaimShape)
             }),
+        CollectionDomainRefusal::OperationContext(reason) => collection_refusal(node_id, reason),
         CollectionDomainRefusal::FieldNotAdmitted => {
             collection_refusal(node_id, CollectionUnsupportedReason::FieldNotAdmitted)
         }
@@ -1050,7 +1051,7 @@ pub(crate) fn classify_scalar_form<'a>(
         Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
         Outcome::LoweredCollection(_)
-        | Outcome::LoweredCollectionPrecondition(_)
+        | Outcome::LoweredCollectionOperation(_)
         | Outcome::LoweredV2Clause(_)
         | Outcome::StateFrame(_)
         | Outcome::StateFrameRefused(_) => {

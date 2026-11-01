@@ -274,6 +274,13 @@ pub(super) struct CollectionSpec {
     pub(super) predicate: CollectionPredicateIdentity,
 }
 #[derive(Clone, Debug)]
+pub(super) struct CollectionOperationSpec {
+    pub(super) identity: crate::kani::identity::CollectionOperationIdentity,
+    pub(super) postcondition: bool,
+    pub(super) subject_path: String,
+}
+
+#[derive(Clone, Debug)]
 pub(super) struct FrameSpec {
     pub(super) prefix: String,
     pub(super) state_path: String,
@@ -328,9 +335,10 @@ pub(super) enum HarnessShape {
         proof: ProofKind,
         body: Vec<Statement>,
     },
-    Collection {
+    Collection(CollectionSpec),
+    CollectionOperation {
         collection: CollectionSpec,
-        precondition: bool,
+        operation: Box<CollectionOperationSpec>,
     },
     Frame(FrameSpec),
 }
@@ -589,24 +597,32 @@ impl HarnessSpec {
         };
         Ok(Self {
             path,
-            shape: HarnessShape::Collection {
-                collection,
-                precondition: false,
-            },
+            shape: HarnessShape::Collection(collection),
             cover,
             unwind,
             solver,
             options,
         })
     }
-    pub(super) fn into_collection_precondition(mut self) -> Result<Self, HarnessSpecError> {
-        let HarnessShape::Collection { precondition, .. } = &mut self.shape else {
+    pub(super) fn into_collection_operation(
+        mut self,
+        operation: CollectionOperationSpec,
+    ) -> Result<Self, HarnessSpecError> {
+        let HarnessShape::Collection(collection) = self.shape else {
             return Err(HarnessSpecError::InvalidDomain);
         };
-        *precondition = true;
         self.cover = Cover {
             condition: ExprText::new("matches!(outcome, ClauseEvaluation::Completed(true))")?,
-            message: "the selected precondition is satisfiable in its admitted domain".to_owned(),
+            message: if operation.postcondition {
+                "a state satisfying the operation preconditions reaches its postcondition"
+            } else {
+                "the selected precondition is satisfiable in its admitted domain"
+            }
+            .to_owned(),
+        };
+        self.shape = HarnessShape::CollectionOperation {
+            collection,
+            operation: Box::new(operation),
         };
         Ok(self)
     }

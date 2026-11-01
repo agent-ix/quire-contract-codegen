@@ -104,3 +104,5 @@ mod v2_selected_claim_entry;
 mod vacuity_primitives;
 
 mod checked_term_consumers;
+
+mod kani_collection_operation;

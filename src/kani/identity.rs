@@ -226,6 +226,9 @@ pub struct V2ClauseObligationIdentity {
     /// Exact selected collection and bound totality check for a collection precondition.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collection_precondition: Option<CollectionPreconditionIdentity>,
+    /// Whole admitted object state and typed operation ABI for a collection clause.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_operation: Option<CollectionOperationIdentity>,
     /// Contract role read from the checked node.
     pub kind: ObligationKind,
     /// Embedded oracle symbol.
@@ -254,6 +257,90 @@ pub struct CollectionPreconditionIdentity {
     pub collection: CollectionObligationIdentity,
     /// Unique one-based line of the Boolean-completion assertion in generated Rust.
     pub totality_assertion_line: u32,
+}
+
+/// One exact-value state slot in checked model declaration order.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionObjectFieldIdentity {
+    /// The actual declaring model node, including inherited fields.
+    pub declaring_node_id: CheckedNodeId,
+    /// Authored field name within that declaration.
+    pub field_name: String,
+    /// Collision-safe generated state slot.
+    pub slot: String,
+    /// Complete symbolic domain without a caller-selected substitute bound.
+    pub bounds: SymbolicBounds,
+    /// Ordering and uniqueness for a collection-valued field.
+    pub collection_kind: Option<CollectionKindIdentity>,
+}
+
+/// One supported primitive operation parameter or result.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionOperationValueIdentity {
+    /// Admitted parameter node identity.
+    pub node_id: CheckedNodeId,
+    /// Admitted type identity.
+    pub type_id: CheckedNodeId,
+    /// Authored parameter name.
+    pub name: String,
+    /// Collision-safe generated Rust binding.
+    pub binding: String,
+    /// Both Boolean values or the inclusive checked integer interval.
+    pub domain: CollectionElementIdentity,
+}
+
+/// Checked generator meaning of a whole-object collection condition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionOperationConditionIdentity {
+    /// A validated scalar expression over bound exact fields and primitive parameters.
+    Scalar {
+        /// The validated generated expression, including every scalar literal and read side.
+        expression: String,
+    },
+    /// A checked collection predicate over one declaration-order field slot.
+    Quantifier {
+        /// Index of the exact state field in the operation context.
+        field: usize,
+        /// Admitted forall or exists identity.
+        operation: String,
+        /// Checked element predicate.
+        predicate: CollectionPredicateIdentity,
+    },
+    /// The complete conjunction in authored operand order.
+    And(Box<Self>, Box<Self>),
+}
+
+/// Complete whole-object operation context of a collection-clause harness.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionOperationIdentity {
+    /// Exact admitted quantifier whose body is asserted or checked for totality.
+    pub quantifier_id: CheckedNodeId,
+    /// Exact admitted projection selecting the collection field.
+    pub projection_id: CheckedNodeId,
+    /// Exact admitted predicate node.
+    pub predicate_id: CheckedNodeId,
+    /// Checked predicate meaning retained by the generated oracle.
+    pub predicate: CollectionPredicateIdentity,
+    /// Admitted operation anchor shared by sibling clauses.
+    pub anchor_id: CheckedNodeId,
+    /// Every admitted object field in checked declaration order.
+    pub fields: Vec<CollectionObjectFieldIdentity>,
+    /// Index of the clause's selected collection in `fields`.
+    pub selected_field: usize,
+    /// Operation parameters in the FR-025 subject-call order.
+    pub parameters: Vec<CollectionOperationValueIdentity>,
+    /// Declared result, or absence for a unit-returning subject.
+    pub result: Option<CollectionOperationValueIdentity>,
+    /// Every same-anchor precondition assumed before a postcondition subject call.
+    pub preconditions: Vec<CheckedNodeId>,
+    /// Complete authored condition, including supported non-quantifier conjuncts.
+    pub condition: CollectionOperationConditionIdentity,
+    /// Checked meanings of the assumed preconditions, in matching identity order.
+    pub precondition_bodies: Vec<CollectionOperationConditionIdentity>,
 }
 
 /// The one message identifying a collection precondition's totality assertion in Kani output.

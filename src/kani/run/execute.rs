@@ -2403,6 +2403,38 @@ exit 0
             ceilings,
             package,
             clause: id("clause"),
+            collection_operation: Some(crate::kani::identity::CollectionOperationIdentity {
+                quantifier_id: collection.quantifier_id.clone(),
+                projection_id: collection.projection_id.clone(),
+                predicate_id: collection.predicate_id.clone(),
+                predicate: collection.predicate.clone(),
+                anchor_id: id("anchor"),
+                fields: vec![crate::kani::identity::CollectionObjectFieldIdentity {
+                    declaring_node_id: collection.declaration_id.clone(),
+                    field_name: collection.field_name.clone(),
+                    slot: "field_0".into(),
+                    bounds: crate::kani::identity::SymbolicBounds::Sequence {
+                        minimum_length: 0,
+                        maximum_length: 3,
+                        element: Box::new(crate::kani::identity::SymbolicBounds::Integer {
+                            minimum: 0,
+                            maximum: 9,
+                        }),
+                    },
+                    collection_kind: Some(collection.collection_kind),
+                }],
+                selected_field: 0,
+                parameters: Vec::new(),
+                result: None,
+                preconditions: Vec::new(),
+                condition:
+                    crate::kani::identity::CollectionOperationConditionIdentity::Quantifier {
+                        field: 0,
+                        operation: collection.quantifier_operation.clone(),
+                        predicate: collection.predicate.clone(),
+                    },
+                precondition_bodies: Vec::new(),
+            }),
             collection_precondition: Some(CollectionPreconditionIdentity {
                 collection,
                 totality_assertion_line: 4,
