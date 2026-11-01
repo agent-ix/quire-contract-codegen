@@ -11,13 +11,13 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DisagreementCause, EnvelopeSource, FunctionSite,
-    Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity, OccurrenceKey,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
-    SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessSettlement, WitnessValue,
+    call_site, replay, witness_entry_name, CallSite, CallSiteRefusal, DeclaredDomain,
+    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DisagreementCause,
+    EnvelopeSource, FunctionSite, Identifier, MalformedTranscript, NoPayload, NodeKey,
+    NodeWireError, ObligationIdentity, OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplayRequestWire, ReplayResult, ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits,
+    SourceIdentity, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope,
+    WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_semantic_value::catalog::Category;
 
@@ -221,61 +221,6 @@ pub(crate) fn render_witness(
     ))
 }
 
-/// The name a witness entry carries for the structural node `key`, as `qsl-replay` decodes it:
-/// the node's compact JSON object (`ordinal`, `package`, `path`, nested nodes as nested objects),
-/// with `%`, the transcript separators `=` `;` `|` `<` `>` and control bytes percent-escaped, so
-/// the name is injective and holds no separator.
-pub(crate) fn witness_entry_name(key: &NodeKey) -> String {
-    use quire_exact::{NodeKeyView, PathSegmentView};
-    fn open(out: &mut String, view: NodeKeyView<'_>) {
-        out.push_str("{\"ordinal\":");
-        out.push_str(&view.ordinal().to_string());
-        out.push_str(",\"package\":");
-        text(out, view.package());
-        out.push_str(",\"path\":[");
-    }
-    // A JSON string literal exactly as serde_json spells it (its `Display` for a string is infallible).
-    fn text(out: &mut String, value: &str) {
-        out.push_str(&serde_json::Value::String(value.to_owned()).to_string());
-    }
-    let mut json = String::new();
-    let root = key.view();
-    open(&mut json, root);
-    let mut stack = vec![(root.path(), false)];
-    while let Some((path, wrote)) = stack.last_mut() {
-        match path.next() {
-            Some(segment) => {
-                if std::mem::replace(wrote, true) {
-                    json.push(',');
-                }
-                match segment {
-                    PathSegmentView::Text(value) => text(&mut json, value),
-                    PathSegmentView::Node(child) => {
-                        open(&mut json, child);
-                        stack.push((child.path(), false));
-                    }
-                }
-            }
-            None => {
-                json.push_str("]}");
-                stack.pop();
-            }
-        }
-    }
-    let mut name = String::with_capacity(json.len());
-    for character in json.chars() {
-        if matches!(character, '%' | '=' | ';' | '|' | '<' | '>')
-            || u32::from(character) < 0x20
-            || character == '\u{7f}'
-        {
-            name.push_str(&format!("%{:02X}", u32::from(character)));
-        } else {
-            name.push(character);
-        }
-    }
-    name
-}
-
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
 type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, SpineReplayError>;
 
@@ -471,6 +416,8 @@ pub enum ReplayPackageError {
     Dependencies(DependencyLockError),
     /// QSL could not compile the unit against its dependencies or locate the function in it.
     CallSite(Box<CallSiteRefusal>),
+    /// QSL could not spell an admitted parameter's structural witness entry name.
+    WitnessEntryName(NodeWireError),
 }
 
 impl fmt::Display for ReplayPackageError {
@@ -481,6 +428,7 @@ impl fmt::Display for ReplayPackageError {
             }
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the call site was not located: {refusal}"),
+            Self::WitnessEntryName(cause) => write!(f, "the witness entry name failed: {cause}"),
         }
     }
 }
@@ -711,8 +659,12 @@ impl ReplayPackage {
         ordered.sort_unstable_by(|left, right| left.1.cmp(&right.1));
         let parameters = ordered
             .into_iter()
-            .map(|(name, node)| (name.as_str().to_owned(), witness_entry_name(node)))
-            .collect();
+            .map(|(name, node)| {
+                let entry_name =
+                    witness_entry_name(node).map_err(ReplayPackageError::WitnessEntryName)?;
+                Ok((name.as_str().to_owned(), entry_name))
+            })
+            .collect::<Result<Vec<_>, ReplayPackageError>>()?;
         Ok(Self {
             inputs,
             selected_dependencies,
@@ -1306,6 +1258,7 @@ impl<'a> From<&'a ReplayPackageError> for ReplaySettlement<'a> {
             ReplayPackageError::InvalidFunction { .. } => Self::CgDefect,
             ReplayPackageError::Dependencies(cause) => cause.into(),
             ReplayPackageError::CallSite(refusal) => refusal.as_ref().into(),
+            ReplayPackageError::WitnessEntryName(_) => Self::CgDefect,
         }
     }
 }
