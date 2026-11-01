@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Dedicated constrained execution and the one typed owner-observation conversion.
-
-use super::*;
+//! The constrained owner-observation conversion retains exact method and replay binding.
+use super::ReplaySettlement;
 use crate::kani::{
-    classify::{KaniInconclusiveReason, KaniRunOutcome},
-    output::report::{KaniCheckClass, KaniCheckResult, KaniCheckStatus},
-    run::{
-        execute::{
-            execute_constrained_raw, KaniExecutionEvidence, KaniExecutionRefusal,
-            KaniExecutionRequest,
-        },
-        harness::KaniExecutableHarness,
-    },
-    terminal::ReplaySettlement,
+    classify::KaniRunOutcome,
+    identity::constrained::ConstrainedMethodIdentity,
+    output::report::{KaniCheckClass, KaniCheckStatus},
+    run::constrained::ConstrainedBackendEvidence,
 };
-
+use serde::Serialize;
 /// Reachability of a constraint boundary within the exact retained method bounds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum ConstraintBoundary {
@@ -24,90 +17,6 @@ pub enum ConstraintBoundary {
     NotReached,
     /// A boundary check is absent, malformed, interrupted or undecided.
     Unknown,
-}
-
-/// Backend evidence sealed to its originating constrained method and source bindings.
-#[derive(Debug, Serialize)]
-pub struct ConstrainedBackendEvidence {
-    method: ConstrainedMethodIdentity,
-    backend: KaniExecutionEvidence,
-    ordinary_cover_line: u32,
-    boundary_cover_line: Option<u32>,
-}
-impl ConstrainedBackendEvidence {
-    /// The exact method that produced this evidence.
-    pub fn method(&self) -> &ConstrainedMethodIdentity {
-        &self.method
-    }
-    /// Original typed backend checks, without an unconditional proof conversion.
-    pub fn checks(&self) -> &[KaniCheckResult] {
-        &self.backend.checks
-    }
-    /// Original falsifying playback, when the backend actually retained one.
-    pub fn playback(&self) -> Option<&str> {
-        if let KaniRunOutcome::Falsified { counterexample } = &self.backend.outcome {
-            Some(counterexample)
-        } else {
-            None
-        }
-    }
-    /// The original typed non-proof reason, retained without inventing a cover result.
-    pub fn nonproof_reason(&self) -> Option<KaniInconclusiveReason> {
-        if let KaniRunOutcome::Inconclusive { reason } = self.backend.outcome {
-            Some(reason)
-        } else {
-            None
-        }
-    }
-}
-
-/// Run only a sealed constrained harness through the existing bounded launcher.
-///
-/// # Errors
-/// Refuses an ordinary harness, a nonunique source binding or any existing launch/report error.
-pub fn execute_constrained_method(
-    request: &KaniExecutionRequest<'_>,
-) -> Result<ConstrainedBackendEvidence, KaniExecutionRefusal> {
-    let KaniExecutableHarness::Constrained(harness) = request.harness else {
-        return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
-    };
-    let library =
-        std::fs::read_to_string(request.crate_directory.join("src/lib.rs")).map_err(|_| {
-            KaniExecutionRefusal::HarnessNotInCrate {
-                harness_path: harness.rust.path.clone(),
-            }
-        })?;
-    let mut matches = library.match_indices(&harness.rust.contents);
-    let (Some((start, _)), None) = (matches.next(), matches.next()) else {
-        return Err(KaniExecutionRefusal::HarnessNotInCrate {
-            harness_path: harness.rust.path.clone(),
-        });
-    };
-    let offset = u32::try_from(
-        library[..start]
-            .bytes()
-            .filter(|byte| *byte == b'\n')
-            .count(),
-    )
-    .map_err(|_| KaniExecutionRefusal::HarnessNotInCrate {
-        harness_path: harness.rust.path.clone(),
-    })?;
-    let line = |value: u32| {
-        offset
-            .checked_add(value)
-            .ok_or_else(|| KaniExecutionRefusal::HarnessNotInCrate {
-                harness_path: harness.rust.path.clone(),
-            })
-    };
-    let ordinary_cover_line = line(harness.identity.ordinary_cover_line)?;
-    let boundary_cover_line = harness.identity.boundary_cover_line.map(line).transpose()?;
-    let backend = execute_constrained_raw(request)?;
-    Ok(ConstrainedBackendEvidence {
-        method: harness.identity.clone(),
-        backend,
-        ordinary_cover_line,
-        boundary_cover_line,
-    })
 }
 
 /// Original owner evaluations at the retained observation, bound to one exact method.
@@ -166,6 +75,16 @@ impl ConstrainedMethodResult<'_> {
     /// Sealed original installed-backend evidence.
     pub fn evidence(&self) -> &ConstrainedBackendEvidence {
         self.evidence
+    }
+    /// The owner's established-invariant-broken code/cause for a call failure.
+    pub fn fault_catalog_code(&self) -> Option<quire_semantic_value::catalog::CatalogCode> {
+        (self.status == ConstrainedMethodStatus::RuntimeInvariant).then(|| {
+            quire_semantic_value::catalog::InternalFault::new(
+                "kani-constrained-method",
+                "owner-call-succeeded",
+            )
+            .catalog_code()
+        })
     }
     /// Original typed owner observations, preserving all refusal/incomplete/fault payloads.
     pub fn owner(&self) -> &ConstrainedOwnerObservation<'_> {
@@ -229,7 +148,16 @@ pub fn classify_constrained_method<'a>(
     let boundary_check = evidence
         .boundary_cover_line
         .and_then(|line| cover(evidence, line));
-    let complete = evidence.backend.success_checks > 0
+    let safety_check = |status| {
+        evidence.backend.checks.iter().any(|check| {
+            matches!(&check.class,KaniCheckClass::Other(class) if class.as_str()=="assertion")
+                && check.status == status
+                && check.location.line == Some(evidence.safety_assertion_line)
+                && std::path::Path::new(&check.location.file).ends_with("src/lib.rs")
+        })
+    };
+    let complete = safety_check(KaniCheckStatus::Success)
+        && evidence.backend.success_checks > 0
         && evidence
             .backend
             .checks
@@ -246,7 +174,8 @@ pub fn classify_constrained_method<'a>(
         KaniRunOutcome::Verified | KaniRunOutcome::CoverUnsatisfied { .. }
     );
     let boundary = evidence.method.constraint.as_ref().map(|_| {
-        if !completed_run || !complete {
+        let covers = evidence.backend.checks.iter().filter(|check| check.class == KaniCheckClass::Cover).count();
+        if !completed_run || !complete || covers != 2 || ordinary.is_none() {
             ConstraintBoundary::Unknown
         } else {
             match boundary_check {
@@ -268,7 +197,9 @@ pub fn classify_constrained_method<'a>(
             .transpose()?;
         match &evidence.backend.outcome {
             KaniRunOutcome::Falsified { .. } => match (safety, constraint) {
-                (O::Completed(V::Boolean(false)), _) => S::Falsified,
+                (O::Completed(V::Boolean(false)), _) if safety_check(KaniCheckStatus::Failure) => {
+                    S::Falsified
+                }
                 (O::Undefined { .. }, _) => S::EvaluationViolation,
                 (O::Refused(_), _) => S::Refused,
                 (O::Incomplete(_), _) => S::Incomplete,
@@ -359,3 +290,6 @@ pub fn constrained_terminal_value(
     }
     Err(ConstrainedBindingRefusal::UnsupportedTerminalRepresentation)
 }
+
+#[cfg(test)]
+mod tests;

@@ -71,6 +71,11 @@ impl StateFrameRole {
 /// One item to negotiate.
 #[derive(Clone, Copy, Debug)]
 pub enum ObligationItem<'a> {
+    /// A bounded state-method request, optionally selecting a separate state constraint.
+    ConstrainedMethod {
+        /// Exact admitted selections, complete state/census and implementation bindings.
+        request: &'a constrained::ConstrainedMethodRequest<'a>,
+    },
     /// One admitted V2 state clause, selected by its checked node identity.
     V2Clause {
         /// The admitted package.
@@ -197,6 +202,11 @@ pub enum DerivedDomain {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum UnsupportedObligation {
+    /// The method cannot preserve its complete domain or owning oracle semantics.
+    ConstrainedMethod {
+        /// Original typed method refusal.
+        reason: constrained::ConstrainedMethodRefusal,
+    },
     /// The authentic V2 clause contains a native-ineligible source operation.
     NativeV2ClauseCapability {
         /// Source-associated typed native capability refusal.
@@ -367,6 +377,11 @@ pub enum UnsupportedObligation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum InvalidObligationItem {
+    /// A selected method or its complete initial/binding provision is invalid.
+    ConstrainedMethod {
+        /// Original typed method-selection refusal.
+        reason: constrained::ConstrainedMethodRefusal,
+    },
     /// A declared dependency has an empty or control-bearing identity.
     EmptyProofDependencyIdentity {
         /// Zero-based index in the declared census.
@@ -544,6 +559,9 @@ pub enum KaniObligationOutcome {
         collection_harnesses: Vec<KaniCollectionObligationHarness>,
         /// Admitted V2 clause harnesses in request order.
         v2_clause_harnesses: Vec<KaniV2ClauseObligationHarness>,
+        /// Method-qualified state harnesses; ordinary execution refuses this family.
+        constrained_harnesses:
+            Vec<crate::kani::identity::constrained::KaniConstrainedMethodHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {
@@ -1489,3 +1507,6 @@ mod declaring_node_error_tests {
         }
     }
 }
+
+/// Optional state-method selection and its typed refusals.
+pub(crate) mod constrained;

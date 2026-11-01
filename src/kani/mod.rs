@@ -25,8 +25,6 @@ pub(crate) mod census;
 // Run classification.
 // Implements: FR-017
 pub(crate) mod classify;
-// Method-qualified bounded state search.
-pub(crate) mod constrained;
 // The one generator.
 // Implements: FR-015
 pub(crate) mod generate;

@@ -2212,6 +2212,7 @@ mod tests {
     ) -> (KaniScalarNativeErrorClass, Option<&'static str>) {
         use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
         match nested {
+            KaniExecutionRefusal::WrongMethodExecutionRoute => (R, None),
             KaniExecutionRefusal::BatchCancelled { .. } => (F, None),
             KaniExecutionRefusal::Tool(_) => (F, None),
             KaniExecutionRefusal::MemoryMechanismUnavailable { .. } => (F, None),

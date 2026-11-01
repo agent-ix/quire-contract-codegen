@@ -19,7 +19,7 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub enum KaniExecutableHarness<'a> {
     /// A method-qualified constrained search, accepted only by its dedicated execution entry.
-    Constrained(&'a crate::kani::constrained::KaniConstrainedMethodHarness),
+    Constrained(&'a crate::kani::identity::constrained::KaniConstrainedMethodHarness),
     /// A caller-built FR-017 contract execution input.
     Contract(&'a KaniObligationHarness),
     /// A V2 exact-scalar harness, as `generate_routed` returns it (FR-022).
@@ -101,24 +101,12 @@ impl<'a> KaniExecutableHarness<'a> {
     /// Record argument bounds only when producing execution evidence.
     pub(super) fn symbolic_arguments(self) -> Vec<SymbolicArgumentBounds> {
         match self {
-            Self::Constrained(harness) => harness
-                .identity
-                .fields
-                .iter()
-                .map(|field| SymbolicArgumentBounds {
-                    identifier: format!("self.{}", field.name),
-                    bounds: field.domain.clone(),
+            Self::Constrained(harness) => harness.identity.operations.iter().flat_map(|operation| {
+                operation.parameters.iter().map(|(name, domain)| SymbolicArgumentBounds {
+                    identifier: format!("step[*].{}::{name}", operation.name),
+                    bounds: domain.bounds.clone(),
                 })
-                .chain(harness.identity.operations.iter().flat_map(|operation| {
-                    operation
-                        .parameters
-                        .iter()
-                        .map(|(name, domain)| SymbolicArgumentBounds {
-                            identifier: format!("{}::{name}", operation.name),
-                            bounds: domain.bounds.clone(),
-                        })
-                }))
-                .collect(),
+            }).collect(),
             Self::Contract(harness) => {
                 let identity = &harness.identity;
                 identity

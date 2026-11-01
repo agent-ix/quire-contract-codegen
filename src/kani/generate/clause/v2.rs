@@ -75,6 +75,7 @@ pub(in crate::kani::generate) fn lower(
         return Err(refusal());
     };
     if input.name.strip_prefix("parameter_").is_none()
+        || input.boolean
         || input.lower > input.upper
         || i64::try_from(input.lower).is_err()
         || i64::try_from(input.upper).is_err()
@@ -640,6 +641,7 @@ fn native_term(
         }
         ClauseTerm::Input(input)
             if input.name == input_name
+                && !input.boolean
                 && input.lower <= input.upper
                 && i64::try_from(input.lower).is_ok()
                 && i64::try_from(input.upper).is_ok() =>

@@ -300,3 +300,6 @@ impl KaniExecutionEvidence {
         Ok(Some((outcome, terminal)))
     }
 }
+
+// Method-qualified state search shares the existing subsystem boundary.
+pub(crate) mod constrained;

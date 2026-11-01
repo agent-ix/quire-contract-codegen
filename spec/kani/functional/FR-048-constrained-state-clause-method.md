@@ -71,7 +71,8 @@ unconstrained Kani outcomes.
 
 ### Public method family
 
-The constrained family SHALL have its own typed generation, execution and result
+The constrained family SHALL have a typed request arm in the one
+negotiate_kani_obligations generation entry, and typed execution and result
 conversion entries. Its execution entry SHALL share the bounded launcher and
 strict report reader with FR-017 while preventing its raw backend success from
 escaping through an ordinary proof execution or terminal entry. The public result

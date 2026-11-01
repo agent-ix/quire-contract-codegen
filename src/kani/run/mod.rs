@@ -20,3 +20,6 @@ mod namespace;
 
 // Construction-time dependencies of the existing launch owners.
 mod owners;
+
+// Method-qualified state search shares the existing subsystem boundary.
+pub(crate) mod constrained;

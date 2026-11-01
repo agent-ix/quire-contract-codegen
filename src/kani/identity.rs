@@ -996,3 +996,6 @@ impl StateFrameIdentity {
         Ok(identity)
     }
 }
+
+// Method-qualified state search shares the existing subsystem boundary.
+pub(crate) mod constrained;

@@ -310,19 +310,18 @@ pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
 /// The actual tree memory mechanism and observations recorded by bounded backend runs.
 pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
 
-// A constrained method has a distinct request and execution identity.
-pub use kani::constrained::{
-    generate_constrained_method, ConstrainedClauseSelection, ConstrainedFieldIdentity,
-    ConstrainedMethodIdentity, ConstrainedMethodRefusal, ConstrainedMethodRequest,
-    ConstrainedObligationIdentity, ConstrainedOperationBinding, ConstrainedOperationIdentity,
-    KaniConstrainedMethodHarness,
+// State-method types retain exact identity across generation, execution and conversion.
+pub use kani::generate::outcome::constrained::{
+    ConstrainedClauseSelection, ConstrainedMethodRefusal, ConstrainedMethodRequest,
+    ConstrainedOperationBinding,
 };
-
-pub use kani::constrained::{
-    classify_constrained_method, constrained_terminal_value, execute_constrained_method,
-    ConstrainedBackendEvidence, ConstrainedBindingRefusal, ConstrainedMethodResult,
-    ConstrainedMethodStatus, ConstrainedOwnerObservation, ConstrainedReplaySettlement,
-    ConstraintBoundary,
+pub use kani::identity::constrained::{
+    ConstrainedFieldIdentity, ConstrainedMethodIdentity, ConstrainedObligationIdentity,
+    ConstrainedOperationIdentity, ConstrainedValueDomain, KaniConstrainedMethodHarness,
 };
-
-pub use kani::constrained::ConstrainedValueDomain;
+pub use kani::run::constrained::{execute_constrained_method, ConstrainedBackendEvidence};
+pub use kani::terminal::constrained::{
+    classify_constrained_method, constrained_terminal_value, ConstrainedBindingRefusal,
+    ConstrainedMethodResult, ConstrainedMethodStatus, ConstrainedOwnerObservation,
+    ConstrainedReplaySettlement, ConstraintBoundary,
+};

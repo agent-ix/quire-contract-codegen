@@ -25,6 +25,8 @@ use super::scalar::{
 pub struct ClauseOracleInput {
     /// The generated parameter name.
     pub name: String,
+    /// Whether this parameter is a Boolean rather than an integer.
+    pub boolean: bool,
     /// Inclusive lower bound from the admitted model member or parameter type.
     pub lower: i128,
     /// Inclusive upper bound from the admitted model member or parameter type.
@@ -221,6 +223,7 @@ fn plan_clause(
         .map(|input| {
             Ok(ClauseOracleInput {
                 name: names.get(input).ok_or(V2ClauseRefusal::Render)?.clone(),
+                boolean: input.boolean,
                 lower: input.lower,
                 upper: input.upper,
             })
@@ -259,7 +262,14 @@ pub fn generate_v2_clause_native_oracle(
     node_id: &CheckedNodeId,
 ) -> Result<V2ClauseOracle, V2ClauseRefusal> {
     let nodes = ClauseGraphView::new(package);
-    generate_clause_oracle_with_view(node_id, &nodes, IntegerRenderPolicy::Native)
+    generate_v2_clause_native_oracle_with_view(node_id, &nodes)
+}
+
+pub(crate) fn generate_v2_clause_native_oracle_with_view(
+    node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
+) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+    generate_clause_oracle_with_view(node_id, nodes, IntegerRenderPolicy::Native)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -321,8 +331,8 @@ fn generate_clause_oracle_with_view(
         "rt::Integer"
     };
     let parameters = names
-        .values()
-        .map(|name| format!("{name}: &{integer_type}, "))
+        .iter()
+        .map(|(input, name)| if input.boolean { format!("{name}: bool, ") } else { format!("{name}: &{integer_type}, ") })
         .collect::<String>();
     let arguments = names
         .values()
@@ -501,7 +511,7 @@ fn lower(
             term: StepTerm::Integer(value.clone()),
         },
         ClauseTerm::Input(input) if names.contains_key(input) => Step {
-            kind: ValueKind::Integer,
+            kind: if input.boolean { ValueKind::Boolean } else { ValueKind::Integer },
             term: StepTerm::Input(input.clone()),
         },
         ClauseTerm::Input(_) => return Err(V2ClauseRefusal::UnsupportedCondition),
@@ -548,7 +558,7 @@ fn lower(
                     operator: crate::oracle::operator_catalog::IntegerOperator::Negate,
                     ..
                 } => (ValueKind::Integer, vec![ValueKind::Integer]),
-                ExactScalarOperation::IntegerArithmetic { .. } => {
+                ExactScalarOperation::IntegerArithmetic { .. } | ExactScalarOperation::IntegerModulo { .. } => {
                     (ValueKind::Integer, vec![ValueKind::Integer; 2])
                 }
                 _ => return Err(V2ClauseRefusal::UnsupportedCondition),
@@ -679,6 +689,7 @@ fn render_step(
                     format!("let operand = {};\n    let outcome = scalar_{index}(&operand, meter).map_err(ClauseStop::Oracle)?;", arg(0)?)
                 }
                 ExactScalarOperation::IntegerArithmetic { .. }
+                | ExactScalarOperation::IntegerModulo { .. }
                 | ExactScalarOperation::Ordering { .. }
                 | ExactScalarOperation::Equality {
                     operands: EqualityOperandKind::Integer,
