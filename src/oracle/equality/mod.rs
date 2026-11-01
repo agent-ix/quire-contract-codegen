@@ -707,6 +707,7 @@ pub fn generate_composite_equality_oracles(
                     source_map: original.source_map(),
                     refinement_step_rows: original.refinement_step_rows(),
                 },
+                original.checked_term_data(),
                 original.capability_report(),
                 original.diagnostics(),
                 quire_canonical::Limits::new(u64::MAX),

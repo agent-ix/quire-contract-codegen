@@ -1759,6 +1759,12 @@ pub(crate) mod tests {
             CheckedModelFieldsError::UnknownNode,
             CheckedModelFieldsError::NotModelObjectType,
             CheckedModelFieldsError::AmbiguousField("items".into()),
+            CheckedModelFieldsError::MissingDeclaringNode {
+                field_identity: "Base/items".into(),
+            },
+            CheckedModelFieldsError::AmbiguousDeclaringNode {
+                field_identity: "Base/items".into(),
+            },
         ] {
             assert_eq!(
                 declared_field(Err::<&Vec<&'static str>, _>(error), lookup("items")),

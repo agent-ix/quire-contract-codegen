@@ -792,11 +792,19 @@ fn serialize_model_fields_error<S: Serializer>(
         UnknownNode,
         NotModelObjectType,
         AmbiguousField { name: &'a str },
+        MissingDeclaringNode { field_identity: &'a str },
+        AmbiguousDeclaringNode { field_identity: &'a str },
     }
     match error {
         CheckedModelFieldsError::UnknownNode => Wire::UnknownNode,
         CheckedModelFieldsError::NotModelObjectType => Wire::NotModelObjectType,
         CheckedModelFieldsError::AmbiguousField(name) => Wire::AmbiguousField { name },
+        CheckedModelFieldsError::MissingDeclaringNode { field_identity } => {
+            Wire::MissingDeclaringNode { field_identity }
+        }
+        CheckedModelFieldsError::AmbiguousDeclaringNode { field_identity } => {
+            Wire::AmbiguousDeclaringNode { field_identity }
+        }
     }
     .serialize(serializer)
 }
@@ -1229,6 +1237,24 @@ mod tests {
                 }),
             ),
             same(
+                "bound not resolved: missing declaring node",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::MissingDeclaringNode {
+                        field_identity: "Order/balance".into(),
+                    },
+                }),
+            ),
+            same(
+                "bound not resolved: ambiguous declaring node",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::AmbiguousDeclaringNode {
+                        field_identity: "Order/balance".into(),
+                    },
+                }),
+            ),
+            same(
                 "bound not resolved: model member without i64 range",
                 unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
                     object: node(9),
@@ -1295,9 +1321,9 @@ mod tests {
     fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
         let rows = table();
         // 17 variants, with `NotLowered` split into its 6 arms (+5), `BoundNotResolved` into its
-        // 3 grounds (+2), with accessor and type causes (+4), and
+        // 3 grounds (+2), with accessor and type causes (+6), and
         // `FrameEffectUnsupported` into its 4 effects (+3).
-        assert_eq!(rows.len(), 17 + 5 + 2 + 4 + 3);
+        assert_eq!(rows.len(), 17 + 5 + 2 + 6 + 3);
         for (label, refusal, expected) in rows {
             assert_eq!(state_frame_disposition(refusal), expected, "{label}");
         }
@@ -1407,5 +1433,43 @@ mod tests {
             !arms.0.iter().any(is_catch_all),
             "the mapping has a wildcard or binding arm"
         );
+    }
+}
+
+#[cfg(test)]
+mod declaring_node_error_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-66", "TC-025")]
+    #[test]
+    fn declaring_node_refusals_preserve_distinct_kinds_and_original_field_identity() {
+        for (error, kind) in [
+            (
+                CheckedModelFieldsError::MissingDeclaringNode {
+                    field_identity: "selected/Base/zeta".into(),
+                },
+                "missing_declaring_node",
+            ),
+            (
+                CheckedModelFieldsError::AmbiguousDeclaringNode {
+                    field_identity: "selected/Base/zeta".into(),
+                },
+                "ambiguous_declaring_node",
+            ),
+        ] {
+            let cause = BoundNotResolvedCause::ModelFieldsUnavailable {
+                object: serde_json::from_value(
+                    serde_json::json!({"package":"test", "path":["Order"], "ordinal":0}),
+                )
+                .unwrap(),
+                error,
+            };
+            let wire = serde_json::to_value(cause).unwrap();
+            assert_eq!(
+                wire["error"],
+                serde_json::json!({"kind":kind,"field_identity":"selected/Base/zeta"})
+            );
+        }
     }
 }
