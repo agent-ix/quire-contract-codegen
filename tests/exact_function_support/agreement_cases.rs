@@ -1,6 +1,8 @@
 //! Executed FR-021 corpus: generated bodies and independent FR-485 session application.
 //! The parent IT test writes the generated crate and the source literal used here.
 
+use ix_trace_rs::trace;
+
 mod generated {
     pub use quire_exact_function_oracles::*;
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
@@ -203,7 +205,7 @@ fn generated(
         .expect("generated body completes")
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35")]
+#[trace("TC-031", "FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35")]
 #[test]
 fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
     let package = package();
@@ -278,7 +280,7 @@ fn direct_begin_refusal(
     }
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-4", "FR-021-AC-5")]
+#[trace("TC-031", "FR-021-AC-4", "FR-021-AC-5")]
 #[test]
 fn qsl_input_refusals_precede_application_charges_and_arity_precedes_kind() {
     let package = package();
@@ -313,7 +315,7 @@ fn qsl_input_refusals_precede_application_charges_and_arity_precedes_kind() {
     }
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-9")]
+#[trace("TC-031", "FR-021-AC-9")]
 #[test]
 fn function_call_denial_is_incomplete_without_an_admitted_charge() {
     let package = package();
@@ -352,7 +354,7 @@ fn function_call_denial_is_incomplete_without_an_admitted_charge() {
     assert_eq!(direct_meter.admission_count(), 0);
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-36", "FR-021-AC-37")]
+#[trace("TC-031", "FR-021-AC-36", "FR-021-AC-37")]
 #[test]
 fn wrong_unit_or_owner_refuses_before_registration_and_charge() {
     let admitted = package();

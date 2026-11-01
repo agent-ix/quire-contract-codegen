@@ -824,7 +824,6 @@ fn generated_for_source_items(
 
 /// Positional rendering cannot turn x+x into x+y.
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2")]
 #[trace("FR-021-AC-2", "TC-031")]
 #[test]
 fn tc_031_repeated_source_operand_refuses_positional_add_body() {
@@ -849,7 +848,6 @@ fn tc_031_repeated_source_operand_refuses_positional_add_body() {
 
 /// A checked add(y,x) cannot render add(x,y).
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2")]
 #[trace("FR-021-AC-2", "TC-031")]
 #[test]
 fn tc_031_reordered_source_call_refuses_positional_nested_body() {
@@ -884,7 +882,6 @@ fn tc_031_reordered_source_call_refuses_positional_nested_body() {
 
 /// A checked call to `add` cannot render a
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2")]
 /// request-named, same-arity call to `unrelated`.
 #[trace("FR-021-AC-2", "TC-031")]
 #[test]
@@ -939,7 +936,6 @@ fn tc_031_source_callee_refuses_requested_alternate_and_keeps_sibling() {
 
 /// A source `=` does not authorize a `!=` body.
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2")]
 #[trace("FR-021-AC-2", "TC-031")]
 #[test]
 fn tc_031_source_equal_refuses_requested_not_equal_body() {
@@ -1070,7 +1066,6 @@ fn genuine_corpus_request(
     (package, generated)
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-32", "FR-021-AC-35")]
 #[trace("FR-021-AC-32", "FR-021-AC-35", "TC-031")]
 #[test]
 fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
@@ -1150,7 +1145,6 @@ fn meter() -> Meter {
 
 /// This leg uses QSL's own
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2", "FR-021-AC-35")]
 /// interpreter through an unregistered facade registry.
 #[trace("FR-021-AC-2", "FR-021-AC-35", "TC-031")]
 #[test]
@@ -1219,7 +1213,6 @@ fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registrati
 
 /// The static request origin is checked against
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-17")]
 /// a QSL-issued site in the retained source body, not emitted Rust text.
 #[trace("FR-021-AC-17", "TC-031")]
 #[test]
@@ -1278,7 +1271,6 @@ fn tc_031_nested_static_origin_matches_the_qsl_checked_call_site() {
 
 /// The imported owner's static root-call origin
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-17")]
 /// is compared with the QSL-issued site from that same locked library.
 #[trace("FR-021-AC-17", "TC-031")]
 #[test]
@@ -1356,7 +1348,6 @@ fn tc_031_imported_static_origin_matches_the_qsl_checked_call_site() {
     assert_eq!(static_index, qsl_index);
 }
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35")]
 #[trace("FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35", "TC-031")]
 #[test]
 fn tc_031_generated_function_crate_matches_independent_fr485_session() {
@@ -1405,7 +1396,6 @@ fn tc_031_generated_function_crate_matches_independent_fr485_session() {
 
 /// The generated body is owned
 
-#[ix_trace_rs::trace("TC-031", "FR-021-AC-35", "FR-021-AC-36")]
 /// by the locked library and selected from a separately admitted importer.
 #[trace("FR-021-AC-35", "FR-021-AC-36", "TC-031")]
 #[test]
@@ -1478,4 +1468,46 @@ fn omitted_earlier_function_does_not_renumber_the_checked_origin() {
         generated.location_map[0].location.origin,
         claim.function_origin
     );
+}
+
+#[trace("TC-031", "FR-021-AC-10")]
+#[test]
+fn operand_type_refusal_retains_the_original_v2_frame() {
+    let package = admitted_source();
+    let bounded = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "bounded_domain")
+        .expect("QSL emitted the authored bounded parameter domain")
+        .node_id
+        .clone();
+    let mut declaration = declared_source_body(
+        &package,
+        "add",
+        type_id(&package, "integer"),
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Add,
+        },
+    );
+    declaration.parameters[0].type_node_id = bounded.clone();
+    let call = item(&package, "probe_add", "add");
+    let mut roots = vec![declaration.node_id.clone(), call.call_node_id.clone()];
+    roots.sort();
+    let lowered = package::admitted_function_contract(&package, &roots);
+    let represented = lowered
+        .wire()
+        .semantic_graph
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "bounded_domain")
+        .expect("lowering retains the bounded domain");
+    assert_ne!(
+        represented.node_id, bounded,
+        "regression requires distinct owning graph frames"
+    );
+    let generated = generated_for_source_items(&package, &[declaration], &[call]);
+    assert!(matches!(&generated.claim_map.items[0].result,
+        ClaimDisposition::Refused { refusal: quire_contract_codegen::ExactFunctionRefusal::UnsupportedOperandType { type_node_id } }
+        if type_node_id == &bounded));
 }

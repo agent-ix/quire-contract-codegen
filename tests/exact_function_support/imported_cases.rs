@@ -1,5 +1,7 @@
 //! Executed imported-owner FR-021 parity through the FR-485 facade.
 
+use ix_trace_rs::trace;
+
 mod generated {
     pub use quire_exact_function_imported_oracles::*;
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
@@ -73,7 +75,7 @@ fn function_id(package: &CheckedPackageV2) -> CheckedNodeId {
         .clone()
 }
 
-#[ix_trace_rs::trace(
+#[trace(
     "TC-031",
     "FR-021-AC-2",
     "FR-021-AC-32",

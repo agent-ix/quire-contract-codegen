@@ -419,6 +419,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::{
         CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
         CheckedPackageV2ReadResult,
@@ -692,7 +693,7 @@ mod tests {
         }
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-35", "FR-021-AC-36")]
+    #[trace("TC-031", "FR-021-AC-35", "FR-021-AC-36")]
     #[test]
     fn checked_owner_path_applies_a_genuine_source_callable() {
         let (package, f, _) = admitted();
@@ -726,7 +727,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-35", "FR-021-AC-36")]
+    #[trace("TC-031", "FR-021-AC-35", "FR-021-AC-36")]
     #[test]
     fn checked_owner_path_applies_a_locked_imported_callable() {
         let (unit, library, function, dependencies, source_bytes) = imported();
@@ -778,7 +779,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-17", "FR-021-AC-36")]
+    #[trace("TC-031", "FR-021-AC-17", "FR-021-AC-36")]
     #[test]
     fn nested_call_site_comes_from_the_selected_checked_body() {
         let (unit, library, imported_function, dependencies, source_bytes) = imported();
@@ -901,7 +902,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-17", "FR-021-AC-35", "FR-021-AC-36")]
+    #[trace("TC-031", "FR-021-AC-17", "FR-021-AC-35", "FR-021-AC-36")]
     #[test]
     fn own_and_imported_callers_charge_their_checked_nested_site() {
         let (unit, library, _, dependencies, source_bytes) = imported();
@@ -1028,7 +1029,7 @@ mod tests {
         }
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-35")]
+    #[trace("TC-031", "FR-021-AC-35")]
     #[test]
     fn malformed_source_stops_at_acquisition() {
         let (package, f, _) = admitted();
@@ -1056,7 +1057,7 @@ mod tests {
         assert!(matches!(refusal, CheckedFunctionError::Acquisition(_)));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-37")]
+    #[trace("TC-031", "FR-021-AC-37")]
     #[test]
     fn genuine_other_unit_identity_stops_before_lookup_or_registration() {
         let (package, f, _) = admitted();
@@ -1093,7 +1094,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-35", "FR-021-AC-37")]
+    #[trace("TC-031", "FR-021-AC-35", "FR-021-AC-37")]
     #[test]
     fn unrelated_declaring_package_cannot_authorize_a_callable() {
         let (unit, f, _) = admitted();
@@ -1122,7 +1123,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-37")]
+    #[trace("TC-031", "FR-021-AC-37")]
     #[test]
     fn post_lookup_guard_refuses_a_genuine_second_selection() {
         let (package, f, g) = admitted();
@@ -1157,7 +1158,7 @@ mod tests {
         ));
     }
 
-    #[ix_trace_rs::trace("TC-031", "FR-021-AC-37")]
+    #[trace("TC-031", "FR-021-AC-37")]
     #[test]
     fn typed_facade_outcomes_keep_distinct_serializable_cause_codes() {
         let (package, _, _) = admitted();

@@ -1431,8 +1431,9 @@ pub enum ExactFunctionRefusal {
 // Claim map and location map
 // ---------------------------------------------------------------------------
 
-/// Static V1 body origin. Claim records use request order; location records
-/// use admitted body source order. QSL owns dynamic application locations.
+/// Static body origin in the complete admitted source function order.
+/// Claim and location records preserve that order when requested functions are
+/// omitted or refused. QSL owns dynamic application locations.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecordedOrigin {
@@ -1440,7 +1441,7 @@ pub enum RecordedOrigin {
     Body {
         /// The function's name.
         function: String,
-        /// The function's index in its assembled package.
+        /// The function's index in the complete admitted source package.
         index: usize,
     },
 }
@@ -1506,7 +1507,7 @@ pub struct GeneratedExactFunctionClaim {
     /// The applied function's name.
     pub function: String,
     /// The applied function's `Origin::Body { function, index }`, indexed in
-    /// canonical body-root node order among surviving declarations (AC-3).
+    /// the complete admitted source function order (AC-3).
     pub function_origin: RecordedOrigin,
     /// Reconstructed declaration closure keys. Always empty in this V1: no
     /// requested item's supported operand types reach a composite
@@ -2629,13 +2630,15 @@ fn schedule_lowering_failure(
 /// a typed refusal -- including `reference`/family blockers (AC-10, AC-11).
 fn resolve_operand_type(
     graph: &Graph<'_>,
+    represented_type: &CheckedNodeId,
     type_node_id: &CheckedNodeId,
 ) -> Result<OperandKind, ExactFunctionRefusal> {
-    let node = graph
-        .node(type_node_id)
-        .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
-            type_node_id: type_node_id.clone(),
-        })?;
+    let node =
+        graph
+            .node(represented_type)
+            .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
+                type_node_id: type_node_id.clone(),
+            })?;
     match CheckedNodeTag::from_wire(&node.node_tag) {
         Some(CheckedNodeTag::ScalarType) => match &*node.semantic_form {
             "boolean" => Ok(OperandKind::Boolean),
@@ -2949,14 +2952,19 @@ pub fn generate_exact_function_oracles(
                     .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
                         type_node_id: parameter.type_node_id.clone(),
                     })?;
-                parameter_kinds.push(resolve_operand_type(graph, represented)?);
+                parameter_kinds.push(resolve_operand_type(
+                    graph,
+                    represented,
+                    &parameter.type_node_id,
+                )?);
             }
             let represented_result = accounting
                 .represented_node(&declaration.result_type)
                 .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
                     type_node_id: declaration.result_type.clone(),
                 })?;
-            let result_kind = resolve_operand_type(graph, represented_result)?;
+            let result_kind =
+                resolve_operand_type(graph, represented_result, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             let body = classify_body_shape(
                 closure.root,
@@ -3575,9 +3583,12 @@ fn item_disposition<'a>(
         let argument = graph
             .node(admitted_argument_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        let original_type = accounting
+            .original_represented_node(&argument.semantic_type)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         let type_node = graph.node(&argument.semantic_type).ok_or_else(|| {
             ExactFunctionRefusal::UnknownTypeNode {
-                type_node_id: argument.semantic_type.clone(),
+                type_node_id: original_type.clone(),
             }
         })?;
         let type_node_id = if type_node.node_tag.as_ref() == "bounded_domain" {
@@ -3585,7 +3596,10 @@ fn item_disposition<'a>(
         } else {
             &argument.semantic_type
         };
-        resolve_operand_type(graph, type_node_id)?;
+        let original_type = accounting
+            .original_represented_node(type_node_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        resolve_operand_type(graph, type_node_id, original_type)?;
     }
     // The readable stem: the applied function's name. The caller settles the final name.
     let stem = format!("call_{}", bounded_readable_component(&declaration.name));
