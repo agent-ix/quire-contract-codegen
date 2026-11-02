@@ -590,15 +590,15 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
 
 #[trace("FR-018-AC-39", "FR-018-AC-42", "TC-029")]
 #[test]
-fn source_context_comparison_retains_a_present_checked_term_sidecar() {
+fn source_context_comparison_distinguishes_checked_term_sidecar_presence() {
     use quire_contract_model::{
         encode_checked_package_v2, CheckedPackageEvidence, CheckedPackageReadLimits,
-        CheckedPackageSourceCorrespondenceRef, CheckedPackageV2, CheckedPackageV2ReadResult,
-        CheckedTermDataV2,
+        CheckedPackageSidecarsRef, CheckedPackageSourceCorrespondenceRef, CheckedPackageV2,
+        CheckedPackageV2ReadResult,
     };
     let compiled = fixture::compile(fixture::UNION_SOURCE, &Default::default());
     let original = checked(&compiled, &[]);
-    assert!(original.checked_term_data().is_none());
+    assert!(original.checked_term_data().is_some());
     let item = direct_source_item(&original, "healthy");
     generate_items(
         &original,
@@ -607,7 +607,6 @@ fn source_context_comparison_retains_a_present_checked_term_sidecar() {
         &[],
     )
     .expect("unchanged complete source matches its context");
-    let data = CheckedTermDataV2::default();
     let bytes = encode_checked_package_v2(
         original.name(),
         original.lock(),
@@ -616,22 +615,27 @@ fn source_context_comparison_retains_a_present_checked_term_sidecar() {
             source_map: original.source_map(),
             refinement_step_rows: original.refinement_step_rows(),
         },
-        Some(&data),
+        CheckedPackageSidecarsRef {
+            checked_term_data: None,
+            temporal_bindings: original.temporal_bindings(),
+            schedulability_claims: original.schedulability_claim_rows(),
+            operation_effects: original.operation_effect_rows(),
+        },
         original.capability_report(),
         original.diagnostics(),
         quire_canonical::Limits::new(u64::MAX),
     )
-    .expect("encode an explicitly present empty decision sidecar");
+    .expect("encode a package without its checked-term sidecar");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    let with_data =
+    let without_data =
         match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {
             CheckedPackageV2ReadResult::Admitted(package) => package,
-            other => panic!("present empty sidecar must admit: {other:?}"),
+            other => panic!("absent checked-term sidecar must admit: {other:?}"),
         };
-    assert_eq!(with_data.checked_term_data(), Some(&data));
+    assert_eq!(without_data.checked_term_data(), None);
     assert_eq!(
-        generate_items(&with_data, Some(compiled.context()), &[item], &[]),
+        generate_items(&without_data, Some(compiled.context()), &[item], &[]),
         Err(OracleGenerationError::ContextPackageContentMismatch)
     );
 }

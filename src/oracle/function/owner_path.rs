@@ -9,7 +9,7 @@ use qsl_replay::{
     ReplayLimits, SelectionRefusal, SourceIdentity, StageLimits,
 };
 use quire_contract_model::{
-    encode_checked_package_v2, CheckedNodeId, CheckedOccurrenceRole,
+    encode_checked_package_v2, CheckedNodeId, CheckedOccurrenceRole, CheckedPackageSidecarsRef,
     CheckedPackageSourceCorrespondenceRef, CheckedPackageV2, ContractSourceKeyV1,
 };
 use quire_eval::{Admission, BodyFactory, CallFailure, Evaluation};
@@ -277,7 +277,12 @@ fn package_bytes(package: &CheckedPackageV2) -> Result<Vec<u8>, CheckedFunctionE
             source_map: package.source_map(),
             refinement_step_rows: package.refinement_step_rows(),
         },
-        package.checked_term_data(),
+        CheckedPackageSidecarsRef {
+            checked_term_data: package.checked_term_data(),
+            temporal_bindings: package.temporal_bindings(),
+            schedulability_claims: package.schedulability_claim_rows(),
+            operation_effects: package.operation_effect_rows(),
+        },
         package.capability_report(),
         package.diagnostics(),
         quire_canonical::Limits::new(u64::MAX),
@@ -473,7 +478,8 @@ pub fn checked_function_declarations(
             | quire_exact::ValueType::Timestamp
             | quire_exact::ValueType::Enum(_)
             | quire_exact::ValueType::Reference(_)
-            | quire_exact::ValueType::Population(_) => {}
+            | quire_exact::ValueType::Population(_)
+            | quire_exact::ValueType::CarriedQuantity(_) => {}
         }
     }
     Ok(declarations)
