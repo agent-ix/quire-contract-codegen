@@ -5887,58 +5887,31 @@ pub fn check() {{
     }
     source.push_str("fn main() { case_0_false::check(); case_0_true::check(); case_1_false::check(); case_1_true::check(); case_2_false::check(); case_2_true::check(); case_3_false::check(); case_3_true::check(); case_4_false::check(); case_4_true::check(); }\n");
     let directory = super::scratch_crate::TemporaryDirectory::new("ir948-invariant-native-oracles");
-    let input = directory.path.join("oracle.rs");
-    let executable = directory.path.join("oracle");
-    fs::write(&input, source).unwrap();
-    let dependencies = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let mut compile = std::process::Command::new("rustc");
-    compile
-        .args(["--edition=2021", "--check-cfg=cfg(kani)"])
-        .arg(&input)
-        .arg("-o")
-        .arg(&executable)
-        .arg("-L")
-        .arg(format!("dependency={}", dependencies.display()));
-    for library in [
-        "quire_contract_runtime",
-        "quire_exact",
-        "quire_semantic_value",
-    ] {
-        let prefix = format!("lib{library}-");
-        let candidates = fs::read_dir(&dependencies)
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| {
-                path.file_name()
-                    .is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "rlib")
-            })
-            .collect::<Vec<_>>();
-        let [artifact] = candidates.as_slice() else {
-            panic!("one locked {library} artifact: {candidates:?}");
-        };
-        compile
-            .arg("--extern")
-            .arg(format!("{library}={}", artifact.display()));
-    }
-    let compiled = compile
-        .output()
-        .expect("compile actual emitted invariant oracles");
-    assert!(
-        compiled.status.success(),
-        "actual invariant oracle compile failed: {}",
-        String::from_utf8_lossy(&compiled.stderr)
+    fs::write(directory.path.join("src/main.rs"), source).unwrap();
+    super::scratch_crate::write_manifest(
+        &directory.path,
+        &format!(
+            "[package]\nname = \"generated-v2-invariant-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE,
+        ),
     );
-    let evaluated = std::process::Command::new(&executable).output().unwrap();
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    eprintln!("invariant oracle scratch metadata resolved offline; all Git sources verified against repository Cargo.lock");
+    // Cargo resolves and links the actual owner libraries from this seeded lock. The enclosing
+    // test invocation holds the host build lock; reacquiring it here would deadlock.
+    let evaluated = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--locked", "--offline", "-j2", "--quiet"])
+        .env("CARGO_BUILD_JOBS", "2")
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .env("RUSTFLAGS", "--check-cfg=cfg(kani)")
+        .current_dir(&directory.path)
+        .output()
+        .expect("compile and execute actual emitted invariant oracles with locked owner libraries");
     assert!(
         evaluated.status.success(),
-        "actual invariant oracle evaluation failed: {}",
+        "actual invariant oracle compilation or evaluation failed: {}",
         String::from_utf8_lossy(&evaluated.stderr)
     );
 }
