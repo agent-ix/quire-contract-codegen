@@ -5806,6 +5806,8 @@ fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions
         "self.balance >= 0",
         "self.balance > 0",
         "self.balance <= self.audit",
+        "true",
+        "false",
     ]
     .into_iter()
     .enumerate()
@@ -5853,7 +5855,14 @@ fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions
                 0 => "balance >= 0",
                 1 => "balance > 0",
                 2 => "balance <= audit",
+                3 => "true",
+                4 => "false",
                 _ => unreachable!(),
+            };
+            let evaluation = if index >= 3 {
+                format!("assert_eq!(oracle_clause(), {expected});")
+            } else {
+                format!("let outcome = oracle_clause({arguments}&mut meter); assert!(matches!(outcome, Ok(rt::Outcome::Completed(actual)) if actual == ({expected})), \"actual generated invariant oracle disagrees: {{outcome:?}}\");")
             };
             source.push_str(&format!(r#"
 mod case_{index}_{native} {{
@@ -5866,8 +5875,7 @@ pub fn check() {{
             let audit_value = convert(audit);
             let _ = &audit_value;
             let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});
-            let outcome = oracle_clause({arguments}&mut meter);
-            assert!(matches!(outcome, Ok(rt::Outcome::Completed(actual)) if actual == ({expected})), "actual generated invariant oracle disagrees at balance={{balance}}, audit={{audit}}: {{outcome:?}}");
+            {evaluation}
         }}
     }}
 }}
@@ -5875,7 +5883,7 @@ pub fn check() {{
 "#, artifact = harness.rust.contents));
         }
     }
-    source.push_str("fn main() { case_0_false::check(); case_0_true::check(); case_1_false::check(); case_1_true::check(); case_2_false::check(); case_2_true::check(); }\n");
+    source.push_str("fn main() { case_0_false::check(); case_0_true::check(); case_1_false::check(); case_1_true::check(); case_2_false::check(); case_2_true::check(); case_3_false::check(); case_3_true::check(); case_4_false::check(); case_4_true::check(); }\n");
     let directory = super::scratch_crate::TemporaryDirectory::new("ir948-invariant-native-oracles");
     let input = directory.path.join("oracle.rs");
     let executable = directory.path.join("oracle");
