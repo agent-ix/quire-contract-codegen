@@ -441,11 +441,16 @@ impl Twin {
 
     /// A source-authored precondition over one bounded operation parameter and no state field.
     pub fn with_bounded_other_precondition() -> Self {
+        Self::with_bounded_other_precondition_condition("other < 1000")
+    }
+
+    /// A source-authored precondition over one bounded operation parameter and no state field.
+    pub fn with_bounded_other_precondition_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();
         let source = String::from_utf8(twin.unit).expect("native unit");
         let changed = source.replace(
             "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= other }",
-            "pre OtherBelowLimit using v on Bank::Account::deposit { other < 1000 }",
+            &format!("pre OtherBelowLimit using v on Bank::Account::deposit {{ {condition} }}"),
         );
         assert_ne!(
             changed, source,

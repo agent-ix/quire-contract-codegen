@@ -90,7 +90,13 @@ pub(in crate::kani::generate) fn lower(
         });
     }
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
-    if (kind != ObligationKind::Invariant && oracle.descriptor.inputs.len() != 1)
+    let input_count_supported = match kind {
+        ObligationKind::Precondition => oracle.descriptor.inputs.len() <= 1,
+        ObligationKind::Postcondition => oracle.descriptor.inputs.len() == 1,
+        ObligationKind::Invariant => true,
+        ObligationKind::Frame => false,
+    };
+    if !input_count_supported
         || oracle.descriptor.inputs.iter().any(|input| {
             let supported = match kind {
                 ObligationKind::Precondition | ObligationKind::Postcondition => {
@@ -402,7 +408,11 @@ pub(in crate::kani::generate) fn render_clause(
         (
             "precondition",
             Cover {
-                condition: ExprText::new("matches!(outcome, Ok(rt::Outcome::Completed(true)))")?,
+                condition: ExprText::new(if direct_boolean {
+                    "outcome"
+                } else {
+                    "matches!(outcome, Ok(rt::Outcome::Completed(true)))"
+                })?,
                 message: "the V2 precondition is satisfiable within admitted parameter bounds"
                     .to_owned(),
             },
