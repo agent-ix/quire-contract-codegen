@@ -806,9 +806,6 @@ fn classify_v2_clause<'a>(
         Some(_) => match kind {
             Some(kind) => match lower_v2_clause(view, clause, kind) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-                Err(reason @ UnsupportedObligation::V2ClauseOperatorNotSupported { .. }) => {
-                    Outcome::Unsupported(reason)
-                }
                 Err(reason) if !native => {
                     match lower_collection_operation(lookup.collection(), clause) {
                         Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
