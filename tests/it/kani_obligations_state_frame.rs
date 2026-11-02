@@ -4049,24 +4049,28 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     let run = forbidden_run(&twin);
-    let check = |edit: fn(&mut Option<quire_contract_codegen::SelectedFrameTarget>), member| {
-        let result = twin.try_frame_replay_with_target_edit(
-            "deposit",
-            &invocation,
-            "account",
-            "audit",
-            &run,
-            (
-                native_twin::frame_decode_limits(),
-                native_twin::frame_decode_limits(),
-            ),
-            edit,
-        );
-        assert!(matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member));
-    };
-    check(|target| *target = None, SelectedTargetMember::Missing);
+    let check =
+        |edit: fn(&mut Option<quire_contract_codegen::SelectedFrameTarget>, &mut OccurrenceKey),
+         member| {
+            let result = twin.try_frame_replay_with_target_edit(
+                "deposit",
+                &invocation,
+                "account",
+                "audit",
+                &run,
+                (
+                    native_twin::frame_decode_limits(),
+                    native_twin::frame_decode_limits(),
+                ),
+                edit,
+            );
+            assert!(
+                matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member)
+            );
+        };
+    check(|target, _| *target = None, SelectedTargetMember::Missing);
     check(
-        |target| {
+        |target, _| {
             target.as_mut().expect("target").operation.object = QualifiedName::new(vec![
                 Identifier::new("Bank").expect("identifier"),
                 Identifier::new("Other").expect("identifier"),
@@ -4076,26 +4080,26 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         SelectedTargetMember::DeclaringOwner,
     );
     check(
-        |target| {
+        |target, _| {
             target.as_mut().expect("target").operation.operation =
                 Identifier::new("withdraw").expect("identifier");
         },
         SelectedTargetMember::Operation,
     );
     check(
-        |target| {
+        |target, _| {
             target.as_mut().expect("target").package_id.name = "unknown".into();
         },
         SelectedTargetMember::Package,
     );
     check(
-        |target| {
+        |target, _| {
             target.as_mut().expect("target").request_index = 1;
         },
         SelectedTargetMember::RequestIndex,
     );
     check(
-        |target| {
+        |target, _| {
             let target = target.as_mut().expect("target");
             target.occurrence = OccurrenceKey::new(
                 target.occurrence.node().clone(),
@@ -4104,6 +4108,40 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         },
         SelectedTargetMember::TargetOccurrence,
     );
+    check(
+        |_, occurrence| {
+            *occurrence = OccurrenceKey::new(
+                occurrence.node().clone(),
+                Origin::new(Role::new("generated"), 1),
+            );
+        },
+        SelectedTargetMember::ItemOccurrence,
+    );
+    let foreign = Twin::with_negated_balance_clause()
+        .emitted_package("BalanceNeverDrops")
+        .0;
+    let foreign_id = quire_contract_model::ContractSourceV1 {
+        name: foreign.name().into(),
+        lock: foreign.lock().clone(),
+    };
+    let foreign_result = twin.try_frame_replay_with_target_edit(
+        "deposit",
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        (
+            native_twin::frame_decode_limits(),
+            native_twin::frame_decode_limits(),
+        ),
+        |target, _| target.as_mut().expect("target").package_id = foreign_id,
+    );
+    assert!(matches!(
+        foreign_result,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Package
+        ))
+    ));
 }
 
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced

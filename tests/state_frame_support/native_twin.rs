@@ -1137,7 +1137,7 @@ impl Twin {
             field,
             run,
             (limits, parse_limits),
-            |_| {},
+            |_, _| {},
         )
     }
 
@@ -1153,7 +1153,7 @@ impl Twin {
             quire_contract_codegen::WitnessDecodeLimits,
             quire_contract_codegen::WitnessDecodeLimits,
         ),
-        edit: impl FnOnce(&mut Option<SelectedFrameTarget>),
+        edit: impl FnOnce(&mut Option<SelectedFrameTarget>, &mut OccurrenceKey),
     ) -> Result<FrameReplay, FrameReplayError> {
         let (limits, parse_limits) = limits;
         let mut inputs = self.run();
@@ -1170,7 +1170,7 @@ impl Twin {
         let selected_site = self
             .operation_site(operation)
             .map_err(FrameReplayError::CallSite)?;
-        let selected_occurrence = selected_site.frame_occurrence.clone();
+        let mut selected_occurrence = selected_site.frame_occurrence.clone();
         let mut selected_target = Some(SelectedFrameTarget {
             operation: selected_site.frame_operation,
             package_id: quire_contract_model::ContractSourceV1 {
@@ -1180,7 +1180,7 @@ impl Twin {
             request_index: 0,
             occurrence: selected_occurrence.clone(),
         });
-        edit(&mut selected_target);
+        edit(&mut selected_target, &mut selected_occurrence);
         FrameReplay::new(FrameReplayInputs {
             run: inputs,
             packages: self.packages(),
