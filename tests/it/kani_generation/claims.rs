@@ -285,7 +285,7 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
     compiled
         .require_positive(&declared, &healthy)
-        .unwrap_or_else(|refusal| panic!("{refusal:?}; claim={declared:?}; evidence={healthy:?}"));
+        .unwrap_or_else(|refusal| panic!("{refusal:?}; claim={declared:?}; see current-claim-attempts/claim-healthy receipts"));
     let (second_healthy, second_compiled, second_target) =
         run(&second_harness, &manifest, "claim-second-healthy");
     assert_eq!(second_healthy.outcome, KaniRunOutcome::Verified);

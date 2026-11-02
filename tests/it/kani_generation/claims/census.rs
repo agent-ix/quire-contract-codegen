@@ -27,6 +27,7 @@ pub(super) enum Refusal {
 pub(super) struct Claim {
     pub module: String,
     pub harness: String,
+    generated_path: String,
     oracle_symbol: String,
     pub start: u32,
     pub end: u32,
@@ -100,12 +101,21 @@ impl Claim {
         Ok(Self {
             failure_lines: failure_lines.clone(),
             harness: format!("{module}::{symbol}"),
+            generated_path: harness.rust.path.clone(),
             oracle_symbol: harness.identity.oracle_symbol.clone(),
             module,
             start: u32::try_from(item.span().start().line).map_err(invalid)?,
             end: u32::try_from(item.span().end().line).map_err(invalid)?,
         })
     }
+    fn invoked(&self, evidence: &KaniExecutionEvidence) -> bool {
+        evidence.harness_path == self.generated_path
+            && evidence
+                .arguments
+                .windows(2)
+                .any(|arguments| arguments[0] == "--harness" && arguments[1] == self.harness)
+    }
+
     fn contains(&self, check: &KaniCheckResult) -> bool {
         check.location.file == "src/lib.rs"
             && check
@@ -351,7 +361,7 @@ impl Compiled {
         claim: &Claim,
         evidence: &KaniExecutionEvidence,
     ) -> Result<(), Refusal> {
-        if evidence.harness_path != claim.harness
+        if !claim.invoked(evidence)
             || evidence.outcome != KaniRunOutcome::Verified
             || !evidence.checks.iter().any(|check| {
                 claim.contains(check)
@@ -369,7 +379,7 @@ impl Compiled {
         claim: &Claim,
         evidence: &KaniExecutionEvidence,
     ) -> Result<(), Refusal> {
-        if evidence.harness_path != claim.harness
+        if !claim.invoked(evidence)
             || !matches!(evidence.outcome, KaniRunOutcome::Falsified { .. })
             || !evidence.checks.iter().any(|check| {
                 claim.contains(check)
@@ -415,8 +425,8 @@ pub(super) fn controls(
     let mut mutations = BTreeSet::new();
     for record in records {
         let owns_proof = claims.iter().any(|claim| {
-            record.positive.harness_path == claim.harness
-                && record.mutant.harness_path == claim.harness
+            claim.invoked(record.positive)
+                && claim.invoked(record.mutant)
                 && (record.name == claim.module || observed_helpers.contains(record.name))
         });
         if !owns_proof
@@ -454,6 +464,7 @@ mod tests {
         let first = Claim {
             module: "first".into(),
             harness: "first::proof".into(),
+            generated_path: "src/generated/first.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
             start: 10,
             end: 20,
@@ -462,6 +473,7 @@ mod tests {
         let second = Claim {
             module: "second".into(),
             harness: "second::proof".into(),
+            generated_path: "src/generated/second.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
             start: 30,
             end: 40,
@@ -526,6 +538,7 @@ mod tests {
         let claim = Claim {
             module: "m".into(),
             harness: "m::proof".into(),
+            generated_path: "src/generated/m.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
             start: 1,
             end: 50,
