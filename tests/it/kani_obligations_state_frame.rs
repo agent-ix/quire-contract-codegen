@@ -4042,6 +4042,130 @@ fn tc_035_selected_frame_target_reaches_packet_and_request() {
     assert_eq!(replay.packet.occurrence_key, Some(site.frame_occurrence));
 }
 
+/// Selecting a subtype preserves the operation's declaring owner in the supplied QSL target.
+#[trace("FR-024-AC-54", "TC-035")]
+#[test]
+fn tc_035_inherited_frame_target_retains_declaring_owner() {
+    let twin = Twin::with_inherited_account();
+    let declared = twin.operation_site("deposit").expect("declared operation");
+    let inherited = twin
+        .operation_site_for_object("ChildAccount", "deposit")
+        .expect("inherited operation");
+    assert_eq!(inherited.frame_operation, declared.frame_operation);
+    assert_ne!(
+        inherited.frame_operation.object.segments()[1].as_str(),
+        "ChildAccount"
+    );
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let replay = twin
+        .try_frame_replay_with_target_edit(
+            ("ChildAccount", "deposit"),
+            &invocation,
+            "account",
+            "audit",
+            &run,
+            (
+                native_twin::frame_decode_limits(),
+                native_twin::frame_decode_limits(),
+            ),
+            |_, _, _| {},
+        )
+        .expect("the inherited frame target binds");
+    assert_eq!(
+        replay.packet.replay_target.frame_operation,
+        Some(declared.frame_operation.clone())
+    );
+    assert_eq!(
+        replay.wire.replay_target.members.frame_operation,
+        Some(declared.frame_operation)
+    );
+    assert_eq!(
+        replay.packet.occurrence_key,
+        Some(inherited.frame_occurrence)
+    );
+}
+
+/// Two admitted frame requests remain distinct by request index even when they name one frame.
+#[trace("FR-024-AC-56", "TC-035")]
+#[test]
+fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::StateFrame {
+        package: &package,
+        clause: &clause,
+        role: StateFrameRole::Frame,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+    };
+    let items = [item, item];
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &items,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("two admitted frame requests");
+    let records = outcome.records();
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].request_index, 0);
+    assert_eq!(records[1].request_index, 1);
+    assert!(records
+        .iter()
+        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
+
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let limits = (
+        native_twin::frame_decode_limits(),
+        native_twin::frame_decode_limits(),
+    );
+    let other_index = twin.try_frame_replay_with_target_edit(
+        ("Account", "deposit"),
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        limits,
+        |target, _, _| target.as_mut().expect("target").request_index = records[1].request_index,
+    );
+    assert!(matches!(
+        other_index,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::RequestIndex
+        ))
+    ));
+
+    let foreign = Twin::new()
+        .with_source_identity("test:foreign-selected-frame")
+        .emitted_package("BalanceNeverDrops")
+        .0;
+    let foreign_id = quire_contract_model::ContractSourceV1 {
+        name: foreign.name().into(),
+        lock: foreign.lock().clone(),
+    };
+    let foreign_item = twin.try_frame_replay_with_target_edit(
+        ("Account", "deposit"),
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        limits,
+        move |target, _, package| {
+            *package = foreign;
+            target.as_mut().expect("target").package_id = foreign_id;
+        },
+    );
+    assert!(matches!(
+        foreign_item,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Package
+        ))
+    ));
+}
+
 /// Every target-member refusal occurs while constructing the replay, before a packet exists.
 #[trace("FR-024-AC-55", "FR-024-AC-56", "TC-035")]
 #[test]
@@ -4049,28 +4173,29 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     let run = forbidden_run(&twin);
-    let check =
-        |edit: fn(&mut Option<quire_contract_codegen::SelectedFrameTarget>, &mut OccurrenceKey),
-         member| {
-            let result = twin.try_frame_replay_with_target_edit(
-                "deposit",
-                &invocation,
-                "account",
-                "audit",
-                &run,
-                (
-                    native_twin::frame_decode_limits(),
-                    native_twin::frame_decode_limits(),
-                ),
-                edit,
-            );
-            assert!(
-                matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member)
-            );
-        };
-    check(|target, _| *target = None, SelectedTargetMember::Missing);
+    let check = |edit: fn(
+        &mut Option<quire_contract_codegen::SelectedFrameTarget>,
+        &mut OccurrenceKey,
+        &mut CheckedPackageV2,
+    ),
+                 member| {
+        let result = twin.try_frame_replay_with_target_edit(
+            ("Account", "deposit"),
+            &invocation,
+            "account",
+            "audit",
+            &run,
+            (
+                native_twin::frame_decode_limits(),
+                native_twin::frame_decode_limits(),
+            ),
+            edit,
+        );
+        assert!(matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member));
+    };
+    check(|target, _, _| *target = None, SelectedTargetMember::Missing);
     check(
-        |target, _| {
+        |target, _, _| {
             target.as_mut().expect("target").operation.object = QualifiedName::new(vec![
                 Identifier::new("Bank").expect("identifier"),
                 Identifier::new("Other").expect("identifier"),
@@ -4080,26 +4205,26 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         SelectedTargetMember::DeclaringOwner,
     );
     check(
-        |target, _| {
+        |target, _, _| {
             target.as_mut().expect("target").operation.operation =
                 Identifier::new("withdraw").expect("identifier");
         },
         SelectedTargetMember::Operation,
     );
     check(
-        |target, _| {
+        |target, _, _| {
             target.as_mut().expect("target").package_id.name = "unknown".into();
         },
         SelectedTargetMember::Package,
     );
     check(
-        |target, _| {
+        |target, _, _| {
             target.as_mut().expect("target").request_index = 1;
         },
         SelectedTargetMember::RequestIndex,
     );
     check(
-        |target, _| {
+        |target, _, _| {
             let target = target.as_mut().expect("target");
             target.occurrence = OccurrenceKey::new(
                 target.occurrence.node().clone(),
@@ -4109,7 +4234,7 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         SelectedTargetMember::TargetOccurrence,
     );
     check(
-        |_, occurrence| {
+        |_, occurrence, _| {
             *occurrence = OccurrenceKey::new(
                 occurrence.node().clone(),
                 Origin::new(Role::new("generated"), 1),
@@ -4126,7 +4251,7 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         lock: foreign.lock().clone(),
     };
     let foreign_result = twin.try_frame_replay_with_target_edit(
-        "deposit",
+        ("Account", "deposit"),
         &invocation,
         "account",
         "audit",
@@ -4135,7 +4260,7 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
             native_twin::frame_decode_limits(),
             native_twin::frame_decode_limits(),
         ),
-        |target, _| target.as_mut().expect("target").package_id = foreign_id,
+        |target, _, _| target.as_mut().expect("target").package_id = foreign_id,
     );
     assert!(matches!(
         foreign_result,
