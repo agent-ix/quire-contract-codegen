@@ -226,6 +226,13 @@ pub enum UnsupportedObligation {
         /// Selected clause node.
         node_id: CheckedNodeId,
     },
+    /// An admitted V2 clause uses an operator outside the clause harness grammar.
+    V2ClauseOperatorNotSupported {
+        /// Selected clause node.
+        node_id: CheckedNodeId,
+        /// Exact checked operator identity found in the clause body.
+        operation_identity: String,
+    },
     /// A surviving renderer could not assemble or serialize a harness after admitting its item.
     /// Distinct from the resource and syntax grounds below.
     RenderFailed,

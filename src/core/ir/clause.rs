@@ -8,7 +8,7 @@ use quire_contract_model::{
     CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
 };
 
-const MAX_CONDITION_TERMS: usize = 256;
+pub(crate) const MAX_CONDITION_TERMS: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ClauseInputSide {

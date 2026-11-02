@@ -1,11 +1,17 @@
 //! Bounded harnesses for admitted V2 scalar clauses (FR-015).
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
+use quire_contract_model::{
+    ApplicationOperator, CheckedNodeId, CheckedPackageV2, CheckedTerm, ContractSourceV1,
+};
 use quote::ToTokens;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use crate::{
-    core::ir::clause::{read_clause, ClauseGraphView, ClauseTerm},
+    core::ir::{
+        checked_term::application,
+        clause::{read_clause, ClauseGraphView, ClauseTerm, MAX_CONDITION_TERMS},
+    },
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
         census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
@@ -70,6 +76,19 @@ pub(in crate::kani::generate) fn lower(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
+    if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
+        return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
+            node_id: clause.clone(),
+            operation_identity,
+        });
+    }
+    let condition = read_clause(clause, view).ok_or_else(refusal)?;
+    if let Some(operation_identity) = unsupported_clause_operator(&condition.term) {
+        return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
+            node_id: clause.clone(),
+            operation_identity: operation_identity.to_owned(),
+        });
+    }
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     if (kind != ObligationKind::Invariant && oracle.descriptor.inputs.len() != 1)
         || oracle.descriptor.inputs.iter().any(|input| {
@@ -111,7 +130,6 @@ pub(in crate::kani::generate) fn lower(
         let input = oracle.descriptor.inputs.first().ok_or_else(refusal)?;
         let input_name = input.name.strip_prefix("parameter_").ok_or_else(refusal)?;
         let symbolic_name = format!("{input_name}_current");
-        let condition = read_clause(clause, view).ok_or_else(refusal)?;
         let mut arithmetic = Vec::new();
         let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
             .and_then(NativeTerm::boolean)
@@ -165,6 +183,92 @@ pub(in crate::kani::generate) fn lower(
         }
         .to_owned(),
     })
+}
+
+fn unsupported_checked_clause_operator(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+) -> Option<String> {
+    let [_, _, condition] = application(
+        view.package().term(clause)?,
+        ApplicationOperator::StateClause,
+        "quire.op.state.clause",
+    )?
+    else {
+        return None;
+    };
+    let mut terms = vec![condition];
+    let mut visited = BTreeSet::new();
+    let mut visits = 0;
+    while let Some(term) = terms.pop() {
+        if visits >= MAX_CONDITION_TERMS {
+            return None;
+        }
+        visits += 1;
+        match term {
+            CheckedTerm::Reference { target } => {
+                if visited.insert(target) {
+                    terms.push(view.package().term(target)?);
+                }
+            }
+            CheckedTerm::Application {
+                operation,
+                arguments,
+                ..
+            } => {
+                let identity = operation.identity()?;
+                if matches!(
+                    identity,
+                    "quire.op.state.pre" | "quire.op.record.project" | "quire.op.model.deref"
+                ) {
+                    continue;
+                }
+                if !supported_clause_operator(identity) {
+                    return Some(identity.to_owned());
+                }
+                terms.extend(arguments.iter().rev());
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn unsupported_clause_operator(term: &ClauseTerm) -> Option<&str> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = term
+    else {
+        return None;
+    };
+    if !supported_clause_operator(identity) {
+        return Some(identity);
+    }
+    arguments.iter().find_map(unsupported_clause_operator)
+}
+
+fn supported_clause_operator(identity: &str) -> bool {
+    matches!(
+        identity,
+        "quire.op.boolean.and"
+            | "quire.op.boolean.or"
+            | "quire.op.boolean.not"
+            | "quire.op.boolean.implies"
+            | "quire.op.boolean.eq"
+            | "quire.op.boolean.ne"
+            | "quire.op.integer.eq"
+            | "quire.op.integer.ne"
+            | "quire.op.integer.lt"
+            | "quire.op.integer.le"
+            | "quire.op.integer.gt"
+            | "quire.op.integer.ge"
+            | "quire.op.integer.add"
+            | "quire.op.integer.sub"
+            | "quire.op.integer.mul"
+            | "quire.op.integer.negate"
+    )
 }
 
 impl LoweredV2Clause {
@@ -941,6 +1045,34 @@ impl NativeTerm {
             Self::Boolean(expression) => Some(expression.clone()),
             Self::Integer { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod unsupported_operator_tests {
+    use super::unsupported_clause_operator;
+    use crate::core::ir::clause::ClauseTerm;
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-42", "TC-025")]
+    #[test]
+    fn nested_absolute_value_names_its_exact_operator() {
+        let term = ClauseTerm::Operation {
+            identity: "quire.op.integer.ge".to_owned(),
+            arguments: vec![
+                ClauseTerm::Operation {
+                    identity: "quire.op.integer.abs".to_owned(),
+                    arguments: vec![ClauseTerm::Integer("-2".to_owned())],
+                    result_bound: None,
+                },
+                ClauseTerm::Integer("0".to_owned()),
+            ],
+            result_bound: None,
+        };
+        assert_eq!(
+            unsupported_clause_operator(&term),
+            Some("quire.op.integer.abs")
+        );
     }
 }
 
