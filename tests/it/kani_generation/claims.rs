@@ -73,6 +73,57 @@ fn a_generated_source_or_saved_verdict_without_this_build_does_not_qualify() {
     );
 }
 
+#[trace("TC-056", "FR-041-AC-2", "FR-041-AC-6", "FR-041-AC-8")]
+#[test]
+fn assembled_current_modules_preserve_production_items_and_mutate_only_one_subject() {
+    use quote::ToTokens;
+    let (mut first, _) = generated();
+    let (mut second, _) = generated_named("second_implication");
+    assert_ne!(first.identity.module_symbol, second.identity.module_symbol);
+    let original_sources = [&first.rust.contents, &second.rust.contents];
+    let combined = assemble(&original_sources);
+    let tokens = |source: &str| {
+        syn::parse_file(source)
+            .unwrap()
+            .items
+            .into_iter()
+            .map(|item| item.to_token_stream().to_string())
+            .collect::<Vec<_>>()
+    };
+    let combined_items = tokens(&combined);
+    for source in original_sources {
+        for item in tokens(source) {
+            assert_eq!(
+                combined_items
+                    .iter()
+                    .filter(|candidate| **candidate == item)
+                    .count(),
+                1,
+                "each unchanged production item appears exactly once"
+            );
+        }
+    }
+    first.rust.contents = combined.clone();
+    second.rust.contents = combined;
+    let first_claim = claim(&first);
+    let second_claim = claim(&second);
+    assert!(first_claim.end < second_claim.start);
+    let mutant = subject_mutant(&first);
+    let mutant_items = tokens(&mutant.rust.contents);
+    assert_eq!(combined_items.len(), mutant_items.len());
+    assert_eq!(
+        combined_items
+            .iter()
+            .zip(&mutant_items)
+            .filter(|(before, after)| before != after)
+            .count(),
+        1,
+        "only the selected module's parsed subject expression changes"
+    );
+    assert_eq!(claim(&mutant).harness, first_claim.harness);
+    assert_eq!(claim(&second).harness, second_claim.harness);
+}
+
 fn run(
     harness: &KaniScalarObligationHarness,
     manifest: &Artifact,
