@@ -20,7 +20,8 @@ use qsl_replay::{
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
-    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, StateClauseReplayInputs,
+    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, SelectedFrameItem,
+    SelectedFrameTarget, StateClauseReplayInputs,
     StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
@@ -1130,6 +1131,23 @@ impl Twin {
         limits: quire_contract_codegen::WitnessDecodeLimits,
         parse_limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
+        self.try_frame_replay_with_target_edit(
+            operation, invocation, account, field, run, limits, parse_limits, |_| {},
+        )
+    }
+
+    /// Build a frame replay after replacing one selected-target input for a refusal test.
+    pub fn try_frame_replay_with_target_edit(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+        parse_limits: quire_contract_codegen::WitnessDecodeLimits,
+        edit: impl FnOnce(&mut Option<SelectedFrameTarget>),
+    ) -> Result<FrameReplay, FrameReplayError> {
         let mut inputs = self.run();
         inputs.decode_limits = run.decode_limits;
         let playback = parse_assertion_playback(
@@ -1140,6 +1158,16 @@ impl Twin {
             parse_limits.values,
         )
         .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
+        let selected_package = self.emitted_package("BalanceNeverDrops").0;
+        let selected_site = self.operation_site(operation).map_err(FrameReplayError::CallSite)?;
+        let selected_occurrence = selected_site.frame_occurrence.clone();
+        let mut selected_target = Some(SelectedFrameTarget {
+            operation: selected_site.frame_operation,
+            package_id: selected_package.package_id().clone(),
+            request_index: 0,
+            occurrence: selected_occurrence.clone(),
+        });
+        edit(&mut selected_target);
         FrameReplay::new(FrameReplayInputs {
             run: inputs,
             packages: self.packages(),
@@ -1149,6 +1177,12 @@ impl Twin {
                 .map(|(_, bytes)| document(bytes))
                 .collect(),
             operation: self.operation(operation),
+            selected_item: SelectedFrameItem {
+                package: &selected_package,
+                request_index: 0,
+                occurrence: &selected_occurrence,
+            },
+            selected_target,
             invocation: invocation.reference.clone(),
             change: ClaimedChange::FieldWrite {
                 object: SelectedObject {

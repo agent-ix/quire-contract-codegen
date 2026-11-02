@@ -45,7 +45,8 @@ use package::{
 };
 use qsl_replay::{
     CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
-    ObligationIdentity, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
+    Identifier, ObligationIdentity, OccurrenceKey, OperationSite, Origin, QualifiedName,
+    ReplayRefusal, ReplayResult, ReplaySource, Role, TerminalValue,
     Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
@@ -59,7 +60,7 @@ use quire_contract_codegen::{
     KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
     ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
     ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofExecutionState,
-    ProofReadiness, ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness,
+    ProofReadiness, ScopeMember, SelectedTargetMember, StateComparison, StateFieldDomain, StateFrameHarness,
     StateFrameIdentity, StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty,
     StateFrameRefusal, StateFrameRequest, StateFrameRole, UnsupportedFrameEffect,
     UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
@@ -4021,6 +4022,58 @@ fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
     );
     let result = replay.replay().expect("QSL admits the frame envelope");
     assert!(matches!(result.result(), ReplayResult::Witness(_)));
+}
+
+/// The driver-supplied typed target, including its declaring owner, is the value sent to QSL.
+#[trace("FR-024-AC-54", "TC-035")]
+#[test]
+fn tc_035_selected_frame_target_reaches_packet_and_request() {
+    let twin = Twin::new();
+    let site = twin.operation_site("deposit").expect("QSL operation site");
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
+    assert_eq!(replay.packet.replay_target.frame_operation, Some(site.frame_operation.clone()));
+    assert_eq!(replay.wire.replay_target.members.frame_operation, Some(site.frame_operation));
+    assert_eq!(replay.packet.occurrence_key, Some(site.frame_occurrence));
+}
+
+/// Every target-member refusal occurs while constructing the replay, before a packet exists.
+#[trace("FR-024-AC-55", "FR-024-AC-56", "TC-035")]
+#[test]
+fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let check = |edit: fn(&mut Option<quire_contract_codegen::SelectedFrameTarget>), member| {
+        let result = twin.try_frame_replay_with_target_edit(
+            "deposit", &invocation, "account", "audit", &run,
+            native_twin::frame_decode_limits(), native_twin::frame_decode_limits(), edit,
+        );
+        assert!(matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member));
+    };
+    check(|target| *target = None, SelectedTargetMember::Missing);
+    check(|target| {
+        target.as_mut().expect("target").operation.object = QualifiedName::new(vec![
+            Identifier::new("Bank").expect("identifier"),
+            Identifier::new("Other").expect("identifier"),
+        ]).expect("qualified name");
+    }, SelectedTargetMember::DeclaringOwner);
+    check(|target| {
+        target.as_mut().expect("target").operation.operation =
+            Identifier::new("withdraw").expect("identifier");
+    }, SelectedTargetMember::Operation);
+    check(|target| {
+        target.as_mut().expect("target").package_id.digest = "unknown".into();
+    }, SelectedTargetMember::Package);
+    check(|target| {
+        target.as_mut().expect("target").request_index = 1;
+    }, SelectedTargetMember::RequestIndex);
+    check(|target| {
+        let target = target.as_mut().expect("target");
+        target.occurrence = OccurrenceKey::new(
+            target.occurrence.node().clone(), Origin::new(Role::new("generated"), 1),
+        );
+    }, SelectedTargetMember::TargetOccurrence);
 }
 
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
