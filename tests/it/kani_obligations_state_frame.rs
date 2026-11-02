@@ -5549,11 +5549,12 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
     let twin = Twin::new();
-    let forbidden = generated_from_twin(
+    let forbidden = generated_from_twin_with_ceilings(
         &twin,
         "BalanceNeverDrops",
         &STATE_FIELDS,
         "crate::subject::deposit_touching_audit",
+        SMALL_FRAME_CEILINGS,
     );
     let counterexample = falsified(
         prove(&forbidden.frame),
@@ -5605,7 +5606,13 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
     let twin = Twin::new();
-    let allowed = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
+    let allowed = generated_from_twin_with_ceilings(
+        &twin,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+        SMALL_FRAME_CEILINGS,
+    );
     assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
     let mut account = subject::Account {
         balance: 5,
