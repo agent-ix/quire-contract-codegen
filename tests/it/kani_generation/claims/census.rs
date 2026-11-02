@@ -209,8 +209,12 @@ fn invalid(error: impl std::fmt::Display) -> Refusal {
 }
 
 fn subject_symbol_matches(name: &str, path: &str) -> bool {
-    let path = path.trim_start_matches("::").trim_start_matches("crate::");
-    name == path || name.ends_with(&format!("::{path}"))
+    let path = path.trim_start_matches("::");
+    if let Some(local) = path.strip_prefix("crate::") {
+        name == local
+    } else {
+        name == path || name.ends_with(&format!("::{path}"))
+    }
 }
 
 pub(super) struct Compiled {
@@ -585,6 +589,16 @@ mod tests {
             edges: BTreeMap::from([("subject".into(), BTreeSet::from(["actual".into()]))]),
         };
         assert!(compiled.shared_helpers(&claim).unwrap().is_empty());
+        compiled
+            .names
+            .insert("actual".into(), "another::update_switch".into());
+        assert_eq!(
+            compiled.shared_helpers(&claim),
+            Err(Refusal::MissingRoot("crate::update_switch".into()))
+        );
+        compiled
+            .names
+            .insert("actual".into(), "update_switch".into());
         compiled
             .edges
             .insert("expected".into(), BTreeSet::from(["actual".into()]));
