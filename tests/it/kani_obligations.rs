@@ -299,7 +299,7 @@ fn claim_index(
         .expect("test claim map contains selected node")
 }
 
-fn boolean_implies_scalar_from(
+pub(super) fn boolean_implies_scalar_from(
     package: CheckedPackageV2,
     node: CheckedNodeId,
 ) -> (
@@ -321,8 +321,13 @@ fn boolean_implies_scalar_from(
         claim_index: claim_index(&oracles.claim_map, &node),
         result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
-    let (_, mut harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let mut requested = request(&items, "crate::subject");
+    requested.ceilings = quire_contract_codegen::ProofCeilings {
+        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+        wall_clock: Duration::from_secs(120),
+    };
+    requested.unwind = 3;
+    let (_, mut harnesses) = emitted_scalar(negotiate_kani_obligations(&requested).unwrap());
     let oracle_crate = oracles
         .artifacts
         .iter()
@@ -472,9 +477,12 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
         panic!("subject-only mutation must falsify: {evidence:?}");
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
-    assert!(
-        counterexample.contains("the compiled implication subject must equal native implication")
-    );
+    assert!(counterexample
+        .contains("the compiled implication subject must equal the independent expectation"));
+    assert_implication_false_left_playback(counterexample);
+}
+
+pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
     use syn::parse::Parser;
     let playback = syn::parse_file(counterexample).expect("Kani playback is Rust source");
     let first_input = playback
@@ -2156,7 +2164,7 @@ fn routed_scalar_binary_subtraction_with_artifacts() -> (
 
 /// Writes the crate the way the driver does: the returned `Cargo.toml` and `library` as
 /// `src/lib.rs`.
-fn write_scalar_crate(
+pub(super) fn write_scalar_crate(
     name: &str,
     manifest: &quire_contract_codegen::Artifact,
     library: &str,
