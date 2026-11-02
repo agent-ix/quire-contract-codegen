@@ -208,6 +208,11 @@ fn invalid(error: impl std::fmt::Display) -> Refusal {
     Refusal::InvalidBuild(error.to_string())
 }
 
+fn subject_symbol_matches(name: &str, path: &str) -> bool {
+    let path = path.trim_start_matches("::").trim_start_matches("crate::");
+    name == path || name.ends_with(&format!("::{path}"))
+}
+
 pub(super) struct Compiled {
     modules: BTreeSet<String>,
     harnesses: BTreeSet<String>,
@@ -391,9 +396,10 @@ impl Compiled {
                 || (!claim.oracle_symbol.is_empty()
                     && (name == &claim.oracle_symbol
                         || name.ends_with(&format!("::{}", claim.oracle_symbol))))
-                || claim.actual_subject.as_ref().is_some_and(|path| {
-                    name.ends_with(&format!("::{}", path.trim_start_matches("crate::")))
-                })
+                || claim
+                    .actual_subject
+                    .as_ref()
+                    .is_some_and(|path| subject_symbol_matches(name, path))
             {
                 return Err(Refusal::DependentExpectation(name.clone()));
             }
@@ -401,7 +407,7 @@ impl Compiled {
         if !subject_reach.iter().any(|id| {
             self.names.get(id).is_some_and(|name| {
                 if let Some(path) = &claim.actual_subject {
-                    name.ends_with(&format!("::{}", path.trim_start_matches("crate::")))
+                    subject_symbol_matches(name, path)
                 } else {
                     name.strip_prefix("quire_contract_runtime::")
                         .is_some_and(|path| {
@@ -546,6 +552,53 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
     use quire_contract_codegen::KaniCheckLocation;
+
+    #[trace("TC-056", "FR-041-AC-3", "FR-041-AC-10")]
+    #[test]
+    fn local_transition_callee_is_required_and_forbidden_in_the_expectation() {
+        let claim = Claim {
+            module: "m".into(),
+            harness: "m::prove".into(),
+            generated_path: "src/generated/m.rs".into(),
+            oracle_symbol: String::new(),
+            subject_root: "subject_boolean_state_transition",
+            expectation_root: "expected_boolean_state_transition",
+            actual_subject: Some("crate::update_switch".into()),
+            start: 1,
+            end: 10,
+            failure_lines: 3..=3,
+        };
+        let mut compiled = Compiled {
+            modules: BTreeSet::from(["m".into()]),
+            harnesses: BTreeSet::from(["m::prove".into()]),
+            names: BTreeMap::from([
+                (
+                    "subject".into(),
+                    "m::subject_boolean_state_transition".into(),
+                ),
+                (
+                    "expected".into(),
+                    "m::expected_boolean_state_transition".into(),
+                ),
+                ("actual".into(), "update_switch".into()),
+            ]),
+            edges: BTreeMap::from([("subject".into(), BTreeSet::from(["actual".into()]))]),
+        };
+        assert!(compiled.shared_helpers(&claim).unwrap().is_empty());
+        compiled
+            .edges
+            .insert("expected".into(), BTreeSet::from(["actual".into()]));
+        assert_eq!(
+            compiled.shared_helpers(&claim),
+            Err(Refusal::DependentExpectation("update_switch".into()))
+        );
+        compiled.edges.remove("expected");
+        compiled.edges.remove("subject");
+        assert_eq!(
+            compiled.shared_helpers(&claim),
+            Err(Refusal::MissingRoot("crate::update_switch".into()))
+        );
+    }
 
     #[trace("TC-056", "FR-041-AC-2")]
     #[test]
