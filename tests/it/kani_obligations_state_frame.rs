@@ -4117,7 +4117,8 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
         },
         SelectedTargetMember::ItemOccurrence,
     );
-    let foreign = Twin::with_negated_balance_clause()
+    let foreign = Twin::new()
+        .with_source_identity("test:foreign-state-frame")
         .emitted_package("BalanceNeverDrops")
         .0;
     let foreign_id = quire_contract_model::ContractSourceV1 {
