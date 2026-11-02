@@ -165,3 +165,48 @@ scope:
     or verified SUCCESS count an
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-002 | medium | Inherited unquoted Rust generic in the public descriptor documentation is parsed as an unclosed HTML tag, causing the required warning-free rustdoc gate to fail. | src/oracle/clause.rs:47 | implementation-bug-despite-evidence |
+
+Evidence: `/tmp/ir1184-final-gate-docs.log` reports `rustdoc::invalid_html_tags` at line 47 under `-D warnings`. Both origin/main `1b28e456bf641e04358d4e35c6126df8517e15a0` and the current candidate contain the identical text `/// and returns Result<Outcome<bool>, ClauseStop>.`; this is inherited from the base, not introduced by IR-1184. The mechanical correction is Markdown code quoting around the type. No executable behavior is implicated. Fix pending; no source edits or builds performed by this reviewer.
+
+## Additional findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-003 | high | New scalar authority and composite artifact imports violate AD-004 dependency direction and crate-root restrictions and introduce a module cycle, failing all three required layout checks. | src/kani/identity.rs:649; src/kani/generate/scalar.rs:339; src/replay/composite_artifact.rs:4; src/replay/scalar_builder.rs:20 | implementation-bug-despite-evidence |
+| FND-004 | medium | New native driver test helpers select dependency artifacts by uniqueness or modification time rather than the running Cargo dependency cohort, so a normal target containing multiple builds panics or mixes incompatible crate identities. | tests/it/scalar_replay_binding.rs:121; tests/it/composite_artifact_binding.rs:175 | implementation-bug-despite-evidence |
+
+Evidence for FND-003: `/tmp/ir1184-final-gate-it.log` records `l_2_every_import_follows_the_dependency_direction`, `l_2_no_file_imports_an_item_through_the_crate_root`, and `l_2_the_module_graph_is_acyclic` failures. The latter reports `kani::identity -> replay::scalar_authority -> kani::test_support -> kani::identity`; the former also identifies reverse Kani-to-replay, replay-to-oracle and crate-root imports. The required fix must preserve the actual architecture rather than weaken the scanner or conceal imports.
+
+Evidence for FND-004: the same log records both scalar controls panicking with five `libquire_exact-*.rlib` candidates. The composite helper chooses each dependency independently by mtime and fails compilation with E0308, `expected UnitTable, found a different UnitTable`. Dependency resolution must identify one coherent current-build cohort and remain test-only. These failures are distinct from the separately observed inherited fixture failures; no baseline fixture repair is requested here. No source changes or builds performed by this reviewer.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | 45a18891 quotes the exact generic type as Markdown code; no lint suppression or executable change. Rustdoc rerun remains with the lead. |
+| FND-003 | fixed | 45a18891 moves scalar authority to core, uses a sealed core-owned composite origin/producer trait, keeps complete public claim-map validation in oracle, removes replay-to-oracle and root imports, and moves the legacy fixture control to kani. Focused supplied log reports all layout checks passing; tests/it/layout.rs unchanged. |
+| FND-004 | fixed | 45a18891 resolves direct dependency fingerprints from the actual running it executable, checks the producing rustc cohort, requires one matching rlib and records the compile-time RUSTUP_TOOLCHAIN. Both actual scalar and composite native controls pass in the supplied focused log; no first/newest fallback. |
+
+## Disposition round 1 verdict
+
+PASS for reviewed fixes at frozen `45a18891beb4adab15abb3cf058d63ba779a81ca`. Inspected the complete `2d20950d..45a18891` diff. All FND-002..004 are fixed; no new defect identified in the fix diff. The original Findings table and recorded defect text remain unchanged. Supplied focused verification reports 2 unit and 45 integration passes (including complete layout and genuine scalar/QSL/native/composite controls), plus fmt/clippy success. Reviewer ran no build or test. Lead-owned final integration and rustdoc reruns remain pending. Independently reproduced baseline fixture failures are context, not new findings.
+
+### Fixed excerpts
+
+```yaml
+- fnd: FND-002
+  after_excerpt: '    /// and returns `Result<Outcome<bool>, ClauseStop>`.'
+- fnd: FND-003
+  after_excerpt: "use crate::core::{\n    artifact::Artifact,\n    composite_authority::{\n\
+    \        CompositeOriginRefusal, CompositeReplayAuthority, CompositeReplayOrigin,\n\
+    \    },\n};"
+- fnd: FND-004
+  after_excerpt: "    let expected = dependency[3]\n        .as_u64()\n        .expect(\"\
+    Cargo dependency fingerprint\");"
+```
