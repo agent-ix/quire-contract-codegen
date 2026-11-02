@@ -511,35 +511,30 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
 
 fn assemble(sources: &[&str]) -> String {
     use quote::ToTokens;
+    use syn::spanned::Spanned;
     let mut seen = BTreeSet::new();
+    let mut attributes = String::new();
     let mut combined = String::new();
     for source in sources {
-        for item in syn::parse_file(source).unwrap().items {
-            let text = item.to_token_stream().to_string();
-            if seen.insert(text.clone()) {
-                combined.push_str(&text);
+        let parsed = syn::parse_file(source).unwrap();
+        for attribute in parsed.attrs {
+            if seen.insert(format!("attribute:{}", attribute.to_token_stream())) {
+                attributes.push_str(&source[attribute.span().byte_range()]);
+                attributes.push('\n');
+            }
+        }
+        for item in parsed.items {
+            if seen.insert(item.to_token_stream().to_string()) {
+                // Keep every production item's source bytes; only identical shared
+                // top-level definitions are coalesced when assembling one crate.
+                combined.push_str(&source[item.span().byte_range()]);
                 combined.push('\n');
             }
         }
     }
-    // Formatting supplies exact distinct module extents for Kani's line attribution.
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    let mut child = Command::new("rustfmt")
-        .args(["--edition", "2021"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(combined.as_bytes())
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-    String::from_utf8(output.stdout).unwrap()
+    attributes.push_str(&combined);
+    syn::parse_file(&attributes).expect("assembled production items remain valid Rust");
+    attributes
 }
 
 fn retain_mutation(directory: &Path, before: &str, after: &str) {
