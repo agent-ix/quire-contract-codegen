@@ -5414,18 +5414,25 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
     let twin = Twin::new();
     assert_eq!(
         prove(
-            &generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
-                .postcondition
+            &generated_from_twin_with_ceilings(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS
+            )
+            .postcondition
         ),
         KaniRunOutcome::Verified
     );
     falsified(
         prove(
-            &generated_from_twin(
+            &generated_from_twin_with_ceilings(
                 &twin,
                 "BalanceNeverDrops",
                 &STATE_FIELDS,
                 "crate::subject::deposit_debiting",
+                SMALL_FRAME_CEILINGS,
             )
             .postcondition,
         ),
