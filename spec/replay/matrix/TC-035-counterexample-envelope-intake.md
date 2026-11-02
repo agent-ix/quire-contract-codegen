@@ -170,6 +170,16 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     key and check QSL packet admission refuses without a CG default. Check that a packet
     assembled inside `request_for` from the selected site or `ParityPreimage` cannot satisfy the
     producer-packet input or this substitution control.
+33. Select one admitted CG frame item and retain its package identity, request index and complete
+    frame occurrence. Supply `FrameReplayInputs` with the driver's exact QSL
+    `OperationSite.frame_operation` and its association to that item; compare the packet and
+    request target with the supplied value, including an inherited operation. Then hold the CG
+    item fixed and omit the target, change only its declaring owner, and change only its operation.
+    Hold the valid target fixed and separately replace its associated package identity with an
+    unknown one and a different admitted package, its request index with an unknown one and
+    another selected item's index, and its occurrence with another ordinal of the same frame
+    node. Record the typed refusal member and whether packet, request or replay was reached
+    (FR-024-AC-54 to FR-024-AC-56).
 
 ## Expected Results
 
@@ -328,6 +338,16 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     whose key is absent receives QSL's packet-admission refusal. Two occurrences of one node
     remain distinct, and neither a call site nor `ParityPreimage` can replace an independently
     supplied packet (FR-024-AC-46).
+38. The matching target reaches the frame packet and request unchanged; its associated package
+    identity and request index equal the independently selected CG item's values, and its frame
+    occurrence equals both that item and QSL's `OperationSite.frame_occurrence`. QSL's
+    `OperationSite.frame_operation` equals the supplied target, including the inherited
+    operation's declaring owner (FR-024-AC-54). Each absent or changed owner/operation target
+    yields a typed `ClaimMismatch` naming that member, with no packet, request or replay and no
+    name-only fallback (FR-024-AC-55). Each foreign, unknown or changed package, request index
+    or occurrence yields a typed `ClaimMismatch` naming the association member before packet,
+    request or replay construction, including the same-node different-ordinal case
+    (FR-024-AC-56).
 
 ## Status
 
@@ -369,3 +389,5 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
+Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+association refusals are not implemented yet.
