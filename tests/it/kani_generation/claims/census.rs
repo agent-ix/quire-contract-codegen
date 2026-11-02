@@ -27,6 +27,7 @@ pub(super) enum Refusal {
 pub(super) struct Claim {
     pub module: String,
     pub harness: String,
+    oracle_symbol: String,
     pub start: u32,
     pub end: u32,
     failure_lines: std::ops::RangeInclusive<u32>,
@@ -99,6 +100,7 @@ impl Claim {
         Ok(Self {
             failure_lines: failure_lines.clone(),
             harness: format!("{module}::{symbol}"),
+            oracle_symbol: harness.identity.oracle_symbol.clone(),
             module,
             start: u32::try_from(item.span().start().line).map_err(invalid)?,
             end: u32::try_from(item.span().end().line).map_err(invalid)?,
@@ -297,13 +299,22 @@ impl Compiled {
                 .names
                 .get(id)
                 .ok_or_else(|| Refusal::MissingRoot(id.clone()))?;
-            if id == &subject || name.contains("quire_exact") || name.contains("oracle") {
+            if id == &subject
+                || name.starts_with("quire_exact::")
+                || name == &claim.oracle_symbol
+                || name.ends_with(&format!("::{}", claim.oracle_symbol))
+            {
                 return Err(Refusal::DependentExpectation(name.clone()));
             }
         }
         if !subject_reach.iter().any(|id| {
             self.names.get(id).is_some_and(|name| {
-                name.contains("quire_contract_runtime::operators::implies_short_circuit")
+                name.strip_prefix("quire_contract_runtime::")
+                    .is_some_and(|path| {
+                        path.split("::<").next().is_some_and(|path| {
+                            path.rsplit("::").next() == Some("implies_short_circuit")
+                        })
+                    })
             })
         }) {
             return Err(Refusal::MissingRoot("runtime implication".into()));
@@ -418,6 +429,7 @@ mod tests {
         let first = Claim {
             module: "first".into(),
             harness: "first::proof".into(),
+            oracle_symbol: "embedded_oracle".into(),
             start: 10,
             end: 20,
             failure_lines: 10..=20,
@@ -425,6 +437,7 @@ mod tests {
         let second = Claim {
             module: "second".into(),
             harness: "second::proof".into(),
+            oracle_symbol: "embedded_oracle".into(),
             start: 30,
             end: 40,
             failure_lines: 30..=40,
@@ -488,6 +501,7 @@ mod tests {
         let claim = Claim {
             module: "m".into(),
             harness: "m::proof".into(),
+            oracle_symbol: "embedded_oracle".into(),
             start: 1,
             end: 50,
             failure_lines: 1..=50,
@@ -502,7 +516,7 @@ mod tests {
                     "runtime".into(),
                     "quire_contract_runtime::operators::implies_short_circuit".into(),
                 ),
-                ("bridge".into(), "indirect".into()),
+                ("bridge".into(), "oracle_free_model".into()),
                 ("shared".into(), "shared".into()),
             ]),
             edges: BTreeMap::from([
