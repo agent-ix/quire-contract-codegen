@@ -44,7 +44,7 @@ pub struct V2ClauseDescriptor {
     pub inputs: Vec<ClauseOracleInput>,
     /// Checked scalar operation identities in evaluation-plan order.
     /// An empty plan emits a direct Boolean read; otherwise oracle_clause accepts a meter
-    /// and returns Result<Outcome<bool>, ClauseStop>.
+    /// and returns `Result<Outcome<bool>, ClauseStop>`.
     pub operation_identities: Vec<String>,
     /// Number of implication consequents derived from the condition tree.
     pub expected_consequents: u32,

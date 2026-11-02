@@ -104,22 +104,7 @@ fn observe(
         fs::write(path, changed).unwrap();
     }
     let deps = target.join("debug/deps");
-    let libraries = fs::read_dir(&deps)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| {
-            path.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("libquire_exact-")
-                && path
-                    .extension()
-                    .is_some_and(|extension| extension == "rlib")
-        })
-        .collect::<Vec<_>>();
-    let [exact] = libraries.as_slice() else {
-        panic!("one exact dependency in the owned target: {libraries:?}")
-    };
+    let exact = super::native_driver_artifacts::dependency("quire_exact");
     let arguments = plan
         .operands()
         .iter()
@@ -129,7 +114,9 @@ fn observe(
     let main = format!("#[path=\"src/lib.rs\"] mod generated;\nuse quire_exact as rt;\nuse rt::ScalarLimits;\nfn main() {{ let mut meter = rt::Meter::new({:?});\n let outcome = generated::{}({arguments}, &mut meter).expect(\"actual generated oracle\");\n match outcome {{ rt::Outcome::Completed(value) => println!(\"completed:{{value}}\"), rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{..}}) => println!(\"out_of_range\"), rt::Outcome::Undefined(_) => println!(\"undefined\"), rt::Outcome::Incomplete(_) => println!(\"incomplete\"), other => panic!(\"unexpected native outcome: {{other:?}}\") }} }}", plan.scalar_limits(), fixture.harness.identity.oracle_symbol);
     fs::write(scratch.0.join("driver.rs"), main).unwrap();
     let binary = scratch.0.join("driver");
-    let compile = Command::new("timeout")
+    let mut compiler = Command::new("timeout");
+    super::native_driver_artifacts::compiler(&mut compiler);
+    let compile = compiler
         .args(["120", "rustc", "--edition=2021", "--cap-lints=allow"])
         .arg(scratch.0.join("driver.rs"))
         .arg("--extern")

@@ -12,10 +12,13 @@ use super::{
     composite_builder::{origin, wire_node, CompositeBuildError, OriginalReplayContext},
     function::{LockedSource, ReplayInputs},
     scalar::decode_scalar_falsification,
-    scalar_authority::{ScalarAuthorityError, ScalarReplayBody},
     witness::DecodeFailure,
 };
-use crate::{Artifact, KaniScalarObligationHarness, ScalarObligationIdentity};
+use crate::core::{
+    artifact::Artifact,
+    scalar_authority::{ScalarAuthorityError, ScalarReplayBody},
+};
+use crate::kani::identity::{KaniScalarObligationHarness, ScalarObligationIdentity};
 
 /// A typed pre-dispatch or report-binding refusal; this never fabricates a QSL settlement.
 #[derive(Debug)]
@@ -96,7 +99,7 @@ impl OriginalScalarContext {
         if !harness.matches_artifact_package(artifacts) {
             return Err(ScalarBuildError::Artifacts);
         }
-        let parsed = crate::parse_assertion_playback(
+        let parsed = crate::kani::output::playback::parse_assertion_playback(
             playback,
             identity.harness_symbol.as_str(),
             identity.module_symbol.as_str(),

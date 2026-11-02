@@ -648,8 +648,8 @@ pub struct KaniScalarObligationHarness {
     original_scalar_limits: Option<quire_exact::ScalarLimits>,
     original_scalar_package: Option<std::sync::Arc<quire_contract_model::CheckedPackageV2>>,
     scalar_replay_body: Result<
-        crate::replay::scalar_authority::ScalarReplayBody,
-        crate::replay::scalar_authority::ScalarAuthorityError,
+        crate::core::scalar_authority::ScalarReplayBody,
+        crate::core::scalar_authority::ScalarAuthorityError,
     >,
 }
 
@@ -688,7 +688,7 @@ impl KaniScalarObligationHarness {
             original_scalar_limits: None,
             original_scalar_package: None,
             scalar_replay_body: Err(
-                crate::replay::scalar_authority::ScalarAuthorityError::Unavailable,
+                crate::core::scalar_authority::ScalarAuthorityError::Unavailable,
             ),
         }
     }
@@ -712,12 +712,12 @@ impl KaniScalarObligationHarness {
     pub fn scalar_replay_body(
         &self,
     ) -> Result<
-        &crate::replay::scalar_authority::ScalarReplayBody,
-        crate::replay::scalar_authority::ScalarAuthorityError,
+        &crate::core::scalar_authority::ScalarReplayBody,
+        crate::core::scalar_authority::ScalarAuthorityError,
     > {
         if !self.has_valid_provenance() {
             return Err(
-                crate::replay::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged,
+                crate::core::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged,
             );
         }
         self.scalar_replay_body.as_ref().map_err(Clone::clone)
@@ -727,19 +727,19 @@ impl KaniScalarObligationHarness {
         &self,
     ) -> Result<
         &std::sync::Arc<quire_contract_model::CheckedPackageV2>,
-        crate::replay::scalar_authority::ScalarAuthorityError,
+        crate::core::scalar_authority::ScalarAuthorityError,
     > {
         self.scalar_replay_body()?;
         self.original_scalar_package
             .as_ref()
-            .ok_or(crate::replay::scalar_authority::ScalarAuthorityError::Unavailable)
+            .ok_or(crate::core::scalar_authority::ScalarAuthorityError::Unavailable)
     }
 
     pub(crate) fn bind_scalar_replay_body(
         &mut self,
         body: Result<
-            crate::replay::scalar_authority::ScalarReplayBody,
-            crate::replay::scalar_authority::ScalarAuthorityError,
+            crate::core::scalar_authority::ScalarReplayBody,
+            crate::core::scalar_authority::ScalarAuthorityError,
         >,
         source: std::sync::Arc<quire_contract_model::CheckedPackageV2>,
     ) {
@@ -754,7 +754,7 @@ impl KaniScalarObligationHarness {
                 });
             let Some(mut retained) = retained else {
                 self.scalar_replay_body =
-                    Err(crate::replay::scalar_authority::ScalarAuthorityError::Record);
+                    Err(crate::core::scalar_authority::ScalarAuthorityError::Record);
                 return;
             };
             retained.push('\n');

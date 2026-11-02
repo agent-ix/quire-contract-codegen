@@ -163,24 +163,12 @@ fn main() {{
         "serde_json",
         "quire_canonical",
     ] {
-        let library = fs::read_dir(&deps)
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| {
-                path.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .starts_with(&format!("lib{name}-"))
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "rlib")
-            })
-            .max_by_key(|path| fs::metadata(path).unwrap().modified().unwrap())
-            .unwrap_or_else(|| panic!("compiled owner dependency {name}"));
+        let library = super::native_driver_artifacts::dependency(name);
         command
             .arg("--extern")
             .arg(format!("{name}={}", library.display()));
     }
+    super::native_driver_artifacts::compiler(&mut command);
     let compiled = command.output().unwrap();
     assert!(
         compiled.status.success(),

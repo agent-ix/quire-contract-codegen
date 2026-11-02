@@ -110,3 +110,5 @@ mod checked_term_consumers;
 mod kani_collection_operation;
 
 mod constrained_method;
+
+mod native_driver_artifacts;

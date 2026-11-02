@@ -146,11 +146,5 @@ mod tests {
             unique_expression_occurrence(std::slice::from_ref(&occurrence)).unwrap(),
             occurrence
         );
-        let (fixture, _) =
-            crate::kani::test_support::scalar_source_fixture(std::time::Duration::from_secs(1));
-        assert_eq!(
-            fixture.scalar_replay_body(),
-            Err(ScalarAuthorityError::Unavailable)
-        );
     }
 }

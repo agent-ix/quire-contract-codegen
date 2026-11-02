@@ -1,9 +1,14 @@
 //! Native-only original composite artifact authentication (FR-033-AC-18).
 //! No backend proof, shadow result, pair count or falsified settlement is manufactured here.
+use super::composite_builder::{
+    CompositeBuildError, OriginalCompositeEqContext, OriginalCompositeEqRequest,
+};
 use super::function::{LockedSource, ReplayInputs};
-use crate::{
-    Artifact, CompositeBuildError, CompositeEqualityOracles, OriginalCompositeEqContext,
-    OriginalCompositeEqRequest,
+use crate::core::{
+    artifact::Artifact,
+    composite_authority::{
+        CompositeOriginRefusal, CompositeReplayAuthority, CompositeReplayOrigin,
+    },
 };
 use qsl_replay::{
     CompositeParityClaim, ParityPreimage, ReplayLimits, ReplayRequestWire, WitnessValue,
@@ -16,7 +21,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct OriginalCompositeArtifactBinding {
     request: OriginalCompositeEqRequest,
-    origin: Arc<crate::oracle::equality::CompositeGenerationOrigin>,
+    origin: Arc<CompositeReplayOrigin>,
     inputs: Arc<ReplayInputs>,
     operands: [WitnessValue; 2],
     oracle_symbol: String,
@@ -32,7 +37,7 @@ impl OriginalCompositeEqContext {
     /// Refuses stale/absent generator authority, another original package or an invalid body.
     pub fn retain_generated_artifact(
         &self,
-        generated: &CompositeEqualityOracles,
+        generated: &impl CompositeReplayAuthority,
         node: &CheckedNodeId,
         occurrence: &CheckedOccurrence,
         operator: qsl_replay::EqualityOperator,
@@ -41,12 +46,10 @@ impl OriginalCompositeEqContext {
         work_limit: u64,
     ) -> Result<OriginalCompositeArtifactBinding, CompositeBuildError> {
         let origin = generated.replay_origin().map_err(|cause| match cause {
-            crate::oracle::equality::CompositeOriginRefusal::Unavailable => {
+            CompositeOriginRefusal::Unavailable => {
                 CompositeBuildError::GeneratedAuthorityUnavailable
             }
-            crate::oracle::equality::CompositeOriginRefusal::Changed => {
-                CompositeBuildError::GeneratedArtifactChanged
-            }
+            CompositeOriginRefusal::Changed => CompositeBuildError::GeneratedArtifactChanged,
         })?;
         if origin.original.as_ref() != self.original_context().original.as_ref() {
             return Err(CompositeBuildError::ContextMismatch);
@@ -60,24 +63,14 @@ impl OriginalCompositeEqContext {
             harness_bounds,
             work_limit,
         )?;
-        let operator_kind = match operator {
-            qsl_replay::EqualityOperator::Equal => crate::EqualityOperatorKind::Equal,
-            qsl_replay::EqualityOperator::NotEqual => crate::EqualityOperatorKind::NotEqual,
-        };
         let [left, right] = request.operands().operands.as_slice() else {
             return Err(CompositeBuildError::OperandShape);
         };
-        let mut candidates = generated.claim_map.items.iter().filter_map(|claim| {
-            let crate::ClaimDisposition::Generated(item) = &claim.result else {
-                return None;
-            };
-            (&claim.node_id == node
-                && item.descriptor.operator == operator_kind
-                && item.descriptor.left_source_type == left.semantic_type
-                && item.descriptor.right_source_type == right.semantic_type
-                && item.descriptor.left_conversion_target.is_none()
-                && item.descriptor.right_conversion_target.is_none())
-            .then_some(item)
+        let mut candidates = origin.entries.iter().filter(|entry| {
+            &entry.node == node
+                && entry.equal == (operator == qsl_replay::EqualityOperator::Equal)
+                && entry.left == left.semantic_type
+                && entry.right == right.semantic_type
         });
         let selected = candidates
             .next()
@@ -85,8 +78,8 @@ impl OriginalCompositeEqContext {
         if candidates.next().is_some() {
             return Err(CompositeBuildError::UnsupportedNodeOperation);
         }
-        let oracle_symbol = selected.oracle_symbol.clone();
-        let environment_symbol = selected.environment_symbol.clone();
+        let oracle_symbol = selected.oracle.clone();
+        let environment_symbol = selected.environment.clone();
         Ok(OriginalCompositeArtifactBinding {
             request,
             origin: Arc::clone(origin),

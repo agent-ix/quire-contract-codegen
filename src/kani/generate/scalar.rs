@@ -340,10 +340,10 @@ impl LoweredScalarClaim {
         &self,
         source: &quire_contract_model::CheckedPackageV2,
     ) -> Result<
-        crate::replay::scalar_authority::ScalarReplayBody,
-        crate::replay::scalar_authority::ScalarAuthorityError,
+        crate::core::scalar_authority::ScalarReplayBody,
+        crate::core::scalar_authority::ScalarAuthorityError,
     > {
-        use crate::replay::scalar_authority::{ScalarAuthorityError, ScalarReplayBody};
+        use crate::core::scalar_authority::{ScalarAuthorityError, ScalarReplayBody};
         if self.operation == ScalarOperation::Implies {
             return Err(ScalarAuthorityError::Unavailable);
         }

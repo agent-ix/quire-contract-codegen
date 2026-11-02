@@ -311,6 +311,8 @@ pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
 pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
 
 // State-method types retain exact identity across generation, execution and conversion.
+/// Original admitted scalar replay body and typed family authority.
+pub use core::scalar_authority::{ScalarAuthorityError, ScalarReplayBody, ScalarReplayKind};
 pub use kani::generate::outcome::constrained::{
     ConstrainedClauseSelection, ConstrainedMethodRefusal, ConstrainedMethodRequest,
     ConstrainedOperationBinding,
@@ -325,8 +327,6 @@ pub use kani::terminal::constrained::{
     ConstrainedMethodResult, ConstrainedMethodStatus, ConstrainedOwnerObservation,
     ConstrainedReplaySettlement, ConstraintBoundary,
 };
-/// Original admitted scalar replay body and typed family authority.
-pub use replay::scalar_authority::{ScalarAuthorityError, ScalarReplayBody, ScalarReplayKind};
 
 /// Checked operator-level scalar replay construction; execution remains driver-owned.
 pub use replay::scalar_builder::{
@@ -337,4 +337,8 @@ pub use replay::scalar_builder::{
 /// Independent native-only original composite artifact authentication.
 pub use replay::composite_artifact::{
     AuthenticatedCompositeArtifact, CompositeDriverObservation, OriginalCompositeArtifactBinding,
+};
+
+pub use core::composite_authority::{
+    CompositeOriginRefusal, CompositeReplayAuthority, CompositeReplayOrigin,
 };
