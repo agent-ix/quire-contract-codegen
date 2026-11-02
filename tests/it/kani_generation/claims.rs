@@ -80,7 +80,7 @@ fn assembled_current_modules_preserve_production_items_and_mutate_only_one_subje
     let (mut first, _) = generated();
     let (mut second, _) = generated_named("second_implication");
     assert_ne!(first.identity.module_symbol, second.identity.module_symbol);
-    let original_sources = [&first.rust.contents, &second.rust.contents];
+    let original_sources = [first.rust.contents.as_str(), second.rust.contents.as_str()];
     let combined = assemble(&original_sources);
     let tokens = |source: &str| {
         syn::parse_file(source)
