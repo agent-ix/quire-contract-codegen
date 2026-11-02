@@ -135,6 +135,41 @@ impl fmt::Display for SelectedTargetMember {
     }
 }
 
+#[ix_trace_rs::string_edge]
+fn selected_target_mismatch(
+    item: &SelectedFrameItem<'_>,
+    located: &LocatedPackageIdentity,
+    target: &SelectedFrameTarget,
+    site: &OperationSite,
+) -> Option<SelectedTargetMember> {
+    let package_id = ContractSourceV1 {
+        name: item.package.name().into(),
+        lock: item.package.lock().clone(),
+    };
+    if package_id.name != located.name || package_id.lock != located.lock {
+        return Some(SelectedTargetMember::Package);
+    }
+    if target.package_id != package_id {
+        return Some(SelectedTargetMember::Package);
+    }
+    if target.request_index != item.request_index {
+        return Some(SelectedTargetMember::RequestIndex);
+    }
+    if item.occurrence != &site.frame_occurrence {
+        return Some(SelectedTargetMember::ItemOccurrence);
+    }
+    if target.occurrence != *item.occurrence {
+        return Some(SelectedTargetMember::TargetOccurrence);
+    }
+    if target.operation.object != site.frame_operation.object {
+        return Some(SelectedTargetMember::DeclaringOwner);
+    }
+    if target.operation.operation != site.frame_operation.operation {
+        return Some(SelectedTargetMember::Operation);
+    }
+    None
+}
+
 /// The member of the harness's scope that is not the one the replay names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScopeMember {
@@ -740,46 +775,10 @@ impl FrameReplay {
         let selected_target = selected_target.ok_or(FrameReplayError::SelectedTarget(
             SelectedTargetMember::Missing,
         ))?;
-        let selected_package_id = ContractSourceV1 {
-            name: selected_item.package.name().into(),
-            lock: selected_item.package.lock().clone(),
-        };
-        if selected_package_id.name != located_identity.name
-            || selected_package_id.lock != located_identity.lock
+        if let Some(member) =
+            selected_target_mismatch(&selected_item, &located_identity, &selected_target, &site)
         {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::Package,
-            ));
-        }
-        if selected_target.package_id != selected_package_id {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::Package,
-            ));
-        }
-        if selected_target.request_index != selected_item.request_index {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::RequestIndex,
-            ));
-        }
-        if selected_item.occurrence != &site.frame_occurrence {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::ItemOccurrence,
-            ));
-        }
-        if selected_target.occurrence != *selected_item.occurrence {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::TargetOccurrence,
-            ));
-        }
-        if selected_target.operation.object != site.frame_operation.object {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::DeclaringOwner,
-            ));
-        }
-        if selected_target.operation.operation != site.frame_operation.operation {
-            return Err(FrameReplayError::SelectedTarget(
-                SelectedTargetMember::Operation,
-            ));
+            return Err(FrameReplayError::SelectedTarget(member));
         }
         same_node(
             ScopeMember::Anchor,
