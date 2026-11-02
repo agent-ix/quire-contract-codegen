@@ -169,6 +169,55 @@ fn original_boolean_transition_uses_canonical_claim_and_source_provenance() {
 
 #[trace("TC-056", "FR-041-AC-10")]
 #[test]
+fn transition_claim_requires_its_selected_module_roots_and_postcondition_assertion() {
+    use super::census::{Claim, Refusal};
+
+    let package = admitted(PRECONDITION, "transition-claim-roots");
+    let original = harness(&package);
+    Claim::state_transition(&original).expect("the production claim has all named roots");
+
+    let mut missing_module = original.clone();
+    missing_module.rust.contents = missing_module.rust.contents.replace(
+        original.identity.module_symbol.as_str(),
+        "unclaimed_transition_module",
+    );
+    assert!(matches!(
+        Claim::state_transition(&missing_module),
+        Err(Refusal::MissingModule(_))
+    ));
+
+    let mut missing_expectation = original.clone();
+    missing_expectation.rust.contents = missing_expectation
+        .rust
+        .contents
+        .replace("expected_boolean_state_transition", "unclaimed_expectation");
+    assert!(matches!(
+        Claim::state_transition(&missing_expectation),
+        Err(Refusal::MissingRoot(_))
+    ));
+
+    let mut missing_postcondition = original.clone();
+    assert_eq!(
+        missing_postcondition
+            .rust
+            .contents
+            .matches("assert!(state_post,")
+            .count(),
+        1
+    );
+    missing_postcondition.rust.contents =
+        missing_postcondition
+            .rust
+            .contents
+            .replacen("assert!(state_post,", "assert!(true,", 1);
+    assert!(matches!(
+        Claim::state_transition(&missing_postcondition),
+        Err(Refusal::InvalidBuild(_))
+    ));
+}
+
+#[trace("TC-056", "FR-041-AC-10")]
+#[test]
 fn unsupported_boolean_preconditions_emit_no_transition_harness() {
     for pre in ["", "pre P0 using v on M::Switch::set { true }\n"] {
         let package = admitted(pre, "unsupported-boolean-transition");
