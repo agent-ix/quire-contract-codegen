@@ -5610,19 +5610,21 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
         .items
         .iter()
         .find_map(|item| match item {
-            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol => module
-                .content
-                .as_ref()?
-                .1
-                .iter()
-                .find_map(|item| match item {
-                    syn::Item::Fn(function)
-                        if function.sig.ident == harness.identity.harness_symbol =>
-                    {
-                        Some(function)
-                    }
-                    _ => None,
-                }),
+            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol.as_str() => {
+                module
+                    .content
+                    .as_ref()?
+                    .1
+                    .iter()
+                    .find_map(|item| match item {
+                        syn::Item::Fn(function)
+                            if function.sig.ident == harness.identity.harness_symbol.as_str() =>
+                        {
+                            Some(function)
+                        }
+                        _ => None,
+                    })
+            }
             _ => None,
         })
         .expect("the selected invariant proof function");
