@@ -2,6 +2,7 @@
 
 mod collection_operation;
 pub(super) mod constrained;
+mod state_transition;
 
 use super::{
     outcome::UnsupportedObligation,
@@ -92,6 +93,9 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
             operation,
         } => collection_operation::render(spec, collection, operation),
         HarnessShape::Frame(frame) => render_frame(spec, frame),
+        HarnessShape::StateTransition { subject_path } => {
+            state_transition::render(spec, subject_path)
+        }
         HarnessShape::Constrained {
             identity,
             conditions,

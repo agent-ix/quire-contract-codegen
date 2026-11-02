@@ -18,8 +18,16 @@ use crate::{
     },
     kani::{
         abi::{adapter_options, KaniSolver},
-        generate::record::harness_path,
-        identity::{state_transition::StateTransitionIdentity, ProofCeilings},
+        generate::{
+            outcome::UnsupportedObligation,
+            record::{harness_path, record},
+            render::render as render_spec,
+            spec::HarnessSpec,
+        },
+        identity::{
+            state_transition::{KaniStateTransitionHarness, StateTransitionIdentity},
+            ProofCeilings,
+        },
     },
 };
 
@@ -41,6 +49,24 @@ pub enum StateTransitionRefusal {
     SourceCorrespondence,
     /// Complete admitted identity material cannot be encoded within the identity ceiling.
     Identity,
+}
+
+pub(super) fn render(
+    identity: StateTransitionIdentity,
+) -> Result<KaniStateTransitionHarness, UnsupportedObligation> {
+    let spec = HarnessSpec::new_state_transition(
+        identity.harness_path(),
+        identity.subject_path.clone(),
+        identity.unwind,
+        identity.solver,
+    )?;
+    let rust = render_spec(&spec)?;
+    let record = record(identity.module_symbol.as_str(), &identity, &rust)?;
+    Ok(KaniStateTransitionHarness {
+        identity,
+        rust,
+        record,
+    })
 }
 
 /// Compute once per borrowed package instance in the request's existing checked lookup.

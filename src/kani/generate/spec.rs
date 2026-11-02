@@ -342,6 +342,9 @@ pub(super) enum HarnessShape {
         operation: Box<CollectionOperationSpec>,
     },
     Frame(FrameSpec),
+    StateTransition {
+        subject_path: String,
+    },
     Constrained {
         identity: Box<crate::kani::identity::constrained::ConstrainedMethodIdentity>,
         conditions: Box<ConstrainedConditionsSpec>,
@@ -384,6 +387,31 @@ fn literal_true(expression: &Expr) -> bool {
     }
 }
 impl HarnessSpec {
+    pub(super) fn new_state_transition(
+        path: HarnessPath,
+        subject_path: String,
+        unwind: u32,
+        solver: KaniSolver,
+    ) -> Result<Self, HarnessSpecError> {
+        if !(1..=MAX_OBLIGATION_UNWIND).contains(&unwind) {
+            return Err(HarnessSpecError::InvalidUnwind(unwind));
+        }
+        syn::parse_str::<syn::Path>(&subject_path)
+            .map_err(|_| HarnessSpecError::InvalidExpression)?;
+        let options = adapter_options(&path.to_string(), unwind, solver, false);
+        Ok(Self {
+            path,
+            shape: HarnessShape::StateTransition { subject_path },
+            cover: Cover {
+                condition: ExprText::new("state_post")?,
+                message: "Boolean field-transition non-vacuity".to_owned(),
+            },
+            unwind,
+            solver,
+            options,
+        })
+    }
+
     pub(super) fn new_frame(
         path: HarnessPath,
         frame: FrameSpec,
