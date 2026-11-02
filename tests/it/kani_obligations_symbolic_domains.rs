@@ -358,12 +358,20 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
     )
 }
 
-// Installed collection controls retain their authored domains and unwind bound with a small backend budget.
-fn qualified_collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionObligationHarness {
-    collection_harness_with_ceilings(fixture, operation, ProofCeilings {
-        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
-        wall_clock: Duration::from_secs(120),
-    })
+// Installed collection controls retain their authored domains and unwind bound
+// with a small backend budget.
+fn qualified_collection_harness(
+    fixture: &Emitted,
+    operation: &str,
+) -> KaniCollectionObligationHarness {
+    collection_harness_with_ceilings(
+        fixture,
+        operation,
+        ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: Duration::from_secs(120),
+        },
+    )
 }
 
 fn collection_harness_with_ceilings(
