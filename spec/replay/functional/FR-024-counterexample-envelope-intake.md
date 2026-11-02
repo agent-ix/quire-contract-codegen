@@ -184,6 +184,12 @@ members against the operation's declaration in the domain package.
   operation, the invocation document reference, the pre, post and invocation documents and the
   claimed change, which the caller supplies. The caller supplies
   no obligation identity and no witness transcript.
+- For a frame replay selected by the driver: the CG selected item, identified by its admitted
+  `package_id`, `request_index` and complete frame occurrence key, and a separate driver-supplied
+  QSL `OperationSite.frame_operation` value with the package, request and occurrence association
+  of the QSL selection. This optional typed target is an input to the public `FrameReplay::new`
+  boundary so an absent selection has a typed refusal;
+  `OperationName` remains a locator and is not a substitute for the selected target.
 
 ## Outputs
 
@@ -200,6 +206,15 @@ members against the operation's declaration in the domain package.
   `StateClauseReplayError` with no replay.
 
 ## Behavior
+
+- When constructing a selected frame replay, CG shall compare the driver's QSL target association
+  with the independently selected CG item's package identity, request index and complete frame
+  occurrence, and shall compare the target value with the `OperationSite.frame_operation` returned
+  by QSL for the proved unit. A mismatch shall return a typed selected-target refusal before
+  request, packet or replay construction.
+- CG shall copy the matching `FrameOperation` value unchanged into the frame packet and replay
+  request. It shall not derive a replacement from `OperationName`, the harness scope or an
+  internally located site's name when the public selected target is absent or refused.
 
 - The common intake shall accept only a typed adapter outcome.
 - When an adapter submits success, it shall include decoded, parameter-bound assignments, backend
@@ -508,6 +523,9 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-51 | PLANNED (IR-1079; replaces AC-24). `FrameReplayInputs` has no `obligation_identity` member. The frame request and envelope carry the same producer-issued typed identity from the selected frame claim; no caller stand-in, CG mint or hash reaches either. A changed grant that rekeys the producer frame node changes both identities; a grant/body mismatch under a held node is refused by the full record comparison. The state-clause path remains outside this criterion. | Test (TC-035) |
 | FR-024-AC-52 | PLANNED (IR-1133; replaces AC-13). The pre snapshot holds, for every declared field of the state object, the integer Kani playback bound to that field, and the post snapshot holds the integer post-state value the caller supplied for it; each has one `complete` population with one object and no defaulted field. The invocation document holds every member stated in Behavior, with `model` naming the admitted owner by identity only, `parameters` empty, `result` null, `created` and `deleted` empty, and `pre` and `post` each naming the respective snapshot by its four identity labels alone. CG appends the three encoded documents as raw byte entries to `ReplayRequestWire.documents`; QSL obtains each reference from the document's own `identity` member. CG puts no state document in the two-label source `byte_provision`. Changing one playback value while keeping labels fixed changes the pre snapshot's document bytes and decoded value; changing one post-state value does the same for the post snapshot. For the selected `BalanceNeverDrops` postcondition, a pre balance of 10 and post balance of 9 evaluates `false`; changing only the pre balance to 9 or only the post balance to 10, while retaining every identity label, evaluates `true` under QSL replay. The first run settles as a reproduced violation and each changed-value run as inconclusive with cause `Verdicts`, with no substitute document selected. An absent referenced document or one supplied under different labels does not select another snapshot. Two supplied documents with the same four labels, whether equal or different bytes, return `DuplicateDocumentIdentity` naming the labels before request construction or replay. No document address, equality check or request member uses a content digest. | Test (TC-035) |
 | FR-024-AC-53 | PLANNED (IR-1133; replaces AC-14). For a document value with members in non-sorted source order, text containing a quote, backslash, control character and non-ASCII letter, and numeric members containing a large integer, a fractional number and an exponent form, the state-clause builder's encoded bytes equal `core::canonical`'s bytes for that value exactly. Separately, take the valid builder output, change only JSON object-member order and whitespace, and supply those raw bytes directly to QSL's `ReplayRequestWire.documents` with the same self-declared identity: QSL admits the same typed document value. A raw-document edit to one value changes the admitted typed value. The builder is never asked to emit noncanonical whitespace or member order. The state-clause module uses the one encoder and names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a document-member `sort` call or hand-written string escaping; it has no document-digest calculation, and `sha2` is absent from `[dependencies]`. | Test, Inspection (TC-035) |
+| FR-024-AC-54 | For a selected frame item, the public `FrameReplayInputs` accepts the driver's exact typed QSL `OperationSite.frame_operation` value with its admitted `package_id`, `request_index` and complete frame occurrence association. With all four equal to the independently selected CG item and QSL call-site result, `FrameReplay::new` uses that same target in the frame packet and replay request; the packet retains the selected frame occurrence. An inherited operation uses QSL's declaring owner, not the spelling of the requested object. | Test |
+| FR-024-AC-55 | If the selected target is absent, or its operation or declaring owner differs from QSL's `OperationSite.frame_operation`, `FrameReplay::new` returns a typed selected-target refusal naming the missing or mismatched member. It constructs no packet or request and calls no replay executor. `OperationName`, harness scope and the internally located call site supply no name-only fallback. | Test |
+| FR-024-AC-56 | Holding the QSL target value fixed, a foreign or unknown `package_id`, a different `request_index` (including another valid selected item), or a different complete frame occurrence (including a different ordinal of the same frame node) each returns a typed selected-target refusal naming the mismatched association before packet, request or replay construction. The target cannot be attached to an item selected from a different package, request or occurrence. | Test |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
