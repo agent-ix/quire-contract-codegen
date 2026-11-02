@@ -29,6 +29,7 @@ pub(super) struct Claim {
     pub harness: String,
     pub start: u32,
     pub end: u32,
+    failure_lines: std::ops::RangeInclusive<u32>,
 }
 impl Claim {
     pub fn generated(harness: &KaniScalarObligationHarness) -> Result<Self, Refusal> {
@@ -58,8 +59,45 @@ impl Claim {
                 return Err(Refusal::MissingRoot(format!("{module}::{name}")));
             }
         }
-        use syn::spanned::Spanned;
+        use syn::{parse::Parser, spanned::Spanned};
+        let mut assertions = Vec::new();
+        for item in items {
+            let syn::Item::Fn(function) = item else {
+                continue;
+            };
+            if function.sig.ident != symbol {
+                continue;
+            }
+            for statement in &function.block.stmts {
+                let syn::Stmt::Macro(statement) = statement else {
+                    continue;
+                };
+                if !statement.mac.path.is_ident("assert") {
+                    continue;
+                }
+                let arguments =
+                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                        .parse2(statement.mac.tokens.clone())
+                        .map_err(invalid)?;
+                let Some(syn::Expr::Binary(binary)) = arguments.first() else {
+                    continue;
+                };
+                if matches!(binary.op, syn::BinOp::Eq(_))
+                    && matches!(&*binary.left, syn::Expr::Path(path) if path.path.is_ident("subject"))
+                    && matches!(&*binary.right, syn::Expr::Path(path) if path.path.is_ident("expected"))
+                {
+                    assertions.push(
+                        u32::try_from(statement.span().start().line).map_err(invalid)?
+                            ..=u32::try_from(statement.span().end().line).map_err(invalid)?,
+                    );
+                }
+            }
+        }
+        let [failure_lines] = assertions.as_slice() else {
+            return Err(invalid("one independent subject assertion required"));
+        };
         Ok(Self {
+            failure_lines: failure_lines.clone(),
             harness: format!("{module}::{symbol}"),
             module,
             start: u32::try_from(item.span().start().line).map_err(invalid)?,
@@ -192,8 +230,18 @@ impl Compiled {
                     .map(|(module, _)| module.to_owned())
             })
             .collect();
-        let harnesses = metadata["proof_harnesses"].as_array().into_iter().flatten().filter_map(|h| h["pretty_name"].as_str().map(str::to_owned)).collect();
-        let result = Self { modules, harnesses, names, edges };
+        let harnesses = metadata["proof_harnesses"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|h| h["pretty_name"].as_str().map(str::to_owned))
+            .collect();
+        let result = Self {
+            modules,
+            harnesses,
+            names,
+            edges,
+        };
         let proof = result.symbol(&claim.harness)?;
         let reachable = result.reachable(&proof);
         for root in [
@@ -273,7 +321,9 @@ impl Compiled {
             if !self.modules.contains(&claim.module) {
                 return Err(Refusal::MissingModule(claim.module.clone()));
             }
-            if !self.harnesses.contains(&claim.harness) { return Err(Refusal::MissingRoot(claim.harness.clone())); }
+            if !self.harnesses.contains(&claim.harness) {
+                return Err(Refusal::MissingRoot(claim.harness.clone()));
+            }
             if !checks.iter().any(|check| {
                 claim.contains(check)
                     && check.class != KaniCheckClass::Cover
@@ -289,11 +339,17 @@ impl Compiled {
         claim: &Claim,
         evidence: &KaniExecutionEvidence,
     ) -> Result<(), Refusal> {
-        if !matches!(evidence.outcome, KaniRunOutcome::Falsified { .. })
+        if evidence.harness_path != claim.harness
+            || !matches!(evidence.outcome, KaniRunOutcome::Falsified { .. })
             || !evidence.checks.iter().any(|check| {
                 claim.contains(check)
                     && check.class != KaniCheckClass::Cover
                     && check.status == KaniCheckStatus::Failure
+                    && check.class == KaniCheckClass::from("assertion".to_owned())
+                    && check
+                        .location
+                        .line
+                        .is_some_and(|line| claim.failure_lines.contains(&line))
             })
         {
             return Err(Refusal::InvalidControl(claim.module.clone()));
@@ -364,12 +420,14 @@ mod tests {
             harness: "first::proof".into(),
             start: 10,
             end: 20,
+            failure_lines: 10..=20,
         };
         let second = Claim {
             module: "second".into(),
             harness: "second::proof".into(),
             start: 30,
             end: 40,
+            failure_lines: 30..=40,
         };
         let compiled = Compiled {
             modules: BTreeSet::from([first.module.clone(), second.module.clone()]),
@@ -428,15 +486,25 @@ mod tests {
     #[trace("TC-056", "FR-041-AC-3", "FR-041-AC-4")]
     #[test]
     fn transitive_intersection_requires_exact_evidence_and_each_helper_control() {
-        let claim = Claim { module: "m".into(), harness: "m::proof".into(), start: 1, end: 50 };
+        let claim = Claim {
+            module: "m".into(),
+            harness: "m::proof".into(),
+            start: 1,
+            end: 50,
+            failure_lines: 1..=50,
+        };
         let mut compiled = Compiled {
             modules: BTreeSet::from(["m".into()]),
             harnesses: BTreeSet::from(["m::proof".into()]),
             names: BTreeMap::from([
                 ("subject".into(), "m::subject_boolean_implication".into()),
                 ("expected".into(), "m::expected_boolean_implication".into()),
-                ("runtime".into(), "quire_contract_runtime::operators::implies_short_circuit".into()),
-                ("bridge".into(), "indirect".into()), ("shared".into(), "shared".into()),
+                (
+                    "runtime".into(),
+                    "quire_contract_runtime::operators::implies_short_circuit".into(),
+                ),
+                ("bridge".into(), "indirect".into()),
+                ("shared".into(), "shared".into()),
             ]),
             edges: BTreeMap::from([
                 ("subject".into(), BTreeSet::from(["runtime".into()])),
@@ -448,16 +516,43 @@ mod tests {
         let observed = compiled.shared_helpers(&claim).unwrap();
         assert_eq!(observed, BTreeSet::from(["shared".to_owned()]));
         let no_helpers = BTreeSet::new();
-        assert_eq!(controls(std::slice::from_ref(&claim), &observed, &no_helpers, &[]), Err(Refusal::HelperEvidence));
-        assert_eq!(controls(std::slice::from_ref(&claim), &no_helpers, &observed, &[]), Err(Refusal::HelperEvidence));
-        assert_eq!(controls(&[], &observed, &observed, &[]), Err(Refusal::MissingControl("shared".into())));
-        compiled.edges.insert("bridge".into(), BTreeSet::from(["subject".into()]));
-        assert_eq!(compiled.shared_helpers(&claim), Err(Refusal::DependentExpectation("m::subject_boolean_implication".into())));
-        compiled.edges.insert("bridge".into(), BTreeSet::from(["exact".into()]));
-        compiled.names.insert("exact".into(), "quire_exact::operation".into());
-        assert_eq!(compiled.shared_helpers(&claim), Err(Refusal::DependentExpectation("quire_exact::operation".into())));
+        assert_eq!(
+            controls(std::slice::from_ref(&claim), &observed, &no_helpers, &[]),
+            Err(Refusal::HelperEvidence)
+        );
+        assert_eq!(
+            controls(std::slice::from_ref(&claim), &no_helpers, &observed, &[]),
+            Err(Refusal::HelperEvidence)
+        );
+        assert_eq!(
+            controls(&[], &observed, &observed, &[]),
+            Err(Refusal::MissingControl("shared".into()))
+        );
+        compiled
+            .edges
+            .insert("bridge".into(), BTreeSet::from(["subject".into()]));
+        assert_eq!(
+            compiled.shared_helpers(&claim),
+            Err(Refusal::DependentExpectation(
+                "m::subject_boolean_implication".into()
+            ))
+        );
+        compiled
+            .edges
+            .insert("bridge".into(), BTreeSet::from(["exact".into()]));
+        compiled
+            .names
+            .insert("exact".into(), "quire_exact::operation".into());
+        assert_eq!(
+            compiled.shared_helpers(&claim),
+            Err(Refusal::DependentExpectation(
+                "quire_exact::operation".into()
+            ))
+        );
         compiled.edges.remove("bridge");
-        assert!(compiled.shared_helpers(&claim).unwrap().is_empty(), "explicit empty computed set");
+        assert!(
+            compiled.shared_helpers(&claim).unwrap().is_empty(),
+            "explicit empty computed set"
+        );
     }
-
 }

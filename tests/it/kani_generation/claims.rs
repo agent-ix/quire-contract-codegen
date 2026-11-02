@@ -68,7 +68,9 @@ fn current_claim_comes_from_authored_admitted_v2_implication() {
 fn a_generated_source_or_saved_verdict_without_this_build_does_not_qualify() {
     let (harness, _) = generated();
     let target = TemporaryDirectory::new("uncompiled-current-claim");
-    assert!(matches!(Compiled::read(&target.path, &claim(&harness)), Err(Refusal::MissingModule(module)) if module == harness.identity.module_symbol.as_str()));
+    assert!(
+        matches!(Compiled::read(&target.path, &claim(&harness)), Err(Refusal::MissingModule(module)) if module == harness.identity.module_symbol.as_str())
+    );
 }
 
 fn run(
@@ -92,6 +94,16 @@ fn run(
     })
     .expect("bounded installed execution");
     let compiled = Compiled::read(&target.path, &claim(harness)).expect("fresh compiled census");
+    for file in ["Cargo.toml", "Cargo.lock", "src/lib.rs"] {
+        fs::copy(
+            scratch.path.join(file),
+            target
+                .path
+                .join(format!("current-{}", file.replace('/', "-"))),
+        )
+        .unwrap();
+    }
+
     fs::write(
         target.path.join("current-evidence.json"),
         serde_json::to_vec_pretty(&evidence).unwrap(),
@@ -101,40 +113,62 @@ fn run(
 }
 
 fn subject_mutant(harness: &KaniScalarObligationHarness) -> KaniScalarObligationHarness {
-    let mut mutant = harness.clone();
-    let expression = "quire_contract_runtime::operators::implies_short_circuit(left, || right)";
+    use syn::spanned::Spanned;
     let parsed = syn::parse_file(&harness.rust.contents).unwrap();
-    let calls = parsed.items.iter().filter_map(|item| match item { syn::Item::Mod(m) if m.ident == harness.identity.module_symbol.as_str() => m.content.as_ref(), _ => None })
-        .flat_map(|(_, items)| items).filter_map(|item| match item { syn::Item::Fn(f) if f.sig.ident == "subject_boolean_implication" => Some(f), _ => None })
-        .flat_map(|f| &f.block.stmts).filter(|stmt| matches!(stmt, syn::Stmt::Local(local) if matches!(&local.pat, syn::Pat::Ident(id) if id.ident == "subject") && local.init.as_ref().is_some_and(|init| matches!(&*init.expr, syn::Expr::Call(_))))).count();
-    assert_eq!(
-        calls, 1,
-        "one parsed subject call inside the claimed module"
-    );
-    let module = claim(harness);
-    let start = harness
+    let mut calls = Vec::new();
+    for item in &parsed.items {
+        let syn::Item::Mod(module) = item else {
+            continue;
+        };
+        if module.ident != harness.identity.module_symbol.as_str() {
+            continue;
+        }
+        let (_, items) = module.content.as_ref().unwrap();
+        for item in items {
+            let syn::Item::Fn(function) = item else {
+                continue;
+            };
+            if function.sig.ident != "subject_boolean_implication" {
+                continue;
+            }
+            for statement in &function.block.stmts {
+                let syn::Stmt::Local(local) = statement else {
+                    continue;
+                };
+                if !matches!(&local.pat, syn::Pat::Ident(name) if name.ident == "subject") {
+                    continue;
+                }
+                let syn::Expr::Call(call) = &*local.init.as_ref().unwrap().expr else {
+                    panic!("subject is a direct call")
+                };
+                let syn::Expr::Path(path) = &*call.func else {
+                    panic!("subject has a named path")
+                };
+                assert_eq!(
+                    path.path
+                        .segments
+                        .iter()
+                        .map(|segment| segment.ident.to_string())
+                        .collect::<Vec<_>>(),
+                    [
+                        "quire_contract_runtime",
+                        "operators",
+                        "implies_short_circuit"
+                    ]
+                );
+                assert_eq!(call.args.len(), 2);
+                calls.push(call.span().byte_range());
+            }
+        }
+    }
+    let [expression] = calls.as_slice() else {
+        panic!("exactly one parsed subject call: {calls:?}")
+    };
+    let mut mutant = harness.clone();
+    mutant
         .rust
         .contents
-        .lines()
-        .take(usize::try_from(module.start - 1).unwrap())
-        .map(|line| line.len() + 1)
-        .sum::<usize>();
-    let end = harness
-        .rust
-        .contents
-        .lines()
-        .take(usize::try_from(module.end).unwrap())
-        .map(|line| line.len() + 1)
-        .sum::<usize>()
-        .min(harness.rust.contents.len());
-    let selected = &harness.rust.contents[start..end];
-    assert_eq!(selected.matches(expression).count(), 1);
-    mutant.rust.contents = format!(
-        "{}{}{}",
-        &harness.rust.contents[..start],
-        selected.replacen(expression, "false", 1),
-        &harness.rust.contents[end..]
-    );
+        .replace_range(expression.clone(), "false");
     mutant
 }
 
@@ -188,12 +222,17 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     // The direct Boolean specification model calls no function. This is evidence
     // about the observed build, not a catalog substituted for graph traversal.
     let reviewed = BTreeSet::new();
-    fs::write(healthy_target.path.join("shared-helper-evidence.json"), serde_json::to_vec_pretty(&serde_json::json!({
-        "module": declared.module, "harness": declared.harness,
-        "subject_root": format!("{}::subject_boolean_implication", declared.module),
-        "expectation_root": format!("{}::expected_boolean_implication", declared.module),
-        "observed_helpers": shared, "reviewed_helpers": reviewed,
-    })).unwrap()).unwrap();
+    fs::write(
+        healthy_target.path.join("shared-helper-evidence.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "module": declared.module, "harness": declared.harness,
+            "subject_root": format!("{}::subject_boolean_implication", declared.module),
+            "expectation_root": format!("{}::expected_boolean_implication", declared.module),
+            "observed_helpers": shared, "reviewed_helpers": reviewed,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         shared, reviewed,
         "every observed shared helper needs its own source control"
@@ -225,10 +264,22 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     second_mutant_compiled
         .require_failure(&claim(&second_mutant), &second_failed)
         .unwrap();
-    retain_mutation(&second_mutant_target.path, &second_harness.rust.contents, &second_mutant.rust.contents);
-    let KaniRunOutcome::Falsified { counterexample: second_playback } = &second_failed.outcome else { panic!("second module must falsify independently") };
+    retain_mutation(
+        &second_mutant_target.path,
+        &second_harness.rust.contents,
+        &second_mutant.rust.contents,
+    );
+    let KaniRunOutcome::Falsified {
+        counterexample: second_playback,
+    } = &second_failed.outcome
+    else {
+        panic!("second module must falsify independently")
+    };
     kani_obligations::assert_implication_false_left_playback(second_playback);
-    assert!(second_healthy.checks.iter().any(|c| c.class == KaniCheckClass::Cover && c.status == KaniCheckStatus::Satisfied));
+    assert!(second_healthy
+        .checks
+        .iter()
+        .any(|c| c.class == KaniCheckClass::Cover && c.status == KaniCheckStatus::Satisfied));
 
     let second_shared = second_compiled.shared_helpers(&second_claim).unwrap();
     assert_eq!(second_shared, reviewed);
@@ -293,20 +344,71 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
         Err(Refusal::InvalidControl(declared.module.clone()))
     );
 
-
-    for reason in [quire_contract_codegen::KaniInconclusiveReason::NoVerdict, quire_contract_codegen::KaniInconclusiveReason::TimedOut, quire_contract_codegen::KaniInconclusiveReason::FailedWithoutCounterexample] {
-        let mut invalid = failed.clone(); invalid.outcome = KaniRunOutcome::Inconclusive { reason };
-        let rejected = Control { name: &declared.module, before: &harness.rust.contents, after: &mutant.rust.contents, positive: &healthy, mutant: &invalid };
-        assert_eq!(controls(std::slice::from_ref(&declared), &shared, &reviewed, &[rejected]), Err(Refusal::InvalidControl(declared.module.clone())));
+    for reason in [
+        quire_contract_codegen::KaniInconclusiveReason::NoVerdict,
+        quire_contract_codegen::KaniInconclusiveReason::TimedOut,
+        quire_contract_codegen::KaniInconclusiveReason::FailedWithoutCounterexample,
+    ] {
+        let mut invalid = failed.clone();
+        invalid.outcome = KaniRunOutcome::Inconclusive { reason };
+        let rejected = Control {
+            name: &declared.module,
+            before: &harness.rust.contents,
+            after: &mutant.rust.contents,
+            positive: &healthy,
+            mutant: &invalid,
+        };
+        assert_eq!(
+            controls(
+                std::slice::from_ref(&declared),
+                &shared,
+                &reviewed,
+                &[rejected]
+            ),
+            Err(Refusal::InvalidControl(declared.module.clone()))
+        );
     }
-    let mut missing_check = failed.clone(); missing_check.checks.clear();
-    assert_eq!(controls(std::slice::from_ref(&declared), &shared, &reviewed, &[Control { name: &declared.module, before: &harness.rust.contents, after: &mutant.rust.contents, positive: &healthy, mutant: &missing_check }]), Err(Refusal::InvalidControl(declared.module.clone())));
-    assert_eq!(controls(std::slice::from_ref(&declared), &shared, &reviewed, &[Control { name: &declared.module, before: &harness.rust.contents, after: &harness.rust.contents, positive: &healthy, mutant: &failed }]), Err(Refusal::InvalidControl(declared.module.clone())));
+    let mut missing_check = failed.clone();
+    missing_check.checks.clear();
+    assert_eq!(
+        controls(
+            std::slice::from_ref(&declared),
+            &shared,
+            &reviewed,
+            &[Control {
+                name: &declared.module,
+                before: &harness.rust.contents,
+                after: &mutant.rust.contents,
+                positive: &healthy,
+                mutant: &missing_check
+            }]
+        ),
+        Err(Refusal::InvalidControl(declared.module.clone()))
+    );
+    assert_eq!(
+        controls(
+            std::slice::from_ref(&declared),
+            &shared,
+            &reviewed,
+            &[Control {
+                name: &declared.module,
+                before: &harness.rust.contents,
+                after: &harness.rust.contents,
+                positive: &healthy,
+                mutant: &failed
+            }]
+        ),
+        Err(Refusal::InvalidControl(declared.module.clone()))
+    );
     let KaniRunOutcome::Falsified { counterexample } = &failed.outcome else {
         panic!("must execute a falsifying source mutation: {failed:?}")
     };
     kani_obligations::assert_implication_false_left_playback(counterexample);
-    retain_mutation(&mutant_target.path, &harness.rust.contents, &mutant.rust.contents);
+    retain_mutation(
+        &mutant_target.path,
+        &harness.rust.contents,
+        &mutant.rust.contents,
+    );
     // Keep evidence beyond the temporary compilation directories, under this worktree's target.
     let evidence_directory =
         Path::new(env!("CARGO_TARGET_TMPDIR")).join("qualified-current-claims");
@@ -319,6 +421,9 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     ] {
         for file in [
             "current-evidence.json",
+            "current-Cargo.toml",
+            "current-Cargo.lock",
+            "current-src-lib.rs",
             "compiled-census.json",
             "compiled-call-graph.txt",
             "compiled-symbols.json",
@@ -374,8 +479,22 @@ fn assemble(sources: &[&str]) -> String {
 fn retain_mutation(directory: &Path, before: &str, after: &str) {
     fs::write(directory.join("unmodified.rs"), before).unwrap();
     fs::write(directory.join("mutant.rs"), after).unwrap();
-    let output = std::process::Command::new("diff").args(["--unified", "--label", "unmodified/src/lib.rs", "--label", "mutant/src/lib.rs"])
-        .arg(directory.join("unmodified.rs")).arg(directory.join("mutant.rs")).output().unwrap();
-    assert_eq!(output.status.code(), Some(1), "the source mutation must differ");
+    let output = std::process::Command::new("diff")
+        .args([
+            "--unified",
+            "--label",
+            "unmodified/src/lib.rs",
+            "--label",
+            "mutant/src/lib.rs",
+        ])
+        .arg(directory.join("unmodified.rs"))
+        .arg(directory.join("mutant.rs"))
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "the source mutation must differ"
+    );
     fs::write(directory.join("source-mutation.diff"), output.stdout).unwrap();
 }
