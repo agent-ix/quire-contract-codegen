@@ -178,6 +178,21 @@ fn run(
         serde_json::to_vec_pretty(&evidence).unwrap(),
     )
     .unwrap();
+    let attempt = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("current-claim-attempts")
+        .join(name);
+    fs::create_dir_all(&attempt).unwrap();
+    for file in [
+        "current-evidence.json",
+        "current-Cargo.toml",
+        "current-Cargo.lock",
+        "current-src-lib.rs",
+        "compiled-census.json",
+        "compiled-call-graph.txt",
+        "compiled-symbols.json",
+    ] {
+        fs::copy(target.path.join(file), attempt.join(file)).unwrap();
+    }
     (evidence, compiled, target)
 }
 
@@ -268,7 +283,9 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     );
     let (healthy, compiled, healthy_target) = run(&harness, &manifest, "claim-healthy");
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
-    compiled.require_positive(&declared, &healthy).unwrap();
+    compiled
+        .require_positive(&declared, &healthy)
+        .unwrap_or_else(|refusal| panic!("{refusal:?}; claim={declared:?}; evidence={healthy:?}"));
     let (second_healthy, second_compiled, second_target) =
         run(&second_harness, &manifest, "claim-second-healthy");
     assert_eq!(second_healthy.outcome, KaniRunOutcome::Verified);
