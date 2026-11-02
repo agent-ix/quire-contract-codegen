@@ -442,6 +442,7 @@ unsatisfiable requires as `cover_unsatisfied`.
 ## V2 clause claims and the V2 census
 
 The generation-time census portion of step 13 is implemented for supported V2 clauses (IR-1044).
+AC-42 has partial generation-time evidence for admitted division and modulo clauses (IR-948).
 The remaining V2 clause controls in this section retain their stated planned status.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
@@ -484,6 +485,17 @@ The remaining V2 clause controls in this section retain their stated planned sta
     FR-040-AC-8 and FR-040-AC-10 refuse them at admission), so that guard is unreachable
     and not tested here. Request a postcondition without its sibling precondition
     (FR-015-AC-43).
+
+    Current AC-42 control: `v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibling`
+    admits separate division and modulo clause bodies with integer literal operands, requests
+    both beside an admitted QSL bounded-parameter precondition, and checks one typed
+    `V2ClauseOperatorNotSupported` per unsupported item with its exact clause node and operator
+    identity, no harness for either, and the supported sibling's one harness. The traced
+    `nested_absolute_value_names_its_exact_operator` unit test checks that a nested
+    `quire.op.integer.abs` term is selected by the operator audit. The closed authoritative
+    checked-operation catalog does not contain an absolute-value entry, so an admitted absolute
+    clause cannot be constructed yet. The nonclause and absent-node request cases in this step
+    remain separate FR-015-AC-14 evidence to complete.
 13. Declare the four invalid censuses of FR-015-AC-22 and the three valid censuses of
     FR-015-AC-25 on a supported V2 clause claim, with the dependency list reordered. The invalid
     ones yield typed refusal and no harness. Parse every valid harness's persisted identity record:
