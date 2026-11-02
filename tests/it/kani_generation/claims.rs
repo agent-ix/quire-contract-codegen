@@ -256,9 +256,7 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     );
     let (healthy, compiled, healthy_target) = run(&harness, &manifest, "claim-healthy");
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
-    compiled
-        .qualify(std::slice::from_ref(&declared), &healthy.checks)
-        .unwrap();
+    compiled.require_positive(&declared, &healthy).unwrap();
     let (second_healthy, second_compiled, second_target) =
         run(&second_harness, &manifest, "claim-second-healthy");
     assert_eq!(second_healthy.outcome, KaniRunOutcome::Verified);
@@ -272,7 +270,7 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
         Err(Refusal::Unreached(second_claim.module.clone()))
     );
     second_compiled
-        .qualify(std::slice::from_ref(&second_claim), &second_healthy.checks)
+        .require_positive(&second_claim, &second_healthy)
         .unwrap();
     let shared = compiled.shared_helpers(&declared).unwrap();
     // The direct Boolean specification model calls no function. This is evidence

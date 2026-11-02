@@ -346,6 +346,24 @@ impl Compiled {
         }
         Ok(())
     }
+    pub fn require_positive(
+        &self,
+        claim: &Claim,
+        evidence: &KaniExecutionEvidence,
+    ) -> Result<(), Refusal> {
+        if evidence.harness_path != claim.harness
+            || evidence.outcome != KaniRunOutcome::Verified
+            || !evidence.checks.iter().any(|check| {
+                claim.contains(check)
+                    && check.class == KaniCheckClass::Cover
+                    && check.status == KaniCheckStatus::Satisfied
+            })
+        {
+            return Err(Refusal::InvalidControl(claim.module.clone()));
+        }
+        self.qualify(std::slice::from_ref(claim), &evidence.checks)
+    }
+
     pub fn require_failure(
         &self,
         claim: &Claim,
