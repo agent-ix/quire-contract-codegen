@@ -453,8 +453,13 @@ The remaining V2 clause controls in this section retain their stated planned sta
     and post-state come from the subject call and their domain is asserted), and none takes a
     bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the
     clause with no subject call (FR-015-AC-49).
-11. Generate a clause of connectives and comparisons and compare the embedded oracle with
-    the FR-014 crate's function byte for byte (needs FR-014-AC-38); generate the
+11. Generate admitted clauses whose Boolean conditions reference expression nodes holding
+    each listed connective and bounded-integer comparison, and one clause with an inline
+    Boolean literal condition. Compare each embedded oracle with the FR-014 crate's
+    clause-identified function byte for byte, retaining the clause node identity in both
+    forms (FR-015-AC-40; needs FR-014-AC-38). Operator applications stand at their
+    referenced nodes' body roots under QSpec FR-322's flat body grammar, rather than
+    nested in the clause's condition argument. Then generate the
     arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
     native `i128` assertion of each arithmetic subterm. Admit QSL's checked
     `numeric.narrow` wrapper around literal `1` through FR-014-AC-54, without
