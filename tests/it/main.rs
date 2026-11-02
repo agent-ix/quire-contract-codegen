@@ -61,6 +61,7 @@ mod bound_populations;
 mod bound_strategy_generation;
 mod bounded_kani_corpus;
 mod capability_settlement;
+mod composite_artifact_binding;
 mod composite_equality_agreement;
 mod composite_equality_generation;
 mod composite_original_eq;

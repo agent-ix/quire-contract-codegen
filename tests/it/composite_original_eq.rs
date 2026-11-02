@@ -53,7 +53,7 @@ fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
     operation.identity()
 }
 
-const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
+pub(super) const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     profile v = \"quire.value.complete/v1\";\n\
     record Q { x: Integer; }\n\
     function f using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { a = b }\n\
@@ -254,7 +254,7 @@ fn application_with_operator(
     )
 }
 
-fn parameter_bounds(
+pub(super) fn parameter_bounds(
     package: &CheckedPackageV2,
     node: &CheckedNodeId,
     occurrence: &CheckedOccurrence,
