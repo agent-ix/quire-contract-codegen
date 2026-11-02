@@ -21,8 +21,7 @@ use qsl_replay::{
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
     FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, SelectedFrameItem,
-    SelectedFrameTarget, StateClauseReplayInputs,
-    StateFrameIdentity, StateObjectAddress,
+    SelectedFrameTarget, StateClauseReplayInputs, StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedNodePathSegment, CheckedOccurrenceRole, CheckedPackageEvidence,
@@ -1132,7 +1131,14 @@ impl Twin {
         parse_limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
         self.try_frame_replay_with_target_edit(
-            operation, invocation, account, field, run, limits, parse_limits, |_| {},
+            operation,
+            invocation,
+            account,
+            field,
+            run,
+            limits,
+            parse_limits,
+            |_| {},
         )
     }
 
@@ -1159,11 +1165,16 @@ impl Twin {
         )
         .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
         let selected_package = self.emitted_package("BalanceNeverDrops").0;
-        let selected_site = self.operation_site(operation).map_err(FrameReplayError::CallSite)?;
+        let selected_site = self
+            .operation_site(operation)
+            .map_err(FrameReplayError::CallSite)?;
         let selected_occurrence = selected_site.frame_occurrence.clone();
         let mut selected_target = Some(SelectedFrameTarget {
             operation: selected_site.frame_operation,
-            package_id: selected_package.package_id().clone(),
+            package_id: quire_contract_model::ContractSourceV1 {
+                name: selected_package.name().into(),
+                lock: selected_package.lock().clone(),
+            },
             request_index: 0,
             occurrence: selected_occurrence.clone(),
         });

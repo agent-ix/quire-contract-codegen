@@ -26,8 +26,8 @@ use qsl_replay::{
     ReplayRequest, ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessValue,
 };
+use quire_contract_model::{CheckedPackageLockV2, CheckedPackageV2, ContractSourceV1};
 use quire_exact::NodeKey;
-use quire_contract_model::{CheckedPackageV2, CheckedSemanticId};
 use serde::Deserialize;
 
 use crate::{
@@ -90,11 +90,17 @@ pub struct SelectedFrameTarget {
     /// The exact QSL target, including its declaring owner.
     pub operation: FrameOperation,
     /// The admitted CG package identity to which the target was attached.
-    pub package_id: CheckedSemanticId,
+    pub package_id: ContractSourceV1,
     /// The request position to which the target was attached.
     pub request_index: usize,
     /// The complete selected frame occurrence.
     pub occurrence: OccurrenceKey,
+}
+
+#[derive(Deserialize)]
+struct LocatedPackageIdentity {
+    name: Box<str>,
+    lock: CheckedPackageLockV2,
 }
 
 /// The selected target member that failed to bind to the selected CG item or QSL site.
@@ -728,26 +734,52 @@ impl FrameReplay {
         )
         .map_err(FrameReplayError::CallSite)?;
         let keys = crate::core::ir::node_key::producer_node_keys(&located.package);
+        let located_identity: LocatedPackageIdentity = serde_json::from_slice(&located.package)
+            .map_err(|_| FrameReplayError::SelectedTarget(SelectedTargetMember::Package))?;
         let site = located.site;
-        let selected_target = selected_target
-            .ok_or(FrameReplayError::SelectedTarget(SelectedTargetMember::Missing))?;
-        if selected_target.package_id != *selected_item.package.package_id() {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::Package));
+        let selected_target = selected_target.ok_or(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Missing,
+        ))?;
+        let selected_package_id = ContractSourceV1 {
+            name: selected_item.package.name().into(),
+            lock: selected_item.package.lock().clone(),
+        };
+        if selected_package_id.name != located_identity.name
+            || selected_package_id.lock != located_identity.lock
+        {
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::Package,
+            ));
+        }
+        if selected_target.package_id != selected_package_id {
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::Package,
+            ));
         }
         if selected_target.request_index != selected_item.request_index {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::RequestIndex));
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::RequestIndex,
+            ));
         }
         if selected_item.occurrence != &site.frame_occurrence {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::ItemOccurrence));
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::ItemOccurrence,
+            ));
         }
         if selected_target.occurrence != *selected_item.occurrence {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::TargetOccurrence));
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::TargetOccurrence,
+            ));
         }
         if selected_target.operation.object != site.frame_operation.object {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::DeclaringOwner));
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::DeclaringOwner,
+            ));
         }
         if selected_target.operation.operation != site.frame_operation.operation {
-            return Err(FrameReplayError::SelectedTarget(SelectedTargetMember::Operation));
+            return Err(FrameReplayError::SelectedTarget(
+                SelectedTargetMember::Operation,
+            ));
         }
         same_node(
             ScopeMember::Anchor,
