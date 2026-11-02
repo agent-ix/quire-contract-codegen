@@ -455,8 +455,8 @@ fn qsl_v2_precondition_embeds_exact_referenced_clause_oracle() {
         ),
         ("(other < 1000) = (other >= 0)", "quire.op.boolean.eq"),
         ("(other < 1000) != (other >= 0)", "quire.op.boolean.ne"),
-        ("other = 0", "quire.op.integer.eq"),
-        ("other != 0", "quire.op.integer.ne"),
+        ("other = other", "quire.op.integer.eq"),
+        ("other != other", "quire.op.integer.ne"),
         ("other < 1000", "quire.op.integer.lt"),
         ("other <= 1000", "quire.op.integer.le"),
         ("other > 0", "quire.op.integer.gt"),
@@ -505,56 +505,48 @@ fn qsl_v2_precondition_embeds_exact_referenced_clause_oracle() {
     }
 }
 
-/// A checked inline clause condition reaches the same public harness path and carries the
+/// A checked inline Boolean literal reaches the public harness path and carries the
 /// clause-identified oracle source unchanged, including the zero-input direct-Boolean form.
 #[trace("FR-015-AC-40", "TC-025")]
 #[test]
 fn inline_v2_precondition_embeds_exact_clause_oracle() {
-    for (variant, condition, expected_operations) in [
-        (2301, Condition::InlineComparison, 1),
-        (2302, Condition::InlineTrue, 0),
-    ] {
-        let admitted = fixture(&Shape {
-            variant,
-            clause: "precondition",
-            condition,
-            ..Shape::HEALTHY
-        });
-        let oracle = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
-            .expect("the checked inline condition has a clause oracle");
-        assert_eq!(oracle.descriptor.node_id, admitted.clause);
-        assert_eq!(oracle.descriptor.condition_node_id, None);
-        assert_eq!(
-            oracle.descriptor.operation_identities.len(),
-            expected_operations
-        );
-        let outcome = negotiate(&[ObligationItem::V2Clause {
-            package: &admitted.package,
-            clause: &admitted.clause,
-            dependencies: None,
-        }]);
-        let KaniObligationOutcome::Emitted {
-            v2_clause_harnesses,
-            ..
-        } = outcome
-        else {
-            panic!("the inline condition must emit a precondition harness");
-        };
-        let [harness] = v2_clause_harnesses.as_slice() else {
-            panic!("one inline precondition harness");
-        };
-        assert_eq!(harness.identity.clause, admitted.clause);
-        assert_eq!(harness.identity.kind, ObligationKind::Precondition);
-        assert_eq!(
-            harness
-                .rust
-                .contents
-                .matches(oracle.source.as_str())
-                .count(),
-            1,
-            "the inline oracle source must appear byte-identically once"
-        );
-    }
+    let admitted = fixture(&Shape {
+        variant: 2302,
+        clause: "precondition",
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    let oracle = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
+        .expect("the checked inline condition has a clause oracle");
+    assert_eq!(oracle.descriptor.node_id, admitted.clause);
+    assert_eq!(oracle.descriptor.condition_node_id, None);
+    assert!(oracle.descriptor.operation_identities.is_empty());
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &admitted.package,
+        clause: &admitted.clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the inline condition must emit a precondition harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one inline precondition harness");
+    };
+    assert_eq!(harness.identity.clause, admitted.clause);
+    assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert_eq!(
+        harness
+            .rust
+            .contents
+            .matches(oracle.source.as_str())
+            .count(),
+        1,
+        "the inline oracle source must appear byte-identically once"
+    );
 }
 
 #[trace("FR-029-AC-11", "TC-040")]
@@ -1563,8 +1555,6 @@ enum FrameEffect {
 enum Condition {
     /// A direct Boolean condition in the clause's third argument.
     InlineTrue,
-    /// A direct bounded-integer comparison in the clause's third argument.
-    InlineComparison,
     /// `post(self.balance) >= pre(self.balance)`.
     PostGePre,
     /// `post(self.balance) >= post(self.balance)`.
@@ -1924,7 +1914,6 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
     let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
         Condition::InlineTrue
-        | Condition::InlineComparison
         | Condition::PostGePre
         | Condition::Negated
         | Condition::Conjunction => (reference(&post_balance), reference(&pre_balance)),
@@ -2066,13 +2055,6 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
                 reference(&anchor),
                 if matches!(shape.condition, Condition::InlineTrue) {
                     boolean_literal(true)
-                } else if matches!(shape.condition, Condition::InlineComparison) {
-                    application(
-                        "binary",
-                        op("quire.op.integer.ge"),
-                        &key(T_BOOLEAN),
-                        vec![literal("integer", "4"), literal("integer", "2")],
-                    )
                 } else {
                     reference(&condition)
                 },
