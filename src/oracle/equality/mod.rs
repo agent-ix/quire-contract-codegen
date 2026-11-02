@@ -773,6 +773,8 @@ pub fn generate_composite_equality_oracles(
                 CheckedPackageSidecarsRef {
                     checked_term_data: original.checked_term_data(),
                     temporal_bindings: original.temporal_bindings(),
+                    schedulability_claims: original.schedulability_claim_rows(),
+                    operation_effects: original.operation_effect_rows(),
                 },
                 original.capability_report(),
                 original.diagnostics(),
@@ -3897,6 +3899,8 @@ mod tests {
             CheckedPackageSidecarsRef {
                 checked_term_data: original.checked_term_data(),
                 temporal_bindings: original.temporal_bindings(),
+                schedulability_claims: original.schedulability_claim_rows(),
+                operation_effects: original.operation_effect_rows(),
             },
             original.capability_report(),
             original.diagnostics(),

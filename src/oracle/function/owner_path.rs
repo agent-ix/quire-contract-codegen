@@ -280,6 +280,8 @@ fn package_bytes(package: &CheckedPackageV2) -> Result<Vec<u8>, CheckedFunctionE
         CheckedPackageSidecarsRef {
             checked_term_data: package.checked_term_data(),
             temporal_bindings: package.temporal_bindings(),
+            schedulability_claims: package.schedulability_claim_rows(),
+            operation_effects: package.operation_effect_rows(),
         },
         package.capability_report(),
         package.diagnostics(),
@@ -476,7 +478,8 @@ pub fn checked_function_declarations(
             | quire_exact::ValueType::Timestamp
             | quire_exact::ValueType::Enum(_)
             | quire_exact::ValueType::Reference(_)
-            | quire_exact::ValueType::Population(_) => {}
+            | quire_exact::ValueType::Population(_)
+            | quire_exact::ValueType::CarriedQuantity(_) => {}
         }
     }
     Ok(declarations)
