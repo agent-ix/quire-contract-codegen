@@ -1989,7 +1989,7 @@ mod fixture_identity_tests {
         }
     }
 
-    #[trace("FR-018-AC-28", "TC-029")]
+    #[trace("TC-029")]
     #[test]
     fn corpus_temporal_clause_requires_its_authored_clock_binding() {
         let builder = corpus_package();
