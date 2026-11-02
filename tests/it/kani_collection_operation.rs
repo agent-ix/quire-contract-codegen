@@ -98,6 +98,15 @@ fn clauses(package: &CheckedPackageV2) -> Vec<CheckedNodeId> {
 }
 
 fn negotiate(package: &CheckedPackageV2, ids: &[CheckedNodeId]) -> KaniObligationOutcome {
+    negotiate_with_request(package, ids, "crate::subject", 8)
+}
+
+fn negotiate_with_request(
+    package: &CheckedPackageV2,
+    ids: &[CheckedNodeId],
+    subject_path: &str,
+    unwind: u32,
+) -> KaniObligationOutcome {
     let items = ids
         .iter()
         .map(|clause| ObligationItem::V2Clause {
@@ -111,8 +120,8 @@ fn negotiate(package: &CheckedPackageV2, ids: &[CheckedNodeId]) -> KaniObligatio
             Duration::from_secs(600),
         ),
         items: &items,
-        subject_path: "crate::subject",
-        unwind: 8,
+        subject_path,
+        unwind,
     })
     .unwrap()
 }
@@ -709,13 +718,24 @@ fn retained_prestate_order_is_an_authored_obligation_separate_from_collection_do
 }
 
 #[test]
-#[trace("TC-025", "FR-015-AC-96", "FR-015-AC-100")]
+#[trace("TC-025", "FR-015-AC-47", "FR-015-AC-96", "FR-015-AC-100")]
 fn whole_object_identity_regenerates_and_changes_with_unread_domains() {
     let package = fixture(&document(), "");
     let ids = clauses(&package);
-    let first = postcondition(negotiate(&package, &ids));
-    let second = postcondition(negotiate(&package, &ids));
-    assert_eq!(first, second);
+    let generated = |unwind, subject_path| {
+        postcondition(negotiate_with_request(&package, &ids, subject_path, unwind))
+    };
+    let first = generated(8, "crate::subject");
+    let same = generated(8, "crate::subject");
+    let changed_unwind = generated(9, "crate::subject");
+    let changed_subject = generated(8, "crate::other_subject");
+    assert_eq!(first.rust.contents, same.rust.contents);
+    assert_eq!(first.record.contents, same.record.contents);
+    assert_eq!(first.identity, same.identity);
+    assert_ne!(first.identity, changed_unwind.identity);
+    assert_ne!(first.record.contents, changed_unwind.record.contents);
+    assert_ne!(first.identity, changed_subject.identity);
+    assert_ne!(first.record.contents, changed_subject.record.contents);
     let mut doc = document();
     doc["types"][1]["fields"][1]["typeRef"] = json!(SMALL);
     let changed = fixture(&doc, "");
