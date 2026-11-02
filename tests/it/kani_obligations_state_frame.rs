@@ -4056,8 +4056,10 @@ fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
             "account",
             "audit",
             &run,
-            native_twin::frame_decode_limits(),
-            native_twin::frame_decode_limits(),
+            (
+                native_twin::frame_decode_limits(),
+                native_twin::frame_decode_limits(),
+            ),
             edit,
         );
         assert!(matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member));

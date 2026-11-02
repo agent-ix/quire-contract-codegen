@@ -1136,8 +1136,7 @@ impl Twin {
             account,
             field,
             run,
-            limits,
-            parse_limits,
+            (limits, parse_limits),
             |_| {},
         )
     }
@@ -1150,10 +1149,13 @@ impl Twin {
         account: &str,
         field: &str,
         run: &Run,
-        limits: quire_contract_codegen::WitnessDecodeLimits,
-        parse_limits: quire_contract_codegen::WitnessDecodeLimits,
+        limits: (
+            quire_contract_codegen::WitnessDecodeLimits,
+            quire_contract_codegen::WitnessDecodeLimits,
+        ),
         edit: impl FnOnce(&mut Option<SelectedFrameTarget>),
     ) -> Result<FrameReplay, FrameReplayError> {
+        let (limits, parse_limits) = limits;
         let mut inputs = self.run();
         inputs.decode_limits = run.decode_limits;
         let playback = parse_assertion_playback(
