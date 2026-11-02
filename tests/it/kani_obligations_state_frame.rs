@@ -39,8 +39,9 @@ use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
 };
 use package::{
-    application, code_id, integer_division_definition, key, law, literal, member, op, op_full,
-    parameter_body, reference, Bound, PackageBuilder, FUNCTION, T_BOOLEAN, T_INTEGER, T_TEXT,
+    application, code_id, integer_division_definition, key, law, literal, member, mode_kv, op,
+    op_full, parameter_body, reference, text_profile_definition, Bound, PackageBuilder, FUNCTION,
+    T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
     CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
@@ -1425,6 +1426,8 @@ enum Condition {
     Division,
     /// An integer modulo nested in a Boolean comparison.
     Modulo,
+    /// Text equality whose literals lie outside the clause reader's scalar input grammar.
+    TextEquality,
 }
 
 impl Shape {
@@ -1806,6 +1809,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             );
             (reference(&key(shape.code(205))), zero)
         }
+        Condition::TextEquality => (reference(&post_balance), reference(&pre_balance)),
     };
     builder.application_bounded(
         shape.code(200),
@@ -1848,6 +1852,29 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
                 op("quire.op.boolean.and"),
                 &key(T_BOOLEAN),
                 vec![reference(&condition), reference(&condition)],
+            ),
+            &[],
+        );
+        condition = key(shape.code(210));
+    }
+    if matches!(shape.condition, Condition::TextEquality) {
+        let definition = text_profile_definition();
+        builder.select_definition(definition.clone());
+        builder.application_bounded(
+            shape.code(210),
+            "expression",
+            "binary",
+            &key(T_BOOLEAN),
+            application(
+                "binary",
+                op_full(
+                    "quire.op.text.eq",
+                    vec![law("text_profile", definition)],
+                    Some(mode_kv("text_profile", "nfc")),
+                    None,
+                ),
+                &key(T_BOOLEAN),
+                vec![literal("text", "a"), literal("text", "b")],
             ),
             &[],
         );
@@ -5952,14 +5979,22 @@ fn v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibli
         condition: Condition::Modulo,
         ..Shape::HEALTHY
     };
+    let text_equality = Shape {
+        variant: 2203,
+        scope: 2203,
+        condition: Condition::TextEquality,
+        ..Shape::HEALTHY
+    };
     let limits = CheckedPackageReadLimits {
         bytes: 8 << 20,
         ..CheckedPackageReadLimits::bounded()
     };
-    let (package, resolver) = package_of(&[&division, &modulo]).admit_with_resolved(limits);
+    let (package, resolver) =
+        package_of(&[&division, &modulo, &text_equality]).admit_with_resolved(limits);
     let refused_clauses = [
         ids(&division).resolved(&resolver).clause,
         ids(&modulo).resolved(&resolver).clause,
+        ids(&text_equality).resolved(&resolver).clause,
     ];
     let (supported_package, supported_clause) =
         Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
@@ -5975,17 +6010,23 @@ fn v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibli
             dependencies: None,
         },
         ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[2],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
             package: &supported_package,
             clause: &supported_clause,
             dependencies: None,
         },
     ]);
-    let [division_record, modulo_record, admitted] = outcome.records() else {
+    let [division_record, modulo_record, text_record, admitted] = outcome.records() else {
         panic!("every selected clause has a record");
     };
     for (record, node_id, operation_identity) in [
         (division_record, &refused_clauses[0], "quire.op.integer.div"),
         (modulo_record, &refused_clauses[1], "quire.op.integer.mod"),
+        (text_record, &refused_clauses[2], "quire.op.text.eq"),
     ] {
         assert_eq!(
             record.disposition,

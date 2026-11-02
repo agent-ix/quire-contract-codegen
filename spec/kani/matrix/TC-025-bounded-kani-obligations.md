@@ -442,7 +442,8 @@ unsatisfiable requires as `cover_unsatisfied`.
 ## V2 clause claims and the V2 census
 
 The generation-time census portion of step 13 is implemented for supported V2 clauses (IR-1044).
-AC-42 has partial generation-time evidence for admitted division and modulo clauses (IR-948).
+AC-42 has partial generation-time evidence for admitted division, modulo and Text equality clauses
+(IR-948).
 The remaining V2 clause controls in this section retain their stated planned status.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
@@ -487,10 +488,12 @@ The remaining V2 clause controls in this section retain their stated planned sta
     (FR-015-AC-43).
 
     Current AC-42 control: `v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibling`
-    admits separate division and modulo clause bodies with integer literal operands, requests
-    both beside an admitted QSL bounded-parameter precondition, and checks one typed
+    admits separate division and modulo clause bodies with integer literal operands and a Text
+    equality clause over Text literals, requests all three beside an admitted QSL bounded-parameter
+    precondition, and checks one typed
     `V2ClauseOperatorNotSupported` per unsupported item with its exact clause node and operator
-    identity, no harness for either, and the supported sibling's one harness. The traced
+    identity, no harness for any of the three, and the supported sibling's one harness. The Text
+    equality case exercises operator classification before clause operand reading. The traced
     `nested_absolute_value_names_its_exact_operator` unit test checks that a nested
     `quire.op.integer.abs` term is selected by the operator audit. The closed authoritative
     checked-operation catalog does not contain an absolute-value entry, so an admitted absolute
