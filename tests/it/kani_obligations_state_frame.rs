@@ -2029,9 +2029,25 @@ fn generated_from_twin(
     fields: &[&str],
     subject_path: &str,
 ) -> StateFrameObligations {
+    generated_from_twin_with_ceilings(
+        twin,
+        clause_name,
+        fields,
+        subject_path,
+        crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+    )
+}
+
+fn generated_from_twin_with_ceilings(
+    twin: &Twin,
+    clause_name: &str,
+    fields: &[&str],
+    subject_path: &str,
+    ceilings: quire_contract_codegen::ProofCeilings,
+) -> StateFrameObligations {
     let (package, clause) = twin.emitted_package(clause_name);
     generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        ceilings,
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -5250,6 +5266,12 @@ fn tc_035_the_frame_envelope_declares_no_domain() {
 
 const KANI_TIMEOUT: Duration = Duration::from_secs(600);
 
+const SMALL_FRAME_CEILINGS: quire_contract_codegen::ProofCeilings =
+    quire_contract_codegen::ProofCeilings {
+        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+        wall_clock: Duration::from_secs(120),
+    };
+
 fn scratch(name: &str) -> PathBuf {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -5300,6 +5322,50 @@ pub(crate) fn prove_evidence(
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
+    let test_name = std::thread::current()
+        .name()
+        .unwrap_or("frame-control")
+        .replace("::", "_");
+    let receipts = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("state-frame-evidence")
+        .join(test_name);
+    fs::create_dir_all(&receipts).expect("frame receipt directory");
+    let attempt = fs::read_dir(&receipts)
+        .expect("frame receipt attempts")
+        .map(|entry| entry.expect("read frame receipt attempt"))
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".evidence.json")
+        })
+        .count();
+    let prefix = format!("{attempt:03}");
+    fs::write(
+        receipts.join(format!("{prefix}.evidence.json")),
+        serde_json::to_vec_pretty(&evidence).expect("serialize real frame evidence"),
+    )
+    .expect("retain real frame evidence");
+    fs::copy(
+        directory.join("src/lib.rs"),
+        receipts.join(format!("{prefix}.rs")),
+    )
+    .expect("retain complete compiled frame source");
+    fs::write(
+        receipts.join(format!("{prefix}.generated.rs")),
+        &harness.rust.contents,
+    )
+    .expect("retain generated frame source");
+    fs::write(
+        receipts.join(format!("{prefix}.record.json")),
+        &harness.record.contents,
+    )
+    .expect("retain frame identity record");
+    fs::copy(
+        directory.join("Cargo.toml"),
+        receipts.join(format!("{prefix}.Cargo.toml")),
+    )
+    .expect("retain frame crate manifest");
     let _ = fs::remove_dir_all(directory);
     evidence
 }
@@ -5416,17 +5482,27 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
     let twin = Twin::new();
     // ALLOWED: only `balance` changes, and the frame grants it.
     assert_eq!(
-        prove(&generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame),
+        prove(
+            &generated_from_twin_with_ceilings(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS
+            )
+            .frame
+        ),
         KaniRunOutcome::Verified
     );
     // FORBIDDEN: `audit` changes too.
     falsified(
         prove(
-            &generated_from_twin(
+            &generated_from_twin_with_ceilings(
                 &twin,
                 "BalanceNeverDrops",
                 &STATE_FIELDS,
                 "crate::subject::deposit_touching_audit",
+                SMALL_FRAME_CEILINGS,
             )
             .frame,
         ),
@@ -5436,7 +5512,14 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
     let emptied = Twin::build(&[], &CLAUSES, 0);
     falsified(
         prove(
-            &generated_from_twin(&emptied, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame,
+            &generated_from_twin_with_ceilings(
+                &emptied,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS,
+            )
+            .frame,
         ),
         "changed `balance`, which its frame does not modify",
     );
