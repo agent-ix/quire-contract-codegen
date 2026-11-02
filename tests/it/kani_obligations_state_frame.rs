@@ -5541,3 +5541,394 @@ fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
     );
     assert!(result.found().is_none());
 }
+
+#[trace(
+    "TC-025",
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "FR-015-AC-49"
+)]
+#[test]
+fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
+    let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("QSL invariant oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 1);
+    assert_eq!(oracle.descriptor.inputs[0].name, "current_balance");
+    assert_eq!(
+        (
+            oracle.descriptor.inputs[0].lower,
+            oracle.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(
+        matches!(record.disposition, ObligationDisposition::Supported { .. }),
+        "{record:?}"
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the invariant is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one invariant harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Invariant);
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert_eq!(harness.rust.contents.matches("assert!(").count(), 1);
+    assert!(harness
+        .rust
+        .contents
+        .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
+    assert!(
+        harness.rust.contents.find("assert!(").unwrap()
+            < harness.rust.contents.find("kani::cover!(").unwrap()
+    );
+    assert!(harness.rust.contents.contains("current_balance >= 0"));
+    assert!(harness.rust.contents.contains("current_balance <= 1000"));
+    assert!(!harness.rust.contents.contains(REQUEST_SUBJECT));
+    assert!(harness.rust.contents.contains(&oracle.source));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::cover!(invariant_domain_0,"));
+    let syntax = syn::parse_file(&harness.rust.contents).expect("valid generated invariant source");
+    let proof = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol => module
+                .content
+                .as_ref()?
+                .1
+                .iter()
+                .find_map(|item| match item {
+                    syn::Item::Fn(function)
+                        if function.sig.ident == harness.identity.harness_symbol =>
+                    {
+                        Some(function)
+                    }
+                    _ => None,
+                }),
+            _ => None,
+        })
+        .expect("the selected invariant proof function");
+    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.last() else {
+        panic!("the invariant's last statement must be its domain cover");
+    };
+    assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
+}
+
+/// Each field read by an object invariant is a separate bounded symbolic argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_invariant_draws_each_selected_model_field_it_reads() {
+    let twin = Twin::with_distinct_invariant_field_ranges("self.balance <= self.audit");
+    let (package, clause) = twin.emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("two-field QSL oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 2);
+    assert_eq!(
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| (input.name.as_str(), input.lower, input.upper))
+            .collect::<Vec<_>>(),
+        [("current_audit", 7, 12), ("current_balance", -5, 10)]
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("two-field invariant admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one two-field invariant harness");
+    };
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness.rust.contents.contains("current_balance >= -5"));
+    assert!(harness.rust.contents.contains("current_balance <= 10"));
+    assert!(harness.rust.contents.contains("current_audit >= 7"));
+    assert!(harness.rust.contents.contains("current_audit <= 12"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
+/// A selected field with no finite domain cannot become a symbolic invariant argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_invariant_unbounded_field_refuses_without_harness() {
+    let (package, clause) =
+        Twin::with_unbounded_balance_invariant().emitted_package("BalanceNonnegative");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant record");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(matches!(
+        &record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+        } if node_id == &clause
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("a well-formed unbounded item is accounted individually");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
+/// The invariant uses the current native selection and preserves deterministic sealed artifacts.
+#[trace(
+    "TC-025",
+    "FR-015-AC-40",
+    "FR-015-AC-47",
+    "FR-015-AC-49",
+    "FR-015-AC-125"
+)]
+#[test]
+fn qsl_native_invariant_preserves_oracle_selection_and_deterministic_identity() {
+    let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).unwrap();
+    let items = [ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }];
+    let generate = |unwind| {
+        let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &items,
+            subject_path: REQUEST_SUBJECT,
+            unwind,
+        })
+        .unwrap();
+        let KaniObligationOutcome::Emitted {
+            mut v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("native invariant is emitted");
+        };
+        assert_eq!(
+            v2_clause_harnesses.len(),
+            1,
+            "native invariant is supported"
+        );
+        v2_clause_harnesses.remove(0)
+    };
+    let first = generate(3);
+    let repeated = generate(3);
+    assert_eq!(first.rust.contents, repeated.rust.contents);
+    assert_eq!(first.record.contents, repeated.record.contents);
+    assert_ne!(first.record.contents, generate(4).record.contents);
+    assert!(first.rust.contents.contains(&oracle.source));
+    assert_eq!(
+        first.identity.native_integer_selection,
+        oracle.native_integer_selection
+    );
+    assert_eq!(
+        first.identity.integer_representation,
+        quire_contract_codegen::ScalarIntegerRepresentation::Native
+    );
+    assert_eq!(
+        first.identity.proof_execution_state,
+        ProofExecutionState::NotRun
+    );
+    assert_eq!(first.identity.arguments[0].minimum, 0);
+    assert_eq!(first.identity.arguments[0].maximum, 1000);
+    assert!(first
+        .rust
+        .contents
+        .contains("nx::NativeInteger::new(i128::from(current_balance))"));
+    assert!(!first.rust.contents.contains(REQUEST_SUBJECT));
+}
+
+/// Arithmetic invariants remain refused until their independent arithmetic probes are lowered.
+#[trace("TC-025", "FR-015-AC-41", "FR-015-AC-49")]
+#[test]
+fn qsl_invariant_arithmetic_is_refused_without_unchecked_harness() {
+    let (package, clause) = Twin::with_balance_invariant_condition("self.balance + 1 >= 0")
+        .emitted_package("BalanceNonnegative");
+    generate_v2_clause_oracle(&package, &clause).expect("the clause oracle supports arithmetic");
+    let items = [ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }];
+    let outcome = negotiate(&items);
+    assert!(matches!(&outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+        } if node_id == &clause));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("one unsupported invariant item is accounted");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
+/// Compile the emitted oracle bytes against the locked runtime and compare real evaluations
+/// with independent native predicates at admitted boundaries, including a false invariant.
+#[trace("TC-025", "FR-015-AC-40", "FR-015-AC-49", "FR-015-AC-125")]
+#[test]
+fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions() {
+    let mut source = String::new();
+    for (index, condition) in [
+        "self.balance >= 0",
+        "self.balance > 0",
+        "self.balance <= self.audit",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (package, clause) =
+            Twin::with_balance_invariant_condition(condition).emitted_package("BalanceNonnegative");
+        for native in [false, true] {
+            let request = KaniObligationRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                items: &[ObligationItem::V2Clause {
+                    package: &package,
+                    clause: &clause,
+                    dependencies: None,
+                }],
+                subject_path: REQUEST_SUBJECT,
+                unwind: 3,
+            };
+            let outcome = if native {
+                negotiate_kani_native_obligations(&request)
+            } else {
+                negotiate_kani_obligations(&request)
+            }
+            .unwrap();
+            let KaniObligationOutcome::Emitted {
+                v2_clause_harnesses,
+                ..
+            } = outcome
+            else {
+                panic!("an invariant request is emitted");
+            };
+            let [harness] = v2_clause_harnesses.as_slice() else {
+                panic!("the bounded invariant must have one harness");
+            };
+            let carrier = if native {
+                "nx::NativeInteger::new(i128::from(value))"
+            } else {
+                "rt::Integer::from(value)"
+            };
+            let arguments = if index == 2 {
+                "&audit_value, &balance_value, "
+            } else {
+                "&balance_value, "
+            };
+            let expected = match index {
+                0 => "balance >= 0",
+                1 => "balance > 0",
+                2 => "balance <= audit",
+                _ => unreachable!(),
+            };
+            source.push_str(&format!(r#"
+mod case_{index}_{native} {{
+{artifact}
+pub fn check() {{
+    let convert = |value: i64| {carrier};
+    for balance in [0i64, 500, 1000] {{
+        for audit in [0i64, 500, 1000] {{
+            let balance_value = convert(balance);
+            let audit_value = convert(audit);
+            let _ = &audit_value;
+            let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});
+            let outcome = oracle_clause({arguments}&mut meter);
+            assert!(matches!(outcome, Ok(rt::Outcome::Completed(actual)) if actual == ({expected})), "actual generated invariant oracle disagrees at balance={{balance}}, audit={{audit}}: {{outcome:?}}");
+        }}
+    }}
+}}
+}}
+"#, artifact = harness.rust.contents));
+        }
+    }
+    source.push_str("fn main() { case_0_false::check(); case_0_true::check(); case_1_false::check(); case_1_true::check(); case_2_false::check(); case_2_true::check(); }\n");
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-invariant-native-oracles");
+    let input = directory.path.join("oracle.rs");
+    let executable = directory.path.join("oracle");
+    fs::write(&input, source).unwrap();
+    let dependencies = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let mut compile = std::process::Command::new("rustc");
+    compile
+        .args(["--edition=2021", "--check-cfg=cfg(kani)"])
+        .arg(&input)
+        .arg("-o")
+        .arg(&executable)
+        .arg("-L")
+        .arg(format!("dependency={}", dependencies.display()));
+    for library in [
+        "quire_contract_runtime",
+        "quire_exact",
+        "quire_semantic_value",
+    ] {
+        let prefix = format!("lib{library}-");
+        let candidates = fs::read_dir(&dependencies)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
+                    && path
+                        .extension()
+                        .is_some_and(|extension| extension == "rlib")
+            })
+            .collect::<Vec<_>>();
+        let [artifact] = candidates.as_slice() else {
+            panic!("one locked {library} artifact: {candidates:?}");
+        };
+        compile
+            .arg("--extern")
+            .arg(format!("{library}={}", artifact.display()));
+    }
+    let compiled = compile
+        .output()
+        .expect("compile actual emitted invariant oracles");
+    assert!(
+        compiled.status.success(),
+        "actual invariant oracle compile failed: {}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let evaluated = std::process::Command::new(&executable).output().unwrap();
+    assert!(
+        evaluated.status.success(),
+        "actual invariant oracle evaluation failed: {}",
+        String::from_utf8_lossy(&evaluated.stderr)
+    );
+}
