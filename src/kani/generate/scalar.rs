@@ -355,6 +355,9 @@ impl LoweredScalarClaim {
                 upper: i128::from(self.upper),
             },
         )?;
+        if body.operation_identity != self.operation_identity {
+            return Err(ScalarAuthorityError::Operation);
+        }
         if body.operands.len() != self.operands.len()
             || body
                 .operands

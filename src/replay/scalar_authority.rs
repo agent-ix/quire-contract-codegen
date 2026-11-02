@@ -27,6 +27,8 @@ impl ScalarReplayKind {
 pub struct ScalarReplayBody {
     /// Original admitted application identity, including package, path and producer ordinal.
     pub node: CheckedNodeId,
+    /// Catalog operation identity read from the admitted application itself.
+    pub operation_identity: String,
     /// Authentic expression occurrence from the admitted original application.
     pub occurrence: CheckedOccurrence,
     /// CG's typed family allocation.
@@ -44,6 +46,8 @@ pub enum ScalarAuthorityError {
     Unavailable,
     /// No unique expression occurrence exists; no ordinal is invented.
     Occurrence,
+    /// The original application has no matching authenticated catalog operation.
+    Operation,
     /// The reader cannot supply complete positional integer operand provenance.
     Operands(CheckedScalarOperandError),
     /// The scalar renderer's actual drawn ranges differ from the admitted projection.
@@ -64,7 +68,7 @@ impl ScalarReplayBody {
             };
             serde_json::json!({"ordinal": operand.ordinal, "child": child, "lower": operand.range.lower.to_string(), "upper": operand.range.upper.to_string()})
         }).collect::<Vec<_>>();
-        serde_json::json!({"node": self.node, "occurrence": self.occurrence, "kind": self.kind.as_str(), "operands": operands, "resultLower": self.result_range.lower.to_string(), "resultUpper": self.result_range.upper.to_string()})
+        serde_json::json!({"node": self.node, "operation": self.operation_identity, "occurrence": self.occurrence, "kind": self.kind.as_str(), "operands": operands, "resultLower": self.result_range.lower.to_string(), "resultUpper": self.result_range.upper.to_string()})
     }
 
     pub(crate) fn admitted(
@@ -78,12 +82,20 @@ impl ScalarReplayBody {
             .iter()
             .find(|entry| &entry.node_id == node)
             .ok_or(ScalarAuthorityError::Occurrence)?;
+        let operation_identity = match package.term(node) {
+            Some(quire_contract_model::CheckedTerm::Application { operation, .. }) => operation
+                .identity()
+                .ok_or(ScalarAuthorityError::Operation)?
+                .to_owned(),
+            _ => return Err(ScalarAuthorityError::Operation),
+        };
         let occurrence = unique_expression_occurrence(&node_record.occurrences)?;
         let operands = package
             .scalar_application_operands(node, &occurrence)
             .map_err(ScalarAuthorityError::Operands)?;
         Ok(Self {
             node: node.clone(),
+            operation_identity,
             occurrence,
             kind: ScalarReplayKind::OperatorParity,
             operands,
