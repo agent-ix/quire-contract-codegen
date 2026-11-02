@@ -134,8 +134,8 @@ fn files(directory: &Path, result: &mut Vec<PathBuf>) -> Result<(), Refusal> {
     }
     Ok(())
 }
-fn instrument() -> Result<PathBuf, Refusal> {
-    let output = Command::new("cargo-kani")
+fn instrument(launcher: &Path) -> Result<PathBuf, Refusal> {
+    let output = Command::new(launcher)
         .arg("--version")
         .output()
         .map_err(invalid)?;
@@ -154,7 +154,7 @@ fn instrument() -> Result<PathBuf, Refusal> {
         .join("bin/goto-instrument"))
 }
 impl Compiled {
-    pub fn read(target: &Path, claim: &Claim) -> Result<Self, Refusal> {
+    pub fn read(target: &Path, claim: &Claim, launcher: &Path) -> Result<Self, Refusal> {
         let mut artifacts = Vec::new();
         files(target, &mut artifacts)?;
         let mut matches = Vec::new();
@@ -185,7 +185,7 @@ impl Compiled {
         if !binary.starts_with(target) || !binary.is_file() {
             return Err(invalid("fresh compiled GOTO missing"));
         }
-        let tool = instrument()?;
+        let tool = instrument(launcher)?;
         let symbols = Command::new(&tool)
             .args(["--show-symbol-table", "--json-ui"])
             .arg(&binary)

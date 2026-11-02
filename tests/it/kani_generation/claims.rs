@@ -69,7 +69,7 @@ fn a_generated_source_or_saved_verdict_without_this_build_does_not_qualify() {
     let (harness, _) = generated();
     let target = TemporaryDirectory::new("uncompiled-current-claim");
     assert!(
-        matches!(Compiled::read(&target.path, &claim(&harness)), Err(Refusal::MissingModule(module)) if module == harness.identity.module_symbol.as_str())
+        matches!(Compiled::read(&target.path, &claim(&harness), Path::new("uncompiled")), Err(Refusal::MissingModule(module)) if module == harness.identity.module_symbol.as_str())
     );
 }
 
@@ -93,7 +93,12 @@ fn run(
         home_directory: None,
     })
     .expect("bounded installed execution");
-    let compiled = Compiled::read(&target.path, &claim(harness)).expect("fresh compiled census");
+    let compiled = Compiled::read(
+        &target.path,
+        &claim(harness),
+        Path::new(&evidence.launcher_path),
+    )
+    .expect("fresh compiled census");
     for file in ["Cargo.toml", "Cargo.lock", "src/lib.rs"] {
         fs::copy(
             scratch.path.join(file),
