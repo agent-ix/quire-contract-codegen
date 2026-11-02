@@ -301,6 +301,7 @@ impl Compiled {
                 .ok_or_else(|| Refusal::MissingRoot(id.clone()))?;
             if id == &subject
                 || name.starts_with("quire_exact::")
+                || name.starts_with("<quire_exact::")
                 || name == &claim.oracle_symbol
                 || name.ends_with(&format!("::{}", claim.oracle_symbol))
             {
