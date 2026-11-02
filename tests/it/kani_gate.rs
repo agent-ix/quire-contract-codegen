@@ -239,6 +239,7 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
         "tests/exact_scalar_support/package.rs",
         "tests/checked_package_support/base.rs",
         "tests/checked_package_support/rekey.rs",
+        "tests/checked_package_support/temporal.rs",
         "tests/state_frame_support/model.rs",
         "schemas/kani-proof-graph-v2.schema.json",
         "schemas/generated-rust-kani-v2.schema.json",
@@ -617,6 +618,7 @@ fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
     for required in [
         "tests/checked_package_support/base.rs",
         "tests/checked_package_support/rekey.rs",
+        "tests/checked_package_support/temporal.rs",
         "tests/state_frame_support/subject.rs",
         "schemas/kani-corpus-proof-graph-v1.schema.json",
     ] {
