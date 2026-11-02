@@ -463,13 +463,12 @@ mod tests {
                 Err(Refusal::Unreached(second.module.clone()))
             );
         }
-        for mut invalid in [second_check] {
-            invalid.location.line = None;
-            assert_eq!(
-                compiled.qualify(&claims, &[first_check.clone(), invalid]),
-                Err(Refusal::Unreached(second.module.clone()))
-            );
-        }
+        let mut unknown_location = second_check;
+        unknown_location.location.line = None;
+        assert_eq!(
+            compiled.qualify(&claims, &[first_check.clone(), unknown_location]),
+            Err(Refusal::Unreached(second.module.clone()))
+        );
         let mut outside = success(35);
         outside.location.file = "other/lib.rs".into();
         assert_eq!(

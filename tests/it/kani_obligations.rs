@@ -485,7 +485,7 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
 pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
     use syn::parse::Parser;
     let playback = syn::parse_file(counterexample).expect("Kani playback is Rust source");
-    let first_input = playback
+    let inputs = playback
         .items
         .iter()
         .find_map(|item| {
@@ -510,30 +510,33 @@ pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
                 };
                 syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
                     .parse2(values.mac.tokens.clone())
-                    .ok()?
-                    .first()
-                    .cloned()
+                    .ok()
             })
         })
         .expect("playback contains symbolic inputs");
-    let syn::Expr::Macro(left_bytes) = first_input else {
-        panic!("first playback input is a byte vector: {counterexample}");
-    };
-    let left_bytes = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
-        .parse2(left_bytes.mac.tokens)
-        .expect("first input bytes parse");
-    let [syn::Expr::Lit(syn::ExprLit {
-        lit: syn::Lit::Int(byte),
-        ..
-    })] = left_bytes.iter().collect::<Vec<_>>().as_slice()
-    else {
-        panic!("one Boolean byte for left: {counterexample}");
-    };
-    assert_eq!(
-        byte.base10_parse::<u8>().unwrap(),
-        0,
-        "left is false in playback"
-    );
+    assert_eq!(inputs.len(), 2, "two drawn Boolean operands");
+    let values = inputs
+        .iter()
+        .map(|input| {
+            let syn::Expr::Macro(bytes) = input else {
+                panic!("Boolean input is a byte vector: {counterexample}")
+            };
+            let bytes = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                .parse2(bytes.mac.tokens.clone())
+                .unwrap();
+            let [syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(byte),
+                ..
+            })] = bytes.iter().collect::<Vec<_>>().as_slice()
+            else {
+                panic!("one byte per Boolean: {counterexample}")
+            };
+            let value = byte.base10_parse::<u8>().unwrap();
+            assert!(value <= 1, "playback operand is in the Boolean domain");
+            value
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(values[0], 0, "left is false in playback");
 }
 
 pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {
