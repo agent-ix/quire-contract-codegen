@@ -8,8 +8,9 @@ use crate::{kani_obligations, scratch_crate::TemporaryDirectory};
 use census::{controls, Claim, Compiled, Control, Refusal};
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
-    execute_kani_obligation, Artifact, KaniCheckClass, KaniCheckStatus, KaniExecutionEvidence,
-    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, KaniScalarObligationHarness,
+    execute_kani_obligation, execute_kani_obligations, Artifact, KaniCheckClass, KaniCheckStatus,
+    KaniExecutionEvidence, KaniExecutionRequest, KaniInstallation, KaniRunOutcome,
+    KaniScalarObligationHarness,
 };
 
 const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction implication using v(left: Boolean, right: Boolean): Boolean pure { left implies right }\n";
@@ -157,25 +158,30 @@ fn run(
         home_directory: None,
     })
     .expect("bounded installed execution");
-    let compiled = Compiled::read(
-        &target.path,
-        &claim(harness),
-        Path::new(&evidence.launcher_path),
-    )
-    .expect("fresh compiled census");
+    let compiled = snapshot(harness, &evidence, &scratch.path, &target.path, name);
+    (evidence, compiled, target)
+}
+
+fn snapshot(
+    harness: &KaniScalarObligationHarness,
+    evidence: &KaniExecutionEvidence,
+    scratch: &Path,
+    target: &Path,
+    name: &str,
+) -> Compiled {
+    let compiled = Compiled::read(target, &claim(harness), Path::new(&evidence.launcher_path))
+        .expect("fresh compiled census");
     for file in ["Cargo.toml", "Cargo.lock", "src/lib.rs"] {
         fs::copy(
-            scratch.path.join(file),
-            target
-                .path
-                .join(format!("current-{}", file.replace('/', "-"))),
+            scratch.join(file),
+            target.join(format!("current-{}", file.replace('/', "-"))),
         )
         .unwrap();
     }
 
     fs::write(
-        target.path.join("current-evidence.json"),
-        serde_json::to_vec_pretty(&evidence).unwrap(),
+        target.join("current-evidence.json"),
+        serde_json::to_vec_pretty(evidence).unwrap(),
     )
     .unwrap();
     let attempt = Path::new(env!("CARGO_TARGET_TMPDIR"))
@@ -191,8 +197,60 @@ fn run(
         "compiled-call-graph.txt",
         "compiled-symbols.json",
     ] {
-        fs::copy(target.path.join(file), attempt.join(file)).unwrap();
+        fs::copy(target.join(file), attempt.join(file)).unwrap();
     }
+    compiled
+}
+
+fn run_pair(
+    harnesses: [&KaniScalarObligationHarness; 2],
+    manifest: &Artifact,
+) -> (
+    [KaniExecutionEvidence; 2],
+    [Compiled; 2],
+    TemporaryDirectory,
+) {
+    assert_eq!(
+        harnesses[0].rust.contents, harnesses[1].rust.contents,
+        "one current source file for both compiled claims"
+    );
+    let scratch = kani_obligations::write_scalar_crate(
+        "claims-pair-healthy",
+        manifest,
+        &harnesses[0].rust.contents,
+    );
+    let target = TemporaryDirectory::new("current-claims-pair-healthy");
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().unwrap();
+    let requests = harnesses
+        .iter()
+        .map(|harness| KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: (*harness).into(),
+            crate_directory: &scratch.path,
+            target_directory: &target.path,
+            home_directory: None,
+        })
+        .collect::<Vec<_>>();
+    let mut groups = execute_kani_obligations(&requests).expect("one bounded current compilation");
+    assert_eq!(groups.len(), 1);
+    let group = groups.pop().unwrap();
+    assert_eq!(group.members, [0, 1]);
+    let evidence: [KaniExecutionEvidence; 2] = group
+        .evidence
+        .expect("both actual proof reports")
+        .try_into()
+        .unwrap();
+    let compiled = std::array::from_fn(|index| {
+        snapshot(
+            harnesses[index],
+            &evidence[index],
+            &scratch.path,
+            &target.path,
+            ["claim-healthy", "claim-second-healthy"][index],
+        )
+    });
     (evidence, compiled, target)
 }
 
@@ -281,13 +339,12 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
         declared.end < second_claim.start,
         "two generated modules have disjoint extents in the same source file"
     );
-    let (healthy, compiled, healthy_target) = run(&harness, &manifest, "claim-healthy");
+    let ([healthy, second_healthy], [compiled, second_compiled], healthy_target) =
+        run_pair([&harness, &second_harness], &manifest);
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
     compiled
         .require_positive(&declared, &healthy)
         .unwrap_or_else(|refusal| panic!("{refusal:?}; claim={declared:?}; see current-claim-attempts/claim-healthy receipts"));
-    let (second_healthy, second_compiled, second_target) =
-        run(&second_harness, &manifest, "claim-second-healthy");
     assert_eq!(second_healthy.outcome, KaniRunOutcome::Verified);
     let mut both_checks = healthy.checks.clone();
     both_checks.extend(second_healthy.checks.iter().cloned());
@@ -512,11 +569,23 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
     let evidence_directory =
         Path::new(env!("CARGO_TARGET_TMPDIR")).join("qualified-current-claims");
     fs::create_dir_all(&evidence_directory).unwrap();
+    fs::copy(
+        healthy_target.path.join("shared-helper-evidence.json"),
+        evidence_directory.join("healthy-shared-helper-evidence.json"),
+    )
+    .unwrap();
     for (from, to) in [
-        (&healthy_target.path, "healthy"),
-        (&mutant_target.path, "mutant"),
-        (&second_target.path, "second-healthy"),
-        (&second_mutant_target.path, "second-mutant"),
+        (
+            Path::new(env!("CARGO_TARGET_TMPDIR")).join("current-claim-attempts/claim-healthy"),
+            "healthy",
+        ),
+        (mutant_target.path.clone(), "mutant"),
+        (
+            Path::new(env!("CARGO_TARGET_TMPDIR"))
+                .join("current-claim-attempts/claim-second-healthy"),
+            "second-healthy",
+        ),
+        (second_mutant_target.path.clone(), "second-mutant"),
     ] {
         for file in [
             "current-evidence.json",
