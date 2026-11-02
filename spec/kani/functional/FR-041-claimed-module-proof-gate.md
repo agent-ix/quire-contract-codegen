@@ -59,11 +59,21 @@ about a semantic stage the test input did not traverse.
   control; a dirty-tree or other process refusal alone is not a falsifying mutation. The gate SHALL
   retain the exact mutation diff, invocation and failing check output as current-run evidence.
 - The gate SHALL accept no predetermined verdict or stubbed executor as proof evidence.
-The former fixed V1 claim inventory and its hold are retired under IR-1105. No current
-FR-041 module proof or mutation credit follows from deleting that inventory. A real
-current-build claim source and installed-Kani positive and falsifying controls remain Open.
 
-## Additional V2 claim (IR-1047, planned)
+## V1 claim retirement
+
+The V1-sourced FR-003@4 claim ended with the V1 generator deletion and retirement
+of its inventory and hold in [CG #636](https://github.com/agent-ix/quire-contract-codegen/pull/636)
+(IR-1105), as confirmed by the
+[owner ruling on IR-1049](https://linear.app/agent-ix/issue/IR-1049#comment-813eda1b).
+No V1 module identity, obligation identity or proof credit carries into a V2 claim.
+The Boolean state-transition obligation is implemented by a new V2 claim under
+AC-10. All current V2 claims remain subject to AC-1 through AC-5: an empty claim
+set, absent compiled module, missing independent expectation or missing control
+SHALL fail. Retirement supplies no exception for a current V2 claim.
+
+
+## Current-build V2 claim machinery (IR-1047, planned)
 
 - When an additional V2 claim is declared, the generator SHALL obtain an admitted V2 Boolean
   implication scalar claim from the production `KaniObligationRequest` path and render its
@@ -96,21 +106,30 @@ current-build claim source and installed-Kani positive and falsifying controls r
   This source mutation, not a stored verdict or a stand-in runner, SHALL be the
   claim's FR-041 control.
 - Once those current-run controls pass, the generated V2 implication claim SHALL be
-  included in the current-build module census. A V2 implication proof SHALL NOT
-  discharge the distinct FR-003@4 Boolean state-transition claim. `make kani-gate`
-  SHALL run the real-Kani claim control in its required lane and fail for a claimed
-  module or shared-helper control that is absent, skipped or unsuccessful. The
-  FR-003@4 claim and IR-1047 Acceptance 4 remain Open.
+  included in the current-build module census. `make kani-gate` SHALL run the
+  real-Kani claim control in its required lane and fail for a claimed module or
+  shared-helper control that is absent, skipped or unsuccessful. This machinery
+  and its independently qualified V2 implication claim complete the IR-1047
+  delivery without depending on IR-1049. The distinct Boolean state-transition
+  obligation remains a separate new V2 claim; implication proof credit SHALL NOT
+  discharge it.
 
-## FR-003@4 claim continuity (IR-1049, planned)
+## New V2 Boolean state-transition claim (IR-1049, planned)
 
-A future production V2 module for the original FR-003@4 Boolean state-transition
-obligation SHALL preserve its precondition, postcondition, actual transition subject,
-checked-package provenance, and a separately named independent expectation. A V2
-implication proof is a different claim. Installed Kani SHALL give the original
-obligation an in-module SUCCESS proposition and satisfied cover, while an in-module
-source mutation SHALL compile, execute, and produce an in-module FAILURE check with
-in-domain playback. No saved result or other claim's proof discharges it.
+After the IR-1047 machinery is available, a production V2 module SHALL implement
+the Boolean state-transition obligation originally described by FR-003@4:
+precondition `input_current || state_pre`, postcondition `state_post`, and the
+actual transition subject. It SHALL have its own stable V2 module and obligation
+identities, authentic checked-package/source provenance, and a separately named
+independent expectation rooted in the current compiled call graph. It SHALL be
+registered as a new claim in the current-build census, without restoring a V1 row,
+reusing a V1 identity or copying V1 generator/source code.
+
+Installed Kani SHALL give this new module an in-module SUCCESS proposition and
+satisfied cover. An in-module source mutation SHALL compile, execute and produce
+an in-module FAILURE check with in-domain playback. Its computed shared helpers
+remain subject to AC-3 and AC-4. No distinct implication proof, absent current V2
+module or saved result discharges this obligation.
 
 ## Acceptance Criteria
 
@@ -124,16 +143,16 @@ in-domain playback. No saved result or other claim's proof discharges it.
 | FR-041-AC-6 | The V2 claim is produced by the admitted V2 Boolean implication request through the production scalar renderer; its generated module and harness identities match the current-build claim source and compiled census. A V1 source, hand-authored module, missing module, changed identity or uncompiled claim is rejected by name. Open pending a genuine current-build claim source. | Test |
 | FR-041-AC-7 | The V2 module exposes separate named subject and expectation roots in the current compiled call graph. The subject reaches the runtime implication operation; the expectation evaluates `!left || right` over the same Boolean inputs and reaches neither subject, oracle nor `quire-exact`. The observed helper intersection exactly matches the declared helper mutations, including an explicit empty set. | Test and Inspection |
 | FR-041-AC-8 | The unmodified generated V2 module has a location-attributed SUCCESS proposition and satisfied final cover with installed Kani. Replacing only its parsed subject-call expression with `false` compiles and executes the same harness, then yields an in-module FAILURE at the subject-versus-expectation assertion with in-domain playback where `left` is false; each computed shared helper has its own positive and falsifying control. | Test |
-| FR-041-AC-9 | After AC-6 through AC-8 pass in the current lane, the V2 implication module is included in the current-build claim census. The required `make kani-gate` run executes its real-Kani control and fails on any missing, skipped or failing claim or helper control. This criterion does not discharge the distinct FR-003@4 claim or complete IR-1047 Acceptance 4. Open pending a genuine current-build claim source. | Test |
-| FR-041-AC-10 | A production V2 module for the original FR-003@4 Boolean state-transition obligation appears in the current compiled census with the same precondition, postcondition, actual transition subject, checked-package/source provenance and a separately named independent expectation. Installed Kani gives that module an in-module SUCCESS proposition and satisfied cover; its in-module source mutant compiles, executes and reports an in-module FAILURE check with in-domain playback. A removed or absent claim, different obligation, V2 implication proof, or saved verdict does not discharge the claim. PLANNED (IR-1049); IR-1047 Acceptance 4 remains unmet. | Test and Inspection |
+| FR-041-AC-9 | After AC-6 through AC-8 pass in the current lane, the V2 implication module is included in the current-build claim census. The required `make kani-gate` run executes its real-Kani control and fails on any missing, skipped or failing claim or helper control. This completes the IR-1047 machinery delivery independently of the new Boolean state-transition claim in AC-10; implication proof credit does not discharge that transition obligation. Open pending a genuine current-build claim source. | Test |
+| FR-041-AC-10 | A production V2 module implements the Boolean state-transition obligation originally described by FR-003@4, with precondition `input_current \|\| state_pre`, postcondition `state_post`, the actual transition subject, authentic checked-package/source provenance and a separately named independent expectation. The new claim has its own stable V2 module and obligation identities and is registered in the current compiled census without restoring a V1 row or asserting V1 identity continuity. Installed Kani gives that module an in-module SUCCESS proposition and satisfied cover; its in-module source mutant compiles, executes and reports an in-module FAILURE check with in-domain playback, with per-helper controls under AC-3 and AC-4. A different obligation, V2 implication proof, absent current V2 claim or saved verdict does not discharge it. PLANNED (IR-1049), dependent on the IR-1047 machinery. | Test and Inspection |
 
 ## Status
 
-Open. IR-1105 retires the frozen V1 claim inventory and its hold; they grant no proof
-credit. The V2 Boolean implication module and the original FR-003@4 state-transition
-module remain separate proof obligations. Neither has current-run FR-041 positive and
-falsifying evidence. A genuine current-build source of module claims is still needed.
-IR-1047 Acceptance 4 remains unmet.
+Open. IR-1047 delivers the genuine current-build claim source, compiled-module
+census, subject/expectation helper intersection and per-helper controls, using the
+V2 implication claim. The new V2 Boolean state-transition claim follows in
+IR-1049. Neither delivery receives proof credit from this specification correction;
+current-run installed-Kani positive and falsifying evidence remains required.
 
 ## Dependencies
 

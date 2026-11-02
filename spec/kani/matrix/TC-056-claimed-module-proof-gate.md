@@ -20,10 +20,11 @@ it does not create another repository gate.
 
 ## Test Procedure
 
-IR-1105 retires the frozen V1 claim inventory and its held row. No current claim is
-proved by that retirement. These procedures remain Open until production generated
+The [retirement record](../functional/FR-041-claimed-module-proof-gate.md#v1-claim-retirement)
+provides no V2 proof credit. These procedures remain Open until production generated
 modules provide a genuine current-build claim source and installed-Kani controls.
-The V2 implication and original FR-003@4 transition are separate obligations.
+IR-1047's V2 implication and IR-1049's new V2 Boolean state-transition claim are
+separate obligations, each with its own generated identity.
 
 1. Obtain a nonempty set of claims from the current production generated artifact.
    Build the candidate and compare claimed identities with compiled modules. In isolated
@@ -76,11 +77,16 @@ The V2 implication and original FR-003@4 transition are separate obligations.
 8. Include the V2 implication claim in the current-build census after its positive
    and falsifying controls pass. Require the real-Kani lane to execute the claim test
    and fail for a missing, skipped or failing claim or shared-helper control. Do not
-   credit the distinct FR-003@4 transition obligation (FR-041-AC-9).
-9. Generate the original FR-003@4 Boolean transition with its precondition,
-   postcondition, actual subject and independent expectation. Require installed-Kani
-   healthy and falsifying controls on that module; a distinct implication proof or
-   stored verdict does not discharge it (FR-041-AC-10).
+   credit the distinct Boolean transition obligation. This completes IR-1047's
+   machinery delivery without requiring the later transition claim (FR-041-AC-9).
+9. After that machinery lands, generate the Boolean transition obligation as a new
+   V2 claim with its own stable module and obligation identities, precondition
+   `input_current || state_pre`, postcondition `state_post`, actual subject,
+   checked-package/source provenance and independent expectation. Register it in
+   the current-build census without restoring or re-identifying a V1 row. Require
+   installed-Kani healthy and falsifying controls on that module and every computed
+   shared helper; a distinct implication proof or stored verdict does not discharge
+   it (FR-041-AC-10).
 
 ## Expected Results
 
@@ -88,10 +94,11 @@ The required real-Kani lane passes only when every current-build claimed module
 has an in-module SUCCESS proposition, the build-derived shared-helper set agrees
 with the generated evidence, and each claimed module and shared helper has a
 compiling, executed mutation with a real failed check. No build-only result,
-stub, process refusal or stored verdict counts. The frozen V1 inventory and hold
-are retired; no claim is credited merely by their deletion.
+stub, process refusal or stored verdict counts. A current V2 claim cannot be
+removed or left uncompiled to satisfy these checks.
 
 ## Status
 
 Open. A genuine current-build claim source and installed-Kani proof and mutation
-controls are still needed. IR-1047 Acceptance 4 remains unmet.
+controls are still needed for IR-1047. IR-1049's new V2 transition claim follows
+that prerequisite and is not a condition for landing the machinery.
