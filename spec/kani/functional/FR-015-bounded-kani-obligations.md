@@ -259,10 +259,11 @@ installed-backend or independent native-replay proof credit.
   `bounded_domain` nodes, never from a caller descriptor, and are tightened
   only as [FR-028](./FR-028-bounded-proof-ceilings.md) records.
 - An optional declared proof-dependency census per obligation.
-- A complete request. A postcondition or invariant is proved under the
-  preconditions of its own anchor operation, so the request must name every
-  package precondition sharing that anchor as an item of the same request. The
-  caller does not choose a solver.
+- A complete request. A postcondition is proved under the preconditions of its
+  anchor operation, so the request must name every package precondition sharing
+  that anchor as an item of the same request. An invariant is anchored at its
+  object type and has no operation precondition to include. The caller does not
+  choose a solver.
 - The loop unwind bound, which is a request-level value in `1..=1024`.
 - A V2 clause claim: one `state`/`state_clause` node id of an admitted
   `CheckedPackageV2` whose `operation.member.clause` is `precondition`, `postcondition`
@@ -486,10 +487,10 @@ installed-backend or independent native-replay proof credit.
   (FR-015-AC-46; IR-464).
 - Regeneration of a V2 clause harness from equal inputs shall be byte-identical
   (FR-015-AC-47).
-- The generator shall form the obligation identity of a V2 clause claim from the members
-  AD-003 E-1 names, with the source span excluded, and shall keep it distinct from the
-  harness identity record (FR-015-AC-48). Whether E-1's member list covers a state field
-  read, which is not a parameter, is an open question for the AD-003 owner.
+- The generator shall carry the QSL producer-issued structural `ObligationIdentity`
+  of a V2 clause claim unchanged, compare its source occurrence, kind and argument
+  identities and domains separately on the obligation record, and keep it distinct
+  from the harness identity record (AD-003 E-1; FR-015-AC-48).
 - A V2 invariant harness shall assert that the invariant clause holds for every state its
   arguments' declared domains admit; preservation of the invariant under an operation is
   not specified here (FR-015-AC-49).
@@ -851,7 +852,7 @@ Generated artifacts and canonical identity inputs SHALL bind the actual selected
 | FR-015-AC-45 | A valid census declared on a V2 clause claim is folded into that harness's identity record, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`, by the same rules as FR-015-AC-25; in addition, the folded census is independent of the order the caller lists its dependencies. Implemented for the supported V2 clause path (IR-1044); the tagged TC-025 test checks the in-memory and persisted identity for passed, missing, failed and reordered declarations. This is generation-time evidence, not a backend verdict. | Test (TC-025) |
 | FR-015-AC-46 | Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption, after the subject call and after every assertion the harness carries (the last statement, as FR-015-AC-7 states), that states the family's reachability, as FR-015-AC-7 does: a precondition harness covers that the precondition holds within the bounds; a postcondition harness covers, after the subject call returns, that the requires and the bounds are jointly satisfiable; an invariant harness covers that the drawn state satisfies its domain assumptions. The subject call is the call of the customer subject at the request's subject path in a postcondition harness, which supplies the result and post-state; a precondition harness and an invariant harness have none, and their cover follows the last assumption. A V2 clause whose assumptions and bounds are jointly unsatisfiable is refused with a typed reason and no harness, or, if it reaches a backend run, does not classify `Verified`. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-47 | Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity record (as FR-015-AC-10 states). PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-48 | The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter, as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing the span, the unwind bound or the subject does not. It is a different value from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-48 | A V2 clause claim carries QSL's producer-issued structural `ObligationIdentity` unchanged: the obligation node's `NodeKey`, optional owning `ModelIdentity`, and producer-assigned ordinal for that node/model pair (AD-003 E-1). Distinct obligations at the same node/model have distinct ordinals; changing any structural member changes the identity. CG does not form a preimage, hash the identity, or derive a replacement node or ordinal. CG compares the complete source occurrence, obligation kind, parameter identities and declared domains, and any state-field read identities and domains, as separate obligation-record fields against the independently selected claim; a state-field read is named by its declaring node id and field name, never by a node of its own. A mismatch refuses before harness generation even when structural identity is unchanged. The source span, occurrence, kind, arguments, unwind bound and customer subject are not structural identity members; changing only the span, unwind bound or subject leaves the carried identity unchanged. It remains distinct from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-49 | A V2 invariant claim yields a harness that draws its state and parameters within their declared domains (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation of the invariant under an operation is not specified by this criterion. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-50 | `negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-025) |
 | FR-015-AC-51 | Until the final retirement slice (FR-015-AC-111, AD-004 step 4g) deletes the hand-built bounded-corpus path, a finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |

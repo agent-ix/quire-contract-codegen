@@ -491,9 +491,15 @@ The remaining V2 clause controls in this section retain their stated planned sta
     `not_run`; reordering leaves its bytes unchanged (FR-015-AC-44, FR-015-AC-45).
 14. Count the covers and locate each relative to the assumptions and the subject call; run
     a clause with jointly unsatisfiable assumptions; regenerate from equal inputs; vary the
-    unwind bound, the subject, a parameter's domain and the source span: the harness
-    identity record changes with the first two, the obligation identity with the domain
-    and not with the span, unwind bound or subject (FR-015-AC-46 to FR-015-AC-48).
+    unwind bound, the subject and the source span while holding QSL's producer-issued
+    structural identity fixed. The harness identity record changes with the unwind bound
+    and subject; the carried structural identity remains unchanged. Compare claims with
+    a changed structural node, model or producer ordinal: each has a different structural
+    identity. Compare a changed source occurrence, kind, parameter identity or declared
+    domain, and state-field read identity or domain, against an independently selected
+    claim while holding structural identity fixed: each mismatch refuses before harness
+    generation. The source span is excluded from the structural identity
+    (FR-015-AC-46 to FR-015-AC-48).
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
