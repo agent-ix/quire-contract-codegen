@@ -9,6 +9,12 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/NFR-006
     type: depends_on
+  - target: ix://agent-ix/quire-specification/FR-341
+    type: references
+  - target: ix://agent-ix/quire-contract-ir/FR-067
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-105
+    type: references
 ---
 # FR-041: Discharge every claimed Kani module with an independently checked proposition
 
@@ -131,6 +137,75 @@ an in-module FAILURE check with in-domain playback. Its computed shared helpers
 remain subject to AC-3 and AC-4. No distinct implication proof, absent current V2
 module or saved result discharges this obligation.
 
+## V2 Boolean field-transition production profile (IR-1049, planned)
+
+The `StateTransition` item of the existing `KaniObligationRequest` SHALL borrow
+one admitted `CheckedPackageV2`, a selected `state`/`transition` node identity,
+and the Rust path of its actual transition subject. `negotiate_kani_obligations`
+SHALL remain the single item-settlement entry. The producer SHALL consume the
+public typed term and operation views of the admitted package, including the
+canonical `anchor`, `subject`, ordered `inputs`, optional `pre`, and `post`
+bindings specified by QSpec FR-341 and IR FR-067. It SHALL introduce no new wire
+carrier, mirrored transition schema, or independently inferred model signature.
+
+This delivery SHALL support the original Boolean contract profile: exactly one
+ordered Boolean operation input, the selected required Boolean model-field
+subject, a precondition equivalent by operand order to
+`input_current || state_pre`, and a postcondition reading that subject as
+`state_post`. Field comparisons SHALL use the canonical declaration identity,
+field name and receiver binding, rather than a field name alone. A different
+transition profile SHALL receive a located typed unsupported disposition with
+no harness. An invalid request SHALL follow FR-015's existing no-partial-output
+rule. Neither an integer frame nor an implication scalar claim supplies this
+profile.
+
+The caller's subject ABI SHALL be `fn(input_current: bool, state: &mut bool)`:
+the mutable slot is the transition body's selected Boolean field. The generated
+named `subject_boolean_state_transition` root SHALL snapshot that field's
+pre-state, call the actual nominated subject with the admitted input binding,
+and return its post-state Boolean value. The proof SHALL draw the input and
+pre-state as two independent symbolic Booleans, assume the admitted
+precondition, call that root, and assert the admitted postcondition. Its
+execution identity and evidence SHALL describe Boolean domains, never integer
+ranges substituted for Boolean types.
+
+A separately named `expected_boolean_state_transition(input_current, state_pre)`
+root SHALL compute `input_current || state_pre` directly as the checked-in
+specification model. The proof SHALL also compare the actual post-state with
+this model and retain one final non-vacuity cover. Under the required
+precondition the model's result is true; the claim makes no assertion about
+behavior outside that precondition. The expectation SHALL call no subject,
+oracle or `quire-exact` operation. Both roots and the actual subject call SHALL
+be visible in the healthy current compiled call graph, with the ordinary exact
+shared-helper census and controls of AC-3 and AC-4.
+
+`KaniObligationOutcome::Emitted` SHALL carry the generated
+`KaniStateTransitionHarness` values in request order in
+`state_transition_harnesses`. `KaniExecutableHarness::StateTransition` SHALL
+execute that same generated artifact through the existing bounded executor.
+The new `StateTransitionIdentity` SHALL retain the selected transition and
+actual subject binding, the canonical `CheckedOccurrence` and
+`CheckedSourceMapEntry` values for the selected transition, and identity material covering the complete selected semantic body,
+its pre/post dependency meaning, ordered input/subject bindings and selected
+profile. A valid body edit retaining a structural node key SHALL change the
+identity material and generated module/obligation identities. Identical admitted
+inputs and configuration SHALL reproduce the same identities and bytes. These
+are new V2 identities; no V1 row is restored or replaced.
+
+Qualification SHALL run four small installed-Kani controls over genuinely
+QSL-emitted, IR-admitted inputs: healthy subject, an in-module forced-false
+post-state, an in-module suppressed transition call, and an in-module removed
+precondition assumption. Healthy code SHALL produce a located in-module
+SUCCESS proposition and satisfied final cover. Each mutant SHALL compile,
+execute, and produce a located FAILURE of the claimed postcondition with an
+in-domain Boolean playback. In particular, suppression distinguishes a real
+state update from a pre-state read, and removing the assumption exposes the
+false-input/false-pre-state case. These controls SHALL retain their exact source
+diffs, invocations and checks. The required existing `make kani-gate` claim
+control SHALL include this new claim only with the full current compiled census
+and all its live module/helper controls; no optional lane or saved verdict
+supplies qualification.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -158,5 +233,6 @@ current-run installed-Kani positive and falsifying evidence remains required.
 
 - **Upstream**: [FR-017](./FR-017-kani-execution-evidence.md) supplies typed per-check report evidence;
   [NFR-006](../non-functional/NFR-006-real-kani-lane-gating.md) owns the existing lane target and
-  real-Kani lane execution.
+  real-Kani lane execution. QSpec FR-341 and IR FR-067 own the admitted Boolean
+  transition carrier; QSL FR-105 owns its source emission.
 - **Verification**: [TC-056](../matrix/TC-056-claimed-module-proof-gate.md).

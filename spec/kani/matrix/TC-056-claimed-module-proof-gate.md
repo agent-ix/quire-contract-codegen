@@ -102,3 +102,32 @@ removed or left uncompiled to satisfy these checks.
 Open. A genuine current-build claim source and installed-Kani proof and mutation
 controls are still needed for IR-1047. IR-1049's new V2 transition claim follows
 that prerequisite and is not a condition for landing the machinery.
+
+## New V2 Boolean field-transition producer (IR-1049, planned)
+
+1. Compile the QSL-owned Switch model/source inputs by reference, adding an
+   authored unpointed precondition `flag or self.on` to the current source.
+   Read the fresh package through public IR admission and inspect its canonical
+   five transition bindings, Boolean field/input/result and all claim/source
+   regions. Select that actual transition in the production Kani request.
+2. Require the new state-transition harness/identity arm, Boolean argument
+   domains and a real nominated `fn(bool, &mut bool)` subject. Check repeatability,
+   source provenance retention, and a valid semantic-body edit that retains a
+   structural key but changes the generated identity. Refuse foreign/missing
+   selections and unsupported profiles by typed disposition without artifacts.
+3. Compile the generated module and actual subject. Inspect the named subject
+   and independent `input_current || state_pre` expectation roots, exact compiled
+   module census and transitive helper intersection. The field-transition claim
+   is distinct from the V2 implication claim and has its own identity.
+4. Run the healthy subject and three distinct in-module source mutants: forced
+   false post-state, suppressed transition call, and removed precondition
+   assumption. Require healthy SUCCESS plus a satisfied cover, and a compiling,
+   executed postcondition FAILURE with Boolean playback for every mutant. Check
+   the false-input/false-pre-state witness for the missing assumption and the
+   true-input/false-pre-state witness for suppression. Retain exact diffs,
+   invocations and check locations. Run every computed shared helper's controls.
+5. Register the newly qualified module in the mandatory current-build claim
+   control. Run the ordinary missing/uncompiled/unreached/empty/missing-control
+   adverse cases, retaining FR-041-AC-1 through AC-5 and NFR-006-AC-19 verbatim.
+   An unsupported source, absent source module or saved verdict supplies no
+   state-transition proof credit.
