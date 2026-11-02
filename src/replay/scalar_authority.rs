@@ -92,10 +92,16 @@ impl ScalarReplayBody {
     }
 }
 
-fn unique_expression_occurrence(occurrences: &[CheckedOccurrence]) -> Result<CheckedOccurrence, ScalarAuthorityError> {
-    let mut expressions = occurrences.iter().filter(|occurrence| occurrence.role == CheckedOccurrenceRole::Expression);
+fn unique_expression_occurrence(
+    occurrences: &[CheckedOccurrence],
+) -> Result<CheckedOccurrence, ScalarAuthorityError> {
+    let mut expressions = occurrences
+        .iter()
+        .filter(|occurrence| occurrence.role == CheckedOccurrenceRole::Expression);
     let selected = expressions.next().ok_or(ScalarAuthorityError::Occurrence)?;
-    if expressions.next().is_some() { return Err(ScalarAuthorityError::Occurrence); }
+    if expressions.next().is_some() {
+        return Err(ScalarAuthorityError::Occurrence);
+    }
     Ok(selected.clone())
 }
 
@@ -106,11 +112,33 @@ mod tests {
     #[trace("TC-047", "FR-032-AC-18")]
     #[test]
     fn absent_or_ambiguous_scalar_authority_never_invents_an_occurrence() {
-        let occurrence = CheckedOccurrence { role: CheckedOccurrenceRole::Expression, ordinal: 17 };
-        assert_eq!(unique_expression_occurrence(&[]), Err(ScalarAuthorityError::Occurrence));
-        assert_eq!(unique_expression_occurrence(&[occurrence.clone(), CheckedOccurrence { ordinal: 23, ..occurrence.clone() }]), Err(ScalarAuthorityError::Occurrence));
-        assert_eq!(unique_expression_occurrence(std::slice::from_ref(&occurrence)).unwrap(), occurrence);
-        let (fixture, _) = crate::kani::test_support::scalar_source_fixture(std::time::Duration::from_secs(1));
-        assert_eq!(fixture.scalar_replay_body(), Err(ScalarAuthorityError::Unavailable));
+        let occurrence = CheckedOccurrence {
+            role: CheckedOccurrenceRole::Expression,
+            ordinal: 17,
+        };
+        assert_eq!(
+            unique_expression_occurrence(&[]),
+            Err(ScalarAuthorityError::Occurrence)
+        );
+        assert_eq!(
+            unique_expression_occurrence(&[
+                occurrence.clone(),
+                CheckedOccurrence {
+                    ordinal: 23,
+                    ..occurrence.clone()
+                }
+            ]),
+            Err(ScalarAuthorityError::Occurrence)
+        );
+        assert_eq!(
+            unique_expression_occurrence(std::slice::from_ref(&occurrence)).unwrap(),
+            occurrence
+        );
+        let (fixture, _) =
+            crate::kani::test_support::scalar_source_fixture(std::time::Duration::from_secs(1));
+        assert_eq!(
+            fixture.scalar_replay_body(),
+            Err(ScalarAuthorityError::Unavailable)
+        );
     }
 }

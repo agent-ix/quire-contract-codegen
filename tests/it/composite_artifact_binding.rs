@@ -331,11 +331,20 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         );
     }
     let changed_bounds = binding(&package, &generated, &node, &occurrence).unwrap();
-    let mut reordered_body = changed_bounds.body().clone(); reordered_body.arguments.swap(0, 1);
-    assert_eq!(qsl_replay::parity_obligation(&reordered_body).unwrap(), qsl_replay::parity_obligation(changed_bounds.body()).unwrap());
-    assert!(matches!(changed_bounds.complete(&reordered_body, observed.clone()), Err(CompositeBuildError::RetainedBodyMismatch)));
+    let mut reordered_body = changed_bounds.body().clone();
+    reordered_body.arguments.swap(0, 1);
+    assert_eq!(
+        qsl_replay::parity_obligation(&reordered_body).unwrap(),
+        qsl_replay::parity_obligation(changed_bounds.body()).unwrap()
+    );
+    assert!(matches!(
+        changed_bounds.complete(&reordered_body, observed.clone()),
+        Err(CompositeBuildError::RetainedBodyMismatch)
+    ));
     for member in 0..6 {
-        let retained = binding(&package, &generated, &node, &occurrence).unwrap(); let original = retained.body().clone(); let mut changed = observed.clone();
+        let retained = binding(&package, &generated, &node, &occurrence).unwrap();
+        let original = retained.body().clone();
+        let mut changed = observed.clone();
         match member {
             0 => changed.operands.swap(0, 1),
             1 => changed.limits.work_units -= 1,
@@ -347,8 +356,16 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         }
         // Equal operands have equal bytes: use a genuine distinct supplied
         // value for this adverse observation rather than pretend swapping changed it.
-        if member == 0 { changed.operands[0] = WitnessValue::Sequence(vec![WitnessValue::Integer(2)]); }
-        assert!(matches!(retained.complete(&original, changed), Err(CompositeBuildError::GeneratedArtifactChanged)), "independent native tie {member}");
+        if member == 0 {
+            changed.operands[0] = WitnessValue::Sequence(vec![WitnessValue::Integer(2)]);
+        }
+        assert!(
+            matches!(
+                retained.complete(&original, changed),
+                Err(CompositeBuildError::GeneratedArtifactChanged)
+            ),
+            "independent native tie {member}"
+        );
     }
     let mutant_binding = binding(&package, &generated, &node, &occurrence).unwrap();
     let mutant = observe(&package, &mutant_binding, true);

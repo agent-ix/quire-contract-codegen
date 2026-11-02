@@ -206,8 +206,18 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
     );
     let body = fixture.harness.scalar_replay_body().unwrap();
     let admitted = fixture.checked.graph().nodes.iter().find(|node| matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.add"))).unwrap();
-    assert_eq!(body.node, admitted.node_id, "CG retains the actual admitted application");
-    assert_eq!(body.operands, fixture.checked.scalar_application_operands(&admitted.node_id, &body.occurrence).unwrap(), "complete positional body comes independently from the IR reader");
+    assert_eq!(
+        body.node, admitted.node_id,
+        "CG retains the actual admitted application"
+    );
+    assert_eq!(
+        body.operands,
+        fixture
+            .checked
+            .scalar_application_operands(&admitted.node_id, &body.occurrence)
+            .unwrap(),
+        "complete positional body comes independently from the IR reader"
+    );
     assert_eq!(body.operands.len(), 2);
     assert_eq!(
         body.operands[0].child, body.operands[1].child,
@@ -375,23 +385,61 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
             0 => changed.generated = NativeOutcome::Completed(Integer::from(7_i64)),
             1 => changed.generated = NativeOutcome::Incomplete,
             2 => changed.generated = NativeOutcome::ExecutionFault,
-            3 => { let qsl_replay::ScalarOperation::Add { left, .. } = &mut changed.operation else { panic!("addition") }; left.value = 10; },
+            3 => {
+                let qsl_replay::ScalarOperation::Add { left, .. } = &mut changed.operation else {
+                    panic!("addition")
+                };
+                left.value = 10;
+            }
             4 => changed.limits.work_units = 0,
-            5 => changed.occurrence = qsl_replay::Origin::new(qsl_replay::Role::new("expression"), claim.occurrence.ordinal() + 1),
-            6 => changed.result_range = IntegerInterval::spanning(Integer::from(0_i64), Integer::from(5_i64)),
+            5 => {
+                changed.occurrence = qsl_replay::Origin::new(
+                    qsl_replay::Role::new("expression"),
+                    claim.occurrence.ordinal() + 1,
+                )
+            }
+            6 => {
+                changed.result_range =
+                    IntegerInterval::spanning(Integer::from(0_i64), Integer::from(5_i64))
+            }
             _ => unreachable!(),
         }
-        let actual = ScalarSentRequest { wire: wire.clone(), claim: changed.clone(), replay_limits: limits };
+        let actual = ScalarSentRequest {
+            wire: wire.clone(),
+            claim: changed.clone(),
+            replay_limits: limits,
+        };
         let changed_report = qsl_replay::replay_operator_parity(wire.clone(), changed, limits);
         match member {
-            0 => assert!(matches!(changed_report.result(), OperatorParityResult::Diverged { .. })),
-            1 | 2 => assert!(matches!(changed_report.result(), OperatorParityResult::GeneratedFault(_))),
-            3 => assert!(matches!(changed_report.result(), OperatorParityResult::RefusedInput(_))),
-            4 => assert!(matches!(changed_report.result(), OperatorParityResult::Incomplete(_))),
-            5 => assert!(matches!(changed_report.result(), OperatorParityResult::Refused(_))),
-            _ => {},
+            0 => assert!(matches!(
+                changed_report.result(),
+                OperatorParityResult::Diverged { .. }
+            )),
+            1 | 2 => assert!(matches!(
+                changed_report.result(),
+                OperatorParityResult::GeneratedFault(_)
+            )),
+            3 => assert!(matches!(
+                changed_report.result(),
+                OperatorParityResult::RefusedInput(_)
+            )),
+            4 => assert!(matches!(
+                changed_report.result(),
+                OperatorParityResult::Incomplete(_)
+            )),
+            5 => assert!(matches!(
+                changed_report.result(),
+                OperatorParityResult::Refused(_)
+            )),
+            _ => {}
         }
-        assert!(matches!(completed.settle(&actual, Some(&changed_report)), Err(ScalarBuildError::Report)), "full actual-sent/report member {member}");
+        assert!(
+            matches!(
+                completed.settle(&actual, Some(&changed_report)),
+                Err(ScalarBuildError::Report)
+            ),
+            "full actual-sent/report member {member}"
+        );
     }
 
     // Mutate independently retained actual driver records after a real run.
