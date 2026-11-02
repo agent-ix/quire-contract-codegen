@@ -5932,3 +5932,61 @@ pub fn check() {{
         String::from_utf8_lossy(&evaluated.stderr)
     );
 }
+
+/// A clause that reads no state has one empty valuation and must still assert its Boolean body.
+#[trace(
+    "TC-025",
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "FR-015-AC-49"
+)]
+#[test]
+fn qsl_constant_invariants_need_no_symbolic_input_or_subject() {
+    for condition in ["true", "false", "0 <= 1", "0 > 1"] {
+        let (package, clause) =
+            Twin::with_balance_invariant_condition(condition).emitted_package("BalanceNonnegative");
+        let oracle = generate_v2_clause_oracle(&package, &clause).expect("constant clause oracle");
+        assert!(oracle.descriptor.inputs.is_empty());
+        let outcome = negotiate(&[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
+        }]);
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("constant invariant item is accounted");
+        };
+        let [harness] = v2_clause_harnesses.as_slice() else {
+            panic!("constant invariant {condition} must have one harness");
+        };
+        assert!(harness.identity.arguments.is_empty());
+        assert_eq!(harness.identity.kind, ObligationKind::Invariant);
+        assert!(harness.rust.contents.contains(&oracle.source));
+        assert!(!harness.rust.contents.contains("kani::any"));
+        assert!(!harness.rust.contents.contains(REQUEST_SUBJECT));
+        assert_eq!(harness.rust.contents.matches("assert!(").count(), 1);
+        assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+        if oracle.descriptor.operation_identities.is_empty() {
+            assert!(harness
+                .rust
+                .contents
+                .contains("let outcome = oracle_clause();"));
+            assert!(harness.rust.contents.contains("assert!(outcome,"));
+            assert!(!harness.rust.contents.contains("let mut meter"));
+        } else {
+            assert!(harness
+                .rust
+                .contents
+                .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
+        }
+        assert!(harness
+            .rust
+            .contents
+            .contains("kani::cover!(matches!(invariant_domain, ()),"));
+    }
+}
