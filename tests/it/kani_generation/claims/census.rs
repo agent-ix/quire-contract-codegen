@@ -29,11 +29,88 @@ pub(super) struct Claim {
     pub harness: String,
     generated_path: String,
     oracle_symbol: String,
+    subject_root: &'static str,
+    expectation_root: &'static str,
+    actual_subject: Option<String>,
     pub start: u32,
     pub end: u32,
     failure_lines: std::ops::RangeInclusive<u32>,
 }
 impl Claim {
+    pub fn state_transition(
+        harness: &quire_contract_codegen::KaniStateTransitionHarness,
+    ) -> Result<Self, Refusal> {
+        use syn::{parse::Parser, spanned::Spanned};
+        let module = harness.identity.module_symbol.to_string();
+        let symbol = harness.identity.harness_symbol.to_string();
+        let parsed = syn::parse_file(&harness.rust.contents).map_err(invalid)?;
+        let item = parsed
+            .items
+            .iter()
+            .find_map(|item| match item {
+                syn::Item::Mod(item) if item.ident == module => Some(item),
+                _ => None,
+            })
+            .ok_or_else(|| Refusal::MissingModule(module.clone()))?;
+        let (_, items) = item
+            .content
+            .as_ref()
+            .ok_or_else(|| Refusal::MissingModule(module.clone()))?;
+        let subject_root = "subject_boolean_state_transition";
+        let expectation_root = "expected_boolean_state_transition";
+        for root in [symbol.as_str(), subject_root, expectation_root] {
+            if !items
+                .iter()
+                .any(|item| matches!(item, syn::Item::Fn(function) if function.sig.ident == root))
+            {
+                return Err(Refusal::MissingRoot(format!("{module}::{root}")));
+            }
+        }
+        let proof = items
+            .iter()
+            .find_map(|item| match item {
+                syn::Item::Fn(function) if function.sig.ident == symbol => Some(function),
+                _ => None,
+            })
+            .ok_or_else(|| Refusal::MissingRoot(format!("{module}::{symbol}")))?;
+        let mut assertions = Vec::new();
+        for statement in &proof.block.stmts {
+            let syn::Stmt::Macro(statement) = statement else {
+                continue;
+            };
+            if !statement.mac.path.is_ident("assert") {
+                continue;
+            }
+            let arguments =
+                syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                    .parse2(statement.mac.tokens.clone())
+                    .map_err(invalid)?;
+            if matches!(arguments.first(), Some(syn::Expr::Path(path)) if path.path.is_ident("state_post"))
+            {
+                assertions.push(
+                    u32::try_from(statement.span().start().line).map_err(invalid)?
+                        ..=u32::try_from(statement.span().end().line).map_err(invalid)?,
+                );
+            }
+        }
+        let [failure_lines] = assertions.as_slice() else {
+            return Err(invalid(
+                "one admitted transition postcondition assertion required",
+            ));
+        };
+        Ok(Self {
+            module: module.clone(),
+            harness: format!("{module}::{symbol}"),
+            generated_path: harness.rust.path.clone(),
+            oracle_symbol: String::new(),
+            subject_root,
+            expectation_root,
+            actual_subject: Some(harness.identity.subject_path.clone()),
+            start: u32::try_from(item.span().start().line).map_err(invalid)?,
+            end: u32::try_from(item.span().end().line).map_err(invalid)?,
+            failure_lines: failure_lines.clone(),
+        })
+    }
     pub fn generated(harness: &KaniScalarObligationHarness) -> Result<Self, Refusal> {
         let module = harness.identity.module_symbol.to_string();
         let parsed = syn::parse_file(&harness.rust.contents).map_err(invalid)?;
@@ -103,6 +180,9 @@ impl Claim {
             harness: format!("{module}::{symbol}"),
             generated_path: harness.rust.path.clone(),
             oracle_symbol: harness.identity.oracle_symbol.clone(),
+            subject_root: "subject_boolean_implication",
+            expectation_root: "expected_boolean_implication",
+            actual_subject: None,
             module,
             start: u32::try_from(item.span().start().line).map_err(invalid)?,
             end: u32::try_from(item.span().end().line).map_err(invalid)?,
@@ -256,10 +336,7 @@ impl Compiled {
         };
         let proof = result.symbol(&claim.harness)?;
         let reachable = result.reachable(&proof);
-        for root in [
-            "subject_boolean_implication",
-            "expected_boolean_implication",
-        ] {
+        for root in [claim.subject_root, claim.expectation_root] {
             let name = format!("{}::{root}", claim.module);
             if !reachable.contains(&result.symbol(&name)?) {
                 return Err(Refusal::MissingRoot(name));
@@ -299,9 +376,8 @@ impl Compiled {
         reached
     }
     pub fn shared_helpers(&self, claim: &Claim) -> Result<BTreeSet<String>, Refusal> {
-        let subject = self.symbol(&format!("{}::subject_boolean_implication", claim.module))?;
-        let expectation =
-            self.symbol(&format!("{}::expected_boolean_implication", claim.module))?;
+        let subject = self.symbol(&format!("{}::{}", claim.module, claim.subject_root))?;
+        let expectation = self.symbol(&format!("{}::{}", claim.module, claim.expectation_root))?;
         let subject_reach = self.reachable(&subject);
         let expected_reach = self.reachable(&expectation);
         for id in &expected_reach {
@@ -312,23 +388,36 @@ impl Compiled {
             if id == &subject
                 || name.starts_with("quire_exact::")
                 || name.starts_with("<quire_exact::")
-                || name == &claim.oracle_symbol
-                || name.ends_with(&format!("::{}", claim.oracle_symbol))
+                || (!claim.oracle_symbol.is_empty()
+                    && (name == &claim.oracle_symbol
+                        || name.ends_with(&format!("::{}", claim.oracle_symbol))))
+                || claim.actual_subject.as_ref().is_some_and(|path| {
+                    name.ends_with(&format!("::{}", path.trim_start_matches("crate::")))
+                })
             {
                 return Err(Refusal::DependentExpectation(name.clone()));
             }
         }
         if !subject_reach.iter().any(|id| {
             self.names.get(id).is_some_and(|name| {
-                name.strip_prefix("quire_contract_runtime::")
-                    .is_some_and(|path| {
-                        path.split("::<").next().is_some_and(|path| {
-                            path.rsplit("::").next() == Some("implies_short_circuit")
+                if let Some(path) = &claim.actual_subject {
+                    name.ends_with(&format!("::{}", path.trim_start_matches("crate::")))
+                } else {
+                    name.strip_prefix("quire_contract_runtime::")
+                        .is_some_and(|path| {
+                            path.split("::<").next().is_some_and(|path| {
+                                path.rsplit("::").next() == Some("implies_short_circuit")
+                            })
                         })
-                    })
+                }
             })
         }) {
-            return Err(Refusal::MissingRoot("runtime implication".into()));
+            return Err(Refusal::MissingRoot(
+                claim
+                    .actual_subject
+                    .clone()
+                    .unwrap_or_else(|| "runtime implication".into()),
+            ));
         }
         Ok(subject_reach
             .intersection(&expected_reach)
@@ -466,6 +555,9 @@ mod tests {
             harness: "first::proof".into(),
             generated_path: "src/generated/first.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
+            subject_root: "subject_boolean_implication",
+            expectation_root: "expected_boolean_implication",
+            actual_subject: None,
             start: 10,
             end: 20,
             failure_lines: 10..=20,
@@ -475,6 +567,9 @@ mod tests {
             harness: "second::proof".into(),
             generated_path: "src/generated/second.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
+            subject_root: "subject_boolean_implication",
+            expectation_root: "expected_boolean_implication",
+            actual_subject: None,
             start: 30,
             end: 40,
             failure_lines: 30..=40,
@@ -540,6 +635,9 @@ mod tests {
             harness: "m::proof".into(),
             generated_path: "src/generated/m.rs".into(),
             oracle_symbol: "embedded_oracle".into(),
+            subject_root: "subject_boolean_implication",
+            expectation_root: "expected_boolean_implication",
+            actual_subject: None,
             start: 1,
             end: 50,
             failure_lines: 1..=50,

@@ -2,8 +2,8 @@
 //! Borrow the canonical transition carrier and recognize its Boolean proposition.
 
 use quire_contract_model::{
-    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind,
-    ContractSourceV1, StateForm,
+    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind, CheckedPackageV2,
+    CheckedSourceMapEntry, ContractSourceV1, StateForm,
 };
 use serde::Serialize;
 
@@ -43,12 +43,39 @@ pub enum StateTransitionRefusal {
     Identity,
 }
 
+/// Compute once per borrowed package instance in the request's existing checked lookup.
+pub(super) fn semantic_digest(
+    package: &CheckedPackageV2,
+) -> Result<String, StateTransitionRefusal> {
+    let material = preimage_value(&(
+        package.name(),
+        package.lock(),
+        package.graph(),
+        package.source_map(),
+    ))
+    .map_err(|_| StateTransitionRefusal::Identity)?;
+    digest(&material)
+}
+
+fn digest(value: &serde_json::Value) -> Result<String, StateTransitionRefusal> {
+    content_digest(value)
+        .map(|bytes| {
+            bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        })
+        .map_err(|_| StateTransitionRefusal::Identity)
+}
+
 pub(super) fn lower(
     view: &ClauseGraphView<'_>,
     transition: &CheckedNodeId,
     subject_path: &str,
     ceilings: ProofCeilings,
     unwind: u32,
+    semantic_digest: &str,
+    source_map: Vec<CheckedSourceMapEntry>,
 ) -> Result<StateTransitionIdentity, StateTransitionRefusal> {
     use StateTransitionRefusal as R;
     let package = view.package();
@@ -72,8 +99,8 @@ pub(super) fn lower(
     };
     let input = reference(input).ok_or(R::Input)?;
     let parameter = package.parameter_declaration(input).map_err(|_| R::Input)?;
-    let (declaring_node, field) = projected_field(package.term(subject).ok_or(R::Subject)?)
-        .ok_or(R::Subject)?;
+    let (declaring_node, field) =
+        projected_field(package.term(subject).ok_or(R::Subject)?).ok_or(R::Subject)?;
     let fields = package
         .model_object_fields(&declaring_node)
         .map_err(|_| R::Subject)?;
@@ -88,13 +115,22 @@ pub(super) fn lower(
     let post = reference(post).ok_or(R::Postcondition)?;
     let precondition = read_clause(pre, view).ok_or(R::Precondition)?;
     let postcondition = read_clause(post, view).ok_or(R::Postcondition)?;
-    let field_read = |term: &ClauseTerm| matches!(term,
+    let field_read = |term: &ClauseTerm| {
+        matches!(term,
         ClauseTerm::Input(value) if value.boolean && value.name == field
-            && value.side == ClauseInputSide::Current);
-    let parameter_read = |term: &ClauseTerm| matches!(term,
+            && value.side == ClauseInputSide::Current)
+    };
+    let parameter_read = |term: &ClauseTerm| {
+        matches!(term,
         ClauseTerm::Input(value) if value.boolean && value.name == parameter.name.as_ref()
-            && value.side == ClauseInputSide::Parameter);
-    let ClauseTerm::Operation { identity, arguments, .. } = &precondition.term else {
+            && value.side == ClauseInputSide::Parameter)
+    };
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = &precondition.term
+    else {
         return Err(R::Precondition);
     };
     let [left, right] = arguments.as_slice() else {
@@ -109,12 +145,6 @@ pub(super) fn lower(
     if !field_read(&postcondition.term) {
         return Err(R::Postcondition);
     }
-    let source_map = package
-        .source_map()
-        .iter()
-        .filter(|entry| &entry.node_id == transition)
-        .cloned()
-        .collect::<Vec<_>>();
     if node.occurrences.is_empty() || source_map.is_empty() {
         return Err(R::SourceCorrespondence);
     }
@@ -122,29 +152,20 @@ pub(super) fn lower(
         name: package.name().into(),
         lock: package.lock().clone(),
     };
-    let digest = |value| {
-        content_digest(&value)
-            .map(|bytes| bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>())
-            .map_err(|_| R::Identity)
-    };
-    let material = preimage_value(&(
-        &package_identity,
-        package.graph(),
-        package.source_map(),
-    ))
-    .map_err(|_| R::Identity)?;
-    let semantic_digest = digest(material)?;
     let material = preimage_value(&(
         "boolean-field-transition-or/v1",
-        &semantic_digest,
+        semantic_digest,
         transition,
         subject_path,
         ceilings,
         unwind,
     ))
     .map_err(|_| R::Identity)?;
-    let path = harness_path(&format!("kob_state_transition_{}", digest(material)?), "prove")
-        .map_err(|_| R::Identity)?;
+    let path = harness_path(
+        &format!("kob_state_transition_{}", digest(&material)?),
+        "prove",
+    )
+    .map_err(|_| R::Identity)?;
     let options = adapter_options(&path.to_string(), unwind, KaniSolver::Cadical, false);
     Ok(StateTransitionIdentity {
         ceilings,
@@ -152,7 +173,7 @@ pub(super) fn lower(
         transition: transition.clone(),
         occurrences: node.occurrences.clone(),
         source_map,
-        semantic_digest,
+        semantic_digest: semantic_digest.to_owned(),
         anchor: anchor.clone(),
         subject: subject.clone(),
         input: input.clone(),

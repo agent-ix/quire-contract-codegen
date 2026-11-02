@@ -499,7 +499,7 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
     assert_implication_false_left_playback(counterexample);
 }
 
-pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
+pub(super) fn boolean_playback_inputs(counterexample: &str) -> Vec<bool> {
     use syn::parse::Parser;
     let playback = syn::parse_file(counterexample).expect("Kani playback is Rust source");
     let inputs = playback
@@ -553,7 +553,12 @@ pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
             value
         })
         .collect::<Vec<_>>();
-    assert_eq!(values[0], 0, "left is false in playback");
+    values.into_iter().map(|value| value == 1).collect()
+}
+
+pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
+    let values = boolean_playback_inputs(counterexample);
+    assert!(!values[0], "left is false in playback");
 }
 
 pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {

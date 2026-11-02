@@ -46,7 +46,9 @@ kani::cover!(state_post, \"Boolean field-transition non-vacuity\");\n\
         proof = identity.harness_symbol,
     );
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(UnsupportedObligation::ResourceLimitExceeded { bytes: source.len() });
+        return Err(UnsupportedObligation::ResourceLimitExceeded {
+            bytes: source.len(),
+        });
     }
     syn::parse_file(&source).map_err(|error| UnsupportedObligation::InvalidGeneratedSyntax {
         error: error.to_string(),
@@ -56,5 +58,9 @@ kani::cover!(state_post, \"Boolean field-transition non-vacuity\");\n\
         source,
     );
     let record = record(identity.module_symbol.as_str(), &identity, &rust)?;
-    Ok(KaniStateTransitionHarness { identity, rust, record })
+    Ok(KaniStateTransitionHarness {
+        identity,
+        rust,
+        record,
+    })
 }

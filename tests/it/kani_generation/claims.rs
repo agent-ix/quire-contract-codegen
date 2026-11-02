@@ -1,6 +1,7 @@
 //! Current generated claims are qualified from compiled artifacts, never a saved verdict.
 
 mod census;
+mod state_transition;
 
 use std::{collections::BTreeSet, fs, path::Path};
 
@@ -324,11 +325,13 @@ fn subject_mutant(harness: &KaniScalarObligationHarness) -> KaniScalarObligation
     "FR-041-AC-7",
     "FR-041-AC-8",
     "FR-041-AC-9",
+    "FR-041-AC-10",
     "NFR-006-AC-19"
 )]
 #[test]
 #[ignore = "required installed-Kani claim control in make kani-gate"]
 fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
+    state_transition::qualify();
     let ([mut harness, mut second_harness], manifest) = generated_pair();
     let assembled = assemble(&[&harness.rust.contents, &second_harness.rust.contents]);
     harness.rust.contents = assembled.clone();
