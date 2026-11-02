@@ -28,6 +28,8 @@ use serde_json::{json, Value};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
+#[path = "../checked_package_support/temporal.rs"]
+mod temporal;
 
 /// Resolves the base fixture's authored paths under the imported package's name.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1542,6 +1544,7 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
             ],
         ),
     );
+    temporal::bind_clause(&mut builder.value, code_id(T_BARE));
 
     // The refused conversion descriptor and ordinary text equality still need distinct
     // application identities, without assigning a non-Boolean result to an equality.
@@ -1950,7 +1953,10 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
 #[cfg(test)]
 mod fixture_identity_tests {
     use ix_trace_rs::trace;
-    use quire_contract_model::{CheckedPackageLimit, CheckedPackageRefusalCode, CheckedTerm};
+    use quire_contract_model::{
+        CheckedPackageLimit, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedTerm,
+        ClockConfiguration,
+    };
 
     use super::*;
 
@@ -1981,6 +1987,39 @@ mod fixture_identity_tests {
             }
             _ => {}
         }
+    }
+
+    #[trace("FR-018-AC-28", "TC-029")]
+    #[test]
+    fn corpus_temporal_clause_requires_its_authored_clock_binding() {
+        let builder = corpus_package();
+        let admitted = builder.admit_resolved().0;
+        let [binding] = admitted.temporal_bindings().expect("clock binding") else {
+            panic!("the corpus has one clock-configured clause");
+        };
+        assert_eq!(binding.declaration, code_id(T_BARE));
+        assert_eq!(binding.clock_name.as_ref(), "c");
+        assert_eq!(
+            binding.clock,
+            ClockConfiguration::EventPosition {
+                sequence_authority: "c".into(),
+            }
+        );
+
+        let mut without_binding = builder.raw_wire();
+        without_binding
+            .as_object_mut()
+            .expect("fixture wire")
+            .remove("temporal_bindings");
+        let CheckedPackageV2ReadResult::Refused(refusal) = read_mutated_wire(without_binding)
+        else {
+            panic!("clock-configured clause without a binding must refuse");
+        };
+        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+        assert_eq!(
+            refusal.cause,
+            Some(CheckedPackageRefusalCause::TimedNodeReference)
+        );
     }
 
     #[trace("FR-037-AC-6", "TC-052")]

@@ -40,6 +40,8 @@ use serde_json::{json, Value};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
+#[path = "../checked_package_support/temporal.rs"]
+mod temporal;
 pub use rekey::FixtureIds;
 
 const FIXTURE_MODEL: &str = "test/cg-exact-scalar";
@@ -1214,6 +1216,7 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
             .cloned()
             .collect(),
     );
+    temporal::retain_for_nodes(&mut wire, |id| keep(&json!(id)));
     wire
 }
 
@@ -3037,6 +3040,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             ),
             &[key(TEMPORAL_PARAMETER), clause_formula.clone()],
         );
+    temporal::bind_clause(&mut builder.value, code_id(TEMPORAL));
     // Each anchor is dedicated to its own fixture's exact bound set (see
     // `dedicated_operand`'s doc): `key(V_INTEGER)` directly would union
     // these bounds onto every other expression that still references the
