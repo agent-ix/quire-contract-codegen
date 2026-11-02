@@ -4086,12 +4086,13 @@ fn tc_035_inherited_frame_target_retains_declaring_owner() {
     );
 }
 
-/// Two admitted frame requests remain distinct by request index even when they name one frame.
+/// Two admitted frame items remain distinct by request index.
 #[trace("FR-024-AC-56", "TC-035")]
 #[test]
 fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
-    let twin = Twin::new();
+    let twin = Twin::with_distinct_balance_clauses();
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let (_, other_clause) = twin.emitted_package("SpareA");
     let item = ObligationItem::StateFrame {
         package: &package,
         clause: &clause,
@@ -4100,7 +4101,17 @@ fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
         state_fields: &STATE_FIELDS,
         subject_path: SUBJECT_PATH,
     };
-    let items = [item, item];
+    let items = [
+        item,
+        ObligationItem::StateFrame {
+            package: &package,
+            clause: &other_clause,
+            role: StateFrameRole::Frame,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+        },
+    ];
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
         items: &items,
@@ -4112,9 +4123,12 @@ fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
     assert_eq!(records.len(), 2);
     assert_eq!(records[0].request_index, 0);
     assert_eq!(records[1].request_index, 1);
-    assert!(records
-        .iter()
-        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
+    assert!(
+        records
+            .iter()
+            .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })),
+        "{records:?}"
+    );
 
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     let run = forbidden_run(&twin);

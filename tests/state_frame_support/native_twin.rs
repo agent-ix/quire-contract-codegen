@@ -1200,10 +1200,17 @@ impl Twin {
         let mut selected_package = self.emitted_package("BalanceNeverDrops").0;
         let selected_site = self
             .operation_site_for_object(selection.0, selection.1)
-            .map_err(FrameReplayError::CallSite)?;
-        let mut selected_occurrence = selected_site.frame_occurrence.clone();
-        let mut selected_target = Some(SelectedFrameTarget {
-            operation: selected_site.frame_operation,
+            .ok();
+        let mut selected_occurrence = selected_site
+            .as_ref()
+            .map(|site| site.frame_occurrence.clone())
+            .unwrap_or_else(|| {
+                self.operation_site("deposit")
+                    .expect("the fixture's deposit frame")
+                    .frame_occurrence
+            });
+        let mut selected_target = selected_site.map(|site| SelectedFrameTarget {
+            operation: site.frame_operation,
             package_id: quire_contract_model::ContractSourceV1 {
                 name: selected_package.name().into(),
                 lock: selected_package.lock().clone(),
