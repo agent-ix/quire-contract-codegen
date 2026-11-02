@@ -62,7 +62,7 @@ fn admitted(precondition: &str, package_name: &str) -> CheckedPackageV2 {
     evidence.support_feature("quire.value.complete/v1");
     evidence.support_feature("quire.protocol.finite-global/v1");
     evidence
-        .insert_domain_package_document("test/orders", &document)
+        .insert_domain_package_document("test/orders", document)
         .expect("retain the actual QSL-owned model evidence");
     match CheckedPackageV2::read(
         compilation.package().bytes(),
@@ -399,7 +399,7 @@ pub(super) fn qualify() {
         let KaniRunOutcome::Falsified { counterexample } = &failed.outcome else {
             panic!("each control must execute and falsify its own postcondition");
         };
-        let values = crate::kani_obligations::boolean_playback_inputs(counterexample);
+        let values = crate::kani_obligations::boolean_playback_inputs(counterexample.as_str());
         match name {
             "suppressed-update" => assert_eq!(values, [true, false]),
             "missing-precondition" => assert_eq!(values, [false, false]),
