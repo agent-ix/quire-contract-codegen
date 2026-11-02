@@ -371,6 +371,22 @@ fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
         ],
     )
     .unwrap();
+    assert_eq!(
+        controls(
+            std::slice::from_ref(&declared),
+            &shared,
+            &reviewed,
+            &[Control {
+                name: &declared.module,
+                before: &harness.rust.contents,
+                after: &mutant.rust.contents,
+                positive: &second_healthy,
+                mutant: &second_failed,
+            }]
+        ),
+        Err(Refusal::InvalidControl(declared.module.clone())),
+        "another module's executed control cannot discharge this one"
+    );
     let control = Control {
         name: &declared.module,
         before: &harness.rust.contents,

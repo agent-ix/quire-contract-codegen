@@ -414,7 +414,13 @@ pub(super) fn controls(
     let mut seen = BTreeSet::new();
     let mut mutations = BTreeSet::new();
     for record in records {
-        if !required.contains(record.name)
+        let owns_proof = claims.iter().any(|claim| {
+            record.positive.harness_path == claim.harness
+                && record.mutant.harness_path == claim.harness
+                && (record.name == claim.module || observed_helpers.contains(record.name))
+        });
+        if !owns_proof
+            || !required.contains(record.name)
             || !seen.insert(record.name.to_owned())
             || record.before == record.after
             || !mutations.insert((record.before, record.after))
