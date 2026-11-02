@@ -39,8 +39,8 @@ use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
 };
 use package::{
-    application, code_id, key, literal, member, op, op_full, parameter_body, reference, Bound,
-    PackageBuilder, FUNCTION, T_BOOLEAN, T_INTEGER, T_TEXT,
+    application, code_id, integer_division_definition, key, law, literal, member, op, op_full,
+    parameter_body, reference, Bound, PackageBuilder, FUNCTION, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
     CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
@@ -1421,6 +1421,10 @@ enum Condition {
     /// `(post(self.balance) >= pre(self.balance)) and (post(self.balance) >= pre(self.balance))`:
     /// an operator outside the six integer comparisons.
     Conjunction,
+    /// A confirmed integer division nested in a Boolean comparison.
+    Division,
+    /// An integer modulo nested in a Boolean comparison.
+    Modulo,
 }
 
 impl Shape {
@@ -1766,6 +1770,42 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
         Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
         Condition::BalanceAgainstLiteral => (reference(&post_balance), zero),
+        Condition::Division | Condition::Modulo => {
+            let (operator, identity, arguments, laws) = match shape.condition {
+                Condition::Division => {
+                    let definition =
+                        integer_division_definition(quire_exact::DivisionProfile::Truncating);
+                    builder.select_definition(definition.clone());
+                    (
+                        "binary",
+                        "quire.op.integer.div",
+                        vec![literal("integer", "4"), literal("integer", "2")],
+                        vec![law("integer_division", definition)],
+                    )
+                }
+                Condition::Modulo => (
+                    "binary",
+                    "quire.op.integer.mod",
+                    vec![literal("integer", "4"), literal("integer", "2")],
+                    Vec::new(),
+                ),
+                _ => unreachable!("the outer match selects an unsupported integer operator"),
+            };
+            builder.application_bounded(
+                shape.code(205),
+                "expression",
+                operator,
+                &key(T_INTEGER),
+                application(
+                    operator,
+                    op_full(identity, laws, None, None),
+                    &key(T_INTEGER),
+                    arguments,
+                ),
+                &[],
+            );
+            (reference(&key(shape.code(205))), zero)
+        }
     };
     builder.application_bounded(
         shape.code(200),
@@ -5893,6 +5933,85 @@ fn qsl_invariant_arithmetic_is_refused_without_unchecked_harness() {
         panic!("one unsupported invariant item is accounted");
     };
     assert!(v2_clause_harnesses.is_empty());
+}
+
+/// Admitted operators outside the V2 grammar are named before oracle or collection lowering,
+/// while an admitted QSL precondition in the same request still emits its harness.
+#[trace("FR-015-AC-42", "TC-025")]
+#[test]
+fn v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibling() {
+    let division = Shape {
+        variant: 2201,
+        scope: 2201,
+        condition: Condition::Division,
+        ..Shape::HEALTHY
+    };
+    let modulo = Shape {
+        variant: 2202,
+        scope: 2202,
+        condition: Condition::Modulo,
+        ..Shape::HEALTHY
+    };
+    let limits = CheckedPackageReadLimits {
+        bytes: 8 << 20,
+        ..CheckedPackageReadLimits::bounded()
+    };
+    let (package, resolver) = package_of(&[&division, &modulo]).admit_with_resolved(limits);
+    let refused_clauses = [
+        ids(&division).resolved(&resolver).clause,
+        ids(&modulo).resolved(&resolver).clause,
+    ];
+    let (supported_package, supported_clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let outcome = negotiate(&[
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[0],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[1],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
+            package: &supported_package,
+            clause: &supported_clause,
+            dependencies: None,
+        },
+    ]);
+    let [division_record, modulo_record, admitted] = outcome.records() else {
+        panic!("every selected clause has a record");
+    };
+    for (record, node_id, operation_identity) in [
+        (division_record, &refused_clauses[0], "quire.op.integer.div"),
+        (modulo_record, &refused_clauses[1], "quire.op.integer.mod"),
+    ] {
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::V2ClauseOperatorNotSupported {
+                    node_id: node_id.clone(),
+                    operation_identity: operation_identity.to_owned(),
+                }
+            }
+        );
+    }
+    assert!(matches!(
+        &admitted.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the valid sibling emits a harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("only the valid sibling emits a harness");
+    };
+    assert_eq!(harness.identity.clause, supported_clause);
 }
 
 /// Compile the emitted oracle bytes against the locked runtime and compare real evaluations

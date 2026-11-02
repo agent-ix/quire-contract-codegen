@@ -70,6 +70,13 @@ pub(in crate::kani::generate) fn lower(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
+    let condition = read_clause(clause, view).ok_or_else(refusal)?;
+    if let Some(operation_identity) = unsupported_clause_operator(&condition.term) {
+        return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
+            node_id: clause.clone(),
+            operation_identity: operation_identity.to_owned(),
+        });
+    }
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     if (kind != ObligationKind::Invariant && oracle.descriptor.inputs.len() != 1)
         || oracle.descriptor.inputs.iter().any(|input| {
@@ -111,7 +118,6 @@ pub(in crate::kani::generate) fn lower(
         let input = oracle.descriptor.inputs.first().ok_or_else(refusal)?;
         let input_name = input.name.strip_prefix("parameter_").ok_or_else(refusal)?;
         let symbolic_name = format!("{input_name}_current");
-        let condition = read_clause(clause, view).ok_or_else(refusal)?;
         let mut arithmetic = Vec::new();
         let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
             .and_then(NativeTerm::boolean)
@@ -165,6 +171,39 @@ pub(in crate::kani::generate) fn lower(
         }
         .to_owned(),
     })
+}
+
+fn unsupported_clause_operator(term: &ClauseTerm) -> Option<&str> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = term
+    else {
+        return None;
+    };
+    if !matches!(
+        identity.as_str(),
+        "quire.op.boolean.and"
+            | "quire.op.boolean.or"
+            | "quire.op.boolean.not"
+            | "quire.op.boolean.implies"
+            | "quire.op.boolean.eq"
+            | "quire.op.boolean.ne"
+            | "quire.op.integer.eq"
+            | "quire.op.integer.ne"
+            | "quire.op.integer.lt"
+            | "quire.op.integer.le"
+            | "quire.op.integer.gt"
+            | "quire.op.integer.ge"
+            | "quire.op.integer.add"
+            | "quire.op.integer.sub"
+            | "quire.op.integer.mul"
+            | "quire.op.integer.negate"
+    ) {
+        return Some(identity);
+    }
+    arguments.iter().find_map(unsupported_clause_operator)
 }
 
 impl LoweredV2Clause {
@@ -941,6 +980,34 @@ impl NativeTerm {
             Self::Boolean(expression) => Some(expression.clone()),
             Self::Integer { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod unsupported_operator_tests {
+    use super::unsupported_clause_operator;
+    use crate::core::ir::clause::ClauseTerm;
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-42", "TC-025")]
+    #[test]
+    fn nested_absolute_value_names_its_exact_operator() {
+        let term = ClauseTerm::Operation {
+            identity: "quire.op.integer.ge".to_owned(),
+            arguments: vec![
+                ClauseTerm::Operation {
+                    identity: "quire.op.integer.abs".to_owned(),
+                    arguments: vec![ClauseTerm::Integer("-2".to_owned())],
+                    result_bound: None,
+                },
+                ClauseTerm::Integer("0".to_owned()),
+            ],
+            result_bound: None,
+        };
+        assert_eq!(
+            unsupported_clause_operator(&term),
+            Some("quire.op.integer.abs")
+        );
     }
 }
 
