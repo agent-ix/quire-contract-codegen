@@ -406,6 +406,39 @@ impl Twin {
         twin
     }
 
+    /// A QSL invariant over the selected model object's bounded `balance` field.
+    pub fn with_balance_invariant() -> Self {
+        Self::with_balance_invariant_condition("self.balance >= 0")
+    }
+
+    /// A QSL invariant whose condition can be mutated while its declared field stays fixed.
+    pub fn with_balance_invariant_condition(condition: &str) -> Self {
+        Self::invariant_from(Self::build(&model::GRANTED, &[CLAUSES[0]], 0), condition)
+    }
+
+    /// An invariant whose two selected field declarations have distinct inclusive ranges.
+    pub fn with_distinct_invariant_field_ranges(condition: &str) -> Self {
+        Self::invariant_from(Self::with_field_ranges((-5, 10), (7, 12)), condition)
+    }
+
+    /// A QSL invariant whose read field is a selected but unbounded Integer.
+    pub fn with_unbounded_balance_invariant() -> Self {
+        Self::invariant_from(Self::without_balance_range(), "self.balance >= 0")
+    }
+
+    fn invariant_from(mut twin: Self, condition: &str) -> Self {
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            &format!(
+                "invariant BalanceNonnegative using v on Bank::Account at current {{ {condition} }}"
+            ),
+        );
+        assert_ne!(changed, source, "the invariant replaced the postcondition");
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// A source-authored precondition over one bounded operation parameter and no state field.
     pub fn with_bounded_other_precondition() -> Self {
         let mut twin = Self::with_bounded_other_condition();

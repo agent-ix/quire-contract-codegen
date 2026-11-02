@@ -796,7 +796,8 @@ fn classify_v2_clause<'a>(
         }
         Some(_)
             if kind != Some(ObligationKind::Precondition)
-                && kind != Some(ObligationKind::Postcondition) =>
+                && kind != Some(ObligationKind::Postcondition)
+                && kind != Some(ObligationKind::Invariant) =>
         {
             Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
