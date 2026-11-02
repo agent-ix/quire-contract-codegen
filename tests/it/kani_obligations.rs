@@ -307,27 +307,52 @@ pub(super) fn boolean_implies_scalar_from(
     quire_contract_codegen::Artifact,
     String,
 ) {
-    let [item] = derive_exact_scalar_items(&package, std::slice::from_ref(&node))
-        .try_into()
-        .expect("one derived scalar item");
-    let oracles = generate_exact_scalar_oracles(&package, &[item.expect("implies derives")])
-        .expect("Boolean oracle generation");
+    let (mut harnesses, manifest, oracle_crate) =
+        boolean_implies_scalars_from(package, std::slice::from_ref(&node));
+    let harness = harnesses.remove(0);
+    let start = oracle_crate
+        .find(&format!("pub fn {}(", harness.identity.oracle_symbol))
+        .expect("the oracle crate has the selected function");
+    let end = oracle_crate[start..]
+        .find("\n}\n")
+        .map(|offset| start + offset + 3)
+        .expect("the selected function closes");
+    (harness, manifest, oracle_crate[start..end].to_owned())
+}
+
+pub(super) fn boolean_implies_scalars_from(
+    package: CheckedPackageV2,
+    nodes: &[CheckedNodeId],
+) -> (
+    Vec<KaniScalarObligationHarness>,
+    quire_contract_codegen::Artifact,
+    String,
+) {
+    let derived = derive_exact_scalar_items(&package, nodes)
+        .into_iter()
+        .map(|item| item.expect("implies derives"))
+        .collect::<Vec<_>>();
+    let oracles =
+        generate_exact_scalar_oracles(&package, &derived).expect("Boolean oracle generation");
     let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
-    let items = [ObligationItem::ScalarClaim {
-        source: &package,
-        package: &admitted,
-        claim_map: &oracles.claim_map,
-        node_id: &node,
-        claim_index: claim_index(&oracles.claim_map, &node),
-        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
+    let items = nodes
+        .iter()
+        .map(|node| ObligationItem::ScalarClaim {
+            source: &package,
+            package: &admitted,
+            claim_map: &oracles.claim_map,
+            node_id: node,
+            claim_index: claim_index(&oracles.claim_map, node),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
+        .collect::<Vec<_>>();
     let mut requested = request(&items, "crate::subject");
     requested.ceilings = quire_contract_codegen::ProofCeilings {
         memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
         wall_clock: Duration::from_secs(120),
     };
     requested.unwind = 3;
-    let (_, mut harnesses) = emitted_scalar(negotiate_kani_obligations(&requested).unwrap());
+    let (_, harnesses) = emitted_scalar(negotiate_kani_obligations(&requested).unwrap());
     let oracle_crate = oracles
         .artifacts
         .iter()
@@ -340,15 +365,7 @@ pub(super) fn boolean_implies_scalar_from(
         .into_iter()
         .find(|artifact| artifact.path == "Cargo.toml")
         .expect("Boolean oracle manifest");
-    let harness = harnesses.remove(0);
-    let start = oracle_crate
-        .find(&format!("pub fn {}(", harness.identity.oracle_symbol))
-        .expect("the oracle crate has the selected function");
-    let end = oracle_crate[start..]
-        .find("\n}\n")
-        .map(|offset| start + offset + 3)
-        .expect("the selected function closes");
-    (harness, manifest, oracle_crate[start..end].to_owned())
+    (harnesses, manifest, oracle_crate)
 }
 
 fn boolean_implies_scalar() -> (

@@ -14,12 +14,7 @@ use quire_contract_codegen::{
 
 const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction implication using v(left: Boolean, right: Boolean): Boolean pure { left implies right }\n";
 
-fn generated() -> (KaniScalarObligationHarness, Artifact) {
-    generated_named("implication")
-}
-
-fn generated_named(function: &str) -> (KaniScalarObligationHarness, Artifact) {
-    let source = SOURCE.replace("function implication", &format!("function {function}"));
+fn checked_source(source: &str) -> quire_contract_model::CheckedPackageV2 {
     let compiled = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
             source: qsl_replay::SourceIdentity::new("test", "implication.native", "git", "current"),
@@ -32,11 +27,30 @@ fn generated_named(function: &str) -> (KaniScalarObligationHarness, Artifact) {
         qsl_replay::StageLimits::default(),
         qsl_replay::ReplayLimits::default(),
     )
-    .expect("authored implication compiles through QSL");
-    let checked = crate::admitted_enum_equality::checked(&compiled, &[]);
-    let node = crate::admitted_enum_equality::application(&checked, function);
+    .expect("authored implications compile through QSL");
+    crate::admitted_enum_equality::checked(&compiled, &[])
+}
+
+fn generated() -> (KaniScalarObligationHarness, Artifact) {
+    let checked = checked_source(SOURCE);
+    let node = crate::admitted_enum_equality::application(&checked, "implication");
     let (harness, manifest, _) = kani_obligations::boolean_implies_scalar_from(checked, node);
     (harness, manifest)
+}
+
+fn generated_pair() -> ([KaniScalarObligationHarness; 2], Artifact) {
+    let checked = checked_source(&format!("{SOURCE}function second_implication using v(left: Boolean, right: Boolean): Boolean pure {{ right implies left }}\n"));
+    let nodes = [
+        crate::admitted_enum_equality::application(&checked, "implication"),
+        crate::admitted_enum_equality::application(&checked, "second_implication"),
+    ];
+    let (harnesses, manifest, _) = kani_obligations::boolean_implies_scalars_from(checked, &nodes);
+    (
+        harnesses
+            .try_into()
+            .expect("two production claims in one request receive distinct generated identities"),
+        manifest,
+    )
 }
 
 fn claim(harness: &KaniScalarObligationHarness) -> Claim {
@@ -77,8 +91,7 @@ fn a_generated_source_or_saved_verdict_without_this_build_does_not_qualify() {
 #[test]
 fn assembled_current_modules_preserve_production_items_and_mutate_only_one_subject() {
     use quote::ToTokens;
-    let (mut first, _) = generated();
-    let (mut second, _) = generated_named("second_implication");
+    let ([mut first, mut second], _) = generated_pair();
     assert_ne!(first.identity.module_symbol, second.identity.module_symbol);
     let original_sources = [first.rust.contents.as_str(), second.rust.contents.as_str()];
     let combined = assemble(&original_sources);
@@ -243,8 +256,7 @@ fn subject_mutant(harness: &KaniScalarObligationHarness) -> KaniScalarObligation
 #[test]
 #[ignore = "required installed-Kani claim control in make kani-gate"]
 fn current_generated_claim_has_fresh_compiled_roots_and_falsifying_control() {
-    let (mut harness, manifest) = generated();
-    let (mut second_harness, _) = generated_named("second_implication");
+    let ([mut harness, mut second_harness], manifest) = generated_pair();
     let assembled = assemble(&[&harness.rust.contents, &second_harness.rust.contents]);
     harness.rust.contents = assembled.clone();
     second_harness.rust.contents = assembled;
