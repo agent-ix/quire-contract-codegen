@@ -41,14 +41,40 @@ fn operation_identity(body: &CheckedTerm) -> Option<&str> {
     operation.identity()
 }
 
+pub(super) struct ReplayFixture {
+    pub harness: KaniScalarObligationHarness,
+    pub checked: CheckedPackageV2,
+    pub source: String,
+    pub artifacts: Vec<quire_contract_codegen::Artifact>,
+}
+
 fn harness(
     operation: &str,
     parameters: &str,
     result: &str,
     expression: &str,
 ) -> KaniScalarObligationHarness {
+    replay_fixture(operation, parameters, result, expression).harness
+}
+
+pub(super) fn replay_fixture(
+    operation: &str,
+    parameters: &str,
+    result: &str,
+    expression: &str,
+) -> ReplayFixture {
+    replay_fixture_with_extra(operation, parameters, result, expression, "")
+}
+
+pub(super) fn replay_fixture_with_extra(
+    operation: &str,
+    parameters: &str,
+    result: &str,
+    expression: &str,
+    extra: &str,
+) -> ReplayFixture {
     let source = format!(
-        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n"
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n{extra}"
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
@@ -175,7 +201,14 @@ fn harness(
     else {
         panic!("routed scalar harness: {:?}", item.output)
     };
-    (**harness).clone()
+    ReplayFixture {
+        harness: (**harness).clone(),
+        checked: *checked,
+        source,
+        artifacts: generated
+            .oracle_artifacts
+            .expect("retained original scalar package"),
+    }
 }
 
 fn identity(
@@ -196,7 +229,7 @@ fn sum() -> ScalarObligationIdentity {
     )
 }
 
-fn transcript(identity: &ScalarObligationIdentity, values: &[i64]) -> String {
+pub(super) fn transcript(identity: &ScalarObligationIdentity, values: &[i64]) -> String {
     let entries = values
         .iter()
         .map(|value| format!("// {value}\nvec!{:?},\n", value.to_le_bytes()))

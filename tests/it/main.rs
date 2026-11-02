@@ -89,6 +89,7 @@ mod oracle_generation;
 mod routed_generation;
 mod scalar_literal_operands;
 mod scalar_playback;
+mod scalar_replay_binding;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;

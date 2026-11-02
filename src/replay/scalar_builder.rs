@@ -40,6 +40,8 @@ pub enum ScalarBuildError {
     Observation,
     /// The genuine QSL report differs from the complete actual-sent claim.
     Report,
+    /// Actual facade wire or replay budget differs from the independently retained context.
+    SentContext,
 }
 
 /// Immutable original scalar source/package context, with no function-contract coercion.
@@ -219,7 +221,7 @@ impl OriginalScalarContext {
 /// Driver-owned execution assertion, supplied independently after executing the actual staged
 /// artifact. The driver is trusted to execute honestly: these fields are checked ties, not
 /// cryptographic or language-level proof of execution. This is not a Kani receipt or backend proof.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ScalarDriverObservation {
     /// The complete staged artifact path/byte set actually executed, including harness and record.
     pub staged_entries: Vec<(String, Vec<u8>)>,
@@ -336,9 +338,19 @@ impl CompletedScalarReplay {
     /// Another actual-sent claim, including different native evidence or context, refuses.
     pub fn settle(
         &self,
-        report: &OperatorParityReport,
+        actual_sent: &ScalarSentRequest,
+        report: Option<&OperatorParityReport>,
     ) -> Result<qsl_replay::TerminalValue, ScalarBuildError> {
-        if report.claim() != &self.sent {
+        if actual_sent.replay_limits != self.replay_limits
+            || !same_wire(&actual_sent.wire, &self.wire)
+        {
+            return Err(ScalarBuildError::SentContext);
+        }
+        let actual_claim = actual_sent
+            .claim
+            .identity(actual_sent.wire.obligation_identity.clone());
+        let report = report.ok_or(ScalarBuildError::Report)?;
+        if actual_claim != self.sent || report.claim() != &actual_claim {
             return Err(ScalarBuildError::Report);
         }
         Ok(report.terminal_value())
@@ -366,3 +378,55 @@ impl std::fmt::Display for ScalarBuildError {
     }
 }
 impl std::error::Error for ScalarBuildError {}
+
+/// The driver's actual facade arguments, captured at dispatch, independently of the returned
+/// report. The driver asserts these were the actual arguments sent; CG checks every wire member
+/// and replay budget against its original context, then full actual-sent/report claim identity.
+/// This record is an honest-driver assertion, not an unforgeable execution receipt.
+pub struct ScalarSentRequest {
+    /// Actual wire passed to the public operator facade.
+    pub wire: ReplayRequestWire,
+    /// Actual scalar claim passed to the facade.
+    pub claim: OperatorClaim,
+    /// Actual final facade replay budget (not part of OperatorIdentity).
+    pub replay_limits: ReplayLimits,
+}
+
+pub(crate) fn same_wire(left: &ReplayRequestWire, right: &ReplayRequestWire) -> bool {
+    // Exhaustive destructuring deliberately makes an upstream wire extension a compile error,
+    // requiring its original-context tie to be considered rather than silently omitted.
+    let ReplayRequestWire {
+        package_name,
+        profile_selections,
+        sources,
+        dependencies,
+        replay_target,
+        source,
+        obligation_identity,
+        backend,
+        state_environment,
+        accounting_limits,
+        stage_limits,
+        supplied_limits,
+        object_environment,
+        declared_domains,
+        byte_provision,
+        documents,
+    } = left;
+    package_name == &right.package_name
+        && profile_selections == &right.profile_selections
+        && sources == &right.sources
+        && dependencies == &right.dependencies
+        && replay_target == &right.replay_target
+        && source == &right.source
+        && obligation_identity == &right.obligation_identity
+        && backend == &right.backend
+        && state_environment == &right.state_environment
+        && accounting_limits == &right.accounting_limits
+        && stage_limits == &right.stage_limits
+        && supplied_limits == &right.supplied_limits
+        && object_environment == &right.object_environment
+        && declared_domains == &right.declared_domains
+        && byte_provision == &right.byte_provision
+        && documents == &right.documents
+}

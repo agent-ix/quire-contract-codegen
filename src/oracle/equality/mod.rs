@@ -715,7 +715,7 @@ pub struct CompositeEqualityClaim {
 
 /// Generation output: the crate files and the claim map they are described
 /// by.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CompositeEqualityOracles {
     /// `Cargo.toml`, generated Rust, the original checked-package bytes when supplied,
     /// and `claim-map.json`, in that order.
@@ -727,6 +727,41 @@ pub struct CompositeEqualityOracles {
     /// generator records are `QuireSpecLanguage120`, `QuireSpecLanguage121`,
     /// `QuireContractRuntime34` and `OperationIdentityNotConsumed`.
     pub claim_map: ClaimMap<CompositeEqualityClaim>,
+    replay_origin: Option<std::sync::Arc<CompositeGenerationOrigin>>,
+}
+
+// Whole-call retained authority does not change the public generation result's equality.
+impl PartialEq for CompositeEqualityOracles {
+    fn eq(&self, other: &Self) -> bool {
+        self.artifacts == other.artifacts && self.claim_map == other.claim_map
+    }
+}
+impl Eq for CompositeEqualityOracles {}
+
+#[derive(Debug)]
+pub(crate) struct CompositeGenerationOrigin {
+    pub(crate) original: std::sync::Arc<CheckedPackageV2>,
+    pub(crate) artifacts: std::sync::Arc<Vec<Artifact>>,
+    claim_map: ClaimMap<CompositeEqualityClaim>,
+}
+
+pub(crate) enum CompositeOriginRefusal {
+    Unavailable,
+    Changed,
+}
+impl CompositeEqualityOracles {
+    pub(crate) fn replay_origin(
+        &self,
+    ) -> Result<&std::sync::Arc<CompositeGenerationOrigin>, CompositeOriginRefusal> {
+        let origin = self
+            .replay_origin
+            .as_ref()
+            .ok_or(CompositeOriginRefusal::Unavailable)?;
+        if self.artifacts != *origin.artifacts || self.claim_map != origin.claim_map {
+            return Err(CompositeOriginRefusal::Changed);
+        }
+        Ok(origin)
+    }
 }
 
 /// Generate composite equality oracles for `items` from one admitted FR-330 package.
@@ -1139,9 +1174,17 @@ pub fn generate_composite_equality_oracles(
             limit: MAX_BUNDLE_BYTES,
         });
     }
+    let replay_origin = original.map(|original| {
+        std::sync::Arc::new(CompositeGenerationOrigin {
+            original: std::sync::Arc::new(original.clone()),
+            artifacts: std::sync::Arc::new(artifacts.clone()),
+            claim_map: claim_map.clone(),
+        })
+    });
     Ok(CompositeEqualityOracles {
         artifacts,
         claim_map,
+        replay_origin,
     })
 }
 
