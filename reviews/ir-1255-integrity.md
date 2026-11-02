@@ -55,3 +55,9 @@ FINDINGS: address the rows below before spec handoff.
   "bindings": []
 }
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-54 now assigns package_id and request_index comparison to independently selected CG item and target/occurrence comparison to QSL OperationSite. |

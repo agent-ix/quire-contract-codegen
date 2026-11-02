@@ -56,3 +56,10 @@ FINDINGS: address the rows below before spec handoff.
   "bindings": []
 }
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-024 now says the driver supplies the typed pair and CG compares then copies it; internal QSL lookup validates only. |
+| FND-002 | fixed | TC-035 step 33 and expected result 38 cover positive, inherited owner, absent target, owner/operation mutation, foreign/unknown package and request index, and same-node ordinal mismatch, with no packet/request/replay on refusal. |
