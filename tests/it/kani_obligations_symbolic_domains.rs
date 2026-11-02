@@ -358,6 +358,14 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
     )
 }
 
+// Installed collection controls retain their authored domains and unwind bound with a small backend budget.
+fn qualified_collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionObligationHarness {
+    collection_harness_with_ceilings(fixture, operation, ProofCeilings {
+        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+        wall_clock: Duration::from_secs(120),
+    })
+}
+
 fn collection_harness_with_ceilings(
     fixture: &Emitted,
     operation: &str,
@@ -3794,7 +3802,7 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
         model_document(),
         "forall(item in deref(input).items: item >= 0)",
     );
-    let healthy_harness = collection_harness(&healthy, "quire.op.collection.forall");
+    let healthy_harness = qualified_collection_harness(&healthy, "quire.op.collection.forall");
     let healthy_evidence = run_collection_kani(&installation, &healthy_harness, "healthy");
     assert_eq!(healthy_evidence.outcome, KaniRunOutcome::Verified);
     assert_eq!(healthy_evidence.exit_code, Some(0));
@@ -3808,7 +3816,7 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
         model_document(),
         "forall(item in deref(input).items: item >= 1)",
     );
-    let mutated_harness = collection_harness(&mutated, "quire.op.collection.forall");
+    let mutated_harness = qualified_collection_harness(&mutated, "quire.op.collection.forall");
     assert_ne!(healthy_harness.identity, mutated_harness.identity);
     let mutated_evidence = run_collection_kani(&installation, &mutated_harness, "mutated");
     let KaniRunOutcome::Falsified { counterexample } = &mutated_evidence.outcome else {
@@ -3846,7 +3854,7 @@ fn tc_025_real_kani_ordered_set_claim_and_mutant_keep_distinct_active_values() {
         document.clone(),
         "forall(item in deref(input).items: item >= 0)",
     );
-    let healthy_harness = collection_harness(&healthy, "quire.op.collection.forall");
+    let healthy_harness = qualified_collection_harness(&healthy, "quire.op.collection.forall");
     assert_eq!(
         run_collection_kani(&installation, &healthy_harness, "ordered-set-healthy").outcome,
         KaniRunOutcome::Verified
@@ -3854,7 +3862,7 @@ fn tc_025_real_kani_ordered_set_claim_and_mutant_keep_distinct_active_values() {
     assert_native_collection_result(&healthy, &[0, 1], CollectionKind::OrderedSet, true);
     let mutant =
         emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 1)");
-    let mutant_harness = collection_harness(&mutant, "quire.op.collection.forall");
+    let mutant_harness = qualified_collection_harness(&mutant, "quire.op.collection.forall");
     let evidence = run_collection_kani(&installation, &mutant_harness, "ordered-set-mutant");
     let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
         panic!("the ordered-set mutant must falsify: {evidence:?}");
@@ -3893,7 +3901,7 @@ fn tc_025_real_kani_ordered_set_uniqueness_changes_the_verdict() {
     flags["multiplicity"]["unique"] = json!(true);
     let claim = "exists(flag in deref(input).flags: flag != false)";
     let ordered_set = emitted_from_document_and_body(document.clone(), claim);
-    let ordered_harness = collection_harness(&ordered_set, "quire.op.collection.exists");
+    let ordered_harness = qualified_collection_harness(&ordered_set, "quire.op.collection.exists");
     assert_eq!(
         ordered_harness.identity.collection_kind,
         CollectionKindIdentity::OrderedSet
@@ -3920,7 +3928,7 @@ fn tc_025_real_kani_ordered_set_uniqueness_changes_the_verdict() {
         .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
         .unwrap()["multiplicity"]["unique"] = json!(false);
     let sequence = emitted_from_document_and_body(document, claim);
-    let sequence_harness = collection_harness(&sequence, "quire.op.collection.exists");
+    let sequence_harness = qualified_collection_harness(&sequence, "quire.op.collection.exists");
     assert_eq!(
         sequence_harness.identity.collection_kind,
         CollectionKindIdentity::Sequence
