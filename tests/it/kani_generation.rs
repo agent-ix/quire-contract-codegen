@@ -25,3 +25,5 @@ fn kani_generation_selects_an_admitted_v2_scalar_harness() {
 fn kani_generation_real_v2_scalar_verifies() {
     crate::kani_obligations::verify_routed_scalar_harness_real_kani();
 }
+
+mod claims;

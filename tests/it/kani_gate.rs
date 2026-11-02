@@ -68,7 +68,11 @@ esac
 set -euo pipefail
 if [[ " $* " == *" --list "* ]]; then
   for ((i=0; i<${FAKE_LIST_COUNT:-2}; i++)); do
-    printf 'kani_obligations::proof_%s: test\n' "$i"
+    if ((i == 0)) && [[ "${FAKE_MISSING_CLAIM:-no}" != yes ]]; then
+      printf 'kani_generation::claims::current_generated_claim_has_fresh_compiled_roots_and_falsifying_control: test\n'
+    else
+      printf 'kani_obligations::proof_%s: test\n' "$i"
+    fi
   done
 else
   printf 'started\n' >> "$FAKE_MARKER"
@@ -621,4 +625,19 @@ fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
             "transitive walk missed {required}"
         );
     }
+}
+
+#[trace("TC-056", "FR-041-AC-9", "NFR-006-AC-19")]
+#[test]
+fn kani_gate_refuses_a_deleted_or_unselected_current_claim_control() {
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .gate()
+        .env("FAKE_MISSING_CLAIM", "yes")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("required current-build claimed-module control missing or skipped"));
+    assert!(!sandbox.root.join("run-marker").exists());
 }

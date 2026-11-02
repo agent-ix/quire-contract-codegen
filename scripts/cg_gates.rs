@@ -292,6 +292,11 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         gate_result("failed", 0, 0, start, &version, "clean");
         return Err("test list empty".into());
     }
+    const CLAIM_CONTROL: &str = "kani_generation::claims::current_generated_claim_has_fresh_compiled_roots_and_falsifying_control: test";
+    if !listed.lines().any(|line| line == CLAIM_CONTROL) {
+        gate_result("failed", 0, expected, start, &version, "clean");
+        return Err("required current-build claimed-module control missing or skipped".into());
+    }
     let run = gate_command(&test_command[0], &test_command[1..], real_cargo, &home)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
