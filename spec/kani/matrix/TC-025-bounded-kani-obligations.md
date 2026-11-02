@@ -515,6 +515,16 @@ The remaining V2 clause controls in this section retain their stated planned sta
     claim while holding structural identity fixed: each mismatch refuses before harness
     generation. The source span is excluded from the structural identity
     (FR-015-AC-46 to FR-015-AC-48).
+
+    Current AC-47 generation-time controls: `qsl_v2_scalar_clause_identity_tracks_request_facts`
+    regenerates authentic QSL precondition, postcondition and invariant harnesses from equal
+    requests, then varies unwind and customer subject independently. Each equal request has
+    identical generated source and persisted record bytes; each variation changes the harness
+    identity and record. The invariant source calls neither customer subject. The authentic
+    whole-object collection postcondition in
+    `whole_object_identity_regenerates_and_changes_with_unread_domains` has the same repeatability
+    and request-variation results. These controls do not claim AC-46 non-vacuity or AC-48 producer
+    identity evidence.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
