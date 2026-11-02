@@ -799,13 +799,7 @@ impl FrameReplay {
             frame: site.frame.clone(),
             occurrence: selected_item.occurrence.clone(),
         };
-        let OperationSite {
-            frame_operation: _,
-            anchor,
-            frame,
-            frame_occurrence: _,
-            ..
-        } = site;
+        let OperationSite { anchor, frame, .. } = site;
         let bindings = values
             .iter()
             .map(|(field, value)| (field.as_str(), i128::from(*value)))
