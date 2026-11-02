@@ -729,9 +729,9 @@ fn whole_object_identity_regenerates_and_changes_with_unread_domains() {
     let same = generated(8, "crate::subject");
     let changed_unwind = generated(9, "crate::subject");
     let changed_subject = generated(8, "crate::other_subject");
+    assert_eq!(first, same);
     assert_eq!(first.rust.contents, same.rust.contents);
     assert_eq!(first.record.contents, same.record.contents);
-    assert_eq!(first.identity, same.identity);
     assert_ne!(first.identity, changed_unwind.identity);
     assert_ne!(first.record.contents, changed_unwind.record.contents);
     assert_ne!(first.identity, changed_subject.identity);

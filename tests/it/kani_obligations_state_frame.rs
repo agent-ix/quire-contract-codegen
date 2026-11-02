@@ -1094,9 +1094,9 @@ fn qsl_v2_scalar_clause_identity_tracks_request_facts() {
         let same = generated(3, "crate::subject::deposit");
         let changed_unwind = generated(4, "crate::subject::deposit");
         let changed_subject = generated(3, "crate::subject::other");
+        assert_eq!(first, same, "{kind:?}");
         assert_eq!(first.rust.contents, same.rust.contents, "{kind:?}");
         assert_eq!(first.record.contents, same.record.contents, "{kind:?}");
-        assert_eq!(first.identity, same.identity, "{kind:?}");
         assert_ne!(first.identity, changed_unwind.identity, "{kind:?}");
         assert_ne!(
             first.record.contents, changed_unwind.record.contents,
