@@ -466,6 +466,22 @@ impl Twin {
         Self::with_bounded_other_precondition_condition("other < 1000")
     }
 
+    /// A QSL precondition reading the selected model's own integer field.
+    pub fn with_balance_field_precondition() -> Self {
+        let mut twin = Self::with_field_ranges((-5, 10), (50, 60));
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            "pre BalanceAboveFloor using v on Bank::Account::deposit { self.balance >= 0 }",
+        );
+        assert_ne!(
+            changed, source,
+            "the precondition replaced the postcondition"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// A source-authored precondition over one bounded operation parameter and no state field.
     pub fn with_bounded_other_precondition_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();

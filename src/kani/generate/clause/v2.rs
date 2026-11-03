@@ -26,7 +26,7 @@ use crate::{
         },
         identity::{
             KaniV2ClauseObligationHarness, ObligationKind, ScalarObligationArgument,
-            V2ClauseObligationIdentity,
+            V2ClauseObligationIdentity, V2ClauseStateField,
         },
     },
     oracle::clause::{
@@ -107,10 +107,16 @@ pub(in crate::kani::generate) fn lower(
     if !input_count_supported
         || oracle.descriptor.inputs.iter().any(|input| {
             let supported = match kind {
-                ObligationKind::Precondition | ObligationKind::Postcondition => {
-                    input.name.starts_with("parameter_")
+                ObligationKind::Precondition => {
+                    input.name.starts_with("parameter_") && input.state_field.is_none()
+                        || input.name.starts_with("current_") && input.state_field.is_some()
                 }
-                ObligationKind::Invariant => input.name.starts_with("current_"),
+                ObligationKind::Postcondition => {
+                    input.name.starts_with("parameter_") && input.state_field.is_none()
+                }
+                ObligationKind::Invariant => {
+                    input.name.starts_with("current_") && input.state_field.is_some()
+                }
                 ObligationKind::Frame => false,
             };
             !supported
@@ -346,6 +352,7 @@ pub(in crate::kani::generate) fn render_clause(
     let direct_boolean = lowered.oracle.descriptor.operation_identities.is_empty();
     let mut body = Vec::new();
     let mut arguments = Vec::new();
+    let mut state_fields = Vec::new();
     let mut reachable = Vec::new();
     for (index, input) in inputs.iter().enumerate() {
         let minimum =
@@ -382,11 +389,21 @@ pub(in crate::kani::generate) fn render_clause(
             domain: (input.lower, input.upper),
             then,
         });
-        arguments.push(ScalarObligationArgument {
-            identifier: input.name.clone(),
-            minimum,
-            maximum,
-        });
+        if let Some(field) = &input.state_field {
+            state_fields.push(V2ClauseStateField {
+                declaring_node_id: field.declaring_node_id.clone(),
+                field_name: field.field_name.clone(),
+                identifier: input.name.clone(),
+                minimum,
+                maximum,
+            });
+        } else {
+            arguments.push(ScalarObligationArgument {
+                identifier: input.name.clone(),
+                minimum,
+                maximum,
+            });
+        }
     }
     if invariant && inputs.is_empty() {
         // The projection onto no read fields has exactly one empty valuation.
@@ -445,7 +462,7 @@ pub(in crate::kani::generate) fn render_clause(
                 } else {
                     "matches!(outcome, Ok(rt::Outcome::Completed(true)))"
                 })?,
-                message: "the V2 precondition is satisfiable within admitted parameter bounds"
+                message: "the V2 precondition is satisfiable within admitted input bounds"
                     .to_owned(),
             },
         )
@@ -481,6 +498,7 @@ pub(in crate::kani::generate) fn render_clause(
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments,
+        state_fields,
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),
@@ -760,6 +778,7 @@ fn render_postcondition(
             minimum,
             maximum,
         }],
+        state_fields: Vec::new(),
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),

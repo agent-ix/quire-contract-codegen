@@ -594,6 +594,7 @@ pub(super) fn render_collection_operation(
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: Vec::new(),
+        state_fields: Vec::new(),
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),

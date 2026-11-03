@@ -502,6 +502,83 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// A selected model field supplies its declared domain to a V2 precondition draw.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_precondition_draws_selected_own_field_domain() {
+    let (package, clause) =
+        Twin::with_balance_field_precondition().emitted_package("BalanceAboveFloor");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("admitted field oracle");
+    let [field_input] = oracle.descriptor.inputs.as_slice() else {
+        panic!("one field input");
+    };
+    assert_eq!(field_input.name, "current_balance");
+    assert_eq!((field_input.lower, field_input.upper), (-5, 10));
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("admitted selected model object");
+    let fields = package
+        .model_object_fields(&object.node_id)
+        .expect("selected model fields");
+    let balance = fields.field("balance").expect("declared balance field");
+    let source_field = field_input.state_field.as_ref().expect("field provenance");
+    assert_eq!(source_field.declaring_node_id, *balance.declaring_node_id());
+    assert_eq!(source_field.field_name, balance.name());
+
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the selected field precondition must emit: {outcome:?}");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one field precondition harness");
+    };
+    assert!(
+        harness.identity.arguments.is_empty(),
+        "self is not an operation parameter"
+    );
+    let [field] = harness.identity.state_fields.as_slice() else {
+        panic!("one separately identified field draw");
+    };
+    assert_eq!(field.declaring_node_id, *balance.declaring_node_id());
+    assert_eq!(field.field_name, "balance");
+    assert_eq!(field.identifier, "current_balance");
+    assert_eq!((field.minimum, field.maximum), (-5, 10));
+    let record: Value = serde_json::from_str(&harness.record.contents).expect("persisted identity");
+    assert_eq!(
+        record["identity"]["stateFields"][0],
+        json!({
+            "declaringNodeId": balance.declaring_node_id(),
+            "fieldName": "balance",
+            "identifier": "current_balance",
+            "minimum": -5,
+            "maximum": 10,
+        })
+    );
+    assert!(harness.rust.contents.contains("current_balance >= -5"));
+    assert!(harness.rust.contents.contains("current_balance <= 10"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&current_balance, &mut meter)"));
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 /// Two source-authored operation parameters retain their distinct inclusive IR bounds and
 /// checked argument order in a single V2 precondition harness.
 #[trace("FR-015-AC-39", "TC-025")]
@@ -6373,7 +6450,7 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
 }
 
-/// Each field read by an object invariant is a separate bounded symbolic argument.
+/// Each field read by an object invariant is a separate bounded state-field draw.
 #[trace("FR-015-AC-39", "TC-025")]
 #[test]
 fn qsl_invariant_draws_each_selected_model_field_it_reads() {
@@ -6405,7 +6482,16 @@ fn qsl_invariant_draws_each_selected_model_field_it_reads() {
     let [harness] = v2_clause_harnesses.as_slice() else {
         panic!("one two-field invariant harness");
     };
-    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness.identity.arguments.is_empty());
+    assert_eq!(
+        harness
+            .identity
+            .state_fields
+            .iter()
+            .map(|field| (field.field_name.as_str(), field.identifier.as_str()))
+            .collect::<Vec<_>>(),
+        [("audit", "current_audit"), ("balance", "current_balance")]
+    );
     assert!(harness.rust.contents.contains("current_balance >= -5"));
     assert!(harness.rust.contents.contains("current_balance <= 10"));
     assert!(harness.rust.contents.contains("current_audit >= 7"));
@@ -6501,8 +6587,9 @@ fn qsl_native_invariant_preserves_oracle_selection_and_deterministic_identity() 
         first.identity.proof_execution_state,
         ProofExecutionState::NotRun
     );
-    assert_eq!(first.identity.arguments[0].minimum, 0);
-    assert_eq!(first.identity.arguments[0].maximum, 1000);
+    assert!(first.identity.arguments.is_empty());
+    assert_eq!(first.identity.state_fields[0].minimum, 0);
+    assert_eq!(first.identity.state_fields[0].maximum, 1000);
     assert!(first
         .rust
         .contents

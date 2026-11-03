@@ -237,6 +237,9 @@ pub struct V2ClauseObligationIdentity {
     pub subject_path: String,
     /// Symbolic parameter and admitted bounds.
     pub arguments: Vec<ScalarObligationArgument>,
+    /// Drawn model state fields, separate from operation parameters.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub state_fields: Vec<V2ClauseStateField>,
     /// Generated Rust module.
     pub module_symbol: ModuleSymbol,
     /// Generated proof function.
@@ -400,6 +403,22 @@ impl KaniV2ClauseObligationHarness {
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationArgument {
     /// Generated identifier.
+    pub identifier: String,
+    /// Inclusive checked minimum.
+    pub minimum: i64,
+    /// Inclusive checked maximum.
+    pub maximum: i64,
+}
+
+/// One drawn model state field and its accessor-derived inclusive domain.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2ClauseStateField {
+    /// Admitted model object declaration that owns the field.
+    pub declaring_node_id: CheckedNodeId,
+    /// Name of the field in the declaring model object.
+    pub field_name: String,
+    /// Generated symbolic identifier passed to the clause oracle.
     pub identifier: String,
     /// Inclusive checked minimum.
     pub minimum: i64,
