@@ -858,7 +858,9 @@ fn render_result_postcondition(
     if let Some((minimum, maximum)) = result_domain {
         body.push(Statement::ProducedResultDomainAssert {
             condition: expression(format!(
-                "subject_result >= {minimum} && subject_result <= {maximum}"
+                "subject_result >= {} && subject_result <= {}",
+                crate::kani::abi::i64_literal(minimum),
+                crate::kani::abi::i64_literal(maximum)
             ))?,
             message: "the produced V2 result lies in its admitted domain".to_owned(),
         });
