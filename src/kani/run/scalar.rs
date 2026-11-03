@@ -2536,6 +2536,19 @@ mod tests {
                 .1,
             harness.record.contents.as_bytes()
         );
+        let oracle_path = snapshot.path().join("src/oracle-artifacts-lib.rs");
+        let harness_path = snapshot.path().join("src/lib.rs");
+        let oracle_bytes = fs::read(&oracle_path).unwrap();
+        let harness_bytes = fs::read(&harness_path).unwrap();
+        assert_ne!(oracle_bytes, harness_bytes);
+        write_private(&oracle_path, &harness_bytes).unwrap();
+        write_private(&harness_path, &oracle_bytes).unwrap();
+        assert!(matches!(
+            ensure_snapshot_matches(snapshot.path(), &entries),
+            Err(KaniScalarNativeError::SnapshotChanged)
+        ));
+        write_private(&oracle_path, &oracle_bytes).unwrap();
+        write_private(&harness_path, &harness_bytes).unwrap();
         let adapter = fs::read_to_string(snapshot.path().join("src/bin/ir791_native.rs")).unwrap();
         assert!(adapter.contains("#[path = \"../lib.rs\"] mod generated;"));
         assert!(!snapshot.path().join("examples").exists());
