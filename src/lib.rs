@@ -233,8 +233,9 @@ pub use crate::core::native_integer::{
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
-    generate_v2_clause_oracle, ClauseOracleInput, NativeClauseCapabilityReason, V2ClauseClaim,
-    V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle, V2ClauseRefusal,
+    generate_v2_clause_oracle, ClauseOracleInput, ClauseOracleStateField,
+    NativeClauseCapabilityReason, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor,
+    V2ClauseOracle, V2ClauseRefusal,
 };
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
@@ -260,7 +261,7 @@ pub use kani::identity::{
     ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
     StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseObligationIdentity,
+    V2ClauseObligationIdentity, V2ClauseStateField,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,

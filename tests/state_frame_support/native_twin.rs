@@ -474,7 +474,10 @@ impl Twin {
             "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
             "pre BalanceAboveFloor using v on Bank::Account::deposit { self.balance >= 0 }",
         );
-        assert_ne!(changed, source, "the precondition replaced the postcondition");
+        assert_ne!(
+            changed, source,
+            "the precondition replaced the postcondition"
+        );
         twin.unit = changed.into_bytes();
         twin
     }

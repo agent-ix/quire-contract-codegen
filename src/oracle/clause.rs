@@ -25,12 +25,24 @@ use super::scalar::{
 pub struct ClauseOracleInput {
     /// The generated parameter name.
     pub name: String,
+    /// Admitted declaring field and name when this input reads model state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_field: Option<ClauseOracleStateField>,
     /// Whether this parameter is a Boolean rather than an integer.
     pub boolean: bool,
     /// Inclusive lower bound from the admitted model member or parameter type.
     pub lower: i128,
     /// Inclusive upper bound from the admitted model member or parameter type.
     pub upper: i128,
+}
+
+/// Source identity of a model state field read by a clause oracle.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ClauseOracleStateField {
+    /// Model object declaration that owns the selected field.
+    pub declaring_node_id: CheckedNodeId,
+    /// Field name in that declaration.
+    pub field_name: String,
 }
 
 /// Checked inputs and operations of one clause-identified Boolean condition.
@@ -225,6 +237,12 @@ fn plan_clause(
         .map(|input| {
             Ok(ClauseOracleInput {
                 name: names.get(input).ok_or(V2ClauseRefusal::Render)?.clone(),
+                state_field: input.declaring_node_id.as_ref().map(|declaring_node_id| {
+                    ClauseOracleStateField {
+                        declaring_node_id: declaring_node_id.clone(),
+                        field_name: input.name.clone(),
+                    }
+                }),
                 boolean: input.boolean,
                 lower: input.lower,
                 upper: input.upper,

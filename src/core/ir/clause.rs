@@ -21,6 +21,7 @@ pub(crate) enum ClauseInputSide {
 pub(crate) struct ClauseInput {
     pub(crate) name: String,
     pub(crate) side: ClauseInputSide,
+    pub(crate) declaring_node_id: Option<CheckedNodeId>,
     pub(crate) boolean: bool,
     pub(crate) lower: i128,
     pub(crate) upper: i128,
@@ -146,6 +147,7 @@ impl Reader<'_, '_> {
                     let input = ClauseInput {
                         name: declaration.name.to_string(),
                         side: ClauseInputSide::Parameter,
+                        declaring_node_id: None,
                         boolean,
                         lower: bound.0,
                         upper: bound.1,
@@ -284,6 +286,7 @@ impl Reader<'_, '_> {
         let input = ClauseInput {
             name: name.to_owned(),
             side,
+            declaring_node_id: Some(field.declaring_node_id().clone()),
             boolean,
             lower,
             upper,

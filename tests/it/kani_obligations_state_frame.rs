@@ -514,6 +514,19 @@ fn qsl_precondition_draws_selected_own_field_domain() {
     };
     assert_eq!(field_input.name, "current_balance");
     assert_eq!((field_input.lower, field_input.upper), (-5, 10));
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("admitted selected model object");
+    let fields = package
+        .model_object_fields(&object.node_id)
+        .expect("selected model fields");
+    let balance = fields.field("balance").expect("declared balance field");
+    let source_field = field_input.state_field.as_ref().expect("field provenance");
+    assert_eq!(source_field.declaring_node_id, *balance.declaring_node_id());
+    assert_eq!(source_field.field_name, balance.name());
 
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
@@ -534,9 +547,23 @@ fn qsl_precondition_draws_selected_own_field_domain() {
     let [harness] = v2_clause_harnesses.as_slice() else {
         panic!("one field precondition harness");
     };
+    assert!(
+        harness.identity.arguments.is_empty(),
+        "self is not an operation parameter"
+    );
+    let [field] = harness.identity.state_fields.as_slice() else {
+        panic!("one separately identified field draw");
+    };
+    assert_eq!(field.declaring_node_id, *balance.declaring_node_id());
+    assert_eq!(field.field_name, "balance");
+    assert_eq!(field.identifier, "current_balance");
+    assert_eq!((field.minimum, field.maximum), (-5, 10));
     assert!(harness.rust.contents.contains("current_balance >= -5"));
     assert!(harness.rust.contents.contains("current_balance <= 10"));
-    assert!(harness.rust.contents.contains("oracle_clause(&current_balance, &mut meter)"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&current_balance, &mut meter)"));
     assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
     assert!(harness.rust.contents.contains(&oracle.source));
 }

@@ -2474,6 +2474,7 @@ exit 0
             oracle_symbol: "oracle".to_owned(),
             subject_path: "crate::subject".to_owned(),
             arguments: Vec::new(),
+            state_fields: Vec::new(),
             module_symbol,
             harness_symbol,
             solver: KaniSolver::Cadical,
