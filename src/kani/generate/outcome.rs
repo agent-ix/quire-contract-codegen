@@ -226,13 +226,23 @@ pub enum UnsupportedObligation {
         /// Selected clause node.
         node_id: CheckedNodeId,
     },
-    /// The admitted postcondition has a result binder, which the scalar renderer cannot
-    /// distinguish from a drawn operation parameter yet.
-    V2ClauseResultNotRendered {
+    /// The selected postcondition's complete effective operation read refused.
+    V2ClauseOperationRead {
         /// Selected postcondition.
         node_id: CheckedNodeId,
-        /// Admitted result parameter declaration.
-        result_node: CheckedNodeId,
+        /// Original typed census refusal with its code, context, work and limit.
+        #[serde(serialize_with = "constrained::serialize_census")]
+        source: quire_contract_model::CheckedOperationReadError,
+    },
+    /// The clause's anchor or ordered binders disagree with its effective signature.
+    V2ClauseSignatureMismatch {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
+    },
+    /// The declared produced result has no supported finite machine domain.
+    V2ClauseResultDomainUnsupported {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
     },
     /// A postcondition request omits an admitted precondition of the same anchor.
     V2ClauseMissingSiblingPrecondition {

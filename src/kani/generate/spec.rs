@@ -161,6 +161,8 @@ pub(super) enum ProofKind {
 #[derive(Clone, Copy, Debug)]
 pub(super) enum LetType {
     I128,
+    I64,
+    Boolean,
 }
 #[derive(Clone, Debug)]
 pub(super) enum Init {

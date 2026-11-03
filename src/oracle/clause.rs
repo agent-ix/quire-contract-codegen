@@ -209,6 +209,7 @@ fn plan_clause(
                 ClauseInputSide::Current => "current",
                 ClauseInputSide::Pre => "pre",
                 ClauseInputSide::Parameter => "parameter",
+                ClauseInputSide::Result => "result",
             };
             let candidate = format!("{side}_{}", input.name);
             let name = if syn::parse_str::<syn::Ident>(&candidate).is_ok() {
