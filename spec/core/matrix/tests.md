@@ -12,7 +12,7 @@ type: TestMatrix
 |---|---|---|---|
 | FR-005 | FR-005-AC-1 | TC-002 | 🚧 Planned |
 | FR-005 | FR-005-AC-2 | TC-001 | 🚧 Planned |
-| FR-005 | FR-005-AC-3 | TC-007 | 🚧 Planned; the Differential Disposition Register has no rows and no join check exists |
+| FR-005 | FR-005-AC-3 | TC-007 | 🚧 Partial; the bound-strategy census and executable bound oracle measured seven comparable cases with zero differences, and the empty register passed the exact join; other backend pairs remain open |
 | FR-005 | FR-005-AC-4 | TC-007 | 🚧 Planned |
 | FR-005 | FR-005-AC-5 | TC-002 | 🚧 Planned |
 | FR-005 | FR-005-AC-6 through FR-005-AC-10 | TC-002 | ✅ Covered |
@@ -56,7 +56,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-001 | Verify deterministic derivation and generated headers | Integration | P0 | FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Partial; NFR-002 header and SPDX checks are covered; FR-005-AC-2 and NFR-001-AC-1 remain planned |
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-005-AC-1, FR-005-AC-5, FR-005-AC-6, FR-005-AC-7, FR-005-AC-8, FR-005-AC-9, FR-005-AC-10, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | NFR-002-AC-3 | 🚧 Planned |
-| TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-3, FR-005-AC-4 | 🚧 Planned |
+| TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-3, FR-005-AC-4 | 🚧 Partial; bound-strategy census versus executable bound oracle qualified; Kani, coverage, and other pairs remain planned |
 | TC-042 | Verify no panic on a generation or analysis path | Unit | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5, NFR-005-AC-6, NFR-005-AC-7, NFR-005-AC-8 | ✅ Covered; NFR-005-AC-1 scans the canonical `CaseIdentity::digest` with no exception |
 | TC-052 | Verify checked-package fixture identity ownership | Integration | P0 | FR-037-AC-6, FR-037-AC-7, FR-037-AC-8, FR-037-AC-9, FR-037-AC-10 | 🚧 Planned |
 | TC-053 | Verify production decisions from one admitted ContractPackage | Integration | P0 | FR-039-AC-1, FR-039-AC-2, FR-039-AC-3, FR-039-AC-6, FR-039-AC-8, FR-039-AC-11, FR-039-AC-9, FR-039-AC-10 | 🚧 AC-10 covered by tagged tests; AC-9 partially covered pending source-bound V2-to-V1 controls; other criteria planned |

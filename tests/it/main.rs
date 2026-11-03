@@ -94,6 +94,7 @@ mod scalar_replay_binding;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
+mod tc007_differential;
 mod terminal_map;
 mod v2_clause_integer_literal_agreement;
 mod v2_clause_integer_literals;

@@ -31,7 +31,7 @@ Changes requested: TC-007 does not define whether an outside-domain census class
 
 ## Dispositions
 
-Round 1 at 5a0a88cf02ff3d1ae40dc99aa6821be2ff69eeb1: PASS. TC-007 now assigns outside-model candidates the normalized pair NotComparable, retains the executable Boolean separately, excludes them from semantic discrepancies and register rows, and forbids parity credit.
+Round 1: PASS. TC-007 now assigns outside-model candidates the normalized pair NotComparable, retains the executable Boolean separately, excludes them from semantic discrepancies and register rows, and forbids parity credit.
 
 | FND | outcome | reason |
 | --- | --- | --- |

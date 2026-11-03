@@ -81,7 +81,9 @@ fn boolean_comparison_projection() -> Value {
     value
 }
 
-fn scalar_projection(package: &str, kind: &str, operator: &str, literal: i64) -> Value {
+/// Builds the shared checked bound-integer projection for generated consumer tests.
+#[ix_trace_rs::string_edge]
+pub(crate) fn scalar_projection(package: &str, kind: &str, operator: &str, literal: i64) -> Value {
     let owner = json!({"package":package,"requirement":"FR-100","revision":3});
     let (declaration_kind, anchor) = if kind == "precondition" {
         ("input", json!({"kind":"pre","operation":"checkAmount"}))
@@ -117,7 +119,8 @@ fn scalar_projection(package: &str, kind: &str, operator: &str, literal: i64) ->
     })
 }
 
-fn decode(value: &Value) -> BoundPackage {
+/// Reads a synthetic projection through the public bound-package reader.
+pub(crate) fn decode(value: &Value) -> BoundPackage {
     BoundPackage::from_json_bytes(&serde_json::to_vec(value).unwrap()).unwrap()
 }
 
@@ -189,7 +192,8 @@ fn wide_ir_domain_refuses_the_i64_strategy() {
     }
 }
 
-fn generate_projection_population(
+/// Generates a bound strategy from one checked projection and campaign population.
+pub(crate) fn generate_projection_population(
     value: &Value,
     clause: &ClauseRef,
     population: BoundStrategyPopulation,
@@ -209,7 +213,8 @@ fn generate_projection_population(
     .unwrap()
 }
 
-fn generated_item(source: &str, prefix: &str) -> String {
+/// Finds the declared name of a generated public Rust item.
+pub(crate) fn generated_item(source: &str, prefix: &str) -> String {
     source
         .lines()
         .find_map(|line| {
@@ -226,6 +231,7 @@ fn generated_item(source: &str, prefix: &str) -> String {
         .unwrap_or_else(|| panic!("generated source has no item beginning {prefix:?}"))
 }
 
+#[ix_trace_rs::string_edge]
 fn generated_runner(source: &str) -> String {
     source
         .lines()
@@ -237,7 +243,9 @@ fn generated_runner(source: &str) -> String {
         .expect("generated sampled runner")
 }
 
-fn generated_census_runner(source: &str) -> String {
+/// Finds the generated full-census runner name.
+#[ix_trace_rs::string_edge]
+pub(crate) fn generated_census_runner(source: &str) -> String {
     source
         .lines()
         .find_map(|line| {
