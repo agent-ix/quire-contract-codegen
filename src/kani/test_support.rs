@@ -274,3 +274,13 @@ pub(crate) fn scalar_source_fixture(
     harness.bind_artifact_package(&artifacts);
     (harness, artifacts)
 }
+
+#[ix_trace_rs::trace("TC-047", "FR-032-AC-18")]
+#[test]
+fn legacy_fixture_never_invents_scalar_authority() {
+    let (fixture, _) = scalar_source_fixture(std::time::Duration::from_secs(1));
+    assert_eq!(
+        fixture.scalar_replay_body(),
+        Err(crate::core::scalar_authority::ScalarAuthorityError::Unavailable)
+    );
+}

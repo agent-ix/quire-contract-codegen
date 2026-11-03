@@ -646,6 +646,11 @@ pub struct KaniScalarObligationHarness {
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
     original_scalar_limits: Option<quire_exact::ScalarLimits>,
+    original_scalar_package: Option<std::sync::Arc<quire_contract_model::CheckedPackageV2>>,
+    scalar_replay_body: Result<
+        crate::core::scalar_authority::ScalarReplayBody,
+        crate::core::scalar_authority::ScalarAuthorityError,
+    >,
 }
 
 // This value compares the per-harness public output and its origin seal. The routed package seal
@@ -659,6 +664,7 @@ impl PartialEq for KaniScalarObligationHarness {
             && self.generated_rust == other.generated_rust
             && self.generated_record == other.generated_record
             && self.original_scalar_limits == other.original_scalar_limits
+            && self.scalar_replay_body == other.scalar_replay_body
     }
 }
 
@@ -680,6 +686,10 @@ impl KaniScalarObligationHarness {
             record,
             generated_artifacts: None,
             original_scalar_limits: None,
+            original_scalar_package: None,
+            scalar_replay_body: Err(
+                crate::core::scalar_authority::ScalarAuthorityError::Unavailable,
+            ),
         }
     }
 
@@ -693,6 +703,66 @@ impl KaniScalarObligationHarness {
         let mut harness = Self::generated(identity, rust, record);
         harness.original_scalar_limits = Some(limits);
         harness
+    }
+
+    /// Original admitted positional replay body, authenticated against the generator seal.
+    ///
+    /// # Errors
+    /// Refuses changed generated fields or unavailable/ambiguous admitted provenance.
+    pub fn scalar_replay_body(
+        &self,
+    ) -> Result<
+        &crate::core::scalar_authority::ScalarReplayBody,
+        crate::core::scalar_authority::ScalarAuthorityError,
+    > {
+        if !self.has_valid_provenance() {
+            return Err(
+                crate::core::scalar_authority::ScalarAuthorityError::GeneratedArtifactChanged,
+            );
+        }
+        self.scalar_replay_body.as_ref().map_err(Clone::clone)
+    }
+
+    pub(crate) fn scalar_original_package(
+        &self,
+    ) -> Result<
+        &std::sync::Arc<quire_contract_model::CheckedPackageV2>,
+        crate::core::scalar_authority::ScalarAuthorityError,
+    > {
+        self.scalar_replay_body()?;
+        self.original_scalar_package
+            .as_ref()
+            .ok_or(crate::core::scalar_authority::ScalarAuthorityError::Unavailable)
+    }
+
+    pub(crate) fn bind_scalar_replay_body(
+        &mut self,
+        body: Result<
+            crate::core::scalar_authority::ScalarReplayBody,
+            crate::core::scalar_authority::ScalarAuthorityError,
+        >,
+        source: std::sync::Arc<quire_contract_model::CheckedPackageV2>,
+    ) {
+        if let Ok(value) = &body {
+            let retained = serde_json::from_str::<serde_json::Value>(&self.record.contents)
+                .ok()
+                .and_then(|mut record| {
+                    record
+                        .as_object_mut()?
+                        .insert("scalarReplayBody".to_owned(), value.record());
+                    serde_json::to_string(&record).ok()
+                });
+            let Some(mut retained) = retained else {
+                self.scalar_replay_body =
+                    Err(crate::core::scalar_authority::ScalarAuthorityError::Record);
+                return;
+            };
+            retained.push('\n');
+            self.record.contents = retained;
+            self.generated_record = self.record.clone();
+            self.original_scalar_package = Some(source);
+        }
+        self.scalar_replay_body = body;
     }
 
     /// The original accounting limits supplied to the meter in this generated scalar source.

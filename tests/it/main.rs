@@ -61,6 +61,7 @@ mod bound_populations;
 mod bound_strategy_generation;
 mod bounded_kani_corpus;
 mod capability_settlement;
+mod composite_artifact_binding;
 mod composite_equality_agreement;
 mod composite_equality_generation;
 mod composite_original_eq;
@@ -89,6 +90,7 @@ mod oracle_generation;
 mod routed_generation;
 mod scalar_literal_operands;
 mod scalar_playback;
+mod scalar_replay_binding;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
@@ -108,3 +110,5 @@ mod checked_term_consumers;
 mod kani_collection_operation;
 
 mod constrained_method;
+
+mod native_driver_artifacts;
