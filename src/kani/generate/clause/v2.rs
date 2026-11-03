@@ -211,6 +211,7 @@ fn result_binder(view: &ClauseGraphView<'_>, clause: &CheckedNodeId) -> Option<C
     let CheckedTerm::Aggregate { members } = parameters else {
         return None;
     };
+    // The admitted clause binds self first, then its optional result, then operation parameters.
     let result_node = reference(members.get(1)?)?;
     (view
         .package()
