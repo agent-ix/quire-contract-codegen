@@ -91,8 +91,8 @@ use crate::{
     },
     kani::generate::collection::{
         collection_symbols_conflict, lower_collection_claim, lower_collection_operation,
-        render_collection, render_collection_operation, CollectionDomainRefusal, CollectionGraph,
-        LoweredCollectionClaim,
+        preconditions_by_anchor, render_collection, render_collection_operation,
+        CollectionDomainRefusal, CollectionGraph, LoweredCollectionClaim,
     },
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
@@ -352,6 +352,7 @@ fn negotiate_integer_policy(
         }
     }
     reject_duplicates_and_mixtures(&mut states);
+    refuse_unrendered_postcondition_siblings(request, &mut states);
     assign_names(request.items, &mut states);
     let rejected = states.iter().any(|state| state.outcome.is_invalid());
     let mut records = Vec::with_capacity(states.len());
@@ -492,6 +493,117 @@ fn negotiate_integer_policy(
             constrained_harnesses,
         }
     })
+}
+
+fn same_anchor_preconditions(
+    package: &CheckedPackageV2,
+    postcondition: &CheckedNodeId,
+) -> Vec<CheckedNodeId> {
+    let Some(CheckedTerm::Application { arguments, .. }) = package.term(postcondition) else {
+        return Vec::new();
+    };
+    let Some(CheckedTerm::Reference { target: anchor }) = arguments.get(1) else {
+        return Vec::new();
+    };
+    preconditions_by_anchor(package)
+        .get(anchor)
+        .into_iter()
+        .flatten()
+        .map(|node| node.node_id.clone())
+        .collect()
+}
+
+fn refuse_unrendered_postcondition_siblings(
+    request: &KaniObligationRequest<'_>,
+    states: &mut [ItemState],
+) {
+    let mut refusals = Vec::new();
+    for (index, (item, state)) in request.items.iter().zip(states.iter()).enumerate() {
+        let ObligationItem::V2Clause {
+            package, clause, ..
+        } = item
+        else {
+            continue;
+        };
+        if state.kind != Some(ObligationKind::Postcondition) {
+            continue;
+        }
+        let scalar = match state.outcome {
+            Outcome::LoweredV2Clause(_) => true,
+            Outcome::LoweredCollectionOperation(_) => false,
+            _ => continue,
+        };
+        let mut missing = None;
+        let mut unsupported = None;
+        let mut requires_not_rendered = None;
+        for sibling in same_anchor_preconditions(package, clause) {
+            let sibling_index = request.items.iter().position(|candidate| {
+                matches!(candidate, ObligationItem::V2Clause { package: other, clause: node, .. }
+                    if std::ptr::eq(*package, *other) && *node == &sibling)
+            });
+            match sibling_index {
+                None => {
+                    missing.get_or_insert(sibling);
+                }
+                Some(sibling_index) => {
+                    let supported = match &states[sibling_index].outcome {
+                        Outcome::LoweredV2Clause(lowered) => {
+                            render_v2_clause(request, lowered).is_ok()
+                        }
+                        Outcome::LoweredCollectionOperation(lowered) => {
+                            render_collection_operation(request, lowered).is_ok()
+                        }
+                        _ => false,
+                    };
+                    if !supported {
+                        unsupported.get_or_insert(sibling);
+                    } else if scalar {
+                        requires_not_rendered.get_or_insert(sibling);
+                    }
+                }
+            }
+        }
+        let reason = if let Some(precondition) = missing {
+            if scalar {
+                UnsupportedObligation::V2ClauseMissingSiblingPrecondition {
+                    node_id: (*clause).clone(),
+                    precondition,
+                }
+            } else {
+                UnsupportedObligation::CollectionClaimNotRendered {
+                    node_id: (*clause).clone(),
+                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition {
+                        precondition,
+                    },
+                }
+            }
+        } else if let Some(precondition) = unsupported {
+            if scalar {
+                UnsupportedObligation::V2ClauseUnsupportedSiblingPrecondition {
+                    node_id: (*clause).clone(),
+                    precondition,
+                }
+            } else {
+                UnsupportedObligation::CollectionClaimNotRendered {
+                    node_id: (*clause).clone(),
+                    reason: CollectionUnsupportedReason::UnsupportedSiblingPrecondition {
+                        precondition,
+                    },
+                }
+            }
+        } else if let Some(precondition) = requires_not_rendered {
+            UnsupportedObligation::V2ClauseSiblingRequiresNotRendered {
+                node_id: (*clause).clone(),
+                precondition,
+            }
+        } else {
+            continue;
+        };
+        refusals.push((index, reason));
+    }
+    for (index, reason) in refusals {
+        states[index].outcome = Outcome::Unsupported(reason);
+    }
 }
 
 fn validate_request(request: &KaniObligationRequest<'_>) -> Result<(), KaniObligationError> {
@@ -1396,6 +1508,120 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// A postcondition cannot produce a harness when the request omits an admitted
+    /// precondition of the same operation, even when the post body itself lowers.
+    #[trace("FR-015-AC-43", "TC-025")]
+    #[test]
+    fn scalar_postcondition_refuses_a_missing_same_anchor_precondition() {
+        let twin = native_twin::Twin::with_scalar_postcondition_siblings(false);
+        let (package, postcondition) = twin.emitted_package("DepositBound");
+        let (_, first) = twin.emitted_package("DepositPositive");
+        let (_, second) = twin.emitted_package("DepositSecond");
+        let items = [
+            ObligationItem::V2Clause {
+                package: &package,
+                clause: &postcondition,
+                dependencies: None,
+            },
+            ObligationItem::V2Clause {
+                package: &package,
+                clause: &first,
+                dependencies: None,
+            },
+        ];
+        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            items: &items,
+            subject_path: "crate::subject::deposit",
+            unwind: 8,
+        })
+        .expect("admitted request");
+        assert!(
+            matches!(
+                &outcome.records()[0].disposition,
+                ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseMissingSiblingPrecondition { precondition, .. } }
+                    if *precondition == second
+            ),
+            "{:?}",
+            outcome.records()[0].disposition
+        );
+        assert!(
+            matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. }
+            if v2_clause_harnesses.iter().all(|harness| harness.identity.clause != postcondition))
+        );
+    }
+
+    /// Until the scalar renderer can embed `requires`, a present supported sibling
+    /// still cannot make its postcondition sound. An unsupported sibling has its own reason.
+    #[trace("FR-015-AC-43", "TC-025")]
+    #[test]
+    fn scalar_postcondition_distinguishes_unsupported_from_unrendered_siblings() {
+        for unsupported_second in [false, true] {
+            let twin = native_twin::Twin::with_scalar_postcondition_siblings(unsupported_second);
+            let (package, postcondition) = twin.emitted_package("DepositBound");
+            let (_, first) = twin.emitted_package("DepositPositive");
+            let (_, second) = twin.emitted_package("DepositSecond");
+            let (_, unrelated) = twin.emitted_package("TransferOnly");
+            let items = [
+                ObligationItem::V2Clause {
+                    package: &package,
+                    clause: &postcondition,
+                    dependencies: None,
+                },
+                ObligationItem::V2Clause {
+                    package: &package,
+                    clause: &first,
+                    dependencies: None,
+                },
+                ObligationItem::V2Clause {
+                    package: &package,
+                    clause: &second,
+                    dependencies: None,
+                },
+            ];
+            for order in [[0, 1, 2], [2, 0, 1]] {
+                let ordered = order.map(|index| items[index]);
+                let post_index = order.iter().position(|index| *index == 0).unwrap();
+                let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+                    ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                    items: &ordered,
+                    subject_path: "crate::subject::deposit",
+                    unwind: 8,
+                })
+                .expect("admitted request");
+                let disposition = &outcome.records()[post_index].disposition;
+                if unsupported_second {
+                    assert!(
+                        matches!(
+                            disposition,
+                            ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseUnsupportedSiblingPrecondition { precondition, .. } }
+                                if *precondition == second
+                        ),
+                        "{disposition:?}"
+                    );
+                } else {
+                    assert!(
+                        matches!(
+                            disposition,
+                            ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseSiblingRequiresNotRendered { precondition, .. } }
+                                if *precondition == first || *precondition == second
+                        ),
+                        "{disposition:?}"
+                    );
+                }
+                assert!(!matches!(
+                    disposition,
+                    ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseMissingSiblingPrecondition { precondition, .. } }
+                        if *precondition == unrelated
+                ));
+                assert!(
+                    matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. }
+                    if v2_clause_harnesses.iter().all(|harness| harness.identity.clause != postcondition))
+                );
+            }
+        }
+    }
 
     #[test]
     fn request_views_keep_every_original_source_occurrence_and_package_separate() {

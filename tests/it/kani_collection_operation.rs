@@ -394,7 +394,7 @@ fn operation_context_executes_exact_state_and_rejects_every_bad_produced_axis() 
 #[test]
 #[trace("TC-025", "FR-015-AC-43", "FR-015-AC-96", "FR-015-AC-99")]
 fn operation_context_requires_and_assumes_same_anchor_preconditions() {
-    let package = fixture(&document(), "pre Ready using v on M::Node::step { self.m_count >= limit and enabled }\npre ItemsReady using v on M::Node::step { forall(item in self.z_items: item >= 0) }");
+    let package = fixture(&document(), "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 0) and self.m_count >= limit and enabled }\npre ItemsReady using v on M::Node::step { forall(item in self.z_items: item >= 0) }");
     let ids = clauses(&package);
     let harness = postcondition(negotiate(&package, &ids));
     assert_eq!(
@@ -439,6 +439,45 @@ fn operation_context_requires_and_assumes_same_anchor_preconditions() {
         }
         if precondition == &harness.identity.collection_operation.as_ref().unwrap().preconditions[0]
     ));
+}
+
+/// Merely naming a scalar sibling in the request cannot make its unsupported
+/// standalone disposition a valid `requires` for a collection postcondition.
+#[test]
+#[trace("TC-025", "FR-015-AC-43")]
+fn present_unsupported_sibling_refuses_collection_postcondition() {
+    let package = fixture(
+        &document(),
+        "pre Ready using v on M::Node::step { self.m_count >= limit and enabled }",
+    );
+    let ids = clauses(&package);
+    let pre = ids
+        .iter()
+        .find(|id| matches!(package.term(id), Some(CheckedTerm::Application { operation, .. })
+            if operation.state_clause_kind().ok().flatten() == Some(quire_contract_model::StateClauseKind::Precondition)))
+        .expect("admitted precondition");
+    let outcome = negotiate(&package, &ids);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("valid request has per-item dispositions");
+    };
+    assert!(records.iter().any(|record| matches!(
+        &record.disposition,
+        quire_contract_codegen::ObligationDisposition::Unsupported {
+            reason: quire_contract_codegen::UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedSiblingPrecondition { precondition },
+                ..
+            }
+        } if precondition == pre
+    )));
+    assert!(v2_clause_harnesses
+        .iter()
+        .all(|harness| harness.identity.kind
+            != quire_contract_codegen::ObligationKind::Postcondition));
 }
 
 #[test]
@@ -901,11 +940,11 @@ fn identity_binds_nonquantifier_conjuncts_and_assumed_precondition_meaning() {
             "forall(item in self.z_items: item >= 0) and self.m_count >= 2",
         ),
         (
-            "pre Ready using v on M::Node::step { self.m_count >= 1 }",
+            "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 0) and self.m_count >= 1 }",
             "forall(item in self.z_items: item >= 0)",
         ),
         (
-            "pre Ready using v on M::Node::step { self.m_count >= 2 }",
+            "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 0) and self.m_count >= 2 }",
             "forall(item in self.z_items: item >= 0)",
         ),
     ]

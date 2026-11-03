@@ -226,6 +226,27 @@ pub enum UnsupportedObligation {
         /// Selected clause node.
         node_id: CheckedNodeId,
     },
+    /// A postcondition request omits an admitted precondition of the same anchor.
+    V2ClauseMissingSiblingPrecondition {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
+        /// Admitted precondition absent from the request.
+        precondition: CheckedNodeId,
+    },
+    /// An admitted sibling is requested but has no supported clause harness.
+    V2ClauseUnsupportedSiblingPrecondition {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
+        /// Admitted precondition with an unsupported disposition.
+        precondition: CheckedNodeId,
+    },
+    /// The scalar postcondition renderer cannot yet embed a supported sibling requires.
+    V2ClauseSiblingRequiresNotRendered {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
+        /// Supported precondition whose requires cannot be represented.
+        precondition: CheckedNodeId,
+    },
     /// An admitted V2 clause uses an operator outside the clause harness grammar.
     V2ClauseOperatorNotSupported {
         /// Selected clause node.
