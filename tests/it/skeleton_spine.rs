@@ -81,8 +81,6 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
     LockedSource {
         authority: AUTHORITY.to_owned(),
         identity: identity.to_owned(),
-        namespace: NAMESPACE.to_owned(),
-        revision: REVISION.to_owned(),
         bytes: bytes.to_vec(),
     }
 }

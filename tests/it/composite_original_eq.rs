@@ -89,8 +89,6 @@ fn inputs(source: &str) -> ReplayInputs {
         source: LockedSource {
             authority: "test".to_owned(),
             identity: "original-eq.native".to_owned(),
-            namespace: "git".to_owned(),
-            revision: "fixture".to_owned(),
             bytes: source.as_bytes().to_vec(),
         },
         dependencies: Vec::new(),
@@ -1153,8 +1151,6 @@ fn original_imported_context_refuses_before_invocation() {
         let source = LockedSource {
             authority: "test".to_owned(),
             identity: "eq-library.native".to_owned(),
-            namespace: "git".to_owned(),
-            revision: "fixture".to_owned(),
             bytes,
         };
         let compiled = compile_package(

@@ -19,8 +19,6 @@ fn source() -> LockedSource {
     LockedSource {
         authority: "test".to_owned(),
         identity: "composite-agreement.native".to_owned(),
-        namespace: "git".to_owned(),
-        revision: "fixture".to_owned(),
         bytes: composite_original_eq::SOURCE.as_bytes().to_vec(),
     }
 }

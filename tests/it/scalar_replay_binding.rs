@@ -16,8 +16,6 @@ fn source(fixture: &ReplayFixture) -> LockedSource {
     LockedSource {
         authority: "test".to_owned(),
         identity: "scalar-playback.native".to_owned(),
-        namespace: "git".to_owned(),
-        revision: "fixture".to_owned(),
         bytes: fixture.source.as_bytes().to_vec(),
     }
 }

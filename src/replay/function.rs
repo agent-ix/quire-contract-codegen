@@ -1133,8 +1133,6 @@ fn compile_corpus_qsl_package(
     let dependency_source = LockedSource {
         authority: "agent-ix".to_owned(),
         identity: DEPENDENCY_NAME.to_owned(),
-        namespace: "generated".to_owned(),
-        revision: "ir-453".to_owned(),
         bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
     };
     let function = "corpus_case";
@@ -1145,8 +1143,6 @@ fn compile_corpus_qsl_package(
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: case.artifacts.qsl_source.path.clone(),
-                namespace: "generated".to_owned(),
-                revision: "ir-453".to_owned(),
                 bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
             },
             dependencies: vec![DependencyLock {
@@ -1575,8 +1571,6 @@ mod tests {
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: "unit".to_owned(),
-                namespace: "git".to_owned(),
-                revision: "r1".to_owned(),
                 bytes: source.as_bytes().to_vec(),
             },
             dependencies: Vec::new(),
