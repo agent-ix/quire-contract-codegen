@@ -67,8 +67,12 @@ outside-domain `NotComparable` observations are retained separately with no regi
 comparison produces an inspectable list of case identifiers, pairs, normalized outcomes,
 diagnostics and dependencies even when no difference occurs. An empty register is valid only
 after an actual complete run has measured zero discrepancies. The mutant's temporary register
-input is test data for the join and never changes this table. No such run or register join exists
-at this revision, so the empty table below is not completion evidence.
+input is test data for the join and never changes this table. The bound-integer TC-007 run
+measured seven in-domain cases and two outside-domain `NotComparable` observations, with zero
+semantic discrepancies; the empty table below passed the exact join. A flipped census-tag mutant
+produced one named discrepancy and joined one temporary fixture row, while the missing,
+duplicate, invalid-fixture, empty-disposition, and stale-row controls failed as intended. This
+evidence covers only the executable bound oracle versus the independent bound-strategy census.
 
 | Case | Backends | Disposition | Fixture or distinction |
 |------|----------|-------------|------------------------|
