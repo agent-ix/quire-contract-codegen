@@ -1,0 +1,5 @@
+{
+  "case_id": "amount:499",
+  "backend_pair": "bound_strategy_census / executable_bound_oracle",
+  "mutation": "flip-census-tag"
+}
