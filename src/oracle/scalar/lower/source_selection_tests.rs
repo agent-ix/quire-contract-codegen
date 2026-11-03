@@ -241,6 +241,16 @@ fn ir_1299_selected_scalar_key_uses_the_admitted_occurrence_frame() {
             "QSL-selected application remains valid after independent sibling omission: {node_id:?}"
         );
     }
+    let (generated, indexes) =
+        generate_contract_scalar_oracles(&checked, &admitted, &positions, &[0, 2])
+            .expect("two selected QSL scalar siblings generate");
+    assert_eq!(indexes.len(), 2);
+    for index in indexes {
+        assert!(matches!(
+            &generated.claim_map.items[index].result,
+            ClaimDisposition::Generated(_)
+        ));
+    }
 }
 
 /// Provenance: IR-988 AC1-3; SR-16303 FND-003.
