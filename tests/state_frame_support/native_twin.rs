@@ -667,7 +667,10 @@ impl Twin {
             "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= other }",
             "post DepositParameter using v on Bank::Account::deposit { other < 1000 }",
         );
-        assert_ne!(changed, source, "the parameter clause replaced the field clause");
+        assert_ne!(
+            changed, source,
+            "the parameter clause replaced the field clause"
+        );
         twin.unit = changed.into_bytes();
         twin
     }

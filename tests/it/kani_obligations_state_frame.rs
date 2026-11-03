@@ -427,8 +427,8 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
 #[trace("FR-015-AC-39", "TC-025")]
 #[test]
 fn qsl_unused_result_binder_refuses_postcondition_harness() {
-    let (package, clause) = Twin::with_unused_bounded_result_postcondition()
-        .emitted_package("DepositParameter");
+    let (package, clause) =
+        Twin::with_unused_bounded_result_postcondition().emitted_package("DepositParameter");
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
