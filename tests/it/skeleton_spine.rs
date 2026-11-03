@@ -33,8 +33,6 @@ use serde_json::json;
 const PROFILE: &str = "profile v = \"quire.value.complete/v1\";\n";
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:skeleton-spine";
-const NAMESPACE: &str = "git";
-const REVISION: &str = "r1";
 const FUNCTION: &str = "balance_never_grows";
 
 /// The native twin of the clause over the subject: the QSL function the replay evaluates.
