@@ -1704,7 +1704,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     super::scratch_crate::resolve_seeded_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--locked", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&directory.path)

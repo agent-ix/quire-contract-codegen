@@ -2276,7 +2276,7 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     seed_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&directory.path)

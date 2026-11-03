@@ -505,6 +505,7 @@ fn controlled_{index}() {{
     fs::write(scratch.path.join("src/lib.rs"), source).unwrap();
     scratch_crate::resolve_seeded_lock(&scratch.path);
     let literal_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let build = scratch_crate::lock_agreement_build();
     let output = Command::new(literal_cargo)
         .args([
             "test",
@@ -516,12 +517,13 @@ fn controlled_{index}() {{
             "--test-threads=1",
             "--nocapture",
         ])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", scratch_crate::agreement_target())
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&scratch.path)
         .output()
         .unwrap();
+    drop(build);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     println!("{stdout}\n{stderr}");
