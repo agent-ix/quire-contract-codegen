@@ -2,7 +2,7 @@
 
 use quire_contract_model::{
     ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind, CheckedPackageV2,
-    CheckedTerm, ContractSourceV1, LiteralKind, ScalarTypeForm,
+    CheckedTerm, CompositeTypeForm, ContractSourceV1, LiteralKind, ScalarTypeForm,
 };
 use quote::ToTokens;
 use std::collections::BTreeSet;
@@ -304,6 +304,23 @@ fn binder_matches_scalar(
     }
 }
 
+fn self_binder_matches_context(
+    view: &ClauseGraphView<'_>,
+    binder: &CheckedNodeId,
+    context: &CheckedNodeId,
+) -> bool {
+    let Some(node) = view.node(binder) else {
+        return false;
+    };
+    view.kind(&node.semantic_type)
+        == Some(CheckedNodeKind::CompositeType(CompositeTypeForm::Reference))
+        && matches!(
+            view.package().term(&node.semantic_type),
+            Some(CheckedTerm::Aggregate { members })
+                if matches!(members.as_slice(), [CheckedTerm::Reference { target }] if target == context)
+        )
+}
+
 fn read_result_signature(
     view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,
@@ -368,6 +385,7 @@ fn read_result_signature(
         .name
         .as_ref()
         != "self"
+        || !self_binder_matches_context(view, self_id, context)
         || package
             .parameter_declaration(result_id)
             .map_err(|_| mismatch())?
@@ -379,8 +397,14 @@ fn read_result_signature(
         return Err(mismatch());
     }
     let mut parameters = Vec::new();
+    let mut parameter_names = BTreeSet::new();
     for (id, parameter) in ids.zip(operation.parameters()) {
         let id = id.ok_or_else(mismatch)?;
+        if matches!(parameter.name(), "self" | "result")
+            || !parameter_names.insert(parameter.name())
+        {
+            return Err(mismatch());
+        }
         let scalar =
             machine_scalar(parameter.member_type().ok_or_else(mismatch)?).ok_or_else(mismatch)?;
         if package
