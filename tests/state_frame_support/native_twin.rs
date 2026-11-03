@@ -672,6 +672,27 @@ impl Twin {
         twin
     }
 
+    /// A declared Integer result with no finite selected model domain.
+    pub fn with_unbounded_result_postcondition() -> Self {
+        let mut twin = Self::with_bounded_result_postcondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"]["typeRef"] = json!("ix://quire/native/Integer");
+        twin.domain = domain.to_string().into_bytes();
+        twin
+    }
+
     /// QSL postcondition with a bounded result and parameter, but no result read.
     pub fn with_unused_bounded_result_postcondition() -> Self {
         let mut twin = Self::with_bounded_other_condition();

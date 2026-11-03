@@ -488,6 +488,108 @@ fn qsl_unused_result_binder_still_checks_produced_domain() {
         .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
 }
 
+/// The emitted Boolean result oracle reads the exact returned bit for both values.
+#[trace("FR-025-AC-12", "FR-025-AC-13", "TC-036")]
+#[test]
+fn qsl_boolean_result_uses_the_same_subject_value_for_both_bits() {
+    let (package, clause) =
+        Twin::with_boolean_result_postcondition("result").emitted_package("DepositResult");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("Boolean result oracle");
+    let [input] = oracle.descriptor.inputs.as_slice() else {
+        panic!("one result read");
+    };
+    assert_eq!(input.name, "result_result");
+    assert!(input.boolean);
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean result postcondition emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one Boolean result harness");
+    };
+    assert!(harness.identity.arguments.is_empty());
+    assert!(!harness.rust.contents.contains("kani::any()"));
+    assert!(harness.rust.contents.contains("let subject_result: bool ="));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let result_result = subject_result;"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&result_result)"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-boolean-result-oracle");
+    fs::write(
+        directory.path.join("src/main.rs"),
+        format!(
+            "mod emitted {{\n{}\npub fn check() {{ for returned in [false, true] {{ let actual = oracle_clause(&returned); assert_eq!(actual, returned); let opposite = oracle_clause(&!returned); assert_ne!(opposite, returned); }} }}\n}}\nfn main() {{ emitted::check(); }}\n",
+            oracle.source
+        ),
+    )
+    .expect("oracle runner");
+    super::scratch_crate::write_manifest(
+        &directory.path,
+        &format!(
+            "[package]\nname = \"generated-v2-boolean-result\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+        ),
+    );
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--locked", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
+        .output()
+        .expect("execute Boolean result oracle");
+    assert!(
+        output.status.success(),
+        "Boolean result oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// An unbounded selected result is refused before any scalar harness is exposed.
+#[trace("FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_unbounded_result_refuses_without_a_scalar_harness() {
+    let (package, clause) =
+        Twin::with_unbounded_result_postcondition().emitted_package("DepositResult");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        &outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseResultDomainUnsupported { node_id }
+        } if node_id == &clause
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("unsupported result is accounted");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
 /// A V2 precondition is selected by its checked clause node, draws the operation parameter
 /// inside the model's bound, and emits its own cover-only harness with the exact clause oracle.
 #[trace("TC-025")]
