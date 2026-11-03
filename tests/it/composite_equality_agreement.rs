@@ -11,9 +11,11 @@
 //! against their own genuine source contexts through the scratch-crate runner.
 
 use ix_trace_rs::trace;
-use std::{collections::BTreeSet, fs, path::PathBuf};
+use std::{collections::BTreeSet, fs};
 
-use super::exact_scalar_agreement::run_composite_agreement_cases;
+use super::exact_scalar_agreement::{
+    run_composite_agreement_workspace, stage_composite_agreement_case,
+};
 
 /// The crate the generator emits now for the corpus request compiles and every
 /// agreement case passes against it. Each case drives the generated oracle and
@@ -31,7 +33,10 @@ use super::exact_scalar_agreement::run_composite_agreement_cases;
 #[test]
 fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
     assert_eq!(fixture::CASES.len(), 15, "keep the complete source corpus");
+    let scratch = super::scratch_crate::TemporaryDirectory::new("composite-equality-workspace");
+    let workspace = &scratch.path;
     let mut package_names = BTreeSet::new();
+    let mut staged = Vec::new();
     for case in fixture::CASES {
         let compiled = fixture::compile(case);
         let package = super::admitted_enum_equality::checked(&compiled, &[]);
@@ -140,7 +145,8 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
             ));
         }
         let label = format!("composite-equality-agreement-{case}");
-        run_composite_agreement_cases(
+        let expected_tests = stage_composite_agreement_case(
+            workspace,
             &label,
             oracles
                 .artifacts
@@ -149,9 +155,7 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
             &[("names.rs", names.as_str()), ("case-mode", case)],
             &format!("tests/composite_equality_support/cases/{case}.rs"),
         );
-        let manifest_path = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(&label)
-            .join("Cargo.toml");
+        let manifest_path = workspace.join(&label).join("Cargo.toml");
         let manifest = fs::read_to_string(&manifest_path)
             .unwrap_or_else(|error| panic!("{case}: read generated scratch manifest: {error}"));
         assert!(
@@ -159,10 +163,12 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
             "{case}: scratch package did not use its distinct test-local identity"
         );
         assert!(
-            package_names.insert(label),
+            package_names.insert(label.clone()),
             "{case}: scratch package identity repeated"
         );
+        staged.push((label, expected_tests));
     }
+    run_composite_agreement_workspace(workspace, &staged);
 }
 
 #[path = "../composite_equality_support/authentic_native.rs"]

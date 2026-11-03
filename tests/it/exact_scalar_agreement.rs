@@ -48,27 +48,138 @@ pub(super) fn run_agreement_cases<'a>(
 }
 
 enum SharedTarget<'a> {
-    Composite(&'a str),
     AdmittedEnum(&'a str),
 }
 
-/// Composite equality's fixed corpus uses `label` as each scratch crate's test-only package
-/// identity. The labels must be distinct valid Cargo package names; each generated manifest
-/// retains its original identity in `artifacts`, while these test copies reuse one target dir.
-pub(super) fn run_composite_agreement_cases<'a>(
+/// Stage one composite equality case as a distinct package in the scratch workspace.
+#[ix_trace_rs::string_edge]
+pub(super) fn stage_composite_agreement_case<'a>(
+    workspace: &Path,
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
-) {
-    run_agreement_cases_with_expectation(
-        label,
-        artifacts,
-        extra_files,
-        cases,
-        None,
-        Some(SharedTarget::Composite(label)),
+) -> Vec<String> {
+    let root = workspace.join(label);
+    let mut wrote_manifest = false;
+    for (path, contents) in artifacts.into_iter().chain(extra_files.iter().copied()) {
+        wrote_manifest |= path == "Cargo.toml";
+        let destination = root.join(path);
+        fs::create_dir_all(destination.parent().expect("artifact paths are relative"))
+            .expect("create composite scratch directory");
+        fs::write(destination, contents).expect("write composite scratch file");
+    }
+    assert!(wrote_manifest, "{label}: generation emitted no Cargo.toml");
+    let manifest_path = root.join("Cargo.toml");
+    let manifest = fs::read_to_string(&manifest_path).expect("read composite manifest");
+    let mut manifest = composite_manifest_for_shared_target(&manifest, label);
+    assert_eq!(manifest.matches("[workspace]\n").count(), 1);
+    manifest = manifest.replacen("[workspace]\n", "", 1);
+    let cases_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(cases);
+    write!(
+        manifest,
+        "\n[[test]]\nname = \"agreement\"\npath = {:?}\n\n[dev-dependencies]\n{AGREEMENT_DEV_DEPENDENCIES}",
+        cases_path.to_str().expect("UTF-8 repository path"),
+    )
+    .expect("write to String");
+    fs::write(manifest_path, manifest).expect("write composite workspace member");
+    let source = fs::read_to_string(cases_path).expect("read composite agreement cases");
+    let expected = source
+        .lines()
+        .zip(source.lines().skip(1))
+        .filter(|(attribute, _)| attribute.trim() == "#[test]")
+        .map(|(_, next)| {
+            next.trim()
+                .strip_prefix("fn ")
+                .and_then(|signature| signature.split_once('('))
+                .map(|(name, _)| name.to_owned())
+                .expect("composite test name follows #[test]")
+        })
+        .collect::<Vec<_>>();
+    assert!(!expected.is_empty(), "{label}: {cases} declares no test");
+    expected
+}
+
+/// Build and run all distinct composite packages through one Cargo workspace invocation.
+#[ix_trace_rs::string_edge]
+pub(super) fn run_composite_agreement_workspace(workspace: &Path, cases: &[(String, Vec<String>)]) {
+    let members = cases
+        .iter()
+        .map(|(label, _)| format!("\"{label}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        workspace.join("Cargo.toml"),
+        format!("[workspace]\nmembers = [{members}]\nresolver = \"2\"\n"),
+    )
+    .expect("write composite scratch workspace");
+    super::scratch_crate::resolve_seeded_lock(workspace);
+
+    // Cargo can compile the distinct packages together; the mutex still protects their
+    // shared target while it compiles and executes every native agreement test.
+    let build = super::scratch_crate::lock_agreement_build();
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "test",
+            "--locked",
+            "--offline",
+            "--workspace",
+            "--test",
+            "agreement",
+        ])
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .current_dir(workspace)
+        .output()
+        .expect("run composite agreement workspace");
+    drop(build);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "composite agreement workspace failed:\n{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let mut passed = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("test result: ok. "))
+        .map(|rest| {
+            rest.split(' ')
+                .next()
+                .expect("test summary has a count")
+                .parse::<usize>()
+                .expect("test summary count is numeric")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        passed.len(),
+        cases.len(),
+        "every composite package must run"
+    );
+    assert!(
+        passed.iter().all(|count| *count > 0),
+        "every package has native assertions"
+    );
+    let mut expected_counts = cases
+        .iter()
+        .map(|(_, names)| names.len())
+        .collect::<Vec<_>>();
+    passed.sort_unstable();
+    expected_counts.sort_unstable();
+    assert_eq!(
+        passed, expected_counts,
+        "each package's native test count must match"
+    );
+    for name in cases.iter().flat_map(|(_, names)| names) {
+        assert_eq!(
+            stdout
+                .lines()
+                .filter(|line| *line == format!("test {name} ... ok"))
+                .count(),
+            1,
+            "native agreement test {name} must pass exactly once"
+        );
+    }
 }
 
 /// Keep generated enum variants in distinct scratch packages while reusing their
@@ -132,9 +243,6 @@ fn run_agreement_cases_with_expectation<'a>(
     let manifest_path = root.join("Cargo.toml");
     let mut manifest = fs::read_to_string(&manifest_path).expect("read generated manifest");
     manifest = match shared_target {
-        Some(SharedTarget::Composite(package_name)) => {
-            composite_manifest_for_shared_target(&manifest, package_name)
-        }
         Some(SharedTarget::AdmittedEnum(package_name)) => {
             enum_manifest_for_shared_target(&manifest, package_name)
         }
