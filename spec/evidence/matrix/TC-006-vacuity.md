@@ -168,9 +168,10 @@ input gives non-success with no invented classification (AC-24); and neither `Bo
    result. The LLVM producer identity and actual probe observations remain CG coverage inputs,
    not QSL result members.
 
-These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
-result/execution/source/map/export association to CG, whose live runner binding still needs
-implementation. No stored or wire receipt is specified. For V2 identity, compare the QSL
+These controls are Planned / UNRUN. QSL-520 delivered the public `/2` producer and strict reader;
+CG consumption remains unrun. QSL-688 allocated the result/execution/source/map/export association
+to CG, whose live runner binding still needs implementation. No stored or wire receipt is specified.
+For V2 identity, compare the QSL
 driver-bound FR-331 claim occurrence (node, role, and ordinal) and the same-owner admitted
 `CheckedPackageV2::package_id()` with the campaign, generated map, and analyzed population using
 the FR-011 canonical rendering or exact typed fields. Corrupt one occurrence component and one
@@ -180,8 +181,8 @@ association.
 The existing `analyze_bound_coverage` primitive does not
 consume a QSL result and is not evidence for these steps.
 
-TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
-completion of bound analysis, native-run binding, or a consuming obligation.
+TC-006 and FR-004 matrix rows remain Planned / UNRUN: primitive controls are partial
+implementation; production live campaign binding and consuming-obligation evidence are unrun.
 
 ## Planned V2 runner publication control (IR-1124)
 
