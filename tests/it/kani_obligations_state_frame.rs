@@ -502,6 +502,45 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// A selected model field supplies its declared domain to a V2 precondition draw.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_precondition_draws_selected_own_field_domain() {
+    let (package, clause) =
+        Twin::with_balance_field_precondition().emitted_package("BalanceAboveFloor");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("admitted field oracle");
+    let [field_input] = oracle.descriptor.inputs.as_slice() else {
+        panic!("one field input");
+    };
+    assert_eq!(field_input.name, "current_balance");
+    assert_eq!((field_input.lower, field_input.upper), (-5, 10));
+
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the selected field precondition must emit: {outcome:?}");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one field precondition harness");
+    };
+    assert!(harness.rust.contents.contains("current_balance >= -5"));
+    assert!(harness.rust.contents.contains("current_balance <= 10"));
+    assert!(harness.rust.contents.contains("oracle_clause(&current_balance, &mut meter)"));
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 /// Two source-authored operation parameters retain their distinct inclusive IR bounds and
 /// checked argument order in a single V2 precondition harness.
 #[trace("FR-015-AC-39", "TC-025")]
