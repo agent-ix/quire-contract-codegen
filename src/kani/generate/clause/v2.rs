@@ -1,8 +1,18 @@
 //! Bounded harnesses for admitted V2 scalar clauses (FR-015).
 
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../../tests/state_frame_support/model.rs"]
+mod model;
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../../tests/state_frame_support/native_twin.rs"]
+mod native_twin;
+
 use quire_contract_model::{
-    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind, CheckedPackageV2,
-    CheckedTerm, CompositeTypeForm, ContractSourceV1, LiteralKind, ScalarTypeForm,
+    ApplicationOperator, CheckedMemberType, CheckedModelOperations, CheckedNodeId, CheckedNodeKind,
+    CheckedOperationParameter, CheckedOperationReadError, CheckedPackageV2, CheckedTerm,
+    CompositeTypeForm, ContractSourceV1, LiteralKind, ScalarTypeForm,
 };
 use quote::ToTokens;
 use std::collections::BTreeSet;
@@ -90,12 +100,26 @@ pub(in crate::kani::generate) fn lower(
     clause: &CheckedNodeId,
     kind: ObligationKind,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
+    lower_with_census(view, clause, kind, |package, context| {
+        package.model_operations(context, 65_536)
+    })
+}
+
+fn lower_with_census<'a>(
+    view: &ClauseGraphView<'a>,
+    clause: &CheckedNodeId,
+    kind: ObligationKind,
+    census: impl FnOnce(
+        &'a CheckedPackageV2,
+        &CheckedNodeId,
+    ) -> Result<CheckedModelOperations<'a>, CheckedOperationReadError>,
+) -> Result<LoweredV2Clause, UnsupportedObligation> {
     let package = view.package();
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
     let result_postcondition = if kind == ObligationKind::Postcondition {
-        Some(read_postcondition_signature(view, clause)?)
+        Some(read_postcondition_signature(view, clause, census)?)
     } else {
         None
     };
@@ -320,9 +344,13 @@ fn self_binder_matches_context(
         )
 }
 
-fn read_postcondition_signature(
-    view: &ClauseGraphView<'_>,
+fn read_postcondition_signature<'a>(
+    view: &ClauseGraphView<'a>,
     clause: &CheckedNodeId,
+    census_read: impl FnOnce(
+        &'a CheckedPackageV2,
+        &CheckedNodeId,
+    ) -> Result<CheckedModelOperations<'a>, CheckedOperationReadError>,
 ) -> Result<ResultPostcondition, UnsupportedObligation> {
     let mismatch = || UnsupportedObligation::V2ClauseSignatureMismatch {
         node_id: clause.clone(),
@@ -351,12 +379,12 @@ fn read_postcondition_signature(
         bound_members(&body.members, ["context", "operation", "frame"]).ok_or_else(mismatch)?;
     let context = reference(context).ok_or_else(mismatch)?;
     let operation_name = literal(operation_name, LiteralKind::Text).ok_or_else(mismatch)?;
-    let census = package
-        .model_operations(context, 65_536)
-        .map_err(|source| UnsupportedObligation::V2ClauseOperationRead {
+    let census = census_read(package, context).map_err(|source| {
+        UnsupportedObligation::V2ClauseOperationRead {
             node_id: clause.clone(),
             source,
-        })?;
+        }
+    })?;
     let mut matches = census
         .operations()
         .iter()
@@ -369,8 +397,29 @@ fn read_postcondition_signature(
         .result()
         .map(|member| machine_scalar(member.ok_or_else(unsupported)?).ok_or_else(unsupported))
         .transpose()?;
-    let expected = operation
-        .parameters()
+    validate_signature_binders(
+        view,
+        clause,
+        context,
+        members,
+        operation.parameters(),
+        result,
+    )
+}
+
+fn validate_signature_binders(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+    context: &CheckedNodeId,
+    members: &[CheckedTerm],
+    signature_parameters: &[CheckedOperationParameter<'_>],
+    result: Option<MachineScalar>,
+) -> Result<ResultPostcondition, UnsupportedObligation> {
+    let mismatch = || UnsupportedObligation::V2ClauseSignatureMismatch {
+        node_id: clause.clone(),
+    };
+    let package = view.package();
+    let expected = signature_parameters
         .len()
         .checked_add(if result.is_some() { 2 } else { 1 })
         .ok_or_else(mismatch)?;
@@ -404,7 +453,7 @@ fn read_postcondition_signature(
     }
     let mut parameters = Vec::new();
     let mut parameter_names = BTreeSet::new();
-    for (id, parameter) in ids.zip(operation.parameters()) {
+    for (id, parameter) in ids.zip(signature_parameters) {
         let id = id.ok_or_else(mismatch)?;
         if matches!(parameter.name(), "self" | "result")
             || !parameter_names.insert(parameter.name())
@@ -1551,6 +1600,106 @@ mod unsupported_operator_tests {
             unsupported_clause_operator(&term),
             Some("quire.op.integer.abs")
         );
+    }
+}
+
+#[cfg(test)]
+mod postcondition_signature_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedOperationReadErrorCode;
+
+    #[trace("FR-025-AC-11", "TC-036")]
+    #[test]
+    fn refused_complete_census_keeps_its_original_typed_work_record() {
+        let (package, clause) =
+            native_twin::Twin::with_bounded_result_postcondition().emitted_package("DepositResult");
+        let view = ClauseGraphView::new(&package);
+        let refusal =
+            match lower_with_census(&view, &clause, ObligationKind::Postcondition, |p, c| {
+                p.model_operations(c, 0)
+            }) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("a refused complete read cannot expose a lowerable harness"),
+            };
+        let UnsupportedObligation::V2ClauseOperationRead { node_id, source } = refusal else {
+            panic!("the original typed read refusal is retained: {refusal:?}");
+        };
+        assert_eq!(node_id, clause);
+        assert_eq!(source.code, CheckedOperationReadErrorCode::WorkLimit);
+        assert_eq!(source.limit, 0);
+        assert_eq!(source.work, 1);
+        let context = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == "object_type")
+            .expect("selected object context");
+        assert_eq!(source.context, context.node_id);
+    }
+
+    #[trace("FR-025-AC-11", "TC-036")]
+    #[test]
+    fn binder_role_type_and_order_mismatches_refuse_before_harness_lowering() {
+        let (package, clause) = native_twin::Twin::with_two_parameter_result_postcondition()
+            .emitted_package("ResultWithParameters");
+        let view = ClauseGraphView::new(&package);
+        let context = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == "object_type")
+            .expect("selected object context");
+        let operations = package
+            .model_operations(&context.node_id, 65_536)
+            .expect("authentic complete signature");
+        let operation = operations
+            .operations()
+            .iter()
+            .find(|operation| operation.name() == "deposit")
+            .expect("selected deposit operation");
+        let [CheckedTerm::Aggregate { members }, _, _] = application(
+            package.term(&clause).expect("admitted clause body"),
+            ApplicationOperator::StateClause,
+            "quire.op.state.clause",
+        )
+        .expect("admitted state clause") else {
+            panic!("admitted ordered binders");
+        };
+        assert_eq!(members.len(), 4);
+        let result = machine_scalar(
+            operation
+                .result()
+                .flatten()
+                .expect("bounded produced result"),
+        )
+        .expect("signed-i64 result domain");
+        let mut wrong_role = members.clone();
+        wrong_role.swap(0, 1);
+        let mut wrong_order = members.clone();
+        wrong_order.swap(2, 3);
+        for (label, changed, expected_result) in [
+            ("role", wrong_role, Some(result.clone())),
+            ("order", wrong_order, Some(result)),
+            ("type", members.clone(), Some(MachineScalar::Boolean)),
+        ] {
+            let refusal = match validate_signature_binders(
+                &view,
+                &clause,
+                &context.node_id,
+                &changed,
+                operation.parameters(),
+                expected_result,
+            ) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("{label} mismatch would expose a lowerable harness"),
+            };
+            assert!(matches!(
+                refusal,
+                UnsupportedObligation::V2ClauseSignatureMismatch { node_id }
+                    if node_id == clause
+            ));
+        }
     }
 }
 
