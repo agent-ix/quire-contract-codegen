@@ -753,7 +753,7 @@ fn render_result_postcondition(
     let mut arguments = Vec::new();
     let mut oracle_bindings = BTreeSet::new();
     let mut drawn_parameters = signature.parameters.iter().collect::<Vec<_>>();
-    drawn_parameters.sort_by_key(|parameter| &parameter.name);
+    drawn_parameters.sort_by(|left, right| left.name.cmp(&right.name));
     for parameter in drawn_parameters {
         let oracle_name = format!("parameter_{}", parameter.name);
         let symbolic = format!("{oracle_name}_current");
