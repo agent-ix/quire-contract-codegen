@@ -28,3 +28,11 @@ Changes requested: TC-007 does not define whether an outside-domain census class
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | TC-007 normalizes only admitted census tags and oracle Booleans, then asks whether an outside-domain classification and an oracle Boolean differ without defining their common normalization or saying they are always a profile distinction. One implementation could omit every outside-domain register row while another requires one per case. State the exact comparison and register rule for outside-domain observations. | spec/core/matrix/TC-007-cross-backend-parity.md:32-44 |
+
+## Dispositions
+
+Round 1 at 5a0a88cf02ff3d1ae40dc99aa6821be2ff69eeb1: PASS. TC-007 now assigns outside-model candidates the normalized pair NotComparable, retains the executable Boolean separately, excludes them from semantic discrepancies and register rows, and forbids parity credit.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The outside-domain normalization and no-register rule are explicit in TC-007 step 3, the register contract, and Expected Results. |
