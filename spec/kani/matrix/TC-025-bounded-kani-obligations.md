@@ -464,6 +464,7 @@ The remaining V2 clause controls in this section retain their stated planned sta
     native `i128` assertion of each arithmetic subterm. Admit QSL's checked
     `numeric.narrow` wrapper around literal `1` through FR-014-AC-54, without
     treating it as an arbitrary conversion or adding an admission charge.
+
     Run the installed backend over the healthy clause and, in separate runs of
     the same clause, mutate the `+` arithmetic executed by the embedded clause
     oracle (or the authoritative kernel operation it calls) to return
@@ -483,6 +484,13 @@ The remaining V2 clause controls in this section retain their stated planned sta
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.
+
+    Current AC-40 controls: `qsl_v2_precondition_embeds_exact_referenced_clause_oracle`
+    admits QSL preconditions for `and`, `or`, `not`, `implies`, Boolean `eq` and `ne`,
+    and integer `eq`, `ne`, `lt`, `le`, `gt`, `ge`; it compares the embedded oracle
+    bytes with `generate_v2_clause_oracle` for the same clause id.
+    `inline_v2_precondition_embeds_exact_clause_oracle` makes the same comparison
+    for a checked inline Boolean literal and checks its clause id.
 12. Request a clause with an unsupported operator (division, modulo, absolute value), a
     node that is not a modelled clause role and an absent node id beside a supported item.
     The operator is `unsupported`, the other two refused as FR-015-AC-14 states, each
