@@ -161,6 +161,9 @@ pub(super) enum ProofKind {
 #[derive(Clone, Copy, Debug)]
 pub(super) enum LetType {
     I128,
+    I64,
+    Boolean,
+    Unit,
 }
 #[derive(Clone, Debug)]
 pub(super) enum Init {
@@ -225,6 +228,11 @@ pub(super) enum Statement {
     /// Fixed compiled runtime subject for the V2 Boolean implication control.
     SubjectImplicationCall,
     Assert {
+        condition: ExprText,
+        message: String,
+    },
+    /// The produced result's admitted domain, checked before invoking its clause oracle.
+    ProducedResultDomainAssert {
         condition: ExprText,
         message: String,
     },
@@ -532,6 +540,12 @@ impl HarnessSpec {
                 Statement::SubjectImplicationCall => {}
                 Statement::Assert { message: text, .. } => {
                     if !called {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                    message(text)?;
+                }
+                Statement::ProducedResultDomainAssert { message: text, .. } => {
+                    if called || !names.contains("subject_result") {
                         return Err(HarnessSpecError::AssertBeforeCall);
                     }
                     message(text)?;

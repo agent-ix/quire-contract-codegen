@@ -93,7 +93,7 @@ pub enum ConstrainedMethodRefusal {
     Render,
 }
 
-fn serialize_census<S: serde::Serializer>(
+pub(super) fn serialize_census<S: serde::Serializer>(
     error: &quire_contract_model::CheckedOperationReadError,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {

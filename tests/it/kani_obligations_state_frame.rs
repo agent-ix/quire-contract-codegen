@@ -392,8 +392,8 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     );
 }
 
-/// A result-only operation must never turn its produced value into a symbolic subject argument.
-#[trace("FR-015-AC-39", "TC-025")]
+/// The result-only subject returns an integer; its result is checked and reaches the oracle.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
 fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
     let (package, clause) =
@@ -404,29 +404,106 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         dependencies: None,
     }]);
     assert!(matches!(
-        &outcome.records()[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseResultNotRendered {
-                node_id,
-                result_node,
-            }
-        } if node_id == &clause
-            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
     ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
     } = outcome
     else {
-        panic!("a well-formed unsupported item is accounted individually");
+        panic!("the admitted result postcondition emits");
     };
-    assert!(v2_clause_harnesses.is_empty());
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one result postcondition harness");
+    };
+    assert!(harness.identity.arguments.is_empty());
+    assert!(!harness.rust.contents.contains("kani::any()"));
+    assert!(harness.rust.contents.contains("let subject_result: i64 ="));
+    assert!(harness.rust.contents.contains("subject_result >= 0"));
+    assert!(harness.rust.contents.contains("subject_result <= 1000"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("rt::Integer::from(subject_result)"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&result_result"));
+    let domain = harness
+        .rust
+        .contents
+        .find("subject_result >= 0")
+        .expect("domain assertion");
+    let oracle_call = harness
+        .rust
+        .contents
+        .find("let outcome = oracle_clause(")
+        .expect("oracle call");
+    let clause = harness
+        .rust
+        .contents
+        .find("the V2 postcondition holds")
+        .expect("clause assertion");
+    let cover = harness
+        .rust
+        .contents
+        .find("kani::cover!")
+        .expect("final cover");
+    assert!(domain < oracle_call && oracle_call < clause && clause < cover);
+    let source = syn::parse_file(&harness.rust.contents).expect("generated Rust parses");
+    let proof = source
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol.as_str() => {
+                module
+                    .content
+                    .as_ref()?
+                    .1
+                    .iter()
+                    .find_map(|item| match item {
+                        syn::Item::Fn(function)
+                            if function.sig.ident == harness.identity.harness_symbol.as_str() =>
+                        {
+                            Some(function)
+                        }
+                        _ => None,
+                    })
+            }
+            _ => None,
+        })
+        .expect("generated postcondition proof");
+    let domain_assertions = proof
+        .block
+        .stmts
+        .iter()
+        .filter_map(|statement| match statement {
+            syn::Stmt::Macro(statement)
+                if statement.mac.path.is_ident("assert")
+                    && statement
+                        .mac
+                        .tokens
+                        .to_string()
+                        .contains("subject_result >= 0") =>
+            {
+                Some(statement)
+            }
+            _ => None,
+        })
+        .count();
+    assert_eq!(domain_assertions, 1, "the produced domain is an assertion");
+    assert!(!proof.block.stmts.iter().any(|statement| matches!(statement,
+        syn::Stmt::Macro(statement)
+            if statement.mac.path.segments.last().is_some_and(|segment| segment.ident == "assume")
+                && statement.mac.tokens.to_string().contains("subject_result")
+    )));
 }
 
-/// A declared operation result is not an input even when the clause body reads only a parameter.
-#[trace("FR-015-AC-39", "TC-025")]
+/// An unused result is still produced and checked, while the parameter is the sole draw.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
-fn qsl_unused_result_binder_refuses_postcondition_harness() {
+fn qsl_result_unused_binder_still_checks_produced_domain() {
     let (package, clause) =
         Twin::with_unused_bounded_result_postcondition().emitted_package("DepositParameter");
     let outcome = negotiate(&[ObligationItem::V2Clause {
@@ -435,21 +512,220 @@ fn qsl_unused_result_binder_refuses_postcondition_harness() {
         dependencies: None,
     }]);
     assert!(matches!(
-        &outcome.records()[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseResultNotRendered {
-                node_id,
-                result_node,
-            }
-        } if node_id == &clause
-            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
     ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
     } = outcome
     else {
-        panic!("a well-formed unsupported item is accounted individually");
+        panic!("the admitted result and parameter postcondition emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one result and parameter postcondition harness");
+    };
+    let [argument] = harness.identity.arguments.as_slice() else {
+        panic!("only the operation parameter is drawn");
+    };
+    assert_eq!(argument.identifier, "parameter_other_current");
+    assert_eq!((argument.minimum, argument.maximum), (0, 1000));
+    assert_eq!(harness.rust.contents.matches("kani::any()").count(), 1);
+    assert!(harness.rust.contents.contains("subject_result: i64"));
+    assert!(harness.rust.contents.contains("subject_result >= 0"));
+    assert!(harness.rust.contents.contains("subject_result <= 1000"));
+    assert!(harness
+        .rust
+        .contents
+        .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
+}
+
+/// Signature order controls the subject call while logical draws ascend by parameter name.
+#[trace("FR-025-AC-1", "FR-025-AC-11", "FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_result_postcondition_keeps_declared_parameter_call_order() {
+    let (package, clause) =
+        Twin::with_two_parameter_result_postcondition().emitted_package("ResultWithParameters");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("ordered result postcondition emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one ordered result postcondition harness");
+    };
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|argument| argument.identifier.as_str())
+            .collect::<Vec<_>>(),
+        ["parameter_offset_current", "parameter_other_current"]
+    );
+    assert!(harness.rust.contents.contains(&format!(
+        "{REQUEST_SUBJECT}(parameter_other_current, parameter_offset_current)"
+    )));
+    assert_eq!(harness.rust.contents.matches("kani::any()").count(), 2);
+    assert!(harness
+        .rust
+        .contents
+        .contains("rt::Integer::from(subject_result)"));
+}
+
+/// The emitted Boolean result oracle reads the exact returned bit for both values.
+#[trace("FR-025-AC-12", "FR-025-AC-13", "TC-036")]
+#[test]
+fn qsl_result_boolean_uses_the_same_subject_value_for_both_bits() {
+    let (package, clause) =
+        Twin::with_boolean_result_postcondition("result").emitted_package("DepositResult");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("Boolean result oracle");
+    let [input] = oracle.descriptor.inputs.as_slice() else {
+        panic!("one result read");
+    };
+    assert_eq!(input.name, "result_result");
+    assert!(input.boolean);
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean result postcondition emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one Boolean result harness");
+    };
+    assert!(harness.identity.arguments.is_empty());
+    assert!(!harness.rust.contents.contains("kani::any()"));
+    assert!(harness.rust.contents.contains("let subject_result: bool ="));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let result_result = subject_result;"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(result_result)"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-boolean-result-oracle");
+    fs::write(
+        directory.path.join("src/main.rs"),
+        format!(
+            "mod emitted {{\n{}\npub fn check() {{ for returned in [false, true] {{ let actual = oracle_clause(returned); assert_eq!(actual, returned); let opposite = oracle_clause(!returned); assert_ne!(opposite, returned); }} }}\n}}\nfn main() {{ emitted::check(); }}\n",
+            oracle.source
+        ),
+    )
+    .expect("oracle runner");
+    super::scratch_crate::write_manifest(
+        &directory.path,
+        &format!(
+            "[package]\nname = \"generated-v2-boolean-result\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+        ),
+    );
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--locked", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
+        .output()
+        .expect("execute Boolean result oracle");
+    assert!(
+        output.status.success(),
+        "Boolean result oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Boolean parameters are drawn, then passed by value to both the subject and clause oracle.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_result_boolean_parameter_preserves_value_binding() {
+    let (package, clause) =
+        Twin::with_boolean_result_parameter_postcondition().emitted_package("DepositResult");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean parameter and result emit");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one Boolean parameter and result harness");
+    };
+    let [parameter] = harness.identity.arguments.as_slice() else {
+        panic!("only the Boolean parameter is drawn");
+    };
+    assert_eq!(parameter.identifier, "parameter_other_current");
+    assert_eq!((parameter.minimum, parameter.maximum), (0, 1));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let parameter_other_current: bool = kani::any()"));
+    assert!(harness
+        .rust
+        .contents
+        .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(parameter_other, result_result"));
+}
+
+/// An unbounded selected result is refused before any scalar harness is exposed.
+#[trace("FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_result_unbounded_refuses_without_a_scalar_harness() {
+    let (package, clause) =
+        Twin::with_unbounded_result_postcondition().emitted_package("DepositResult");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        &outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseResultDomainUnsupported { node_id }
+        } if node_id == &clause
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("unsupported result is accounted");
     };
     assert!(v2_clause_harnesses.is_empty());
 }
@@ -1089,13 +1365,14 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     .expect("the original clause request is well formed");
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
+        records,
         ..
     } = outcome
     else {
         panic!("the native postcondition is emitted");
     };
     let [harness] = v2_clause_harnesses.as_slice() else {
-        panic!("one original postcondition harness");
+        panic!("one original postcondition harness: {v2_clause_harnesses:?}; {records:?}");
     };
     assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
     assert_eq!(harness.identity.arguments[0].minimum, 0);
@@ -1112,8 +1389,86 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     assert!(harness.rust.contents.contains("nx::NativeIntegerPlan::new"));
     assert!(!harness.rust.contents.contains("_i128_i128"));
     assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
-    assert!(harness.rust.contents.contains("subject == expected"));
+    assert!(harness.rust.contents.contains("let subject_result: bool ="));
+    assert!(harness.rust.contents.contains("subject_result == expected"));
+    assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let result_result = subject_result;"));
     syn::parse_file(&harness.rust.contents).expect("the native harness is valid Rust syntax");
+}
+
+#[trace("FR-015-AC-119", "FR-015-AC-126", "TC-025")]
+#[test]
+fn native_v2_boolean_result_subject_mutation_fails_the_generated_assertion() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("admitted Boolean-result clause request");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean-result clause emits a harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one generated Boolean-result harness");
+    };
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-result-subject-control");
+    fs::create_dir_all(directory.path.join("src")).expect("scratch source directory");
+    write_v2_precondition_fixture(&directory.path, harness);
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    for (subject_result, should_pass) in [(true, true), (false, false)] {
+        let stub = format!(
+            "extern crate self as kani;\npub fn any<T: Default>() -> T {{ T::default() }}\npub fn assume(_: bool) {{}}\n#[macro_export]\nmacro_rules! cover {{ ($condition:expr, $message:expr) => {{ let _ = ($condition, $message); }}; }}\npub mod request {{ pub fn unrelated(_: i64) -> bool {{ {subject_result} }} }}\n"
+        );
+        let source = format!(
+            "{stub}{}",
+            harness
+                .rust
+                .contents
+                .replace("#[kani::proof]", "#[test]")
+                .replace("#[cfg(kani)]", "")
+        );
+        fs::write(directory.path.join("src/lib.rs"), source).expect("generated proof source");
+        let output = std::process::Command::new("cargo")
+            .args(["test", "--locked", "--offline", "--lib", "--quiet"])
+            .env(
+                "CARGO_TARGET_DIR",
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+            )
+            .current_dir(&directory.path)
+            .output()
+            .expect("execute generated proof without Kani");
+        assert_eq!(
+            output.status.success(),
+            should_pass,
+            "subject {subject_result}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !should_pass {
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains(
+                    "the produced V2 Boolean result agrees with the independent checked condition"
+                ),
+                "the subject mutant must fail the generated independent assertion: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }
 
 /// Decode only the actual helper-mutant playback against its healthy sealed source and record.
@@ -1507,9 +1862,10 @@ fn write_v2_precondition_fixture(
     super::scratch_crate::write_manifest(
         directory,
         &format!(
-            "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
             super::scratch_crate::runtime_dependency(&["exact"]),
-            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
         ),
     );
     fs::write(

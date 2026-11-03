@@ -1,7 +1,18 @@
 //! Bounded harnesses for admitted V2 scalar clauses (FR-015).
 
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../../tests/state_frame_support/model.rs"]
+mod model;
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../../tests/state_frame_support/native_twin.rs"]
+mod native_twin;
+
 use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedPackageV2, CheckedTerm, ContractSourceV1,
+    ApplicationOperator, CheckedMemberType, CheckedModelOperations, CheckedNodeId, CheckedNodeKind,
+    CheckedOperationParameter, CheckedOperationReadError, CheckedPackageV2, CheckedTerm,
+    CompositeTypeForm, ContractSourceV1, LiteralKind, ScalarTypeForm,
 };
 use quote::ToTokens;
 use std::collections::BTreeSet;
@@ -9,8 +20,8 @@ use std::fmt::Write as _;
 
 use crate::{
     core::ir::{
-        checked_term::{application, reference},
-        clause::{read_clause, ClauseGraphView, ClauseTerm, MAX_CONDITION_TERMS},
+        checked_term::{application, bound_members, literal, reference},
+        clause::{read_clause, ClauseGraphView, ClauseInputSide, ClauseTerm, MAX_CONDITION_TERMS},
     },
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
@@ -20,8 +31,8 @@ use crate::{
             record::{harness_path, record},
             render,
             spec::{
-                Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, NativeAdmissionStage,
-                ProofKind, Statement,
+                Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, LetType,
+                NativeAdmissionStage, ProofKind, Statement,
             },
         },
         identity::{
@@ -44,8 +55,25 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     native_expectation: Option<String>,
     arithmetic: Vec<ArithmeticProbe>,
     symbolic_name: Option<String>,
+    result_postcondition: Option<ResultPostcondition>,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
+}
+
+#[derive(Clone)]
+enum MachineScalar {
+    Boolean,
+    Integer { minimum: i64, maximum: i64 },
+}
+
+struct ResultParameter {
+    name: String,
+    scalar: MachineScalar,
+}
+
+struct ResultPostcondition {
+    result: Option<MachineScalar>,
+    parameters: Vec<ResultParameter>,
 }
 
 /// Encode the complete structural key for a generated message. Escaping `%` keeps
@@ -72,18 +100,29 @@ pub(in crate::kani::generate) fn lower(
     clause: &CheckedNodeId,
     kind: ObligationKind,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
+    lower_with_census(view, clause, kind, |package, context| {
+        package.model_operations(context, 65_536)
+    })
+}
+
+fn lower_with_census<'a>(
+    view: &ClauseGraphView<'a>,
+    clause: &CheckedNodeId,
+    kind: ObligationKind,
+    census: impl FnOnce(
+        &'a CheckedPackageV2,
+        &CheckedNodeId,
+    ) -> Result<CheckedModelOperations<'a>, CheckedOperationReadError>,
+) -> Result<LoweredV2Clause, UnsupportedObligation> {
     let package = view.package();
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
-    if kind == ObligationKind::Postcondition {
-        if let Some(result_node) = result_binder(view, clause) {
-            return Err(UnsupportedObligation::V2ClauseResultNotRendered {
-                node_id: clause.clone(),
-                result_node,
-            });
-        }
-    }
+    let result_postcondition = if kind == ObligationKind::Postcondition {
+        Some(read_postcondition_signature(view, clause, census)?)
+    } else {
+        None
+    };
     if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
         return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
             node_id: clause.clone(),
@@ -100,7 +139,12 @@ pub(in crate::kani::generate) fn lower(
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     let input_count_supported = match kind {
         ObligationKind::Precondition => true,
-        ObligationKind::Postcondition => oracle.descriptor.inputs.len() == 1,
+        ObligationKind::Postcondition => {
+            result_postcondition
+                .as_ref()
+                .is_some_and(|signature| signature.result.is_some())
+                || oracle.descriptor.inputs.len() == 1
+        }
         ObligationKind::Invariant => true,
         ObligationKind::Frame => false,
     };
@@ -112,7 +156,12 @@ pub(in crate::kani::generate) fn lower(
                         || input.name.starts_with("current_") && input.state_field.is_some()
                 }
                 ObligationKind::Postcondition => {
-                    input.name.starts_with("parameter_") && input.state_field.is_none()
+                    input.state_field.is_none()
+                        && (input.name.starts_with("parameter_")
+                            || result_postcondition
+                                .as_ref()
+                                .is_some_and(|signature| signature.result.is_some())
+                                && input.name == "result_result")
                 }
                 ObligationKind::Invariant => {
                     input.name.starts_with("current_") && input.state_field.is_some()
@@ -120,7 +169,10 @@ pub(in crate::kani::generate) fn lower(
                 ObligationKind::Frame => false,
             };
             !supported
-                || input.boolean
+                || (input.boolean
+                    && result_postcondition
+                        .as_ref()
+                        .is_some_and(|signature| signature.result.is_none()))
                 || input.lower > input.upper
                 || i64::try_from(input.lower).is_err()
                 || i64::try_from(input.upper).is_err()
@@ -146,15 +198,52 @@ pub(in crate::kani::generate) fn lower(
     {
         return Err(refusal());
     }
-    let (native_expectation, arithmetic, symbolic_name) = if kind == ObligationKind::Postcondition {
+    let (native_expectation, arithmetic, symbolic_name) = if kind == ObligationKind::Postcondition
+        && result_postcondition
+            .as_ref()
+            .is_some_and(|signature| signature.result.is_none())
+    {
+        let signature = result_postcondition.as_ref().ok_or_else(refusal)?;
+        let [parameter] = signature.parameters.as_slice() else {
+            return Err(refusal());
+        };
         let input = oracle.descriptor.inputs.first().ok_or_else(refusal)?;
         let input_name = input.name.strip_prefix("parameter_").ok_or_else(refusal)?;
+        if input_name != parameter.name
+            || !matches!(
+                parameter.scalar,
+                MachineScalar::Integer { minimum, maximum }
+                    if input.lower == i128::from(minimum) && input.upper == i128::from(maximum)
+            )
+        {
+            return Err(refusal());
+        }
         let symbolic_name = format!("{input_name}_current");
         let mut arithmetic = Vec::new();
         let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
             .and_then(NativeTerm::boolean)
             .ok_or_else(refusal)?;
         (Some(expectation), arithmetic, Some(symbolic_name))
+    } else if kind == ObligationKind::Postcondition
+        && result_postcondition
+            .as_ref()
+            .is_some_and(|signature| matches!(signature.result, Some(MachineScalar::Boolean)))
+    {
+        let signature = result_postcondition.as_ref().ok_or_else(refusal)?;
+        if let [parameter] = signature.parameters.as_slice() {
+            let symbolic_name = format!("parameter_{}_current", parameter.name);
+            let mut arithmetic = Vec::new();
+            let expectation = match (&parameter.scalar, result_expectation_term(&condition.term)) {
+                (MachineScalar::Integer { .. }, Some(term)) => {
+                    native_term(term, &parameter.name, &symbolic_name, &mut arithmetic)
+                        .and_then(NativeTerm::boolean)
+                }
+                _ => None,
+            };
+            (expectation, arithmetic, Some(symbolic_name))
+        } else {
+            (None, Vec::new(), None)
+        }
     } else {
         (None, Vec::new(), None)
     };
@@ -193,6 +282,7 @@ pub(in crate::kani::generate) fn lower(
         native_expectation,
         arithmetic,
         symbolic_name,
+        result_postcondition,
         module_symbol,
         harness_symbol: if kind == ObligationKind::Postcondition {
             "prove_clause"
@@ -205,28 +295,209 @@ pub(in crate::kani::generate) fn lower(
     })
 }
 
-fn result_binder(view: &ClauseGraphView<'_>, clause: &CheckedNodeId) -> Option<CheckedNodeId> {
-    let [parameters, _, _] = application(
-        view.package().term(clause)?,
+fn machine_scalar(member: &CheckedMemberType) -> Option<MachineScalar> {
+    match member {
+        CheckedMemberType::Boolean => Some(MachineScalar::Boolean),
+        CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
+            Some(MachineScalar::Integer {
+                minimum: i64::try_from(*lower).ok()?,
+                maximum: i64::try_from(*upper).ok()?,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn binder_matches_scalar(
+    view: &ClauseGraphView<'_>,
+    binder: &CheckedNodeId,
+    scalar: &MachineScalar,
+) -> bool {
+    let Some(node) = view.node(binder) else {
+        return false;
+    };
+    match scalar {
+        MachineScalar::Boolean => {
+            view.kind(&node.semantic_type)
+                == Some(CheckedNodeKind::ScalarType(ScalarTypeForm::Boolean))
+        }
+        MachineScalar::Integer { minimum, maximum } => {
+            let Some(CheckedTerm::Aggregate { members }) = view.package().term(&node.semantic_type)
+            else {
+                return false;
+            };
+            let number = |name| {
+                members.iter().find_map(|entry| match entry {
+                    CheckedTerm::Binding {
+                        name: actual,
+                        value,
+                    } if actual.as_ref() == name => {
+                        literal(value, LiteralKind::Integer)?.parse::<i64>().ok()
+                    }
+                    _ => None,
+                })
+            };
+            view.kind(&node.semantic_type)
+                == Some(CheckedNodeKind::BoundedDomain(
+                    quire_contract_model::BoundedDomainForm::IntegerRange,
+                ))
+                && number("min") == Some(*minimum)
+                && number("max") == Some(*maximum)
+        }
+    }
+}
+
+fn self_binder_matches_context(
+    view: &ClauseGraphView<'_>,
+    binder: &CheckedNodeId,
+    context: &CheckedNodeId,
+) -> bool {
+    let Some(node) = view.node(binder) else {
+        return false;
+    };
+    view.kind(&node.semantic_type)
+        == Some(CheckedNodeKind::CompositeType(CompositeTypeForm::Reference))
+        && matches!(
+            view.package().term(&node.semantic_type),
+            Some(CheckedTerm::Aggregate { members })
+                if matches!(members.as_slice(), [CheckedTerm::Reference { target }] if target == context)
+        )
+}
+
+fn read_postcondition_signature<'a>(
+    view: &ClauseGraphView<'a>,
+    clause: &CheckedNodeId,
+    census_read: impl FnOnce(
+        &'a CheckedPackageV2,
+        &CheckedNodeId,
+    ) -> Result<CheckedModelOperations<'a>, CheckedOperationReadError>,
+) -> Result<ResultPostcondition, UnsupportedObligation> {
+    let mismatch = || UnsupportedObligation::V2ClauseSignatureMismatch {
+        node_id: clause.clone(),
+    };
+    let unsupported = || UnsupportedObligation::V2ClauseResultDomainUnsupported {
+        node_id: clause.clone(),
+    };
+    let package = view.package();
+    let [binders, anchor, _] = application(
+        package.term(clause).ok_or_else(mismatch)?,
         ApplicationOperator::StateClause,
         "quire.op.state.clause",
-    )?
+    )
+    .ok_or_else(mismatch)?
     else {
-        return None;
+        return Err(mismatch());
     };
-    let CheckedTerm::Aggregate { members } = parameters else {
-        return None;
+    let CheckedTerm::Aggregate { members } = binders else {
+        return Err(mismatch());
     };
-    // The admitted clause binds self first, then its optional result, then operation parameters.
-    let result_node = reference(members.get(1)?)?;
-    (view
-        .package()
-        .parameter_declaration(result_node)
-        .ok()?
+    let anchor = reference(anchor).ok_or_else(mismatch)?;
+    let Some(CheckedTerm::OperationAnchorBody(body)) = package.term(anchor) else {
+        return Err(mismatch());
+    };
+    let [context, operation_name, _] =
+        bound_members(&body.members, ["context", "operation", "frame"]).ok_or_else(mismatch)?;
+    let context = reference(context).ok_or_else(mismatch)?;
+    let operation_name = literal(operation_name, LiteralKind::Text).ok_or_else(mismatch)?;
+    let census = census_read(package, context).map_err(|source| {
+        UnsupportedObligation::V2ClauseOperationRead {
+            node_id: clause.clone(),
+            source,
+        }
+    })?;
+    let mut matches = census
+        .operations()
+        .iter()
+        .filter(|operation| operation.name() == operation_name);
+    let operation = matches.next().ok_or_else(mismatch)?;
+    if matches.next().is_some() {
+        return Err(mismatch());
+    }
+    let result = operation
+        .result()
+        .map(|member| machine_scalar(member.ok_or_else(unsupported)?).ok_or_else(unsupported))
+        .transpose()?;
+    validate_signature_binders(
+        view,
+        clause,
+        context,
+        members,
+        operation.parameters(),
+        result,
+    )
+}
+
+fn validate_signature_binders(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+    context: &CheckedNodeId,
+    members: &[CheckedTerm],
+    signature_parameters: &[CheckedOperationParameter<'_>],
+    result: Option<MachineScalar>,
+) -> Result<ResultPostcondition, UnsupportedObligation> {
+    let mismatch = || UnsupportedObligation::V2ClauseSignatureMismatch {
+        node_id: clause.clone(),
+    };
+    let package = view.package();
+    let expected = signature_parameters
+        .len()
+        .checked_add(if result.is_some() { 2 } else { 1 })
+        .ok_or_else(mismatch)?;
+    if members.len() != expected {
+        return Err(mismatch());
+    }
+    let mut ids = members.iter().map(reference);
+    let self_id = ids.next().flatten().ok_or_else(mismatch)?;
+    if package
+        .parameter_declaration(self_id)
+        .map_err(|_| mismatch())?
         .name
         .as_ref()
-        == "result")
-        .then(|| result_node.clone())
+        != "self"
+        || !self_binder_matches_context(view, self_id, context)
+    {
+        return Err(mismatch());
+    }
+    if let Some(result) = &result {
+        let result_id = ids.next().flatten().ok_or_else(mismatch)?;
+        if package
+            .parameter_declaration(result_id)
+            .map_err(|_| mismatch())?
+            .name
+            .as_ref()
+            != "result"
+            || !binder_matches_scalar(view, result_id, result)
+        {
+            return Err(mismatch());
+        }
+    }
+    let mut parameters = Vec::new();
+    let mut parameter_names = BTreeSet::new();
+    for (id, parameter) in ids.zip(signature_parameters) {
+        let id = id.ok_or_else(mismatch)?;
+        if matches!(parameter.name(), "self" | "result")
+            || !parameter_names.insert(parameter.name())
+        {
+            return Err(mismatch());
+        }
+        let scalar =
+            machine_scalar(parameter.member_type().ok_or_else(mismatch)?).ok_or_else(mismatch)?;
+        if package
+            .parameter_declaration(id)
+            .map_err(|_| mismatch())?
+            .name
+            .as_ref()
+            != parameter.name()
+            || !binder_matches_scalar(view, id, &scalar)
+        {
+            return Err(mismatch());
+        }
+        parameters.push(ResultParameter {
+            name: parameter.name().to_owned(),
+            scalar,
+        });
+    }
+    Ok(ResultPostcondition { result, parameters })
 }
 
 fn unsupported_checked_clause_operator(
@@ -315,6 +586,31 @@ fn supported_clause_operator(identity: &str) -> bool {
     )
 }
 
+fn result_expectation_term(term: &ClauseTerm) -> Option<&ClauseTerm> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = term
+    else {
+        return None;
+    };
+    if identity != "quire.op.boolean.eq" {
+        return None;
+    }
+    let [left, right] = arguments.as_slice() else {
+        return None;
+    };
+    match (left, right) {
+        (ClauseTerm::Input(input), expression) | (expression, ClauseTerm::Input(input))
+            if input.side == ClauseInputSide::Result && input.boolean =>
+        {
+            Some(expression)
+        }
+        _ => None,
+    }
+}
+
 impl LoweredV2Clause {
     pub(in crate::kani::generate) fn set_dependencies(
         &mut self,
@@ -344,6 +640,11 @@ pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    if let Some(signature) = &lowered.result_postcondition {
+        if signature.result.is_some() {
+            return render_result_postcondition(request, lowered, signature);
+        }
+    }
     if lowered.kind == ObligationKind::Postcondition {
         return render_postcondition(request, lowered);
     }
@@ -541,63 +842,242 @@ fn i128_literal(value: i128) -> String {
     }
 }
 
-fn render_postcondition(
+fn render_result_postcondition(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
+    signature: &ResultPostcondition,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
-        return Err(UnsupportedObligation::RenderFailed);
+    let refusal = || UnsupportedObligation::V2ClauseSignatureMismatch {
+        node_id: lowered.node_id.clone(),
     };
-    let symbolic = lowered
-        .symbolic_name
-        .as_deref()
-        .ok_or(UnsupportedObligation::RenderFailed)?;
-    let expectation = lowered
-        .native_expectation
-        .as_deref()
-        .ok_or(UnsupportedObligation::RenderFailed)?;
-    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let mut body = vec![
-        Statement::Input {
-            name: symbolic.to_owned(),
-            ty: KaniPrimitiveType::I64,
-            domain: (input.lower, input.upper),
-            then: vec![LetBinding {
-                name: input.name.clone(),
-                ty: None,
-                mutable: false,
-                init: Init::Expression(expression(format!(
-                    "nx::NativeInteger::new(i128::from({symbolic}))"
-                ))?),
-            }],
-        },
-        binding(
+    let mut body = Vec::new();
+    let mut arguments = Vec::new();
+    let mut oracle_bindings = BTreeSet::new();
+    let mut drawn_parameters = signature.parameters.iter().collect::<Vec<_>>();
+    drawn_parameters.sort_by(|left, right| left.name.cmp(&right.name));
+    for parameter in drawn_parameters {
+        let oracle_name = format!("parameter_{}", parameter.name);
+        let symbolic = format!("{oracle_name}_current");
+        if syn::parse_str::<syn::Ident>(&symbolic).is_err() {
+            return Err(refusal());
+        }
+        let (ty, domain, then) = match parameter.scalar {
+            MachineScalar::Boolean => (
+                KaniPrimitiveType::Boolean,
+                (0, 1),
+                vec![LetBinding {
+                    name: oracle_name.clone(),
+                    ty: None,
+                    mutable: false,
+                    init: Init::Expression(expression(&symbolic)?),
+                }],
+            ),
+            MachineScalar::Integer { minimum, maximum } => (
+                KaniPrimitiveType::I64,
+                (i128::from(minimum), i128::from(maximum)),
+                vec![LetBinding {
+                    name: oracle_name.clone(),
+                    ty: None,
+                    mutable: false,
+                    init: Init::Expression(expression(if lowered.native_integer {
+                        format!("nx::NativeInteger::new(i128::from({symbolic}))")
+                    } else {
+                        format!("rt::Integer::from({symbolic})")
+                    })?),
+                }],
+            ),
+        };
+        body.push(Statement::Input {
+            name: symbolic.clone(),
+            ty,
+            domain,
+            then,
+        });
+        arguments.push(ScalarObligationArgument {
+            identifier: symbolic.clone(),
+            minimum: i64::try_from(domain.0).map_err(|_| refusal())?,
+            maximum: i64::try_from(domain.1).map_err(|_| refusal())?,
+        });
+        oracle_bindings.insert(oracle_name);
+    }
+    let subject_arguments = signature
+        .parameters
+        .iter()
+        .map(|parameter| format!("parameter_{}_current", parameter.name))
+        .collect::<Vec<_>>();
+    let (result_type, result_domain) = match signature.result {
+        Some(MachineScalar::Boolean) => (LetType::Boolean, None),
+        Some(MachineScalar::Integer { minimum, maximum }) => {
+            (LetType::I64, Some((minimum, maximum)))
+        }
+        None => return Err(refusal()),
+    };
+    if let (true, Some(expectation)) = (lowered.native_integer, &lowered.native_expectation) {
+        body.push(binding(
             "expected",
             Init::Expression(expression(native_expected_expression(expectation)?)?),
             false,
-        ),
-        binding(
+        ));
+    }
+    body.push(Statement::Let(LetBinding {
+        name: "subject_result".to_owned(),
+        ty: Some(result_type),
+        mutable: false,
+        init: Init::Expression(expression(format!(
+            "{}({})",
+            request.subject_path,
+            subject_arguments.join(", ")
+        ))?),
+    }));
+    if lowered
+        .oracle
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "result_result")
+    {
+        body.push(binding(
+            "result_result",
+            Init::Expression(expression(match signature.result {
+                Some(MachineScalar::Boolean) => "subject_result".to_owned(),
+                Some(MachineScalar::Integer { .. }) if lowered.native_integer => {
+                    "nx::NativeInteger::new(i128::from(subject_result))".to_owned()
+                }
+                Some(MachineScalar::Integer { .. }) => {
+                    "rt::Integer::from(subject_result)".to_owned()
+                }
+                None => return Err(refusal()),
+            })?),
+            false,
+        ));
+        oracle_bindings.insert("result_result".to_owned());
+    }
+    if lowered
+        .oracle
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| !oracle_bindings.contains(&input.name))
+    {
+        return Err(refusal());
+    }
+    let direct_boolean = lowered.oracle.descriptor.operation_identities.is_empty();
+    if !direct_boolean {
+        body.push(binding(
             "meter",
             Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
             true,
+        ));
+    }
+    if let Some((minimum, maximum)) = result_domain {
+        body.push(Statement::ProducedResultDomainAssert {
+            condition: expression(format!(
+                "subject_result >= {} && subject_result <= {}",
+                crate::kani::abi::i64_literal(minimum),
+                crate::kani::abi::i64_literal(maximum)
+            ))?,
+            message: "the produced V2 result lies in its admitted domain".to_owned(),
+        });
+    }
+    let mut oracle_arguments = lowered
+        .oracle
+        .descriptor
+        .inputs
+        .iter()
+        .map(|input| {
+            if input.boolean {
+                Argument::Value(input.name.clone())
+            } else {
+                Argument::Borrow(input.name.clone())
+            }
+        })
+        .collect::<Vec<_>>();
+    if !direct_boolean {
+        oracle_arguments.push(Argument::BorrowMut("meter".to_owned()));
+    }
+    body.push(Statement::Call {
+        result: "outcome".to_owned(),
+        callee: "oracle_clause".to_owned(),
+        args: oracle_arguments,
+    });
+    if lowered.native_integer && lowered.native_expectation.is_some() {
+        let completed_prefix = append_arithmetic_probes(&mut body, &lowered.arithmetic)?;
+        body.push(Statement::Assert {
+            condition: expression(format!(
+                "!({completed_prefix}) || subject_result == expected"
+            ))?,
+            message: "the produced V2 Boolean result agrees with the independent checked condition"
+                .to_owned(),
+        });
+    }
+    body.push(Statement::Assert {
+        condition: expression(if direct_boolean {
+            "outcome"
+        } else {
+            "matches!(&outcome, Ok(rt::Outcome::Completed(true)))"
+        })?,
+        message: "the V2 postcondition holds for the produced result".to_owned(),
+    });
+    let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
+    let spec = HarnessSpec::new(
+        format!(
+            "V2 postcondition {}",
+            message_safe_node_label(&lowered.node_id)
         ),
-        Statement::Call {
-            result: "outcome".to_owned(),
-            callee: "oracle_clause".to_owned(),
-            args: vec![
-                Argument::Borrow(input.name.clone()),
-                Argument::BorrowMut("meter".to_owned()),
-            ],
+        path,
+        lowered.oracle.source.clone(),
+        ProofKind::Proof,
+        body,
+        vec![Cover {
+            condition: expression(if direct_boolean {
+                "outcome"
+            } else {
+                "matches!(&outcome, Ok(rt::Outcome::Completed(_)))"
+            })?,
+            message: "the V2 result postcondition reaches its admitted domain".to_owned(),
+        }],
+        request.unwind,
+        KaniSolver::Cadical,
+    )?;
+    let rust = render::render(&spec)?;
+    let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
+        integer_representation: if lowered.native_integer {
+            crate::kani::identity::ScalarIntegerRepresentation::Native
+        } else {
+            crate::kani::identity::ScalarIntegerRepresentation::General
         },
-        binding(
-            "subject",
-            Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
-            false,
-        ),
-    ];
+        native_integer_selection: lowered.oracle.native_integer_selection.clone(),
+        ceilings: request.ceilings,
+        package: lowered.package.clone(),
+        clause: lowered.node_id.clone(),
+        collection_precondition: None,
+        collection_operation: None,
+        kind: ObligationKind::Postcondition,
+        oracle_symbol: "oracle_clause".to_owned(),
+        subject_path: request.subject_path.to_owned(),
+        arguments,
+        state_fields: Vec::new(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
+    };
+    let record = record(&lowered.module_symbol, &identity, &rust)?;
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity, rust, record,
+    ))
+}
+
+fn append_arithmetic_probes(
+    body: &mut Vec<Statement>,
+    arithmetic: &[ArithmeticProbe],
+) -> Result<String, UnsupportedObligation> {
     let mut completed_prefix = "true".to_owned();
-    for (index, probe) in lowered.arithmetic.iter().enumerate() {
+    for (index, probe) in arithmetic.iter().enumerate() {
         let guard = format!("({}) && ({completed_prefix})", probe.guard);
         let mut probe_body = Vec::new();
         let expected = native_expected_expression(&probe.expected)?;
@@ -722,6 +1202,66 @@ fn render_postcondition(
             probe.guard
         );
     }
+    Ok(completed_prefix)
+}
+
+fn render_postcondition(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredV2Clause,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
+        return Err(UnsupportedObligation::RenderFailed);
+    };
+    let symbolic = lowered
+        .symbolic_name
+        .as_deref()
+        .ok_or(UnsupportedObligation::RenderFailed)?;
+    let expectation = lowered
+        .native_expectation
+        .as_deref()
+        .ok_or(UnsupportedObligation::RenderFailed)?;
+    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let mut body = vec![
+        Statement::Input {
+            name: symbolic.to_owned(),
+            ty: KaniPrimitiveType::I64,
+            domain: (input.lower, input.upper),
+            then: vec![LetBinding {
+                name: input.name.clone(),
+                ty: None,
+                mutable: false,
+                init: Init::Expression(expression(format!(
+                    "nx::NativeInteger::new(i128::from({symbolic}))"
+                ))?),
+            }],
+        },
+        binding(
+            "expected",
+            Init::Expression(expression(native_expected_expression(expectation)?)?),
+            false,
+        ),
+        binding(
+            "meter",
+            Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+            true,
+        ),
+        Statement::Call {
+            result: "outcome".to_owned(),
+            callee: "oracle_clause".to_owned(),
+            args: vec![
+                Argument::Borrow(input.name.clone()),
+                Argument::BorrowMut("meter".to_owned()),
+            ],
+        },
+        Statement::Let(LetBinding {
+            name: "subject".to_owned(),
+            ty: Some(LetType::Unit),
+            mutable: false,
+            init: Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
+        }),
+    ];
+    let completed_prefix = append_arithmetic_probes(&mut body, &lowered.arithmetic)?;
     body.extend([
         Statement::Assert {
             condition: expression(format!(
@@ -734,10 +1274,6 @@ fn render_postcondition(
                 "!({completed_prefix}) || (matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected)"
             ))?,
             message: "the clause oracle agrees with the independent checked condition".to_owned(),
-        },
-        Statement::Assert {
-            condition: expression(format!("!({completed_prefix}) || subject == expected"))?,
-            message: "the compiled subject agrees with the checked condition".to_owned(),
         },
     ]);
     let spec = HarnessSpec::new(
@@ -1134,6 +1670,106 @@ mod unsupported_operator_tests {
             unsupported_clause_operator(&term),
             Some("quire.op.integer.abs")
         );
+    }
+}
+
+#[cfg(test)]
+mod postcondition_signature_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedOperationReadErrorCode;
+
+    #[trace("FR-025-AC-11", "TC-036")]
+    #[test]
+    fn refused_complete_census_keeps_its_original_typed_work_record() {
+        let (package, clause) =
+            native_twin::Twin::with_bounded_result_postcondition().emitted_package("DepositResult");
+        let view = ClauseGraphView::new(&package);
+        let refusal =
+            match lower_with_census(&view, &clause, ObligationKind::Postcondition, |p, c| {
+                p.model_operations(c, 0)
+            }) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("a refused complete read cannot expose a lowerable harness"),
+            };
+        let UnsupportedObligation::V2ClauseOperationRead { node_id, source } = refusal else {
+            panic!("the original typed read refusal is retained: {refusal:?}");
+        };
+        assert_eq!(node_id, clause);
+        assert_eq!(source.code, CheckedOperationReadErrorCode::WorkLimit);
+        assert_eq!(source.limit, 0);
+        assert_eq!(source.work, 1);
+        let context = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == "object_type")
+            .expect("selected object context");
+        assert_eq!(source.context, context.node_id);
+    }
+
+    #[trace("FR-025-AC-11", "TC-036")]
+    #[test]
+    fn binder_role_type_and_order_mismatches_refuse_before_harness_lowering() {
+        let (package, clause) = native_twin::Twin::with_two_parameter_result_postcondition()
+            .emitted_package("ResultWithParameters");
+        let view = ClauseGraphView::new(&package);
+        let context = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == "object_type")
+            .expect("selected object context");
+        let operations = package
+            .model_operations(&context.node_id, 65_536)
+            .expect("authentic complete signature");
+        let operation = operations
+            .operations()
+            .iter()
+            .find(|operation| operation.name() == "deposit")
+            .expect("selected deposit operation");
+        let [CheckedTerm::Aggregate { members }, _, _] = application(
+            package.term(&clause).expect("admitted clause body"),
+            ApplicationOperator::StateClause,
+            "quire.op.state.clause",
+        )
+        .expect("admitted state clause") else {
+            panic!("admitted ordered binders");
+        };
+        assert_eq!(members.len(), 4);
+        let result = machine_scalar(
+            operation
+                .result()
+                .flatten()
+                .expect("bounded produced result"),
+        )
+        .expect("signed-i64 result domain");
+        let mut wrong_role = members.clone();
+        wrong_role.swap(0, 1);
+        let mut wrong_order = members.clone();
+        wrong_order.swap(2, 3);
+        for (label, changed, expected_result) in [
+            ("role", wrong_role, Some(result.clone())),
+            ("order", wrong_order, Some(result)),
+            ("type", members.clone(), Some(MachineScalar::Boolean)),
+        ] {
+            let refusal = match validate_signature_binders(
+                &view,
+                &clause,
+                &context.node_id,
+                &changed,
+                operation.parameters(),
+                expected_result,
+            ) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("{label} mismatch would expose a lowerable harness"),
+            };
+            assert!(matches!(
+                refusal,
+                UnsupportedObligation::V2ClauseSignatureMismatch { node_id }
+                    if node_id == clause
+            ));
+        }
     }
 }
 

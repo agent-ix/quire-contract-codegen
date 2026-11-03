@@ -617,12 +617,66 @@ impl Twin {
 
     /// The original guarded arithmetic condition with the same declared bounds.
     pub fn with_bounded_amount_implication() -> Self {
-        Self::with_bounded_amount_condition("amount < 1000 implies amount + 1 <= 1000")
+        let mut twin = Self::with_bounded_amount_condition(
+            "result = (amount < 1000 implies amount + 1 <= 1000)",
+        );
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"] = json!({
+            "typeRef": "ix://quire/native/Boolean",
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "nullable": false,
+        });
+        twin.domain = domain.to_string().into_bytes();
+        twin
     }
 
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)
+    }
+
+    /// QSL postcondition whose condition reads the Boolean value returned by the subject.
+    pub fn with_boolean_result_postcondition(condition: &str) -> Self {
+        let mut twin = Self::with_deposit_result();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            &format!("post DepositResult using v on Bank::Account::deposit {{ {condition} }}"),
+        );
+        assert_ne!(
+            changed, source,
+            "the Boolean result replaced the field clause"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
+    /// A Boolean result and one declared Boolean operation parameter.
+    pub fn with_boolean_result_parameter_postcondition() -> Self {
+        let mut twin = Self::with_deposit_declaration(true, true);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            "post DepositResult using v on Bank::Account::deposit { result = other }",
+        );
+        assert_ne!(
+            changed, source,
+            "the Boolean result replaced the field clause"
+        );
+        twin.unit = changed.into_bytes();
+        twin
     }
 
     /// QSL postcondition over a bounded operation result and no parameters.
@@ -651,6 +705,72 @@ impl Twin {
         assert_ne!(
             changed, source,
             "the result postcondition replaced the field clause"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
+    /// A declared Integer result with no finite selected model domain.
+    pub fn with_unbounded_result_postcondition() -> Self {
+        let mut twin = Self::with_bounded_result_postcondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"]["typeRef"] = json!("ix://quire/native/Integer");
+        twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post DepositResult using v on Bank::Account::deposit { result >= 0 }",
+            "post DepositResult using v on Bank::Account::deposit { true }",
+        );
+        assert_ne!(
+            changed, source,
+            "the unbounded result no longer enters a comparison"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
+    /// A result postcondition whose two declared parameters have a different draw order.
+    pub fn with_two_parameter_result_postcondition() -> Self {
+        let mut twin = Self::with_two_bounded_parameter_precondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"] = json!({
+            "typeRef": range_type("balance"),
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "nullable": false,
+        });
+        twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "pre TwoParameters using v on Bank::Account::deposit { other < 1000 and offset > 0 }",
+            "post ResultWithParameters using v on Bank::Account::deposit { result >= other }",
+        );
+        assert_ne!(
+            changed, source,
+            "the result postcondition replaced the precondition"
         );
         twin.unit = changed.into_bytes();
         twin

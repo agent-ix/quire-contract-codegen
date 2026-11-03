@@ -29,6 +29,9 @@ fn binding(source: &mut String, binding: &LetBinding) {
     let ty = match binding.ty {
         None => "",
         Some(LetType::I128) => ": i128",
+        Some(LetType::I64) => ": i64",
+        Some(LetType::Boolean) => ": bool",
+        Some(LetType::Unit) => ": ()",
     };
     let init = match &binding.init {
         Init::Expression(expression) => expression.as_str().to_owned(),
@@ -240,6 +243,10 @@ fn render_statements(
                 "let subject = subject_boolean_implication(left, right);\nlet expected = expected_boolean_implication(left, right);\nassert!(subject == expected, \"the compiled implication subject must equal the independent expectation\");\nassert!(matches!(&outcome, Ok(rt::Outcome::Completed(value)) if *value == expected), \"the implication oracle must equal the independent expectation\");",
             ),
             Statement::Assert { condition, message } => line(
+                &mut source,
+                &format!("assert!({}, \"{message}\");", condition.as_str()),
+            ),
+            Statement::ProducedResultDomainAssert { condition, message } => line(
                 &mut source,
                 &format!("assert!({}, \"{message}\");", condition.as_str()),
             ),

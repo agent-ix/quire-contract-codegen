@@ -15,6 +15,7 @@ pub(crate) enum ClauseInputSide {
     Current,
     Pre,
     Parameter,
+    Result,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -107,6 +108,7 @@ struct Reader<'a, 'view> {
     package: &'a CheckedPackageV2,
     nodes: &'view ClauseGraphView<'a>,
     self_id: CheckedNodeId,
+    result_id: Option<CheckedNodeId>,
     allowed_parameters: BTreeSet<CheckedNodeId>,
     inputs: BTreeSet<ClauseInput>,
     visiting: BTreeSet<CheckedNodeId>,
@@ -141,12 +143,19 @@ impl Reader<'_, '_> {
                         self.bound(&node.semantic_type)?
                     };
                     let declaration = self.package.parameter_declaration(&id).ok()?;
-                    if side != ClauseInputSide::Current || !self.allowed_parameters.contains(&id) {
+                    if side != ClauseInputSide::Current
+                        || (!self.allowed_parameters.contains(&id)
+                            && self.result_id.as_ref() != Some(&id))
+                    {
                         return None;
                     }
                     let input = ClauseInput {
                         name: declaration.name.to_string(),
-                        side: ClauseInputSide::Parameter,
+                        side: if self.result_id.as_ref() == Some(&id) {
+                            ClauseInputSide::Result
+                        } else {
+                            ClauseInputSide::Parameter
+                        },
                         declaring_node_id: None,
                         boolean,
                         lower: bound.0,
@@ -327,15 +336,19 @@ pub(crate) fn read_clause(
     if package.parameter_declaration(&self_id).ok()?.name.as_ref() != "self" {
         return None;
     }
+    let result_id = declared.get(1).and_then(reference).and_then(|id| {
+        (package.parameter_declaration(id).ok()?.name.as_ref() == "result").then(|| id.clone())
+    });
     let allowed_parameters = declared
         .iter()
-        .skip(1)
+        .skip(if result_id.is_some() { 2 } else { 1 })
         .map(|term| reference(term).cloned())
         .collect::<Option<_>>()?;
     let mut reader = Reader {
         package,
         nodes,
         self_id,
+        result_id,
         allowed_parameters,
         inputs: BTreeSet::new(),
         visiting: BTreeSet::new(),
