@@ -22,6 +22,7 @@ use quire_contract_model::{
     ApplicationOperator, BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole,
     CheckedSemanticNodeV2, CheckedTerm, CompleteContractNodeV2, CompleteLoweringRecordV2,
     ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
+    ContractSourceKeyV1,
 };
 use quire_exact::{
     ComparisonOperator, IeeeComparison, IeeeWidth, IntegerDomain, IntegerInterval,
@@ -922,6 +923,7 @@ impl<Body> Clone for BoundView<'_, Body> {
 #[derive(Clone)]
 pub(super) struct SelectedResult<'a> {
     pub(super) package: &'a ContractPackageV1,
+    pub(super) source_key: &'a ContractSourceKeyV1,
     pub(super) application: &'a ContractOccurrenceKeyV1,
     pub(super) conversion: Option<&'a ContractOccurrenceKeyV1>,
 }
@@ -974,7 +976,7 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
             let result = selected
                 .package
                 .result_context(
-                    &self.node.root.node_id,
+                    selected.source_key,
                     selected.application,
                     selected.conversion,
                     form.ir(),
@@ -1153,7 +1155,7 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
             match selected
                 .package
                 .result_context(
-                    &self.node.root.node_id,
+                    selected.source_key,
                     selected.application,
                     selected.conversion,
                     BoundedDomainForm::IntegerRange,
@@ -2077,7 +2079,7 @@ pub(super) fn contract_checked_operation<'a>(
     else {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     };
-    if &application.node_id != node_id {
+    if !items.same_source_node(&application.node_id, node_id) {
         return Ok(Err(ExactScalarRefusal::IncompleteContext));
     }
     let Some(admitted_node) = items.accounted_node(node_id) else {
@@ -2104,6 +2106,7 @@ pub(super) fn contract_checked_operation<'a>(
         closure,
         SelectedResult {
             package,
+            source_key: &closure.root_structural_key,
             application: &admitted_application,
             conversion: admitted_conversion.as_ref(),
         },
