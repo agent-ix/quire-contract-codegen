@@ -690,6 +690,16 @@ impl Twin {
             .expect("deposit operation");
         deposit["returns"]["typeRef"] = json!("ix://quire/native/Integer");
         twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post DepositResult using v on Bank::Account::deposit { result >= 0 }",
+            "post DepositResult using v on Bank::Account::deposit { true }",
+        );
+        assert_ne!(
+            changed, source,
+            "the unbounded result no longer enters a comparison"
+        );
+        twin.unit = changed.into_bytes();
         twin
     }
 
