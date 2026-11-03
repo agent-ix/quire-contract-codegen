@@ -30,7 +30,7 @@ type: TestMatrix
 | FR-014 | FR-014-AC-19 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-20 through FR-014-AC-25 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-26 through FR-014-AC-34 | TC-024 | ✅ Covered |
-| FR-014 | FR-014-AC-38 | TC-024 | ✅ Covered; the clause-identified descriptor and one-item claim map cover QSL-emitted referenced conditions and an admitted inline condition. Compiled runtime cases exercise declared field endpoints, a bounded operation parameter, connectives, comparisons and the four supported integer operations; non-clause and unsupported `pre(...)` controls refuse. FR-015-AC-40's harness embedding remains planned (IR-489). |
+| FR-014 | FR-014-AC-38 | TC-024 | ✅ Covered; the clause-identified descriptor and one-item claim map cover QSL-emitted referenced conditions and an admitted inline condition. Compiled runtime cases exercise declared field endpoints, a bounded operation parameter, connectives, comparisons and the four supported integer operations; non-clause and unsupported `pre(...)` controls refuse. FR-015-AC-40's public harness embedding is covered by the TC-025 controls. |
 | FR-014 | FR-014-AC-35 through FR-014-AC-37 | TC-024 | 🚧 Planned; Boolean and integer `eq`/`ne` nodes are refused as `OperationNotDerivable`; agreement with the QSL value authority is outside CG's boundary, owned by quire-integration IR-842, and not claimed by CG (FR-014-AC-47) |
 | FR-018 | FR-018-AC-1, FR-018-AC-3, FR-018-AC-6, FR-018-AC-11, FR-018-AC-12, FR-018-AC-14, FR-018-AC-15 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-46 | TC-029 | 🚧 Planned (IR-1146); structural owner-key equality, adverse identity refusal and emitted-source no-constructor evidence await the code leg |

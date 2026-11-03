@@ -444,7 +444,8 @@ unsatisfiable requires as `cover_unsatisfied`.
 The generation-time census portion of step 13 is implemented for supported V2 clauses (IR-1044).
 AC-42 has partial generation-time evidence for admitted division, modulo and Text equality clauses
 (IR-948).
-The remaining V2 clause controls in this section retain their stated planned status.
+AC-40 and AC-47 have implemented generation-time controls (IR-948). AC-40 covers admitted
+referenced operators and an inline Boolean literal. Other V2 controls retain their row statuses.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
     `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
