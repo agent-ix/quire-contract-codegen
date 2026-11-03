@@ -4,8 +4,8 @@
 use quire_exact::{NativeIntegerInterval, NativeIntegerOperation, NativeIntegerPlan};
 
 use super::{
-    native_literal, ExactScalarOperation, NativeClauseCapabilityReason, Step, StepTerm,
-    V2ClauseRefusal,
+    native_literal, EqualityOperandKind, ExactScalarOperation, NativeClauseCapabilityReason, Step,
+    StepTerm, V2ClauseRefusal,
 };
 use crate::core::native_integer::{NativeIntegerOperationDecision, NativeIntegerSelection};
 use crate::oracle::operator_catalog::IntegerOperator;
@@ -48,7 +48,12 @@ pub(super) fn helpers(
         .filter_map(|(index, step)| match &step.term {
             StepTerm::Operation {
                 identity,
-                operation: operation @ ExactScalarOperation::Boolean { .. },
+                operation:
+                    operation @ (ExactScalarOperation::Boolean { .. }
+                    | ExactScalarOperation::Equality {
+                        operands: EqualityOperandKind::Boolean,
+                        ..
+                    }),
                 ..
             } => Some((
                 format!("scalar_{index}"),
@@ -100,7 +105,11 @@ pub(super) fn helpers(
                         .ok_or(V2ClauseRefusal::Render)
                 };
                 match operation {
-                    ExactScalarOperation::Boolean { .. } => None,
+                    ExactScalarOperation::Boolean { .. }
+                    | ExactScalarOperation::Equality {
+                        operands: EqualityOperandKind::Boolean,
+                        ..
+                    } => None,
                     ExactScalarOperation::Ordering { operator, .. } => {
                         let operator = match operator {
                             OrderingOperator::Less => "Less",

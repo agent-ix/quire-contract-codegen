@@ -617,7 +617,29 @@ impl Twin {
 
     /// The original guarded arithmetic condition with the same declared bounds.
     pub fn with_bounded_amount_implication() -> Self {
-        Self::with_bounded_amount_condition("amount < 1000 implies amount + 1 <= 1000")
+        let mut twin = Self::with_bounded_amount_condition(
+            "result = (amount < 1000 implies amount + 1 <= 1000)",
+        );
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"] = json!({
+            "typeRef": "ix://quire/native/Boolean",
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "nullable": false,
+        });
+        twin.domain = domain.to_string().into_bytes();
+        twin
     }
 
     /// QSL-emitted postcondition package whose operation declares a Boolean result.

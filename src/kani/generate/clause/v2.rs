@@ -21,7 +21,7 @@ use std::fmt::Write as _;
 use crate::{
     core::ir::{
         checked_term::{application, bound_members, literal, reference},
-        clause::{read_clause, ClauseGraphView, ClauseTerm, MAX_CONDITION_TERMS},
+        clause::{read_clause, ClauseGraphView, ClauseInputSide, ClauseTerm, MAX_CONDITION_TERMS},
     },
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
@@ -224,6 +224,26 @@ fn lower_with_census<'a>(
             .and_then(NativeTerm::boolean)
             .ok_or_else(refusal)?;
         (Some(expectation), arithmetic, Some(symbolic_name))
+    } else if kind == ObligationKind::Postcondition
+        && result_postcondition
+            .as_ref()
+            .is_some_and(|signature| matches!(signature.result, Some(MachineScalar::Boolean)))
+    {
+        let signature = result_postcondition.as_ref().ok_or_else(refusal)?;
+        if let [parameter] = signature.parameters.as_slice() {
+            let symbolic_name = format!("parameter_{}_current", parameter.name);
+            let mut arithmetic = Vec::new();
+            let expectation = match (&parameter.scalar, result_expectation_term(&condition.term)) {
+                (MachineScalar::Integer { .. }, Some(term)) => {
+                    native_term(term, &parameter.name, &symbolic_name, &mut arithmetic)
+                        .and_then(NativeTerm::boolean)
+                }
+                _ => None,
+            };
+            (expectation, arithmetic, Some(symbolic_name))
+        } else {
+            (None, Vec::new(), None)
+        }
     } else {
         (None, Vec::new(), None)
     };
@@ -566,6 +586,31 @@ fn supported_clause_operator(identity: &str) -> bool {
     )
 }
 
+fn result_expectation_term(term: &ClauseTerm) -> Option<&ClauseTerm> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = term
+    else {
+        return None;
+    };
+    if identity != "quire.op.boolean.eq" {
+        return None;
+    }
+    let [left, right] = arguments.as_slice() else {
+        return None;
+    };
+    match (left, right) {
+        (ClauseTerm::Input(input), expression) | (expression, ClauseTerm::Input(input))
+            if input.side == ClauseInputSide::Result && input.boolean =>
+        {
+            Some(expression)
+        }
+        _ => None,
+    }
+}
+
 impl LoweredV2Clause {
     pub(in crate::kani::generate) fn set_dependencies(
         &mut self,
@@ -867,6 +912,13 @@ fn render_result_postcondition(
         }
         None => return Err(refusal()),
     };
+    if let (true, Some(expectation)) = (lowered.native_integer, &lowered.native_expectation) {
+        body.push(binding(
+            "expected",
+            Init::Expression(expression(native_expected_expression(expectation)?)?),
+            false,
+        ));
+    }
     body.push(Statement::Let(LetBinding {
         name: "subject_result".to_owned(),
         ty: Some(result_type),
@@ -948,6 +1000,16 @@ fn render_result_postcondition(
         callee: "oracle_clause".to_owned(),
         args: oracle_arguments,
     });
+    if lowered.native_integer && lowered.native_expectation.is_some() {
+        let completed_prefix = append_arithmetic_probes(&mut body, &lowered.arithmetic)?;
+        body.push(Statement::Assert {
+            condition: expression(format!(
+                "!({completed_prefix}) || subject_result == expected"
+            ))?,
+            message: "the produced V2 Boolean result agrees with the independent checked condition"
+                .to_owned(),
+        });
+    }
     body.push(Statement::Assert {
         condition: expression(if direct_boolean {
             "outcome"
@@ -1010,64 +1072,12 @@ fn render_result_postcondition(
     ))
 }
 
-fn render_postcondition(
-    request: &KaniObligationRequest<'_>,
-    lowered: &LoweredV2Clause,
-) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
-        return Err(UnsupportedObligation::RenderFailed);
-    };
-    let symbolic = lowered
-        .symbolic_name
-        .as_deref()
-        .ok_or(UnsupportedObligation::RenderFailed)?;
-    let expectation = lowered
-        .native_expectation
-        .as_deref()
-        .ok_or(UnsupportedObligation::RenderFailed)?;
-    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let mut body = vec![
-        Statement::Input {
-            name: symbolic.to_owned(),
-            ty: KaniPrimitiveType::I64,
-            domain: (input.lower, input.upper),
-            then: vec![LetBinding {
-                name: input.name.clone(),
-                ty: None,
-                mutable: false,
-                init: Init::Expression(expression(format!(
-                    "nx::NativeInteger::new(i128::from({symbolic}))"
-                ))?),
-            }],
-        },
-        binding(
-            "expected",
-            Init::Expression(expression(native_expected_expression(expectation)?)?),
-            false,
-        ),
-        binding(
-            "meter",
-            Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
-            true,
-        ),
-        Statement::Call {
-            result: "outcome".to_owned(),
-            callee: "oracle_clause".to_owned(),
-            args: vec![
-                Argument::Borrow(input.name.clone()),
-                Argument::BorrowMut("meter".to_owned()),
-            ],
-        },
-        Statement::Let(LetBinding {
-            name: "subject".to_owned(),
-            ty: Some(LetType::Unit),
-            mutable: false,
-            init: Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
-        }),
-    ];
+fn append_arithmetic_probes(
+    body: &mut Vec<Statement>,
+    arithmetic: &[ArithmeticProbe],
+) -> Result<String, UnsupportedObligation> {
     let mut completed_prefix = "true".to_owned();
-    for (index, probe) in lowered.arithmetic.iter().enumerate() {
+    for (index, probe) in arithmetic.iter().enumerate() {
         let guard = format!("({}) && ({completed_prefix})", probe.guard);
         let mut probe_body = Vec::new();
         let expected = native_expected_expression(&probe.expected)?;
@@ -1192,6 +1202,66 @@ fn render_postcondition(
             probe.guard
         );
     }
+    Ok(completed_prefix)
+}
+
+fn render_postcondition(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredV2Clause,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
+        return Err(UnsupportedObligation::RenderFailed);
+    };
+    let symbolic = lowered
+        .symbolic_name
+        .as_deref()
+        .ok_or(UnsupportedObligation::RenderFailed)?;
+    let expectation = lowered
+        .native_expectation
+        .as_deref()
+        .ok_or(UnsupportedObligation::RenderFailed)?;
+    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let mut body = vec![
+        Statement::Input {
+            name: symbolic.to_owned(),
+            ty: KaniPrimitiveType::I64,
+            domain: (input.lower, input.upper),
+            then: vec![LetBinding {
+                name: input.name.clone(),
+                ty: None,
+                mutable: false,
+                init: Init::Expression(expression(format!(
+                    "nx::NativeInteger::new(i128::from({symbolic}))"
+                ))?),
+            }],
+        },
+        binding(
+            "expected",
+            Init::Expression(expression(native_expected_expression(expectation)?)?),
+            false,
+        ),
+        binding(
+            "meter",
+            Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+            true,
+        ),
+        Statement::Call {
+            result: "outcome".to_owned(),
+            callee: "oracle_clause".to_owned(),
+            args: vec![
+                Argument::Borrow(input.name.clone()),
+                Argument::BorrowMut("meter".to_owned()),
+            ],
+        },
+        Statement::Let(LetBinding {
+            name: "subject".to_owned(),
+            ty: Some(LetType::Unit),
+            mutable: false,
+            init: Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
+        }),
+    ];
+    let completed_prefix = append_arithmetic_probes(&mut body, &lowered.arithmetic)?;
     body.extend([
         Statement::Assert {
             condition: expression(format!(

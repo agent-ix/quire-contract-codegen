@@ -1365,13 +1365,14 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     .expect("the original clause request is well formed");
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
+        records,
         ..
     } = outcome
     else {
         panic!("the native postcondition is emitted");
     };
     let [harness] = v2_clause_harnesses.as_slice() else {
-        panic!("one original postcondition harness");
+        panic!("one original postcondition harness: {v2_clause_harnesses:?}; {records:?}");
     };
     assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
     assert_eq!(harness.identity.arguments[0].minimum, 0);
@@ -1388,9 +1389,86 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     assert!(harness.rust.contents.contains("nx::NativeIntegerPlan::new"));
     assert!(!harness.rust.contents.contains("_i128_i128"));
     assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
-    assert!(harness.rust.contents.contains("let subject: () ="));
-    assert!(!harness.rust.contents.contains("subject == expected"));
+    assert!(harness.rust.contents.contains("let subject_result: bool ="));
+    assert!(harness.rust.contents.contains("subject_result == expected"));
+    assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let result_result = subject_result;"));
     syn::parse_file(&harness.rust.contents).expect("the native harness is valid Rust syntax");
+}
+
+#[trace("FR-015-AC-119", "FR-015-AC-126", "TC-025")]
+#[test]
+fn native_v2_boolean_result_subject_mutation_fails_the_generated_assertion() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("admitted Boolean-result clause request");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean-result clause emits a harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one generated Boolean-result harness");
+    };
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-result-subject-control");
+    fs::create_dir_all(directory.path.join("src")).expect("scratch source directory");
+    write_v2_precondition_fixture(&directory.path, harness);
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    for (subject_result, should_pass) in [(true, true), (false, false)] {
+        let stub = format!(
+            "extern crate self as kani;\npub fn any<T: Default>() -> T {{ T::default() }}\npub fn assume(_: bool) {{}}\n#[macro_export]\nmacro_rules! cover {{ ($condition:expr, $message:expr) => {{ let _ = ($condition, $message); }}; }}\npub mod request {{ pub fn unrelated(_: i64) -> bool {{ {subject_result} }} }}\n"
+        );
+        let source = format!(
+            "{stub}{}",
+            harness
+                .rust
+                .contents
+                .replace("#[kani::proof]", "#[test]")
+                .replace("#[cfg(kani)]", "")
+        );
+        fs::write(directory.path.join("src/lib.rs"), source).expect("generated proof source");
+        let output = std::process::Command::new("cargo")
+            .args(["test", "--locked", "--offline", "--lib", "--quiet"])
+            .env(
+                "CARGO_TARGET_DIR",
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+            )
+            .current_dir(&directory.path)
+            .output()
+            .expect("execute generated proof without Kani");
+        assert_eq!(
+            output.status.success(),
+            should_pass,
+            "subject {subject_result}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !should_pass {
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains(
+                    "the produced V2 Boolean result agrees with the independent checked condition"
+                ),
+                "the subject mutant must fail the generated independent assertion: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }
 
 /// Decode only the actual helper-mutant playback against its healthy sealed source and record.
@@ -1784,9 +1862,10 @@ fn write_v2_precondition_fixture(
     super::scratch_crate::write_manifest(
         directory,
         &format!(
-            "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
             super::scratch_crate::runtime_dependency(&["exact"]),
-            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
         ),
     );
     fs::write(
