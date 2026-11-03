@@ -186,6 +186,7 @@ fn case_{index}() {{
     fs::write(scratch.path.join("src/lib.rs"), source).expect("write public native agreement");
     scratch_crate::resolve_seeded_lock(&scratch.path);
     let agreement_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let _build = scratch_crate::lock_agreement_build();
     let output = Command::new(agreement_cargo)
         .args([
             "test",
@@ -197,7 +198,7 @@ fn case_{index}() {{
             "--test-threads=1",
             "--nocapture",
         ])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", scratch_crate::agreement_target())
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&scratch.path)

@@ -11,11 +11,24 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,
-    sync::Mutex,
+    sync::{Mutex, MutexGuard},
     thread::ThreadId,
 };
 
 use quire_contract_codegen::RUNTIME_DEPENDENCY_SOURCE;
+
+static AGREEMENT_BUILD: Mutex<()> = Mutex::new(());
+
+/// Dependency artifacts shared by generated native agreement crates in this target.
+pub(crate) fn agreement_target() -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR")).join("generated-agreement-target")
+}
+
+/// Keep compilation and execution together: Cargo releases its build lock before a
+/// test runs, when another child could otherwise replace the executable.
+pub(crate) fn lock_agreement_build() -> MutexGuard<'static, ()> {
+    AGREEMENT_BUILD.lock().expect("agreement build lock")
+}
 
 /// The `quire-contract-runtime` dependency line of a scratch manifest, with `features`.
 pub(crate) fn runtime_dependency(features: &[&str]) -> String {
