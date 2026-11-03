@@ -121,8 +121,6 @@ fn initial(package: &str, snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>) -> Doc
     let reference = DocumentRef {
         authority: "test".to_owned(),
         identity: name,
-        revision_namespace: "fixture".to_owned(),
-        revision: "fixture:1".to_owned(),
     };
     snapshots.insert(reference.clone(), bytes);
     reference

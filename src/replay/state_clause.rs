@@ -1282,15 +1282,14 @@ mod tests {
     #[trace("FR-024-AC-52", "TC-035")]
     #[test]
     fn tc_035_duplicate_document_labels_refuse_before_request() {
-        let first = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":1}"#;
-        let changed = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":2}"#;
+        let first = br#"{"identity":{"authority":"a","identity":"i"},"value":1}"#;
+        let changed = br#"{"identity":{"authority":"a","identity":"i"},"value":2}"#;
         for second in [first.as_slice(), changed.as_slice()] {
             let error = ensure_unique_documents(&[first.as_slice(), second])
                 .expect_err("repeated labels refuse regardless of bytes");
             assert!(
                 matches!(error, StateClauseReplayError::DuplicateDocumentIdentity { identity }
-                if identity.authority == "a" && identity.identity == "i"
-                    && identity.revision_namespace == "n" && identity.revision == "r")
+                    if identity.authority == "a" && identity.identity == "i")
             );
         }
     }
