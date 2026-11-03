@@ -20,8 +20,8 @@ use qsl_replay::{
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
-    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, StateClauseReplayInputs,
-    StateFrameIdentity, StateObjectAddress,
+    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, SelectedFrameItem,
+    SelectedFrameTarget, StateClauseReplayInputs, StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedNodePathSegment, CheckedOccurrenceRole, CheckedPackageEvidence,
@@ -374,6 +374,28 @@ impl Twin {
     /// Builds the twin.
     pub fn new() -> Self {
         Self::build(&model::GRANTED, &CLAUSES, 0)
+    }
+
+    /// The same frame with a subtype that inherits `Account::deposit`.
+    pub fn with_inherited_account() -> Self {
+        let mut twin = Self::new();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let types = domain["types"].as_array_mut().expect("types");
+        let mut child = types
+            .iter()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type")
+            .clone();
+        let child_identity = format!("ix://{PACKAGE}/ChildAccount");
+        child["identity"] = json!(child_identity);
+        child["displayName"] = json!(child_identity);
+        child["origin"] = generated(&child_identity);
+        child["supertypes"] = json!([account_type()]);
+        child["fields"] = json!([]);
+        child["operations"] = json!([]);
+        types.push(child);
+        twin.domain = domain.to_string().into_bytes();
+        twin
     }
 
     /// QSL-emitted postcondition package whose operation declares one `other` parameter.
@@ -781,6 +803,15 @@ impl Twin {
     /// The `OperationSite` `qsl_replay::call_site` returns for `Bank::Account::<operation>`,
     /// read directly and not through the crate under test.
     pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
+        self.operation_site_for_object("Account", operation)
+    }
+
+    /// The operation site selected through `object`, including inherited operations.
+    pub fn operation_site_for_object(
+        &self,
+        object: &str,
+        operation: &str,
+    ) -> Result<OperationSite, Box<CallSiteRefusal>> {
         call_site(
             SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
             self.identity.to_owned(),
@@ -788,7 +819,7 @@ impl Twin {
             &self.unit,
             [self.domain.as_slice()],
             &DependencyInput::default(),
-            &self.operation(operation),
+            &self.operation_for_object(object, operation),
         )
         .map(|located| located.site)
     }
@@ -1130,6 +1161,32 @@ impl Twin {
         limits: quire_contract_codegen::WitnessDecodeLimits,
         parse_limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
+        self.try_frame_replay_with_target_edit(
+            ("Account", operation),
+            invocation,
+            account,
+            field,
+            run,
+            (limits, parse_limits),
+            |_, _, _| {},
+        )
+    }
+
+    /// Build a frame replay after replacing one selected-target input for a refusal test.
+    pub fn try_frame_replay_with_target_edit(
+        &self,
+        selection: (&str, &str),
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: (
+            quire_contract_codegen::WitnessDecodeLimits,
+            quire_contract_codegen::WitnessDecodeLimits,
+        ),
+        edit: impl FnOnce(&mut Option<SelectedFrameTarget>, &mut OccurrenceKey, &mut CheckedPackageV2),
+    ) -> Result<FrameReplay, FrameReplayError> {
+        let (limits, parse_limits) = limits;
         let mut inputs = self.run();
         inputs.decode_limits = run.decode_limits;
         let playback = parse_assertion_playback(
@@ -1140,6 +1197,32 @@ impl Twin {
             parse_limits.values,
         )
         .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
+        let mut selected_package = self.emitted_package("BalanceNeverDrops").0;
+        let selected_site = self
+            .operation_site_for_object(selection.0, selection.1)
+            .ok();
+        let mut selected_occurrence = selected_site
+            .as_ref()
+            .map(|site| site.frame_occurrence.clone())
+            .unwrap_or_else(|| {
+                self.operation_site("deposit")
+                    .expect("the fixture's deposit frame")
+                    .frame_occurrence
+            });
+        let mut selected_target = selected_site.map(|site| SelectedFrameTarget {
+            operation: site.frame_operation,
+            package_id: quire_contract_model::ContractSourceV1 {
+                name: selected_package.name().into(),
+                lock: selected_package.lock().clone(),
+            },
+            request_index: 0,
+            occurrence: selected_occurrence.clone(),
+        });
+        edit(
+            &mut selected_target,
+            &mut selected_occurrence,
+            &mut selected_package,
+        );
         FrameReplay::new(FrameReplayInputs {
             run: inputs,
             packages: self.packages(),
@@ -1148,7 +1231,13 @@ impl Twin {
                 .iter()
                 .map(|(_, bytes)| document(bytes))
                 .collect(),
-            operation: self.operation(operation),
+            operation: self.operation_for_object(selection.0, selection.1),
+            selected_item: SelectedFrameItem {
+                package: &selected_package,
+                request_index: 0,
+                occurrence: &selected_occurrence,
+            },
+            selected_target,
             invocation: invocation.reference.clone(),
             change: ClaimedChange::FieldWrite {
                 object: SelectedObject {
@@ -1211,10 +1300,14 @@ impl Twin {
 
     /// `Bank::Account::<operation>`.
     fn operation(&self, operation: &str) -> OperationName {
+        self.operation_for_object("Account", operation)
+    }
+
+    fn operation_for_object(&self, object: &str, operation: &str) -> OperationName {
         let identifier = |name| Identifier::new(name).expect("identifier");
         OperationName {
             model: identifier("Bank"),
-            object: identifier("Account"),
+            object: identifier(object),
             operation: identifier(operation),
         }
     }

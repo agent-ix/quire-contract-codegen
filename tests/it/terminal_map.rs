@@ -22,8 +22,9 @@ use quire_contract_codegen::{
     KaniExecutionEvidence, KaniFailureCause, KaniInconclusiveReason, KaniRunOutcome, KaniSolver,
     LockedSource, MemoryMechanism, MemoryObservation, ModelError, ObligationIdentityError,
     OperationDeclaration, PreStateFault, ProofCeilings, ReplayInputs, ReplayPackage,
-    ReplayPackageError, ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError,
-    StateClauseReplay, StateClauseReplayError, StateFrameRefusal, TerminalPairError,
+    ReplayPackageError, ReplaySettlement, ReplayVerdict, ScopeMember, SelectedTargetMember,
+    SpineReplayError, StateClauseReplay, StateClauseReplayError, StateFrameRefusal,
+    TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_exact::CancelCause;
@@ -419,6 +420,7 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
     .map(|_| ())
     .expect_err("an envelope with no members is refused");
     let frame = [
+        FrameReplayError::SelectedTarget(SelectedTargetMember::Package),
         FrameReplayError::Transcript(malformed()),
         FrameReplayError::Envelope(envelope),
         FrameReplayError::Name(empty_name),
