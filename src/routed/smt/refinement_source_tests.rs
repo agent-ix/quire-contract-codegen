@@ -11,9 +11,9 @@ use std::{
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    acquire_checked_closure, encode_refinement_query, DependencyInput, DocumentRef, NodeKey,
-    RefinementQueryKind, RefinementQueryRequest, RefinementQuerySubject, RefinementUniverse,
-    ReplayLimits, ScalarLimits, SourceIdentity, StageLimits,
+    acquire_checked_closure, encode_refinement_query, CompileUnit, DependencyInput, DocumentRef,
+    NodeKey, RefinementQueryKind, RefinementQueryRequest, RefinementQuerySubject,
+    RefinementUniverse, ReplayLimits, ScalarLimits, SourceIdentity, StageLimits,
 };
 use quire_exact::Cancel;
 use serde_json::{json, Value};
@@ -39,7 +39,7 @@ fn origin(identity: &str) -> Value {
         "inputIdentities": [identity]}})
 }
 
-fn model(package: &str, operations: &[&str]) -> (Vec<u8>, [u8; 32], String) {
+fn model(package: &str, operations: &[&str]) -> Vec<u8> {
     let object = key(package, "Object");
     let population = key(package, "objects");
     let constructs: Vec<_> = [
@@ -99,16 +99,10 @@ fn model(package: &str, operations: &[&str]) -> (Vec<u8>, [u8; 32], String) {
             "members": [object], "extent": "closed", "origin": origin(&population)}]
     });
     let limits = quire_canonical::Limits::new(1 << 20);
-    let bytes = quire_canonical::to_vec(&document, limits).expect("model bytes");
-    let digest = quire_canonical::sha256(&document, limits).expect("model digest");
-    (bytes, *digest.as_bytes(), digest.to_string())
+    quire_canonical::to_vec(&document, limits).expect("model bytes")
 }
 
-fn initial(
-    package: &str,
-    model_digest: [u8; 32],
-    snapshots: &mut BTreeMap<[u8; 32], Vec<u8>>,
-) -> DocumentRef {
+fn initial(package: &str, snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>) -> DocumentRef {
     let name = format!("{package}/start");
     let fields: BTreeMap<_, _> = (0..7)
         .map(|index| (format!("flag{index}"), json!({"boolean": false})))
@@ -118,8 +112,7 @@ fn initial(
         "identity": {"authority": "test", "identity": name,
             "revision_namespace": "fixture", "revision": "fixture:1"},
         "observation": "current",
-        "model": {"identity": package, "version": "1.0.0",
-            "digest": format!("sha256-jcs:{}", hex(&model_digest))},
+        "model": {"identity": package},
         "anchor": {"kind": "initialization", "name": "start"},
         "populations": [{"population": key(package, "objects"), "complete": true,
             "objects": [{"key": "only", "type": key(package, "Object"),
@@ -127,21 +120,14 @@ fn initial(
     });
     let limits = quire_canonical::Limits::new(1 << 20);
     let bytes = quire_canonical::to_vec(&snapshot, limits).expect("snapshot bytes");
-    let digest = *quire_canonical::sha256(&snapshot, limits)
-        .expect("snapshot digest")
-        .as_bytes();
-    snapshots.insert(digest, bytes);
-    DocumentRef {
+    let reference = DocumentRef {
         authority: "test".to_owned(),
         identity: name,
         revision_namespace: "fixture".to_owned(),
         revision: "fixture:1".to_owned(),
-        digest,
-    }
-}
-
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    };
+    snapshots.insert(reference.clone(), bytes);
+    reference
 }
 
 fn authored_rows(reverse: bool) -> String {
@@ -155,7 +141,7 @@ fn authored_rows(reverse: bool) -> String {
         .collect()
 }
 
-fn authored_unit(abstract_digest: &str, concrete_digest: &str, reverse: bool) -> String {
+fn authored_unit(reverse: bool) -> String {
     let mapping = (0..7)
         .map(|index| format!("flag{index} = self.flag{index};"))
         .collect::<Vec<_>>()
@@ -163,8 +149,8 @@ fn authored_unit(abstract_digest: &str, concrete_digest: &str, reverse: bool) ->
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile inf = \"quire.temporal.infinite-trace/v1\";\n\
-         model Abstract = \"{ABSTRACT}\" version \"1.0.0\" digest \"sha256-jcs:{abstract_digest}\";\n\
-         model Concrete = \"{CONCRETE}\" version \"1.0.0\" digest \"sha256-jcs:{concrete_digest}\";\n\
+         model Abstract = \"{ABSTRACT}\";\n\
+         model Concrete = \"{CONCRETE}\";\n\
          refinement SevenRows using inf abstract Abstract concrete Concrete {{\n\
          population Abstract::objects from Concrete::objects;\n\
          object Abstract::Object from Concrete::Object {{ {mapping} }}\n\
@@ -178,21 +164,24 @@ type Expected = RefinementExpected<NodeKey, [String; 2]>;
 type Run = RefinementRun<NodeKey, [String; 2]>;
 
 fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
-    let (abstract_bytes, abstract_digest, abstract_hex) = model(ABSTRACT, &[]);
+    let abstract_bytes = model(ABSTRACT, &[]);
     let names: Vec<_> = (0..7).map(|index| format!("op{index}")).collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
-    let (concrete_bytes, concrete_digest, concrete_hex) = model(CONCRETE, &names);
+    let concrete_bytes = model(CONCRETE, &names);
     let mut packages = BTreeMap::new();
-    packages.insert(abstract_digest, abstract_bytes.clone());
-    packages.insert(concrete_digest, concrete_bytes.clone());
+    packages.insert(ABSTRACT.to_owned(), abstract_bytes);
+    packages.insert(CONCRETE.to_owned(), concrete_bytes);
     let mut snapshots = BTreeMap::new();
-    let abstract_initial = initial(ABSTRACT, abstract_digest, &mut snapshots);
-    let concrete_initial = initial(CONCRETE, concrete_digest, &mut snapshots);
-    let source = authored_unit(&abstract_hex, &concrete_hex, reverse);
+    let abstract_initial = initial(ABSTRACT, &mut snapshots);
+    let concrete_initial = initial(CONCRETE, &mut snapshots);
+    let source = authored_unit(reverse);
     let compiled = acquire_checked_closure(
-        SourceIdentity::new("agent-ix", "ir1120-refinement", "git", "fixture"),
-        "ir1120-refinement.native",
-        source.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("agent-ix", "ir1120-refinement", "git", "fixture"),
+            package_name: "ir1120-refinement".to_owned(),
+            path: "ir1120-refinement.native",
+            bytes: source.as_bytes(),
+        },
         packages.values().map(Vec::as_slice),
         &DependencyInput::default(),
         StageLimits::default(),
