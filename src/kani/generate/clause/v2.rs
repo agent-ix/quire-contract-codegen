@@ -91,7 +91,7 @@ pub(in crate::kani::generate) fn lower(
     }
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     let input_count_supported = match kind {
-        ObligationKind::Precondition => oracle.descriptor.inputs.len() <= 1,
+        ObligationKind::Precondition => true,
         ObligationKind::Postcondition => oracle.descriptor.inputs.len() == 1,
         ObligationKind::Invariant => true,
         ObligationKind::Frame => false,

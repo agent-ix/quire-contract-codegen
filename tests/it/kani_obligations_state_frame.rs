@@ -464,6 +464,10 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
         clause: &clause,
         dependencies: None,
     }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
