@@ -482,8 +482,8 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
             .iter()
             .map(|argument| (
                 argument.identifier.as_str(),
-                argument.minimum,
-                argument.maximum
+                i128::from(argument.minimum),
+                i128::from(argument.maximum)
             ))
             .collect::<Vec<_>>(),
         inputs,
