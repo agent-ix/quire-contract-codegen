@@ -6439,7 +6439,7 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
 }
 
-/// Each field read by an object invariant is a separate bounded symbolic argument.
+/// Each field read by an object invariant is a separate bounded state-field draw.
 #[trace("FR-015-AC-39", "TC-025")]
 #[test]
 fn qsl_invariant_draws_each_selected_model_field_it_reads() {
@@ -6471,7 +6471,16 @@ fn qsl_invariant_draws_each_selected_model_field_it_reads() {
     let [harness] = v2_clause_harnesses.as_slice() else {
         panic!("one two-field invariant harness");
     };
-    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness.identity.arguments.is_empty());
+    assert_eq!(
+        harness
+            .identity
+            .state_fields
+            .iter()
+            .map(|field| (field.field_name.as_str(), field.identifier.as_str()))
+            .collect::<Vec<_>>(),
+        [("audit", "current_audit"), ("balance", "current_balance")]
+    );
     assert!(harness.rust.contents.contains("current_balance >= -5"));
     assert!(harness.rust.contents.contains("current_balance <= 10"));
     assert!(harness.rust.contents.contains("current_audit >= 7"));
@@ -6567,8 +6576,9 @@ fn qsl_native_invariant_preserves_oracle_selection_and_deterministic_identity() 
         first.identity.proof_execution_state,
         ProofExecutionState::NotRun
     );
-    assert_eq!(first.identity.arguments[0].minimum, 0);
-    assert_eq!(first.identity.arguments[0].maximum, 1000);
+    assert!(first.identity.arguments.is_empty());
+    assert_eq!(first.identity.state_fields[0].minimum, 0);
+    assert_eq!(first.identity.state_fields[0].maximum, 1000);
     assert!(first
         .rust
         .contents
