@@ -441,14 +441,14 @@ fn operation_context_requires_and_assumes_same_anchor_preconditions() {
     ));
 }
 
-/// Merely naming a scalar sibling in the request cannot make its unsupported
-/// standalone disposition a valid `requires` for a collection postcondition.
+/// A supported scalar sibling cannot become a collection `requires` when its
+/// expression cannot be rendered against the collection's shared prestate.
 #[test]
 #[trace("TC-025", "FR-015-AC-43")]
-fn present_unsupported_sibling_refuses_collection_postcondition() {
+fn present_unrenderable_sibling_refuses_collection_postcondition() {
     let package = fixture(
         &document(),
-        "pre Ready using v on M::Node::step { self.m_count >= limit and enabled }",
+        "pre Ready using v on M::Node::step { self.m_count * limit >= 1 and enabled }",
     );
     let ids = clauses(&package);
     let pre = ids
@@ -465,6 +465,16 @@ fn present_unsupported_sibling_refuses_collection_postcondition() {
     else {
         panic!("valid request has per-item dispositions");
     };
+    assert!(records.iter().any(|record| {
+        matches!(
+            &record.subject,
+            quire_contract_codegen::ObligationSubject::CheckedNode { node_id, .. }
+                if node_id == pre
+        ) && matches!(
+            record.disposition,
+            quire_contract_codegen::ObligationDisposition::Supported { .. }
+        )
+    }));
     assert!(records.iter().any(|record| matches!(
         &record.disposition,
         quire_contract_codegen::ObligationDisposition::Unsupported {

@@ -118,11 +118,6 @@ fn lower_with_census<'a>(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
-    let result_postcondition = if kind == ObligationKind::Postcondition {
-        Some(read_postcondition_signature(view, clause, census)?)
-    } else {
-        None
-    };
     if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
         return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
             node_id: clause.clone(),
@@ -136,6 +131,11 @@ fn lower_with_census<'a>(
             operation_identity: operation_identity.to_owned(),
         });
     }
+    let result_postcondition = if kind == ObligationKind::Postcondition {
+        Some(read_postcondition_signature(view, clause, census)?)
+    } else {
+        None
+    };
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     let input_count_supported = match kind {
         ObligationKind::Precondition => true,
