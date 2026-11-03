@@ -2028,7 +2028,7 @@ pub(super) fn selected_scalar_key(
     };
     let ContractResultViewV1::Lowered(view) = package
         .result_context(
-            admitted_node,
+            &closure.root_structural_key,
             &admitted_application,
             admitted_conversion.as_ref(),
             BoundedDomainForm::IntegerRange,
