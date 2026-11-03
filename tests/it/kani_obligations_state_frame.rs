@@ -134,13 +134,15 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
+    let build = super::scratch_crate::lock_agreement_build();
     let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .current_dir(&scratch.path)
         .output()
         .unwrap();
+    drop(build);
     assert!(
         output.status.success(),
         "generated clause failed: {}",
@@ -289,13 +291,15 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
+    let build = super::scratch_crate::lock_agreement_build();
     let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .current_dir(&scratch.path)
         .output()
         .unwrap();
+    drop(build);
     assert!(
         output.status.success(),
         "inline clause failed: {}",
@@ -378,13 +382,15 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
+    let build = super::scratch_crate::lock_agreement_build();
     let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .current_dir(&scratch.path)
         .output()
         .unwrap();
+    drop(build);
     assert!(
         output.status.success(),
         "parameter clause failed: {}",
@@ -1991,13 +1997,15 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
         ),
     );
     let clause_corpus_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let build = super::scratch_crate::lock_agreement_build();
     let output = std::process::Command::new(clause_corpus_cargo)
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("CARGO_TARGET_DIR", super::scratch_crate::agreement_target())
         .env("RUSTFLAGS", "-Dwarnings")
         .current_dir(&scratch.path)
         .output()
         .unwrap();
+    drop(build);
     assert!(
         output.status.success(),
         "generated clause corpus failed: {}",
