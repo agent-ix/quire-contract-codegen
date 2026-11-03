@@ -31,6 +31,7 @@ fn binding(source: &mut String, binding: &LetBinding) {
         Some(LetType::I128) => ": i128",
         Some(LetType::I64) => ": i64",
         Some(LetType::Boolean) => ": bool",
+        Some(LetType::Unit) => ": ()",
     };
     let init = match &binding.init {
         Init::Expression(expression) => expression.as_str().to_owned(),

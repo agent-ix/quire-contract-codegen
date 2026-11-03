@@ -451,6 +451,53 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         .find("kani::cover!")
         .expect("final cover");
     assert!(domain < oracle_call && oracle_call < clause && clause < cover);
+    let source = syn::parse_file(&harness.rust.contents).expect("generated Rust parses");
+    let proof = source
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol.as_str() => {
+                module
+                    .content
+                    .as_ref()?
+                    .1
+                    .iter()
+                    .find_map(|item| match item {
+                        syn::Item::Fn(function)
+                            if function.sig.ident == harness.identity.harness_symbol.as_str() =>
+                        {
+                            Some(function)
+                        }
+                        _ => None,
+                    })
+            }
+            _ => None,
+        })
+        .expect("generated postcondition proof");
+    let domain_assertions = proof
+        .block
+        .stmts
+        .iter()
+        .filter_map(|statement| match statement {
+            syn::Stmt::Macro(statement)
+                if statement.mac.path.is_ident("assert")
+                    && statement
+                        .mac
+                        .tokens
+                        .to_string()
+                        .contains("subject_result >= 0") =>
+            {
+                Some(statement)
+            }
+            _ => None,
+        })
+        .count();
+    assert_eq!(domain_assertions, 1, "the produced domain is an assertion");
+    assert!(!proof.block.stmts.iter().any(|statement| matches!(statement,
+        syn::Stmt::Macro(statement)
+            if statement.mac.path.segments.last().is_some_and(|segment| segment.ident == "assume")
+                && statement.mac.tokens.to_string().contains("subject_result")
+    )));
 }
 
 /// An unused result is still produced and checked, while the parameter is the sole draw.
@@ -1341,7 +1388,8 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     assert!(harness.rust.contents.contains("nx::NativeIntegerPlan::new"));
     assert!(!harness.rust.contents.contains("_i128_i128"));
     assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
-    assert!(harness.rust.contents.contains("subject == expected"));
+    assert!(harness.rust.contents.contains("let subject: () ="));
+    assert!(!harness.rust.contents.contains("subject == expected"));
     syn::parse_file(&harness.rust.contents).expect("the native harness is valid Rust syntax");
 }
 

@@ -163,6 +163,7 @@ pub(super) enum LetType {
     I128,
     I64,
     Boolean,
+    Unit,
 }
 #[derive(Clone, Debug)]
 pub(super) enum Init {

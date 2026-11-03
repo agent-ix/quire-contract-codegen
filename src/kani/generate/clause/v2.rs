@@ -62,7 +62,7 @@ struct ResultParameter {
 }
 
 struct ResultPostcondition {
-    result: MachineScalar,
+    result: Option<MachineScalar>,
     parameters: Vec<ResultParameter>,
 }
 
@@ -94,12 +94,11 @@ pub(in crate::kani::generate) fn lower(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
-    let result_postcondition =
-        if kind == ObligationKind::Postcondition && result_binder(view, clause).is_some() {
-            Some(read_result_signature(view, clause)?)
-        } else {
-            None
-        };
+    let result_postcondition = if kind == ObligationKind::Postcondition {
+        Some(read_postcondition_signature(view, clause)?)
+    } else {
+        None
+    };
     if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
         return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
             node_id: clause.clone(),
@@ -117,7 +116,10 @@ pub(in crate::kani::generate) fn lower(
     let input_count_supported = match kind {
         ObligationKind::Precondition => true,
         ObligationKind::Postcondition => {
-            result_postcondition.is_some() || oracle.descriptor.inputs.len() == 1
+            result_postcondition
+                .as_ref()
+                .is_some_and(|signature| signature.result.is_some())
+                || oracle.descriptor.inputs.len() == 1
         }
         ObligationKind::Invariant => true,
         ObligationKind::Frame => false,
@@ -132,7 +134,10 @@ pub(in crate::kani::generate) fn lower(
                 ObligationKind::Postcondition => {
                     input.state_field.is_none()
                         && (input.name.starts_with("parameter_")
-                            || result_postcondition.is_some() && input.name == "result_result")
+                            || result_postcondition
+                                .as_ref()
+                                .is_some_and(|signature| signature.result.is_some())
+                                && input.name == "result_result")
                 }
                 ObligationKind::Invariant => {
                     input.name.starts_with("current_") && input.state_field.is_some()
@@ -140,7 +145,10 @@ pub(in crate::kani::generate) fn lower(
                 ObligationKind::Frame => false,
             };
             !supported
-                || (input.boolean && result_postcondition.is_none())
+                || (input.boolean
+                    && result_postcondition
+                        .as_ref()
+                        .is_some_and(|signature| signature.result.is_none()))
                 || input.lower > input.upper
                 || i64::try_from(input.lower).is_err()
                 || i64::try_from(input.upper).is_err()
@@ -167,10 +175,25 @@ pub(in crate::kani::generate) fn lower(
         return Err(refusal());
     }
     let (native_expectation, arithmetic, symbolic_name) = if kind == ObligationKind::Postcondition
-        && result_postcondition.is_none()
+        && result_postcondition
+            .as_ref()
+            .is_some_and(|signature| signature.result.is_none())
     {
+        let signature = result_postcondition.as_ref().ok_or_else(refusal)?;
+        let [parameter] = signature.parameters.as_slice() else {
+            return Err(refusal());
+        };
         let input = oracle.descriptor.inputs.first().ok_or_else(refusal)?;
         let input_name = input.name.strip_prefix("parameter_").ok_or_else(refusal)?;
+        if input_name != parameter.name
+            || !matches!(
+                parameter.scalar,
+                MachineScalar::Integer { minimum, maximum }
+                    if input.lower == i128::from(minimum) && input.upper == i128::from(maximum)
+            )
+        {
+            return Err(refusal());
+        }
         let symbolic_name = format!("{input_name}_current");
         let mut arithmetic = Vec::new();
         let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
@@ -225,31 +248,6 @@ pub(in crate::kani::generate) fn lower(
             "cover_precondition"
         }
         .to_owned(),
-    })
-}
-
-fn result_binder(view: &ClauseGraphView<'_>, clause: &CheckedNodeId) -> Option<CheckedNodeId> {
-    let [parameters, _, _] = application(
-        view.package().term(clause)?,
-        ApplicationOperator::StateClause,
-        "quire.op.state.clause",
-    )?
-    else {
-        return None;
-    };
-    let CheckedTerm::Aggregate { members } = parameters else {
-        return None;
-    };
-    members.iter().skip(1).find_map(|member| {
-        let result_node = reference(member)?;
-        (view
-            .package()
-            .parameter_declaration(result_node)
-            .ok()?
-            .name
-            .as_ref()
-            == "result")
-            .then(|| result_node.clone())
     })
 }
 
@@ -322,7 +320,7 @@ fn self_binder_matches_context(
         )
 }
 
-fn read_result_signature(
+fn read_postcondition_signature(
     view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,
 ) -> Result<ResultPostcondition, UnsupportedObligation> {
@@ -367,19 +365,20 @@ fn read_result_signature(
     if matches.next().is_some() {
         return Err(mismatch());
     }
-    let result = operation.result().ok_or_else(mismatch)?;
-    let result = machine_scalar(result.ok_or_else(unsupported)?).ok_or_else(unsupported)?;
+    let result = operation
+        .result()
+        .map(|member| machine_scalar(member.ok_or_else(unsupported)?).ok_or_else(unsupported))
+        .transpose()?;
     let expected = operation
         .parameters()
         .len()
-        .checked_add(2)
+        .checked_add(if result.is_some() { 2 } else { 1 })
         .ok_or_else(mismatch)?;
     if members.len() != expected {
         return Err(mismatch());
     }
     let mut ids = members.iter().map(reference);
     let self_id = ids.next().flatten().ok_or_else(mismatch)?;
-    let result_id = ids.next().flatten().ok_or_else(mismatch)?;
     if package
         .parameter_declaration(self_id)
         .map_err(|_| mismatch())?
@@ -387,15 +386,21 @@ fn read_result_signature(
         .as_ref()
         != "self"
         || !self_binder_matches_context(view, self_id, context)
-        || package
+    {
+        return Err(mismatch());
+    }
+    if let Some(result) = &result {
+        let result_id = ids.next().flatten().ok_or_else(mismatch)?;
+        if package
             .parameter_declaration(result_id)
             .map_err(|_| mismatch())?
             .name
             .as_ref()
             != "result"
-        || !binder_matches_scalar(view, result_id, &result)
-    {
-        return Err(mismatch());
+            || !binder_matches_scalar(view, result_id, result)
+        {
+            return Err(mismatch());
+        }
     }
     let mut parameters = Vec::new();
     let mut parameter_names = BTreeSet::new();
@@ -542,7 +547,9 @@ pub(in crate::kani::generate) fn render_clause(
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
     if let Some(signature) = &lowered.result_postcondition {
-        return render_result_postcondition(request, lowered, signature);
+        if signature.result.is_some() {
+            return render_result_postcondition(request, lowered, signature);
+        }
     }
     if lowered.kind == ObligationKind::Postcondition {
         return render_postcondition(request, lowered);
@@ -805,8 +812,11 @@ fn render_result_postcondition(
         .map(|parameter| format!("parameter_{}_current", parameter.name))
         .collect::<Vec<_>>();
     let (result_type, result_domain) = match signature.result {
-        MachineScalar::Boolean => (LetType::Boolean, None),
-        MachineScalar::Integer { minimum, maximum } => (LetType::I64, Some((minimum, maximum))),
+        Some(MachineScalar::Boolean) => (LetType::Boolean, None),
+        Some(MachineScalar::Integer { minimum, maximum }) => {
+            (LetType::I64, Some((minimum, maximum)))
+        }
+        None => return Err(refusal()),
     };
     body.push(Statement::Let(LetBinding {
         name: "subject_result".to_owned(),
@@ -828,11 +838,14 @@ fn render_result_postcondition(
         body.push(binding(
             "result_result",
             Init::Expression(expression(match signature.result {
-                MachineScalar::Boolean => "subject_result".to_owned(),
-                MachineScalar::Integer { .. } if lowered.native_integer => {
+                Some(MachineScalar::Boolean) => "subject_result".to_owned(),
+                Some(MachineScalar::Integer { .. }) if lowered.native_integer => {
                     "nx::NativeInteger::new(i128::from(subject_result))".to_owned()
                 }
-                MachineScalar::Integer { .. } => "rt::Integer::from(subject_result)".to_owned(),
+                Some(MachineScalar::Integer { .. }) => {
+                    "rt::Integer::from(subject_result)".to_owned()
+                }
+                None => return Err(refusal()),
             })?),
             false,
         ));
@@ -997,11 +1010,12 @@ fn render_postcondition(
                 Argument::BorrowMut("meter".to_owned()),
             ],
         },
-        binding(
-            "subject",
-            Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
-            false,
-        ),
+        Statement::Let(LetBinding {
+            name: "subject".to_owned(),
+            ty: Some(LetType::Unit),
+            mutable: false,
+            init: Init::Expression(expression(format!("{}({symbolic})", request.subject_path))?),
+        }),
     ];
     let mut completed_prefix = "true".to_owned();
     for (index, probe) in lowered.arithmetic.iter().enumerate() {
@@ -1141,10 +1155,6 @@ fn render_postcondition(
                 "!({completed_prefix}) || (matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected)"
             ))?,
             message: "the clause oracle agrees with the independent checked condition".to_owned(),
-        },
-        Statement::Assert {
-            condition: expression(format!("!({completed_prefix}) || subject == expected"))?,
-            message: "the compiled subject agrees with the checked condition".to_owned(),
         },
     ]);
     let spec = HarnessSpec::new(
