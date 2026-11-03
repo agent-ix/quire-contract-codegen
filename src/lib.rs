@@ -277,6 +277,7 @@ pub use replay::composite_builder::{
 };
 pub use replay::frame::{
     FrameClaimMember, FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
+    SelectedFrameItem, SelectedFrameTarget, SelectedTargetMember,
 };
 pub use replay::function::{
     replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,

@@ -39,13 +39,14 @@ use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
 };
 use package::{
-    application, code_id, key, literal, member, op, op_full, parameter_body, reference, Bound,
-    PackageBuilder, FUNCTION, T_BOOLEAN, T_INTEGER, T_TEXT,
+    application, code_id, integer_division_definition, key, law, literal, member, mode_kv, op,
+    op_full, parameter_body, reference, text_profile_definition, Bound, PackageBuilder, FUNCTION,
+    T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
-    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
-    ObligationIdentity, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
-    Verdict, WitnessSettlement,
+    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, Identifier,
+    InconclusiveCause, ObligationIdentity, OccurrenceKey, OperationSite, Origin, QualifiedName,
+    ReplayRefusal, ReplayResult, ReplaySource, Role, TerminalValue, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
@@ -58,10 +59,10 @@ use quire_contract_codegen::{
     KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
     ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
     ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofExecutionState,
-    ProofReadiness, ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness,
-    StateFrameIdentity, StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty,
-    StateFrameRefusal, StateFrameRequest, StateFrameRole, UnsupportedFrameEffect,
-    UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    ProofReadiness, ScopeMember, SelectedTargetMember, StateComparison, StateFieldDomain,
+    StateFrameHarness, StateFrameIdentity, StateFrameLoweringRefusal, StateFrameObligations,
+    StateFrameProperty, StateFrameRefusal, StateFrameRequest, StateFrameRole,
+    UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -437,6 +438,123 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains("parameter_other >= 0"));
     assert!(harness.rust.contents.contains("parameter_other <= 1000"));
     assert!(harness.rust.contents.contains(&oracle.source));
+}
+
+/// The public V2 request embeds the clause-identified FR-014 source for each supported
+/// connective and comparison, keeping the QSL clause node as the oracle's identity.
+#[trace("FR-015-AC-40", "TC-025")]
+#[test]
+fn qsl_v2_precondition_embeds_exact_referenced_clause_oracle() {
+    for (condition, operation_identity) in [
+        ("other < 1000 and other >= 0", "quire.op.boolean.and"),
+        ("other < 1000 or other >= 0", "quire.op.boolean.or"),
+        ("not (other < 1000)", "quire.op.boolean.not"),
+        (
+            "other < 1000 implies other >= 0",
+            "quire.op.boolean.implies",
+        ),
+        ("(other < 1000) = (other >= 0)", "quire.op.boolean.eq"),
+        ("(other < 1000) != (other >= 0)", "quire.op.boolean.ne"),
+        ("other = other", "quire.op.integer.eq"),
+        ("other != other", "quire.op.integer.ne"),
+        ("other < 1000", "quire.op.integer.lt"),
+        ("other <= 1000", "quire.op.integer.le"),
+        ("other > 0", "quire.op.integer.gt"),
+        ("other >= 0", "quire.op.integer.ge"),
+    ] {
+        let (package, clause) = Twin::with_bounded_other_precondition_condition(condition)
+            .emitted_package("OtherBelowLimit");
+        let oracle = generate_v2_clause_oracle(&package, &clause)
+            .unwrap_or_else(|error| panic!("{condition}: {error:?}"));
+        assert_eq!(oracle.descriptor.node_id, clause, "{condition}");
+        assert!(oracle.descriptor.condition_node_id.is_some(), "{condition}");
+        assert!(
+            oracle
+                .descriptor
+                .operation_identities
+                .iter()
+                .any(|identity| identity == operation_identity),
+            "{condition}: the expected operation was not derived"
+        );
+        let outcome = negotiate(&[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
+        }]);
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("{condition}: the admitted clause must emit");
+        };
+        let [harness] = v2_clause_harnesses.as_slice() else {
+            panic!("{condition}: one harness must emit");
+        };
+        assert_eq!(harness.identity.clause, clause, "{condition}");
+        assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+        assert_eq!(
+            harness
+                .rust
+                .contents
+                .matches(oracle.source.as_str())
+                .count(),
+            1,
+            "{condition}: the oracle source must appear byte-identically once"
+        );
+    }
+}
+
+/// A checked inline Boolean literal reaches the public harness path and carries the
+/// clause-identified oracle source unchanged, including the zero-input direct-Boolean form.
+#[trace("FR-015-AC-40", "TC-025")]
+#[test]
+fn inline_v2_precondition_embeds_exact_clause_oracle() {
+    let admitted = fixture(&Shape {
+        variant: 2302,
+        clause: "precondition",
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    let oracle = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
+        .expect("the checked inline condition has a clause oracle");
+    assert_eq!(oracle.descriptor.node_id, admitted.clause);
+    assert_eq!(oracle.descriptor.condition_node_id, None);
+    assert!(oracle.descriptor.operation_identities.is_empty());
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &admitted.package,
+        clause: &admitted.clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the inline condition must emit a precondition harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one inline precondition harness");
+    };
+    assert_eq!(harness.identity.clause, admitted.clause);
+    assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert!(
+        harness.rust.contents.contains("kani::cover!(outcome,"),
+        "the direct Boolean oracle must be the cover condition"
+    );
+    assert!(!harness
+        .rust
+        .contents
+        .contains("kani::cover!(matches!(outcome,"));
+    assert_eq!(
+        harness
+            .rust
+            .contents
+            .matches(oracle.source.as_str())
+            .count(),
+        1,
+        "the inline oracle source must appear byte-identically once"
+    );
 }
 
 #[trace("FR-029-AC-11", "TC-040")]
@@ -1035,46 +1153,85 @@ fn native_v2_chained_probe_uses_selected_intermediate_interval() {
     assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
 }
 
-/// The admitted package and selected node fix the generated bytes, while backend and subject
-/// request facts remain distinct harness identities.
+/// Equal checked clauses regenerate the same bytes, while unwind and subject request facts
+/// remain distinct harness identities for each supported scalar V2 clause kind.
 #[trace("FR-015-AC-47", "TC-025")]
 #[test]
-fn qsl_v2_precondition_harness_identity_tracks_request_facts() {
-    let (package, clause) =
-        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
-    let item = ObligationItem::V2Clause {
-        package: &package,
-        clause: &clause,
-        dependencies: None,
-    };
-    let generated = |unwind, subject_path| {
-        let request = KaniObligationRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings(),
-            items: std::slice::from_ref(&item),
-            subject_path,
-            unwind,
+fn qsl_v2_scalar_clause_identity_tracks_request_facts() {
+    for (twin, clause_name, kind) in [
+        (
+            Twin::with_bounded_other_precondition(),
+            "OtherBelowLimit",
+            ObligationKind::Precondition,
+        ),
+        (
+            Twin::with_bounded_amount_implication(),
+            "BalanceNeverDrops",
+            ObligationKind::Postcondition,
+        ),
+        (
+            Twin::with_balance_invariant(),
+            "BalanceNonnegative",
+            ObligationKind::Invariant,
+        ),
+    ] {
+        let (package, clause) = twin.emitted_package(clause_name);
+        let item = ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
         };
-        let KaniObligationOutcome::Emitted {
-            v2_clause_harnesses,
-            ..
-        } = negotiate_kani_obligations(&request).expect("valid request")
-        else {
-            panic!("one valid precondition");
+        let generated = |unwind, subject_path| {
+            let request = KaniObligationRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                items: std::slice::from_ref(&item),
+                subject_path,
+                unwind,
+            };
+            let outcome = if kind == ObligationKind::Precondition {
+                negotiate_kani_obligations(&request)
+            } else {
+                negotiate_kani_native_obligations(&request)
+            }
+            .expect("valid clause request");
+            let KaniObligationOutcome::Emitted {
+                v2_clause_harnesses,
+                ..
+            } = outcome
+            else {
+                panic!("one valid {kind:?} clause");
+            };
+            let [harness] = v2_clause_harnesses.as_slice() else {
+                panic!("one generated {kind:?} harness");
+            };
+            assert_eq!(harness.identity.kind, kind);
+            harness.clone()
         };
-        let [harness] = v2_clause_harnesses.as_slice() else {
-            panic!("one generated harness");
-        };
-        harness.clone()
-    };
-    let first = generated(3, "crate::subject::deposit");
-    let same = generated(3, "crate::subject::deposit");
-    let changed_unwind = generated(4, "crate::subject::deposit");
-    let changed_subject = generated(3, "crate::subject::other");
-    assert_eq!(first, same);
-    assert_ne!(first.identity, changed_unwind.identity);
-    assert_ne!(first.record, changed_unwind.record);
-    assert_ne!(first.identity, changed_subject.identity);
-    assert_ne!(first.record, changed_subject.record);
+        let first = generated(3, "crate::subject::deposit");
+        let same = generated(3, "crate::subject::deposit");
+        let changed_unwind = generated(4, "crate::subject::deposit");
+        let changed_subject = generated(3, "crate::subject::other");
+        assert_eq!(first, same, "{kind:?}");
+        assert_eq!(first.rust.contents, same.rust.contents, "{kind:?}");
+        assert_eq!(first.record.contents, same.record.contents, "{kind:?}");
+        assert_ne!(first.identity, changed_unwind.identity, "{kind:?}");
+        assert_ne!(
+            first.record.contents, changed_unwind.record.contents,
+            "{kind:?}"
+        );
+        assert_ne!(first.identity, changed_subject.identity, "{kind:?}");
+        assert_ne!(
+            first.record.contents, changed_subject.record.contents,
+            "{kind:?}"
+        );
+        if kind == ObligationKind::Invariant {
+            assert!(!first.rust.contents.contains("crate::subject::deposit"));
+            assert!(!changed_subject
+                .rust
+                .contents
+                .contains("crate::subject::other"));
+        }
+    }
 }
 
 fn v2_precondition_fixture_harness(
@@ -1421,6 +1578,12 @@ enum Condition {
     /// `(post(self.balance) >= pre(self.balance)) and (post(self.balance) >= pre(self.balance))`:
     /// an operator outside the six integer comparisons.
     Conjunction,
+    /// A confirmed integer division nested in a Boolean comparison.
+    Division,
+    /// An integer modulo nested in a Boolean comparison.
+    Modulo,
+    /// Text equality whose literals lie outside the clause reader's scalar input grammar.
+    TextEquality,
 }
 
 impl Shape {
@@ -1766,6 +1929,43 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
         Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
         Condition::BalanceAgainstLiteral => (reference(&post_balance), zero),
+        Condition::Division | Condition::Modulo => {
+            let (operator, identity, arguments, laws) = match shape.condition {
+                Condition::Division => {
+                    let definition =
+                        integer_division_definition(quire_exact::DivisionProfile::Truncating);
+                    builder.select_definition(definition.clone());
+                    (
+                        "binary",
+                        "quire.op.integer.div",
+                        vec![literal("integer", "4"), literal("integer", "2")],
+                        vec![law("integer_division", definition)],
+                    )
+                }
+                Condition::Modulo => (
+                    "binary",
+                    "quire.op.integer.mod",
+                    vec![literal("integer", "4"), literal("integer", "2")],
+                    Vec::new(),
+                ),
+                _ => unreachable!("the outer match selects an unsupported integer operator"),
+            };
+            builder.application_bounded(
+                shape.code(205),
+                "expression",
+                operator,
+                &key(T_INTEGER),
+                application(
+                    operator,
+                    op_full(identity, laws, None, None),
+                    &key(T_INTEGER),
+                    arguments,
+                ),
+                &[],
+            );
+            (reference(&key(shape.code(205))), zero)
+        }
+        Condition::TextEquality => (reference(&post_balance), reference(&pre_balance)),
     };
     builder.application_bounded(
         shape.code(200),
@@ -1808,6 +2008,29 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
                 op("quire.op.boolean.and"),
                 &key(T_BOOLEAN),
                 vec![reference(&condition), reference(&condition)],
+            ),
+            &[],
+        );
+        condition = key(shape.code(210));
+    }
+    if matches!(shape.condition, Condition::TextEquality) {
+        let definition = text_profile_definition();
+        builder.select_definition(definition.clone());
+        builder.application_bounded(
+            shape.code(210),
+            "expression",
+            "binary",
+            &key(T_BOOLEAN),
+            application(
+                "binary",
+                op_full(
+                    "quire.op.text.eq",
+                    vec![law("text_profile", definition)],
+                    Some(mode_kv("text_profile", "nfc")),
+                    None,
+                ),
+                &key(T_BOOLEAN),
+                vec![literal("text", "a"), literal("text", "b")],
             ),
             &[],
         );
@@ -2029,9 +2252,25 @@ fn generated_from_twin(
     fields: &[&str],
     subject_path: &str,
 ) -> StateFrameObligations {
+    generated_from_twin_with_ceilings(
+        twin,
+        clause_name,
+        fields,
+        subject_path,
+        crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+    )
+}
+
+fn generated_from_twin_with_ceilings(
+    twin: &Twin,
+    clause_name: &str,
+    fields: &[&str],
+    subject_path: &str,
+    ceilings: quire_contract_codegen::ProofCeilings,
+) -> StateFrameObligations {
     let (package, clause) = twin.emitted_package(clause_name);
     generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        ceilings,
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3784,6 +4023,267 @@ fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
     assert!(matches!(result.result(), ReplayResult::Witness(_)));
 }
 
+/// The driver-supplied typed target, including its declaring owner, is the value sent to QSL.
+#[trace("FR-024-AC-54", "TC-035")]
+#[test]
+fn tc_035_selected_frame_target_reaches_packet_and_request() {
+    let twin = Twin::new();
+    let site = twin.operation_site("deposit").expect("QSL operation site");
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
+    assert_eq!(
+        replay.packet.replay_target.frame_operation,
+        Some(site.frame_operation.clone())
+    );
+    assert_eq!(
+        replay.wire.replay_target.members.frame_operation,
+        Some(site.frame_operation)
+    );
+    assert_eq!(replay.packet.occurrence_key, Some(site.frame_occurrence));
+}
+
+/// Selecting a subtype preserves the operation's declaring owner in the supplied QSL target.
+#[trace("FR-024-AC-54", "TC-035")]
+#[test]
+fn tc_035_inherited_frame_target_retains_declaring_owner() {
+    let twin = Twin::with_inherited_account();
+    let declared = twin.operation_site("deposit").expect("declared operation");
+    let inherited = twin
+        .operation_site_for_object("ChildAccount", "deposit")
+        .expect("inherited operation");
+    assert_eq!(inherited.frame_operation, declared.frame_operation);
+    assert_ne!(
+        inherited.frame_operation.object.segments()[1].as_str(),
+        "ChildAccount"
+    );
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let replay = twin
+        .try_frame_replay_with_target_edit(
+            ("ChildAccount", "deposit"),
+            &invocation,
+            "account",
+            "audit",
+            &run,
+            (
+                native_twin::frame_decode_limits(),
+                native_twin::frame_decode_limits(),
+            ),
+            |_, _, _| {},
+        )
+        .expect("the inherited frame target binds");
+    assert_eq!(
+        replay.packet.replay_target.frame_operation,
+        Some(declared.frame_operation.clone())
+    );
+    assert_eq!(
+        replay.wire.replay_target.members.frame_operation,
+        Some(declared.frame_operation)
+    );
+    assert_eq!(
+        replay.packet.occurrence_key,
+        Some(inherited.frame_occurrence)
+    );
+}
+
+/// Two admitted frame items remain distinct by request index.
+#[trace("FR-024-AC-56", "TC-035")]
+#[test]
+fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
+    let twin = Twin::with_distinct_balance_clauses();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let (_, other_clause) = twin.emitted_package("SpareA");
+    let item = ObligationItem::StateFrame {
+        package: &package,
+        clause: &clause,
+        role: StateFrameRole::Frame,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+    };
+    let items = [
+        item,
+        ObligationItem::StateFrame {
+            package: &package,
+            clause: &other_clause,
+            role: StateFrameRole::Frame,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+        },
+    ];
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &items,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("two admitted frame requests");
+    let records = outcome.records();
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].request_index, 0);
+    assert_eq!(records[1].request_index, 1);
+    assert!(
+        records
+            .iter()
+            .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })),
+        "{records:?}"
+    );
+
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let limits = (
+        native_twin::frame_decode_limits(),
+        native_twin::frame_decode_limits(),
+    );
+    let other_index = twin.try_frame_replay_with_target_edit(
+        ("Account", "deposit"),
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        limits,
+        |target, _, _| target.as_mut().expect("target").request_index = records[1].request_index,
+    );
+    assert!(matches!(
+        other_index,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::RequestIndex
+        ))
+    ));
+
+    let foreign = Twin::new()
+        .with_source_identity("test:foreign-selected-frame")
+        .emitted_package("BalanceNeverDrops")
+        .0;
+    let foreign_id = quire_contract_model::ContractSourceV1 {
+        name: foreign.name().into(),
+        lock: foreign.lock().clone(),
+    };
+    let foreign_item = twin.try_frame_replay_with_target_edit(
+        ("Account", "deposit"),
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        limits,
+        move |target, _, package| {
+            *package = foreign;
+            target.as_mut().expect("target").package_id = foreign_id;
+        },
+    );
+    assert!(matches!(
+        foreign_item,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Package
+        ))
+    ));
+}
+
+/// Every target-member refusal occurs while constructing the replay, before a packet exists.
+#[trace("FR-024-AC-55", "FR-024-AC-56", "TC-035")]
+#[test]
+fn tc_035_selected_frame_target_refuses_missing_and_mismatched_members() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = forbidden_run(&twin);
+    let check = |edit: fn(
+        &mut Option<quire_contract_codegen::SelectedFrameTarget>,
+        &mut OccurrenceKey,
+        &mut CheckedPackageV2,
+    ),
+                 member| {
+        let result = twin.try_frame_replay_with_target_edit(
+            ("Account", "deposit"),
+            &invocation,
+            "account",
+            "audit",
+            &run,
+            (
+                native_twin::frame_decode_limits(),
+                native_twin::frame_decode_limits(),
+            ),
+            edit,
+        );
+        assert!(matches!(result, Err(FrameReplayError::SelectedTarget(found)) if found == member));
+    };
+    check(|target, _, _| *target = None, SelectedTargetMember::Missing);
+    check(
+        |target, _, _| {
+            target.as_mut().expect("target").operation.object = QualifiedName::new(vec![
+                Identifier::new("Bank").expect("identifier"),
+                Identifier::new("Other").expect("identifier"),
+            ])
+            .expect("qualified name");
+        },
+        SelectedTargetMember::DeclaringOwner,
+    );
+    check(
+        |target, _, _| {
+            target.as_mut().expect("target").operation.operation =
+                Identifier::new("withdraw").expect("identifier");
+        },
+        SelectedTargetMember::Operation,
+    );
+    check(
+        |target, _, _| {
+            target.as_mut().expect("target").package_id.name = "unknown".into();
+        },
+        SelectedTargetMember::Package,
+    );
+    check(
+        |target, _, _| {
+            target.as_mut().expect("target").request_index = 1;
+        },
+        SelectedTargetMember::RequestIndex,
+    );
+    check(
+        |target, _, _| {
+            let target = target.as_mut().expect("target");
+            target.occurrence = OccurrenceKey::new(
+                target.occurrence.node().clone(),
+                Origin::new(Role::new("generated"), 1),
+            );
+        },
+        SelectedTargetMember::TargetOccurrence,
+    );
+    check(
+        |_, occurrence, _| {
+            *occurrence = OccurrenceKey::new(
+                occurrence.node().clone(),
+                Origin::new(Role::new("generated"), 1),
+            );
+        },
+        SelectedTargetMember::ItemOccurrence,
+    );
+    let foreign = Twin::new()
+        .with_source_identity("test:foreign-state-frame")
+        .emitted_package("BalanceNeverDrops")
+        .0;
+    let foreign_id = quire_contract_model::ContractSourceV1 {
+        name: foreign.name().into(),
+        lock: foreign.lock().clone(),
+    };
+    let foreign_result = twin.try_frame_replay_with_target_edit(
+        ("Account", "deposit"),
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        (
+            native_twin::frame_decode_limits(),
+            native_twin::frame_decode_limits(),
+        ),
+        |target, _, _| target.as_mut().expect("target").package_id = foreign_id,
+    );
+    assert!(matches!(
+        foreign_result,
+        Err(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Package
+        ))
+    ));
+}
+
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 #[trace("FR-015-AC-36", "TC-025")]
@@ -5250,6 +5750,12 @@ fn tc_035_the_frame_envelope_declares_no_domain() {
 
 const KANI_TIMEOUT: Duration = Duration::from_secs(600);
 
+const SMALL_FRAME_CEILINGS: quire_contract_codegen::ProofCeilings =
+    quire_contract_codegen::ProofCeilings {
+        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+        wall_clock: Duration::from_secs(120),
+    };
+
 fn scratch(name: &str) -> PathBuf {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -5300,6 +5806,50 @@ pub(crate) fn prove_evidence(
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
+    let test_name = std::thread::current()
+        .name()
+        .unwrap_or("frame-control")
+        .replace("::", "_");
+    let receipts = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("state-frame-evidence")
+        .join(test_name);
+    fs::create_dir_all(&receipts).expect("frame receipt directory");
+    let attempt = fs::read_dir(&receipts)
+        .expect("frame receipt attempts")
+        .map(|entry| entry.expect("read frame receipt attempt"))
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".evidence.json")
+        })
+        .count();
+    let prefix = format!("{attempt:03}");
+    fs::write(
+        receipts.join(format!("{prefix}.evidence.json")),
+        serde_json::to_vec_pretty(&evidence).expect("serialize real frame evidence"),
+    )
+    .expect("retain real frame evidence");
+    fs::copy(
+        directory.join("src/lib.rs"),
+        receipts.join(format!("{prefix}.rs")),
+    )
+    .expect("retain complete compiled frame source");
+    fs::write(
+        receipts.join(format!("{prefix}.generated.rs")),
+        &harness.rust.contents,
+    )
+    .expect("retain generated frame source");
+    fs::write(
+        receipts.join(format!("{prefix}.record.json")),
+        &harness.record.contents,
+    )
+    .expect("retain frame identity record");
+    fs::copy(
+        directory.join("Cargo.toml"),
+        receipts.join(format!("{prefix}.Cargo.toml")),
+    )
+    .expect("retain frame crate manifest");
     let _ = fs::remove_dir_all(directory);
     evidence
 }
@@ -5348,18 +5898,25 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
     let twin = Twin::new();
     assert_eq!(
         prove(
-            &generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
-                .postcondition
+            &generated_from_twin_with_ceilings(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS
+            )
+            .postcondition
         ),
         KaniRunOutcome::Verified
     );
     falsified(
         prove(
-            &generated_from_twin(
+            &generated_from_twin_with_ceilings(
                 &twin,
                 "BalanceNeverDrops",
                 &STATE_FIELDS,
                 "crate::subject::deposit_debiting",
+                SMALL_FRAME_CEILINGS,
             )
             .postcondition,
         ),
@@ -5416,17 +5973,27 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
     let twin = Twin::new();
     // ALLOWED: only `balance` changes, and the frame grants it.
     assert_eq!(
-        prove(&generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame),
+        prove(
+            &generated_from_twin_with_ceilings(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS
+            )
+            .frame
+        ),
         KaniRunOutcome::Verified
     );
     // FORBIDDEN: `audit` changes too.
     falsified(
         prove(
-            &generated_from_twin(
+            &generated_from_twin_with_ceilings(
                 &twin,
                 "BalanceNeverDrops",
                 &STATE_FIELDS,
                 "crate::subject::deposit_touching_audit",
+                SMALL_FRAME_CEILINGS,
             )
             .frame,
         ),
@@ -5436,7 +6003,14 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
     let emptied = Twin::build(&[], &CLAUSES, 0);
     falsified(
         prove(
-            &generated_from_twin(&emptied, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame,
+            &generated_from_twin_with_ceilings(
+                &emptied,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                SUBJECT_PATH,
+                SMALL_FRAME_CEILINGS,
+            )
+            .frame,
         ),
         "changed `balance`, which its frame does not modify",
     );
@@ -5459,11 +6033,12 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
     let twin = Twin::new();
-    let forbidden = generated_from_twin(
+    let forbidden = generated_from_twin_with_ceilings(
         &twin,
         "BalanceNeverDrops",
         &STATE_FIELDS,
         "crate::subject::deposit_touching_audit",
+        SMALL_FRAME_CEILINGS,
     );
     let counterexample = falsified(
         prove(&forbidden.frame),
@@ -5515,7 +6090,13 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
     let twin = Twin::new();
-    let allowed = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
+    let allowed = generated_from_twin_with_ceilings(
+        &twin,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+        SMALL_FRAME_CEILINGS,
+    );
     assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
     let mut account = subject::Account {
         balance: 5,
@@ -5540,4 +6121,529 @@ fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
         })
     );
     assert!(result.found().is_none());
+}
+
+#[trace(
+    "TC-025",
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "FR-015-AC-49"
+)]
+#[test]
+fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
+    let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("QSL invariant oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 1);
+    assert_eq!(oracle.descriptor.inputs[0].name, "current_balance");
+    assert_eq!(
+        (
+            oracle.descriptor.inputs[0].lower,
+            oracle.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(
+        matches!(record.disposition, ObligationDisposition::Supported { .. }),
+        "{record:?}"
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the invariant is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one invariant harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Invariant);
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert_eq!(harness.rust.contents.matches("assert!(").count(), 1);
+    assert!(harness
+        .rust
+        .contents
+        .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
+    assert!(
+        harness.rust.contents.find("assert!(").unwrap()
+            < harness.rust.contents.find("kani::cover!(").unwrap()
+    );
+    assert!(harness.rust.contents.contains("current_balance >= 0"));
+    assert!(harness.rust.contents.contains("current_balance <= 1000"));
+    assert!(!harness.rust.contents.contains(REQUEST_SUBJECT));
+    assert!(harness.rust.contents.contains(&oracle.source));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::cover!(invariant_domain_0,"));
+    let syntax = syn::parse_file(&harness.rust.contents).expect("valid generated invariant source");
+    let proof = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == harness.identity.module_symbol.as_str() => {
+                module
+                    .content
+                    .as_ref()?
+                    .1
+                    .iter()
+                    .find_map(|item| match item {
+                        syn::Item::Fn(function)
+                            if function.sig.ident == harness.identity.harness_symbol.as_str() =>
+                        {
+                            Some(function)
+                        }
+                        _ => None,
+                    })
+            }
+            _ => None,
+        })
+        .expect("the selected invariant proof function");
+    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.last() else {
+        panic!("the invariant's last statement must be its domain cover");
+    };
+    assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
+}
+
+/// Each field read by an object invariant is a separate bounded symbolic argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_invariant_draws_each_selected_model_field_it_reads() {
+    let twin = Twin::with_distinct_invariant_field_ranges("self.balance <= self.audit");
+    let (package, clause) = twin.emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("two-field QSL oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 2);
+    assert_eq!(
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| (input.name.as_str(), input.lower, input.upper))
+            .collect::<Vec<_>>(),
+        [("current_audit", 7, 12), ("current_balance", -5, 10)]
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("two-field invariant admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one two-field invariant harness");
+    };
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness.rust.contents.contains("current_balance >= -5"));
+    assert!(harness.rust.contents.contains("current_balance <= 10"));
+    assert!(harness.rust.contents.contains("current_audit >= 7"));
+    assert!(harness.rust.contents.contains("current_audit <= 12"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
+/// A selected field with no finite domain cannot become a symbolic invariant argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_invariant_unbounded_field_refuses_without_harness() {
+    let (package, clause) =
+        Twin::with_unbounded_balance_invariant().emitted_package("BalanceNonnegative");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant record");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(matches!(
+        &record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+        } if node_id == &clause
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("a well-formed unbounded item is accounted individually");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
+/// The invariant uses the current native selection and preserves deterministic sealed artifacts.
+#[trace(
+    "TC-025",
+    "FR-015-AC-40",
+    "FR-015-AC-47",
+    "FR-015-AC-49",
+    "FR-015-AC-125"
+)]
+#[test]
+fn qsl_native_invariant_preserves_oracle_selection_and_deterministic_identity() {
+    let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).unwrap();
+    let items = [ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }];
+    let generate = |unwind| {
+        let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &items,
+            subject_path: REQUEST_SUBJECT,
+            unwind,
+        })
+        .unwrap();
+        let KaniObligationOutcome::Emitted {
+            mut v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("native invariant is emitted");
+        };
+        assert_eq!(
+            v2_clause_harnesses.len(),
+            1,
+            "native invariant is supported"
+        );
+        v2_clause_harnesses.remove(0)
+    };
+    let first = generate(3);
+    let repeated = generate(3);
+    assert_eq!(first.rust.contents, repeated.rust.contents);
+    assert_eq!(first.record.contents, repeated.record.contents);
+    assert_ne!(first.record.contents, generate(4).record.contents);
+    assert!(first.rust.contents.contains(&oracle.source));
+    assert_eq!(
+        first.identity.native_integer_selection,
+        oracle.native_integer_selection
+    );
+    assert_eq!(
+        first.identity.integer_representation,
+        quire_contract_codegen::ScalarIntegerRepresentation::Native
+    );
+    assert_eq!(
+        first.identity.proof_execution_state,
+        ProofExecutionState::NotRun
+    );
+    assert_eq!(first.identity.arguments[0].minimum, 0);
+    assert_eq!(first.identity.arguments[0].maximum, 1000);
+    assert!(first
+        .rust
+        .contents
+        .contains("nx::NativeInteger::new(i128::from(current_balance))"));
+    assert!(!first.rust.contents.contains(REQUEST_SUBJECT));
+}
+
+/// Arithmetic invariants remain refused until their independent arithmetic probes are lowered.
+#[trace("TC-025", "FR-015-AC-41", "FR-015-AC-49")]
+#[test]
+fn qsl_invariant_arithmetic_is_refused_without_unchecked_harness() {
+    let (package, clause) = Twin::with_balance_invariant_condition("self.balance + 1 >= 0")
+        .emitted_package("BalanceNonnegative");
+    generate_v2_clause_oracle(&package, &clause).expect("the clause oracle supports arithmetic");
+    let items = [ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }];
+    let outcome = negotiate(&items);
+    assert!(matches!(&outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+        } if node_id == &clause));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("one unsupported invariant item is accounted");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
+/// Admitted operators outside the V2 grammar are named before oracle or collection lowering,
+/// while an admitted QSL precondition in the same request still emits its harness.
+#[trace("FR-015-AC-42", "TC-025")]
+#[test]
+fn v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibling() {
+    let division = Shape {
+        variant: 2201,
+        scope: 2201,
+        condition: Condition::Division,
+        ..Shape::HEALTHY
+    };
+    let modulo = Shape {
+        variant: 2202,
+        scope: 2202,
+        condition: Condition::Modulo,
+        ..Shape::HEALTHY
+    };
+    let text_equality = Shape {
+        variant: 2203,
+        scope: 2203,
+        condition: Condition::TextEquality,
+        ..Shape::HEALTHY
+    };
+    let limits = CheckedPackageReadLimits {
+        bytes: 8 << 20,
+        ..CheckedPackageReadLimits::bounded()
+    };
+    let (package, resolver) =
+        package_of(&[&division, &modulo, &text_equality]).admit_with_resolved(limits);
+    let refused_clauses = [
+        ids(&division).resolved(&resolver).clause,
+        ids(&modulo).resolved(&resolver).clause,
+        ids(&text_equality).resolved(&resolver).clause,
+    ];
+    let (supported_package, supported_clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let outcome = negotiate(&[
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[0],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[1],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &refused_clauses[2],
+            dependencies: None,
+        },
+        ObligationItem::V2Clause {
+            package: &supported_package,
+            clause: &supported_clause,
+            dependencies: None,
+        },
+    ]);
+    let [division_record, modulo_record, text_record, admitted] = outcome.records() else {
+        panic!("every selected clause has a record");
+    };
+    for (record, node_id, operation_identity) in [
+        (division_record, &refused_clauses[0], "quire.op.integer.div"),
+        (modulo_record, &refused_clauses[1], "quire.op.integer.mod"),
+        (text_record, &refused_clauses[2], "quire.op.text.eq"),
+    ] {
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::V2ClauseOperatorNotSupported {
+                    node_id: node_id.clone(),
+                    operation_identity: operation_identity.to_owned(),
+                }
+            }
+        );
+    }
+    assert!(matches!(
+        &admitted.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the valid sibling emits a harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("only the valid sibling emits a harness");
+    };
+    assert_eq!(harness.identity.clause, supported_clause);
+}
+
+/// Compile the emitted oracle bytes against the locked runtime and compare real evaluations
+/// with independent native predicates at admitted boundaries, including a false invariant.
+#[trace("TC-025", "FR-015-AC-40", "FR-015-AC-49", "FR-015-AC-125")]
+#[test]
+fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions() {
+    let mut source = String::new();
+    for (index, condition) in [
+        "self.balance >= 0",
+        "self.balance > 0",
+        "self.balance <= self.audit",
+        "true",
+        "false",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (package, clause) =
+            Twin::with_balance_invariant_condition(condition).emitted_package("BalanceNonnegative");
+        for native in [false, true] {
+            let request = KaniObligationRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                items: &[ObligationItem::V2Clause {
+                    package: &package,
+                    clause: &clause,
+                    dependencies: None,
+                }],
+                subject_path: REQUEST_SUBJECT,
+                unwind: 3,
+            };
+            let outcome = if native {
+                negotiate_kani_native_obligations(&request)
+            } else {
+                negotiate_kani_obligations(&request)
+            }
+            .unwrap();
+            let KaniObligationOutcome::Emitted {
+                v2_clause_harnesses,
+                ..
+            } = outcome
+            else {
+                panic!("an invariant request is emitted");
+            };
+            let [harness] = v2_clause_harnesses.as_slice() else {
+                panic!("the bounded invariant must have one harness");
+            };
+            let carrier = if native {
+                "nx::NativeInteger::new(i128::from(value))"
+            } else {
+                "rt::Integer::from(value)"
+            };
+            let arguments = if index == 2 {
+                "&audit_value, &balance_value, "
+            } else {
+                "&balance_value, "
+            };
+            let expected = match index {
+                0 => "balance >= 0",
+                1 => "balance > 0",
+                2 => "balance <= audit",
+                3 => "true",
+                4 => "false",
+                _ => unreachable!(),
+            };
+            let evaluation = if index >= 3 {
+                format!("assert_eq!(oracle_clause(), {expected});")
+            } else {
+                format!("let outcome = oracle_clause({arguments}&mut meter); assert!(matches!(outcome, Ok(rt::Outcome::Completed(actual)) if actual == ({expected})), \"actual generated invariant oracle disagrees: {{outcome:?}}\");")
+            };
+            source.push_str(&format!(r#"
+mod case_{index}_{native} {{
+{artifact}
+pub fn check() {{
+    let convert = |value: i64| {carrier};
+    for balance in [0i64, 500, 1000] {{
+        for audit in [0i64, 500, 1000] {{
+            let balance_value = convert(balance);
+            let audit_value = convert(audit);
+            let _ = &audit_value;
+            let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});
+            {evaluation}
+        }}
+    }}
+}}
+}}
+"#, artifact = harness.rust.contents));
+        }
+    }
+    source.push_str("fn main() { case_0_false::check(); case_0_true::check(); case_1_false::check(); case_1_true::check(); case_2_false::check(); case_2_true::check(); case_3_false::check(); case_3_true::check(); case_4_false::check(); case_4_true::check(); }\n");
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir948-invariant-native-oracles");
+    fs::write(directory.path.join("src/main.rs"), source).unwrap();
+    super::scratch_crate::write_manifest(
+        &directory.path,
+        &format!(
+            "[package]\nname = \"generated-v2-invariant-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE,
+        ),
+    );
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    eprintln!("invariant oracle scratch metadata resolved offline; all Git sources verified against repository Cargo.lock");
+    // Cargo resolves and links the actual owner libraries from this seeded lock. The enclosing
+    // test invocation holds the host build lock; reacquiring it here would deadlock.
+    let evaluated = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--locked", "--offline", "-j2", "--quiet"])
+        .env("CARGO_BUILD_JOBS", "2")
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .env("RUSTFLAGS", "--check-cfg=cfg(kani)")
+        .current_dir(&directory.path)
+        .output()
+        .expect("compile and execute actual emitted invariant oracles with locked owner libraries");
+    assert!(
+        evaluated.status.success(),
+        "actual invariant oracle compilation or evaluation failed: {}",
+        String::from_utf8_lossy(&evaluated.stderr)
+    );
+}
+
+/// A clause that reads no state has one empty valuation and must still assert its Boolean body.
+#[trace(
+    "TC-025",
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "FR-015-AC-49"
+)]
+#[test]
+fn qsl_constant_invariants_need_no_symbolic_input_or_subject() {
+    for condition in ["true", "false", "0 <= 1", "0 > 1"] {
+        let (package, clause) =
+            Twin::with_balance_invariant_condition(condition).emitted_package("BalanceNonnegative");
+        let oracle = generate_v2_clause_oracle(&package, &clause).expect("constant clause oracle");
+        assert!(oracle.descriptor.inputs.is_empty());
+        let outcome = negotiate(&[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
+        }]);
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("constant invariant item is accounted");
+        };
+        let [harness] = v2_clause_harnesses.as_slice() else {
+            panic!("constant invariant {condition} must have one harness");
+        };
+        assert!(harness.identity.arguments.is_empty());
+        assert_eq!(harness.identity.kind, ObligationKind::Invariant);
+        assert!(harness.rust.contents.contains(&oracle.source));
+        assert!(!harness.rust.contents.contains("kani::any"));
+        assert!(!harness.rust.contents.contains(REQUEST_SUBJECT));
+        assert_eq!(harness.rust.contents.matches("assert!(").count(), 1);
+        assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+        if oracle.descriptor.operation_identities.is_empty() {
+            assert!(harness
+                .rust
+                .contents
+                .contains("let outcome = oracle_clause();"));
+            assert!(harness.rust.contents.contains("assert!(outcome,"));
+            assert!(!harness.rust.contents.contains("let mut meter"));
+        } else {
+            assert!(harness
+                .rust
+                .contents
+                .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
+        }
+        assert!(harness
+            .rust
+            .contents
+            .contains("kani::cover!(matches!(invariant_domain, ()),"));
+    }
 }

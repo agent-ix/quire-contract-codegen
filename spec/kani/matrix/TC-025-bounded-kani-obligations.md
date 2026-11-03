@@ -442,7 +442,10 @@ unsatisfiable requires as `cover_unsatisfied`.
 ## V2 clause claims and the V2 census
 
 The generation-time census portion of step 13 is implemented for supported V2 clauses (IR-1044).
-The remaining V2 clause controls in this section retain their stated planned status.
+AC-42 has partial generation-time evidence for admitted division, modulo and Text equality clauses
+(IR-948).
+AC-40 and AC-47 have implemented generation-time controls (IR-948). AC-40 covers admitted
+referenced operators and an inline Boolean literal. Other V2 controls retain their row statuses.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
     `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
@@ -451,12 +454,18 @@ The remaining V2 clause controls in this section retain their stated planned sta
     and post-state come from the subject call and their domain is asserted), and none takes a
     bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the
     clause with no subject call (FR-015-AC-49).
-11. Generate a clause of connectives and comparisons and compare the embedded oracle with
-    the FR-014 crate's function byte for byte (needs FR-014-AC-38); generate the
+11. Generate admitted clauses whose Boolean conditions reference expression nodes holding
+    each listed connective and bounded-integer comparison, and one clause with an inline
+    Boolean literal condition. Compare each embedded oracle with the FR-014 crate's
+    clause-identified function byte for byte, retaining the clause node identity in both
+    forms (FR-015-AC-40; needs FR-014-AC-38). Operator applications stand at their
+    referenced nodes' body roots under QSpec FR-322's flat body grammar, rather than
+    nested in the clause's condition argument. Then generate the
     arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
     native `i128` assertion of each arithmetic subterm. Admit QSL's checked
     `numeric.narrow` wrapper around literal `1` through FR-014-AC-54, without
     treating it as an arbitrary conversion or adding an admission charge.
+
     Run the installed backend over the healthy clause and, in separate runs of
     the same clause, mutate the `+` arithmetic executed by the embedded clause
     oracle (or the authoritative kernel operation it calls) to return
@@ -476,6 +485,13 @@ The remaining V2 clause controls in this section retain their stated planned sta
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.
+
+    Current AC-40 controls: `qsl_v2_precondition_embeds_exact_referenced_clause_oracle`
+    admits QSL preconditions for `and`, `or`, `not`, `implies`, Boolean `eq` and `ne`,
+    and integer `eq`, `ne`, `lt`, `le`, `gt`, `ge`; it compares the embedded oracle
+    bytes with `generate_v2_clause_oracle` for the same clause id.
+    `inline_v2_precondition_embeds_exact_clause_oracle` makes the same comparison
+    for a checked inline Boolean literal and checks its clause id.
 12. Request a clause with an unsupported operator (division, modulo, absolute value), a
     node that is not a modelled clause role and an absent node id beside a supported item.
     The operator is `unsupported`, the other two refused as FR-015-AC-14 states, each
@@ -484,6 +500,19 @@ The remaining V2 clause controls in this section retain their stated planned sta
     FR-040-AC-8 and FR-040-AC-10 refuse them at admission), so that guard is unreachable
     and not tested here. Request a postcondition without its sibling precondition
     (FR-015-AC-43).
+
+    Current AC-42 control: `v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibling`
+    admits separate division and modulo clause bodies with integer literal operands and a Text
+    equality clause over Text literals, requests all three beside an admitted QSL bounded-parameter
+    precondition, and checks one typed
+    `V2ClauseOperatorNotSupported` per unsupported item with its exact clause node and operator
+    identity, no harness for any of the three, and the supported sibling's one harness. The Text
+    equality case exercises operator classification before clause operand reading. The traced
+    `nested_absolute_value_names_its_exact_operator` unit test checks that a nested
+    `quire.op.integer.abs` term is selected by the operator audit. The closed authoritative
+    checked-operation catalog does not contain an absolute-value entry, so an admitted absolute
+    clause cannot be constructed yet. The nonclause and absent-node request cases in this step
+    remain separate FR-015-AC-14 evidence to complete.
 13. Declare the four invalid censuses of FR-015-AC-22 and the three valid censuses of
     FR-015-AC-25 on a supported V2 clause claim, with the dependency list reordered. The invalid
     ones yield typed refusal and no harness. Parse every valid harness's persisted identity record:
@@ -491,9 +520,25 @@ The remaining V2 clause controls in this section retain their stated planned sta
     `not_run`; reordering leaves its bytes unchanged (FR-015-AC-44, FR-015-AC-45).
 14. Count the covers and locate each relative to the assumptions and the subject call; run
     a clause with jointly unsatisfiable assumptions; regenerate from equal inputs; vary the
-    unwind bound, the subject, a parameter's domain and the source span: the harness
-    identity record changes with the first two, the obligation identity with the domain
-    and not with the span, unwind bound or subject (FR-015-AC-46 to FR-015-AC-48).
+    unwind bound, the subject and the source span while holding QSL's producer-issued
+    structural identity fixed. The harness identity record changes with the unwind bound
+    and subject; the carried structural identity remains unchanged. Compare claims with
+    a changed structural node, model or producer ordinal: each has a different structural
+    identity. Compare a changed source occurrence, kind, parameter identity or declared
+    domain, and state-field read identity or domain, against an independently selected
+    claim while holding structural identity fixed: each mismatch refuses before harness
+    generation. The source span is excluded from the structural identity
+    (FR-015-AC-46 to FR-015-AC-48).
+
+    Current AC-47 generation-time controls: `qsl_v2_scalar_clause_identity_tracks_request_facts`
+    regenerates authentic QSL precondition, postcondition and invariant harnesses from equal
+    requests, then varies unwind and customer subject independently. Each equal request has
+    identical generated source and persisted record bytes; each variation changes the harness
+    identity and record. The invariant source calls neither customer subject. The authentic
+    whole-object collection postcondition in
+    `whole_object_identity_regenerates_and_changes_with_unread_domains` has the same repeatability
+    and request-variation results. These controls do not claim AC-46 non-vacuity or AC-48 producer
+    identity evidence.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).

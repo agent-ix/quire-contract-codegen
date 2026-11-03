@@ -88,9 +88,9 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 use crate::oracle::direct_unsupported_form;
 use quire_contract_model::{
     encode_checked_package_v2, ApplicationOperator, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageSourceCorrespondenceRef, CheckedPackageV2, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CheckedTerm, ContractFeatureRecordV1, ContractPackageV1,
-    ContractSourceV1,
+    CheckedPackageSidecarsRef, CheckedPackageSourceCorrespondenceRef, CheckedPackageV2,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, ContractFeatureRecordV1,
+    ContractPackageV1, ContractSourceV1,
 };
 use quire_exact::{
     self as exact, CardinalityBound, CollectionKind, CollectionType, DecimalType, IllTypedCause,
@@ -801,7 +801,12 @@ pub fn generate_composite_equality_oracles(
                     source_map: original.source_map(),
                     refinement_step_rows: original.refinement_step_rows(),
                 },
-                original.checked_term_data(),
+                CheckedPackageSidecarsRef {
+                    checked_term_data: original.checked_term_data(),
+                    temporal_bindings: original.temporal_bindings(),
+                    schedulability_claims: original.schedulability_claim_rows(),
+                    operation_effects: original.operation_effect_rows(),
+                },
                 original.capability_report(),
                 original.diagnostics(),
                 quire_canonical::Limits::new(u64::MAX),
@@ -3952,7 +3957,12 @@ mod tests {
                 source_map: original.source_map(),
                 refinement_step_rows: original.refinement_step_rows(),
             },
-            original.checked_term_data(),
+            CheckedPackageSidecarsRef {
+                checked_term_data: original.checked_term_data(),
+                temporal_bindings: original.temporal_bindings(),
+                schedulability_claims: original.schedulability_claim_rows(),
+                operation_effects: original.operation_effect_rows(),
+            },
             original.capability_report(),
             original.diagnostics(),
             quire_canonical::Limits::new(u64::MAX),

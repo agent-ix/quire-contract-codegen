@@ -1,11 +1,10 @@
 //! Native replay of a frame counterexample: a Kani falsification of an operation's frame is put
 //! before QSL's `replay_frame` as a request and an envelope built here.
 //!
-//! The operation's identities (its anchor and frame nodes and the frame's occurrence) are not
-//! computed by this crate: [`qsl_replay::call_site`] compiles the proved unit, with its domain
-//! packages and dependencies, and names them, so the payload, the envelope's `clause_node` and
-//! its `occurrence_key` are all QSL's own answer for the operation. The envelope names the
-//! payload's frame node and frame occurrence, the pair `replay_frame` requires it to agree with.
+//! The driver supplies its selected CG frame item and QSL's typed frame target. This adapter
+//! compares their package, request, and complete occurrence association with the checked package
+//! and operation site that [`qsl_replay::call_site`] locates for the proved unit. The target is
+//! copied into the packet and request; the packet retains the selected frame occurrence.
 //!
 //! The obligation identity comes from QSL's selected producer claim. The witness is the real playback:
 //! decoded against the harness's `state_fields` by the one decoder and rendered by the one adapter
@@ -21,11 +20,12 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_frame, CallSiteRefusal, ClaimedChange, DocumentRef, EmptyQualifiedName,
-    EnvelopeSource, FrameCounterexample, FrameReplayResult, MalformedTranscript,
+    EnvelopeSource, FrameCounterexample, FrameOperation, FrameReplayResult, MalformedTranscript,
     ObligationIdentity, OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal,
     ReplayRequest, ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessValue,
 };
+use quire_contract_model::{CheckedPackageLockV2, CheckedPackageV2, ContractSourceV1};
 use quire_exact::NodeKey;
 use serde::Deserialize;
 
@@ -56,6 +56,10 @@ pub struct FrameReplayInputs<'a> {
     pub state_documents: Vec<ProvidedDocument>,
     /// The operation whose frame the counterexample refutes.
     pub operation: OperationName,
+    /// The independently selected admitted CG frame item.
+    pub selected_item: SelectedFrameItem<'a>,
+    /// The driver's QSL target and its association to that item.
+    pub selected_target: Option<SelectedFrameTarget>,
     /// The `quire.state.invocation/v1` document.
     pub invocation: DocumentRef,
     /// The change the counterexample claims.
@@ -66,6 +70,104 @@ pub struct FrameReplayInputs<'a> {
     pub playback: Playback<'a>,
     /// The caller's requested decode bounds; replay narrows them by the proving run's bounds.
     pub requested_decode_limits: WitnessDecodeLimits,
+}
+
+/// An admitted CG package and the driver's selected frame request.
+#[derive(Clone, Copy, Debug)]
+pub struct SelectedFrameItem<'a> {
+    /// The admitted package that owns the selected item.
+    pub package: &'a CheckedPackageV2,
+    /// The selected item's request position.
+    pub request_index: usize,
+    /// The complete occurrence retained for the selected frame.
+    pub occurrence: &'a OccurrenceKey,
+}
+
+/// A QSL frame target associated with one CG request position.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectedFrameTarget {
+    /// The exact QSL target, including its declaring owner.
+    pub operation: FrameOperation,
+    /// The admitted CG package identity to which the target was attached.
+    pub package_id: ContractSourceV1,
+    /// The request position to which the target was attached.
+    pub request_index: usize,
+    /// The complete selected frame occurrence.
+    pub occurrence: OccurrenceKey,
+}
+
+#[derive(Deserialize)]
+struct LocatedPackageIdentity {
+    name: Box<str>,
+    lock: CheckedPackageLockV2,
+}
+
+/// The selected target member that failed to bind to the selected CG item or QSL site.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectedTargetMember {
+    /// No target was supplied.
+    Missing,
+    /// The attached package differs from the admitted CG package.
+    Package,
+    /// The attached request position differs from the selected item.
+    RequestIndex,
+    /// The selected occurrence differs from the located QSL frame occurrence.
+    ItemOccurrence,
+    /// The attached occurrence differs from the selected item.
+    TargetOccurrence,
+    /// The target's declaring object differs from QSL's declaring object.
+    DeclaringOwner,
+    /// The target's operation differs from QSL's operation.
+    Operation,
+}
+
+impl fmt::Display for SelectedTargetMember {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Missing => "missing target",
+            Self::Package => "package identity",
+            Self::RequestIndex => "request index",
+            Self::ItemOccurrence => "selected item occurrence",
+            Self::TargetOccurrence => "target occurrence",
+            Self::DeclaringOwner => "declaring owner",
+            Self::Operation => "operation",
+        })
+    }
+}
+
+#[ix_trace_rs::string_edge]
+fn selected_target_mismatch(
+    item: &SelectedFrameItem<'_>,
+    located: &LocatedPackageIdentity,
+    target: &SelectedFrameTarget,
+    site: &OperationSite,
+) -> Option<SelectedTargetMember> {
+    let package_id = ContractSourceV1 {
+        name: item.package.name().into(),
+        lock: item.package.lock().clone(),
+    };
+    if package_id.name != located.name || package_id.lock != located.lock {
+        return Some(SelectedTargetMember::Package);
+    }
+    if target.package_id != package_id {
+        return Some(SelectedTargetMember::Package);
+    }
+    if target.request_index != item.request_index {
+        return Some(SelectedTargetMember::RequestIndex);
+    }
+    if item.occurrence != &site.frame_occurrence {
+        return Some(SelectedTargetMember::ItemOccurrence);
+    }
+    if target.occurrence != *item.occurrence {
+        return Some(SelectedTargetMember::TargetOccurrence);
+    }
+    if target.operation.object != site.frame_operation.object {
+        return Some(SelectedTargetMember::DeclaringOwner);
+    }
+    if target.operation.operation != site.frame_operation.operation {
+        return Some(SelectedTargetMember::Operation);
+    }
+    None
 }
 
 /// The member of the harness's scope that is not the one the replay names.
@@ -203,6 +305,8 @@ impl fmt::Display for PreStateFault {
 /// Why a frame replay produced no result.
 #[derive(Debug)]
 pub enum FrameReplayError {
+    /// The selected frame target does not bind to the admitted CG item and located QSL site.
+    SelectedTarget(SelectedTargetMember),
     /// The lock's dependency selections are not admitted.
     Dependencies(DependencyLockError),
     /// QSL could not compile the unit or find the operation's frame in it.
@@ -261,6 +365,7 @@ pub enum FrameReplayError {
 impl fmt::Display for FrameReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SelectedTarget(member) => write!(f, "selected frame target: {member}"),
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the operation was not located: {refusal}"),
             Self::Name(cause) => write!(f, "the operation's name is not admitted: {cause}"),
@@ -318,6 +423,7 @@ impl std::error::Error for FrameReplayError {}
 impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
     fn from(error: &'a FrameReplayError) -> Self {
         match error {
+            FrameReplayError::SelectedTarget(_) => Self::CgDefect,
             FrameReplayError::Dependencies(cause) => cause.into(),
             FrameReplayError::CallSite(refusal) => refusal.as_ref().into(),
             FrameReplayError::Name(_)
@@ -605,14 +711,15 @@ fn same_node(
 
 impl FrameReplay {
     /// Checks the harness against the operation and its playback, compiles the proved unit
-    /// against its domain packages and dependencies, locates `inputs.operation` in it, and builds
-    /// the request and envelope members for the claimed change.
+    /// against its domain packages and dependencies, locates `inputs.operation` in it, validates
+    /// the selected target association, and builds the request and envelope for the claimed change.
     ///
     /// The harness's property must be a frame over exactly its state fields, its scope must name
     /// the operation requested, its playback must decode against its state fields, and every
     /// decoded value must lie in its field's declared range, all before the unit is compiled. The
     /// parsed playback must fit both the requested bounds and the proving run's bounds; the
-    /// call site's anchor and frame must then be the harness's, and the pre snapshot the
+    /// selected package, request, occurrence, and QSL target must agree before packet or request
+    /// construction. The call site's anchor and frame must then be the harness's, and the pre snapshot the
     /// invocation names must hold the decoded values. The obligation identity and the witness
     /// transcript are built here from the call site, the harness and the decoded playback.
     ///
@@ -627,6 +734,8 @@ impl FrameReplay {
             packages,
             state_documents,
             operation,
+            selected_item,
+            selected_target,
             invocation,
             change,
             harness,
@@ -660,7 +769,17 @@ impl FrameReplay {
         )
         .map_err(FrameReplayError::CallSite)?;
         let keys = crate::core::ir::node_key::producer_node_keys(&located.package);
+        let located_identity: LocatedPackageIdentity = serde_json::from_slice(&located.package)
+            .map_err(|_| FrameReplayError::SelectedTarget(SelectedTargetMember::Package))?;
         let site = located.site;
+        let selected_target = selected_target.ok_or(FrameReplayError::SelectedTarget(
+            SelectedTargetMember::Missing,
+        ))?;
+        if let Some(member) =
+            selected_target_mismatch(&selected_item, &located_identity, &selected_target, &site)
+        {
+            return Err(FrameReplayError::SelectedTarget(member));
+        }
         same_node(
             ScopeMember::Anchor,
             &harness.scope.anchor,
@@ -677,15 +796,9 @@ impl FrameReplay {
         let selected = SelectedFrameClaim {
             identity: obligation.clone(),
             frame: site.frame.clone(),
-            occurrence: site.frame_occurrence.clone(),
+            occurrence: selected_item.occurrence.clone(),
         };
-        let OperationSite {
-            frame_operation,
-            anchor,
-            frame,
-            frame_occurrence,
-            ..
-        } = site;
+        let OperationSite { anchor, frame, .. } = site;
         let bindings = values
             .iter()
             .map(|(field, value)| (field.as_str(), i128::from(*value)))
@@ -695,7 +808,7 @@ impl FrameReplay {
         let payload = FrameCounterexample {
             anchor,
             frame,
-            occurrence: frame_occurrence,
+            occurrence: selected_target.occurrence,
             invocation,
             change,
         };
@@ -706,7 +819,7 @@ impl FrameReplay {
             .collect::<Vec<_>>();
         let request = |source: ReplaySource| {
             run.wire(
-                RequestTargetWire::frame_operation(frame_operation.clone()),
+                RequestTargetWire::frame_operation(selected_target.operation.clone()),
                 source,
                 obligation.clone(),
                 &documents,
@@ -730,7 +843,7 @@ impl FrameReplay {
             obligation_identity: Some(obligation),
             occurrence_key: Some(payload.occurrence.clone()),
             clause_node: Some(payload.frame.clone()),
-            replay_target: ReplayTargetMembers::frame_operation(frame_operation),
+            replay_target: ReplayTargetMembers::frame_operation(selected_target.operation),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
             declared_domains: Some(Vec::new()),

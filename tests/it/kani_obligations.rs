@@ -299,7 +299,7 @@ fn claim_index(
         .expect("test claim map contains selected node")
 }
 
-fn boolean_implies_scalar_from(
+pub(super) fn boolean_implies_scalar_from(
     package: CheckedPackageV2,
     node: CheckedNodeId,
 ) -> (
@@ -307,22 +307,52 @@ fn boolean_implies_scalar_from(
     quire_contract_codegen::Artifact,
     String,
 ) {
-    let [item] = derive_exact_scalar_items(&package, std::slice::from_ref(&node))
-        .try_into()
-        .expect("one derived scalar item");
-    let oracles = generate_exact_scalar_oracles(&package, &[item.expect("implies derives")])
-        .expect("Boolean oracle generation");
+    let (mut harnesses, manifest, oracle_crate) =
+        boolean_implies_scalars_from(package, std::slice::from_ref(&node));
+    let harness = harnesses.remove(0);
+    let start = oracle_crate
+        .find(&format!("pub fn {}(", harness.identity.oracle_symbol))
+        .expect("the oracle crate has the selected function");
+    let end = oracle_crate[start..]
+        .find("\n}\n")
+        .map(|offset| start + offset + 3)
+        .expect("the selected function closes");
+    (harness, manifest, oracle_crate[start..end].to_owned())
+}
+
+pub(super) fn boolean_implies_scalars_from(
+    package: CheckedPackageV2,
+    nodes: &[CheckedNodeId],
+) -> (
+    Vec<KaniScalarObligationHarness>,
+    quire_contract_codegen::Artifact,
+    String,
+) {
+    let derived = derive_exact_scalar_items(&package, nodes)
+        .into_iter()
+        .map(|item| item.expect("implies derives"))
+        .collect::<Vec<_>>();
+    let oracles =
+        generate_exact_scalar_oracles(&package, &derived).expect("Boolean oracle generation");
     let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
-    let items = [ObligationItem::ScalarClaim {
-        source: &package,
-        package: &admitted,
-        claim_map: &oracles.claim_map,
-        node_id: &node,
-        claim_index: claim_index(&oracles.claim_map, &node),
-        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
-    let (_, mut harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let items = nodes
+        .iter()
+        .map(|node| ObligationItem::ScalarClaim {
+            source: &package,
+            package: &admitted,
+            claim_map: &oracles.claim_map,
+            node_id: node,
+            claim_index: claim_index(&oracles.claim_map, node),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
+        .collect::<Vec<_>>();
+    let mut requested = request(&items, "crate::subject");
+    requested.ceilings = quire_contract_codegen::ProofCeilings {
+        memory_bytes: std::num::NonZeroU64::new(4 * 1024 * 1024 * 1024).unwrap(),
+        wall_clock: Duration::from_secs(120),
+    };
+    requested.unwind = 3;
+    let (_, harnesses) = emitted_scalar(negotiate_kani_obligations(&requested).unwrap());
     let oracle_crate = oracles
         .artifacts
         .iter()
@@ -335,15 +365,7 @@ fn boolean_implies_scalar_from(
         .into_iter()
         .find(|artifact| artifact.path == "Cargo.toml")
         .expect("Boolean oracle manifest");
-    let harness = harnesses.remove(0);
-    let start = oracle_crate
-        .find(&format!("pub fn {}(", harness.identity.oracle_symbol))
-        .expect("the oracle crate has the selected function");
-    let end = oracle_crate[start..]
-        .find("\n}\n")
-        .map(|offset| start + offset + 3)
-        .expect("the selected function closes");
-    (harness, manifest, oracle_crate[start..end].to_owned())
+    (harnesses, manifest, oracle_crate)
 }
 
 fn boolean_implies_scalar() -> (
@@ -472,12 +494,15 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
         panic!("subject-only mutation must falsify: {evidence:?}");
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
-    assert!(
-        counterexample.contains("the compiled implication subject must equal native implication")
-    );
+    assert!(counterexample
+        .contains("the compiled implication subject must equal the independent expectation"));
+    assert_implication_false_left_playback(counterexample);
+}
+
+pub(super) fn assert_implication_false_left_playback(counterexample: &str) {
     use syn::parse::Parser;
     let playback = syn::parse_file(counterexample).expect("Kani playback is Rust source");
-    let first_input = playback
+    let inputs = playback
         .items
         .iter()
         .find_map(|item| {
@@ -502,30 +527,33 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
                 };
                 syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
                     .parse2(values.mac.tokens.clone())
-                    .ok()?
-                    .first()
-                    .cloned()
+                    .ok()
             })
         })
         .expect("playback contains symbolic inputs");
-    let syn::Expr::Macro(left_bytes) = first_input else {
-        panic!("first playback input is a byte vector: {counterexample}");
-    };
-    let left_bytes = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
-        .parse2(left_bytes.mac.tokens)
-        .expect("first input bytes parse");
-    let [syn::Expr::Lit(syn::ExprLit {
-        lit: syn::Lit::Int(byte),
-        ..
-    })] = left_bytes.iter().collect::<Vec<_>>().as_slice()
-    else {
-        panic!("one Boolean byte for left: {counterexample}");
-    };
-    assert_eq!(
-        byte.base10_parse::<u8>().unwrap(),
-        0,
-        "left is false in playback"
-    );
+    assert_eq!(inputs.len(), 2, "two drawn Boolean operands");
+    let values = inputs
+        .iter()
+        .map(|input| {
+            let syn::Expr::Macro(bytes) = input else {
+                panic!("Boolean input is a byte vector: {counterexample}")
+            };
+            let bytes = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                .parse2(bytes.mac.tokens.clone())
+                .unwrap();
+            let [syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(byte),
+                ..
+            })] = bytes.iter().collect::<Vec<_>>().as_slice()
+            else {
+                panic!("one byte per Boolean: {counterexample}")
+            };
+            let value = byte.base10_parse::<u8>().unwrap();
+            assert!(value <= 1, "playback operand is in the Boolean domain");
+            value
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(values[0], 0, "left is false in playback");
 }
 
 pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {
@@ -2156,7 +2184,7 @@ fn routed_scalar_binary_subtraction_with_artifacts() -> (
 
 /// Writes the crate the way the driver does: the returned `Cargo.toml` and `library` as
 /// `src/lib.rs`.
-fn write_scalar_crate(
+pub(super) fn write_scalar_crate(
     name: &str,
     manifest: &quire_contract_codegen::Artifact,
     library: &str,

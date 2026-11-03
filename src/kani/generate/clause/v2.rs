@@ -1,11 +1,17 @@
-//! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
+//! Bounded harnesses for admitted V2 scalar clauses (FR-015).
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
+use quire_contract_model::{
+    ApplicationOperator, CheckedNodeId, CheckedPackageV2, CheckedTerm, ContractSourceV1,
+};
 use quote::ToTokens;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use crate::{
-    core::ir::clause::{read_clause, ClauseGraphView, ClauseTerm},
+    core::ir::{
+        checked_term::application,
+        clause::{read_clause, ClauseGraphView, ClauseTerm, MAX_CONDITION_TERMS},
+    },
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
         census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
@@ -70,22 +76,66 @@ pub(in crate::kani::generate) fn lower(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
+    if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
+        return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
+            node_id: clause.clone(),
+            operation_identity,
+        });
+    }
+    let condition = read_clause(clause, view).ok_or_else(refusal)?;
+    if let Some(operation_identity) = unsupported_clause_operator(&condition.term) {
+        return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
+            node_id: clause.clone(),
+            operation_identity: operation_identity.to_owned(),
+        });
+    }
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
-    let [input] = oracle.descriptor.inputs.as_slice() else {
-        return Err(refusal());
+    let input_count_supported = match kind {
+        ObligationKind::Precondition => oracle.descriptor.inputs.len() <= 1,
+        ObligationKind::Postcondition => oracle.descriptor.inputs.len() == 1,
+        ObligationKind::Invariant => true,
+        ObligationKind::Frame => false,
     };
-    if input.name.strip_prefix("parameter_").is_none()
-        || input.boolean
-        || input.lower > input.upper
-        || i64::try_from(input.lower).is_err()
-        || i64::try_from(input.upper).is_err()
+    if !input_count_supported
+        || oracle.descriptor.inputs.iter().any(|input| {
+            let supported = match kind {
+                ObligationKind::Precondition | ObligationKind::Postcondition => {
+                    input.name.starts_with("parameter_")
+                }
+                ObligationKind::Invariant => input.name.starts_with("current_"),
+                ObligationKind::Frame => false,
+            };
+            !supported
+                || input.boolean
+                || input.lower > input.upper
+                || i64::try_from(input.lower).is_err()
+                || i64::try_from(input.upper).is_err()
+        })
+    {
+        return Err(refusal());
+    }
+    // Arithmetic clauses require independent subterm probes before they can be asserted.
+    if kind == ObligationKind::Invariant
+        && oracle
+            .descriptor
+            .operation_identities
+            .iter()
+            .any(|identity| {
+                matches!(
+                    identity.as_str(),
+                    "quire.op.integer.add"
+                        | "quire.op.integer.sub"
+                        | "quire.op.integer.mul"
+                        | "quire.op.integer.negate"
+                )
+            })
     {
         return Err(refusal());
     }
     let (native_expectation, arithmetic, symbolic_name) = if kind == ObligationKind::Postcondition {
+        let input = oracle.descriptor.inputs.first().ok_or_else(refusal)?;
         let input_name = input.name.strip_prefix("parameter_").ok_or_else(refusal)?;
         let symbolic_name = format!("{input_name}_current");
-        let condition = read_clause(clause, view).ok_or_else(refusal)?;
         let mut arithmetic = Vec::new();
         let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
             .and_then(NativeTerm::boolean)
@@ -109,6 +159,8 @@ pub(in crate::kani::generate) fn lower(
         "{}_{}",
         if kind == ObligationKind::Postcondition {
             "kob_v2_clause"
+        } else if kind == ObligationKind::Invariant {
+            "kob_v2_inv"
         } else {
             "kob_v2_pre"
         },
@@ -130,11 +182,99 @@ pub(in crate::kani::generate) fn lower(
         module_symbol,
         harness_symbol: if kind == ObligationKind::Postcondition {
             "prove_clause"
+        } else if kind == ObligationKind::Invariant {
+            "assert_invariant"
         } else {
             "cover_precondition"
         }
         .to_owned(),
     })
+}
+
+fn unsupported_checked_clause_operator(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+) -> Option<String> {
+    let [_, _, condition] = application(
+        view.package().term(clause)?,
+        ApplicationOperator::StateClause,
+        "quire.op.state.clause",
+    )?
+    else {
+        return None;
+    };
+    let mut terms = vec![condition];
+    let mut visited = BTreeSet::new();
+    let mut visits = 0;
+    while let Some(term) = terms.pop() {
+        if visits >= MAX_CONDITION_TERMS {
+            return None;
+        }
+        visits += 1;
+        match term {
+            CheckedTerm::Reference { target } => {
+                if visited.insert(target) {
+                    terms.push(view.package().term(target)?);
+                }
+            }
+            CheckedTerm::Application {
+                operation,
+                arguments,
+                ..
+            } => {
+                let identity = operation.identity()?;
+                if matches!(
+                    identity,
+                    "quire.op.state.pre" | "quire.op.record.project" | "quire.op.model.deref"
+                ) {
+                    continue;
+                }
+                if !supported_clause_operator(identity) {
+                    return Some(identity.to_owned());
+                }
+                terms.extend(arguments.iter().rev());
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn unsupported_clause_operator(term: &ClauseTerm) -> Option<&str> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        ..
+    } = term
+    else {
+        return None;
+    };
+    if !supported_clause_operator(identity) {
+        return Some(identity);
+    }
+    arguments.iter().find_map(unsupported_clause_operator)
+}
+
+fn supported_clause_operator(identity: &str) -> bool {
+    matches!(
+        identity,
+        "quire.op.boolean.and"
+            | "quire.op.boolean.or"
+            | "quire.op.boolean.not"
+            | "quire.op.boolean.implies"
+            | "quire.op.boolean.eq"
+            | "quire.op.boolean.ne"
+            | "quire.op.integer.eq"
+            | "quire.op.integer.ne"
+            | "quire.op.integer.lt"
+            | "quire.op.integer.le"
+            | "quire.op.integer.gt"
+            | "quire.op.integer.ge"
+            | "quire.op.integer.add"
+            | "quire.op.integer.sub"
+            | "quire.op.integer.mul"
+            | "quire.op.integer.negate"
+    )
 }
 
 impl LoweredV2Clause {
@@ -169,59 +309,123 @@ pub(in crate::kani::generate) fn render_clause(
     if lowered.kind == ObligationKind::Postcondition {
         return render_postcondition(request, lowered);
     }
-    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
-        return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
-            node_id: lowered.node_id.clone(),
+    let inputs = &lowered.oracle.descriptor.inputs;
+    let invariant = lowered.kind == ObligationKind::Invariant;
+    let direct_boolean = lowered.oracle.descriptor.operation_identities.is_empty();
+    let mut body = Vec::new();
+    let mut arguments = Vec::new();
+    let mut reachable = Vec::new();
+    for (index, input) in inputs.iter().enumerate() {
+        let minimum =
+            i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
+        let maximum =
+            i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+        let mut then = Vec::new();
+        if invariant {
+            let domain = format!("invariant_domain_{index}");
+            then.push(LetBinding {
+                name: domain.clone(),
+                ty: None,
+                mutable: false,
+                init: Init::Expression(ExprText::new(format!(
+                    "{} >= {minimum} && {} <= {maximum}",
+                    input.name, input.name
+                ))?),
+            });
+            reachable.push(domain);
+        }
+        then.push(LetBinding {
+            name: input.name.clone(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(ExprText::new(if lowered.native_integer {
+                format!("nx::NativeInteger::new(i128::from({}))", input.name)
+            } else {
+                format!("rt::Integer::from({})", input.name)
+            })?),
         });
-    };
-    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let body = vec![
-        Statement::Input {
+        body.push(Statement::Input {
             name: input.name.clone(),
             ty: KaniPrimitiveType::I64,
             domain: (input.lower, input.upper),
-            then: vec![LetBinding {
-                name: input.name.clone(),
-                ty: None,
-                mutable: false,
-                init: Init::Expression(ExprText::new(if lowered.native_integer {
-                    format!("nx::NativeInteger::new(i128::from({}))", input.name)
-                } else {
-                    format!("rt::Integer::from({})", input.name)
-                })?),
-            }],
-        },
-        Statement::Let(LetBinding {
+            then,
+        });
+        arguments.push(ScalarObligationArgument {
+            identifier: input.name.clone(),
+            minimum,
+            maximum,
+        });
+    }
+    if invariant && inputs.is_empty() {
+        // The projection onto no read fields has exactly one empty valuation.
+        body.push(binding(
+            "invariant_domain",
+            Init::Expression(expression("()")?),
+            false,
+        ));
+    }
+    let mut oracle_arguments = inputs
+        .iter()
+        .map(|input| Argument::Borrow(input.name.clone()))
+        .collect::<Vec<_>>();
+    if !direct_boolean {
+        body.push(Statement::Let(LetBinding {
             name: "meter".to_owned(),
             ty: None,
             mutable: true,
             init: Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
-        }),
-        Statement::Call {
-            result: "outcome".to_owned(),
-            callee: "oracle_clause".to_owned(),
-            args: vec![
-                Argument::Borrow(input.name.clone()),
-                Argument::BorrowMut("meter".to_owned()),
-            ],
-        },
-    ];
+        }));
+        oracle_arguments.push(Argument::BorrowMut("meter".to_owned()));
+    }
+    body.push(Statement::Call {
+        result: "outcome".to_owned(),
+        callee: "oracle_clause".to_owned(),
+        args: oracle_arguments,
+    });
+    if invariant {
+        body.push(Statement::Assert {
+            condition: ExprText::new(if direct_boolean {
+                "outcome"
+            } else {
+                "matches!(&outcome, Ok(rt::Outcome::Completed(true)))"
+            })?,
+            message: "the V2 invariant holds for every admitted state".to_owned(),
+        });
+    }
+    let (label, cover) = if invariant {
+        (
+            "invariant",
+            Cover {
+                condition: ExprText::new(if inputs.is_empty() {
+                    "matches!(invariant_domain, ())".to_owned()
+                } else {
+                    reachable.join(" && ")
+                })?,
+                message: "the V2 invariant's admitted state domain is reachable".to_owned(),
+            },
+        )
+    } else {
+        (
+            "precondition",
+            Cover {
+                condition: ExprText::new(if direct_boolean {
+                    "outcome"
+                } else {
+                    "matches!(outcome, Ok(rt::Outcome::Completed(true)))"
+                })?,
+                message: "the V2 precondition is satisfiable within admitted parameter bounds"
+                    .to_owned(),
+            },
+        )
+    };
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
-        format!(
-            "V2 precondition {}",
-            message_safe_node_label(&lowered.node_id)
-        ),
+        format!("V2 {label} {}", message_safe_node_label(&lowered.node_id)),
         path,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
         body,
-        vec![Cover {
-            condition: ExprText::new("matches!(outcome, Ok(rt::Outcome::Completed(true)))")?,
-            message: "the V2 precondition is satisfiable within admitted parameter bounds"
-                .to_owned(),
-        }],
+        vec![cover],
         request.unwind,
         KaniSolver::Cadical,
     )?;
@@ -241,14 +445,10 @@ pub(in crate::kani::generate) fn render_clause(
         clause: lowered.node_id.clone(),
         collection_precondition: None,
         collection_operation: None,
-        kind: ObligationKind::Precondition,
+        kind: lowered.kind,
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
-        arguments: vec![ScalarObligationArgument {
-            identifier: input.name.clone(),
-            minimum,
-            maximum,
-        }],
+        arguments,
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),
@@ -855,6 +1055,34 @@ impl NativeTerm {
             Self::Boolean(expression) => Some(expression.clone()),
             Self::Integer { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod unsupported_operator_tests {
+    use super::unsupported_clause_operator;
+    use crate::core::ir::clause::ClauseTerm;
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-42", "TC-025")]
+    #[test]
+    fn nested_absolute_value_names_its_exact_operator() {
+        let term = ClauseTerm::Operation {
+            identity: "quire.op.integer.ge".to_owned(),
+            arguments: vec![
+                ClauseTerm::Operation {
+                    identity: "quire.op.integer.abs".to_owned(),
+                    arguments: vec![ClauseTerm::Integer("-2".to_owned())],
+                    result_bound: None,
+                },
+                ClauseTerm::Integer("0".to_owned()),
+            ],
+            result_bound: None,
+        };
+        assert_eq!(
+            unsupported_clause_operator(&term),
+            Some("quire.op.integer.abs")
+        );
     }
 }
 
