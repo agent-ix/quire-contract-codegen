@@ -333,7 +333,7 @@ mod tests {
     };
     use crate::{
         kani::run::process::ProcessLimits,
-        routed::smt::{run_solver_query, QuerySelection, SolverStatus},
+        routed::smt::{run_solver_query, QuerySelection, ReachedLimit, SolverStatus},
     };
 
     type Run = RefinementRun<&'static str, [&'static str; 2]>;
@@ -637,5 +637,62 @@ mod tests {
         let (expected, record) = run(RefinementRole::Base, b"");
         assert_eq!(record.proof_bytes(), Some(b"".as_slice()));
         assert!(refinement_handoff(0, &[expected], &[record]).is_ok());
+    }
+
+    /// Non-proof process outcomes retain their typed cause and produce no handoff.
+    #[trace("TC-059", "FR-045-AC-7")]
+    #[test]
+    fn non_proof_solver_outcomes_refuse_refinement_handoff() {
+        for (script, output_limit, expected_status) in [
+            ("printf 'sat\\n'", 1024, SolverStatus::Sat),
+            ("printf 'unknown\\n'", 1024, SolverStatus::Unknown),
+            (
+                "printf 'unsat\\n'; exit 3",
+                1024,
+                SolverStatus::ProcessFailed,
+            ),
+            ("printf 'invalid\\n'", 1024, SolverStatus::MalformedResponse),
+            (
+                "printf 'unsat\\n(extra)'",
+                2,
+                SolverStatus::Stopped(ReachedLimit::OutputBytes),
+            ),
+        ] {
+            let query = b"selected canonical query".to_vec();
+            let execution = run_solver_query(
+                QuerySelection {
+                    product: (),
+                    item: "refinement-a",
+                    instance: (),
+                    depth: NonZeroU64::MIN,
+                    kind: RefinementRole::Base,
+                    query_bytes: query.clone(),
+                },
+                "/bin/sh".into(),
+                vec![OsString::from("-c"), OsString::from(script)],
+                ProcessLimits {
+                    input_bytes: NonZeroUsize::new(1024).expect("limit"),
+                    wall_clock: Duration::from_secs(5),
+                    memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("limit"),
+                    output_bytes: NonZeroUsize::new(output_limit).expect("limit"),
+                },
+                Cancel::new(),
+            )
+            .expect("bounded invocation");
+            let expected = Expected {
+                item: "refinement-a",
+                subjects: ["concrete", "abstract"],
+                role: RefinementRole::Base,
+                attempt: execution.query().association.attempt(),
+                query_bytes: query,
+            };
+            let record = Run::from_execution(["concrete", "abstract"], execution);
+            assert_eq!(record.status(), expected_status, "{script}");
+            assert_eq!(
+                refinement_handoff(0, &[expected], &[record]),
+                Err(RefinementHandoffError::NonProof(expected_status)),
+                "{script}"
+            );
+        }
     }
 }
