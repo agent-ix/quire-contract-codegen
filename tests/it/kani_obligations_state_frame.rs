@@ -558,6 +558,17 @@ fn qsl_precondition_draws_selected_own_field_domain() {
     assert_eq!(field.field_name, "balance");
     assert_eq!(field.identifier, "current_balance");
     assert_eq!((field.minimum, field.maximum), (-5, 10));
+    let record: Value = serde_json::from_str(&harness.record.contents).expect("persisted identity");
+    assert_eq!(
+        record["identity"]["stateFields"][0],
+        json!({
+            "declaringNodeId": balance.declaring_node_id(),
+            "fieldName": "balance",
+            "identifier": "current_balance",
+            "minimum": -5,
+            "maximum": 10,
+        })
+    );
     assert!(harness.rust.contents.contains("current_balance >= -5"));
     assert!(harness.rust.contents.contains("current_balance <= 10"));
     assert!(harness
