@@ -440,6 +440,123 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// The public V2 request embeds the clause-identified FR-014 source for each supported
+/// connective and comparison, keeping the QSL clause node as the oracle's identity.
+#[trace("FR-015-AC-40", "TC-025")]
+#[test]
+fn qsl_v2_precondition_embeds_exact_referenced_clause_oracle() {
+    for (condition, operation_identity) in [
+        ("other < 1000 and other >= 0", "quire.op.boolean.and"),
+        ("other < 1000 or other >= 0", "quire.op.boolean.or"),
+        ("not (other < 1000)", "quire.op.boolean.not"),
+        (
+            "other < 1000 implies other >= 0",
+            "quire.op.boolean.implies",
+        ),
+        ("(other < 1000) = (other >= 0)", "quire.op.boolean.eq"),
+        ("(other < 1000) != (other >= 0)", "quire.op.boolean.ne"),
+        ("other = other", "quire.op.integer.eq"),
+        ("other != other", "quire.op.integer.ne"),
+        ("other < 1000", "quire.op.integer.lt"),
+        ("other <= 1000", "quire.op.integer.le"),
+        ("other > 0", "quire.op.integer.gt"),
+        ("other >= 0", "quire.op.integer.ge"),
+    ] {
+        let (package, clause) = Twin::with_bounded_other_precondition_condition(condition)
+            .emitted_package("OtherBelowLimit");
+        let oracle = generate_v2_clause_oracle(&package, &clause)
+            .unwrap_or_else(|error| panic!("{condition}: {error:?}"));
+        assert_eq!(oracle.descriptor.node_id, clause, "{condition}");
+        assert!(oracle.descriptor.condition_node_id.is_some(), "{condition}");
+        assert!(
+            oracle
+                .descriptor
+                .operation_identities
+                .iter()
+                .any(|identity| identity == operation_identity),
+            "{condition}: the expected operation was not derived"
+        );
+        let outcome = negotiate(&[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
+        }]);
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("{condition}: the admitted clause must emit");
+        };
+        let [harness] = v2_clause_harnesses.as_slice() else {
+            panic!("{condition}: one harness must emit");
+        };
+        assert_eq!(harness.identity.clause, clause, "{condition}");
+        assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+        assert_eq!(
+            harness
+                .rust
+                .contents
+                .matches(oracle.source.as_str())
+                .count(),
+            1,
+            "{condition}: the oracle source must appear byte-identically once"
+        );
+    }
+}
+
+/// A checked inline Boolean literal reaches the public harness path and carries the
+/// clause-identified oracle source unchanged, including the zero-input direct-Boolean form.
+#[trace("FR-015-AC-40", "TC-025")]
+#[test]
+fn inline_v2_precondition_embeds_exact_clause_oracle() {
+    let admitted = fixture(&Shape {
+        variant: 2302,
+        clause: "precondition",
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    let oracle = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
+        .expect("the checked inline condition has a clause oracle");
+    assert_eq!(oracle.descriptor.node_id, admitted.clause);
+    assert_eq!(oracle.descriptor.condition_node_id, None);
+    assert!(oracle.descriptor.operation_identities.is_empty());
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &admitted.package,
+        clause: &admitted.clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the inline condition must emit a precondition harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one inline precondition harness");
+    };
+    assert_eq!(harness.identity.clause, admitted.clause);
+    assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert!(
+        harness.rust.contents.contains("kani::cover!(outcome,"),
+        "the direct Boolean oracle must be the cover condition"
+    );
+    assert!(!harness
+        .rust
+        .contents
+        .contains("kani::cover!(matches!(outcome,"));
+    assert_eq!(
+        harness
+            .rust
+            .contents
+            .matches(oracle.source.as_str())
+            .count(),
+        1,
+        "the inline oracle source must appear byte-identically once"
+    );
+}
+
 #[trace("FR-029-AC-11", "TC-040")]
 #[test]
 fn ordinary_v2_clause_cannot_settle_as_a_collection_totality_failure() {
