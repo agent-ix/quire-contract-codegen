@@ -20,9 +20,17 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-015
     type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-018
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-251
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-288
     type: references
   - target: ix://agent-ix/quire-specification/AD-016
+    type: references
+  - target: ix://agent-ix/quire-specification/FR-487
+    type: references
+  - target: ix://agent-ix/quire-contract-runtime/FR-276
     type: references
 ---
 # Contract codegen architecture
@@ -262,6 +270,24 @@ success fallback, and no requirement converts one into another.
   per family, and a tightened bound is always recorded (ADR-003, FR-028).
 - The generator settles each capability once. Generation, execution and replay then take the
   settlement as given.
+- Retire the reserved `FR-020` number as a separate CG temporal or protocol
+  **semantic oracle** requirement; it has no artifact or matrix row to implement.
+  QSL's trace evaluator and model-checking semantics own temporal truth and
+  replay (QSL ADR-018 SM-1, SM-7 and DS-1). QSL FR-251 derives the timed
+  monitor program carried by QSpec FR-487; RT FR-276 owns execution of that
+  program and remains Planned. CG does not derive a temporal formula verdict,
+  protocol successor relation or monitor update in a second oracle. Its own
+  temporal/protocol backend obligations remain FR-019 capability settlement
+  and FR-022 generation for routed items. FR-045 separately owns only HP-2
+  induction solver run records over QSL-encoded queries; it is not a general
+  temporal/protocol oracle. The temporal and
+  protocol arms of FR-019-AC-34 through AC-41 remain Planned in the
+  [routed matrix](../routed/matrix/tests.md); retiring the unused number gives
+  none of them implementation credit. The current oracle tree contains scalar,
+  equality, function and condition generators; `src/oracle/mod.rs` rejects
+  direct temporal formula and fairness roots, and `src/routed/capability.rs`
+  has only Kani and Process negotiation arms. FR-014 and FR-018 continue to
+  require typed unsupported results for forms outside their oracle families.
 - Generation and execution are separate claims. A generated harness records proof execution as
   `not_run`, and only an observed run with every cover satisfied is `verified` (FR-015, FR-017).
 - Separate-obligation harnesses are lowered against `cadical` with no stubbing option, and every

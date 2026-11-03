@@ -101,6 +101,17 @@ scalar proof qualification are distinct, both still required.
 FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
 FR-021's.
+The formerly reserved `FR-020` number is retired as a separate temporal or
+protocol semantic-oracle owner ([AD-001](assurance/AD-001-codegen-architecture.md)).
+QSL owns temporal meaning and monitor-plan derivation; RT's monitor execution
+remains Planned. CG's temporal and protocol backend obligations stay under
+[FR-019](routed/functional/FR-019-capability-settlement.md) negotiation,
+[FR-022](routed/functional/FR-022-routed-generation.md) routed generation.
+[FR-045](routed/functional/FR-045-hyper-smt-induction-map.md) separately owns
+only HP-2 induction solver run records over QSL-encoded queries; it adds no
+general temporal/protocol oracle.
+The [routed matrix](routed/matrix/tests.md) keeps FR-019-AC-34 through AC-41
+Planned; this decision creates no oracle implementation or test credit.
 
 ## Subsystems
 
