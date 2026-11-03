@@ -153,28 +153,35 @@ impl<'a> CollectionGraph<'a> {
         COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut index = CollectionNodeIndex::from_nodes(package.graph().nodes.iter());
         index.package = Some(package);
-        let mut preconditions = BTreeMap::<_, Vec<_>>::new();
-        for node in &package.graph().nodes {
-            let Some(CheckedTerm::Application {
-                operation,
-                arguments,
-                ..
-            }) = package.term(&node.node_id)
-            else {
-                continue;
-            };
-            if operation.state_clause_kind().ok().flatten() == Some(StateClauseKind::Precondition) {
-                if let Some(CheckedTerm::Reference { target }) = arguments.get(1) {
-                    preconditions.entry(target).or_default().push(node);
-                }
-            }
-        }
         Self {
             package,
             index,
-            preconditions,
+            preconditions: preconditions_by_anchor(package),
         }
     }
+}
+
+/// The admitted sibling set shared by collection lowering and request validation.
+pub(super) fn preconditions_by_anchor(
+    package: &CheckedPackageV2,
+) -> BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> {
+    let mut preconditions = BTreeMap::<_, Vec<_>>::new();
+    for node in &package.graph().nodes {
+        let Some(CheckedTerm::Application {
+            operation,
+            arguments,
+            ..
+        }) = package.term(&node.node_id)
+        else {
+            continue;
+        };
+        if operation.state_clause_kind().ok().flatten() == Some(StateClauseKind::Precondition) {
+            if let Some(CheckedTerm::Reference { target }) = arguments.get(1) {
+                preconditions.entry(target).or_default().push(node);
+            }
+        }
+    }
+    preconditions
 }
 
 impl<'a> CollectionNodeIndex<'a> {

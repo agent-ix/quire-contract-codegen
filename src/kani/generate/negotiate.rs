@@ -91,8 +91,8 @@ use crate::{
     },
     kani::generate::collection::{
         collection_symbols_conflict, lower_collection_claim, lower_collection_operation,
-        render_collection, render_collection_operation, CollectionDomainRefusal, CollectionGraph,
-        LoweredCollectionClaim,
+        preconditions_by_anchor, render_collection, render_collection_operation,
+        CollectionDomainRefusal, CollectionGraph, LoweredCollectionClaim,
     },
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
@@ -505,30 +505,11 @@ fn same_anchor_preconditions(
     let Some(CheckedTerm::Reference { target: anchor }) = arguments.get(1) else {
         return Vec::new();
     };
-    package
-        .graph()
-        .nodes
-        .iter()
-        .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
-        .filter_map(|node| {
-            let CheckedTerm::Application {
-                operation,
-                arguments,
-                ..
-            } = package.term(&node.node_id)?
-            else {
-                return None;
-            };
-            if operation.state_clause_kind().ok().flatten() != Some(StateClauseKind::Precondition) {
-                return None;
-            }
-            match arguments.get(1) {
-                Some(CheckedTerm::Reference { target }) if target == anchor => {
-                    Some(node.node_id.clone())
-                }
-                _ => None,
-            }
-        })
+    preconditions_by_anchor(package)
+        .get(anchor)
+        .into_iter()
+        .flatten()
+        .map(|node| node.node_id.clone())
         .collect()
 }
 
