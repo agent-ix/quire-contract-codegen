@@ -18,7 +18,7 @@ type: TestMatrix
 | FR-004 | FR-004-AC-25 | TC-006, TC-020 | SUPERSEDED by AC-26; original same-node/different-point case infeasible; no implementation credit |
 | FR-004 | FR-004-AC-26 | TC-006, TC-020 | 🚧 Planned (IR-1070); node-qualified point admission and generated-campaign evidence binding are not implemented |
 | FR-004 | FR-004-AC-12 through FR-004-AC-15 | TC-006 | 🚧 Planned; QSL `/2` strict reader and CG authenticated producer/artifact binding are not implemented |
-| [FR-036](../functional/FR-036-source-obligation-census.md) | FR-036-AC-1 through FR-036-AC-7 | [TC-051](TC-051-source-obligation-census.md) | 🚧 Planned; separate inventories/complete candidate tuples and typed artifact/run controls Gated on IR-759 reviewed neutral correspondence; IR-740 owns implementation |
+| FR-036 | FR-036-AC-1 through FR-036-AC-7 | [TC-051](TC-051-source-obligation-census.md) | 🚧 Planned; separate inventories/complete candidate tuples and typed artifact/run controls Gated on IR-759 reviewed neutral correspondence; IR-740 owns implementation |
 
 ## Test Case Summary
 
