@@ -148,9 +148,15 @@ fn register_rows(markdown: &str) -> Vec<RegisterRow> {
         lines.next(),
         Some("|------|----------|-------------|------------------------|")
     );
-    lines
-        .take_while(|line| line.starts_with('|'))
+    let table = lines.collect::<Vec<_>>().join("\n");
+    table
+        .trim_end()
+        .lines()
         .map(|line| {
+            assert!(
+                line.starts_with('|') && line.ends_with('|'),
+                "malformed TC-007 register row: {line:?}"
+            );
             let cells: Vec<_> = line.trim_matches('|').split('|').map(str::trim).collect();
             let [case_id, pair, disposition, detail] = cells.as_slice() else {
                 panic!("TC-007 register row has {} cells: {line}", cells.len());
@@ -435,10 +441,6 @@ fn tc007_bound_census_and_executable_oracle_join_the_authoritative_register() {
         .iter()
         .all(|case| case.diagnostic.is_none() && !case.dependency.is_empty()));
     let measured = differences(&cases);
-    assert!(
-        measured.is_empty(),
-        "actual TC-007 discrepancies: {measured:?}"
-    );
     let authoritative = register_rows(REGISTER);
     join(&measured, &authoritative)
         .expect("every measured discrepancy has exactly one authoritative row");
@@ -464,17 +466,27 @@ fn tc007_bound_census_and_executable_oracle_join_the_authoritative_register() {
         disposition: "fixture".to_owned(),
         detail: MUTANT_PATH.to_owned(),
     };
+    let row_line = format!(
+        "| {} | {} | {} | {} |",
+        row.key.case_id, row.key.pair, row.disposition, row.detail
+    );
     let seeded_markdown = REGISTER.replacen(
         "|------|----------|-------------|------------------------|",
-        &format!(
-            "|------|----------|-------------|------------------------|\n| {} | {} | {} | {} |",
-            row.key.case_id, row.key.pair, row.disposition, row.detail
-        ),
+        &format!("|------|----------|-------------|------------------------|\n{row_line}"),
         1,
     );
     let seeded_rows = register_rows(&seeded_markdown);
     assert_eq!(seeded_rows, [row.clone()]);
     join(&mutant_differences, &seeded_rows).expect("temporary mutant register joins exactly once");
+    let malformed_markdown = seeded_markdown.replacen(
+        &row_line,
+        &format!("{row_line}\nmalformed row before duplicate\n{row_line}"),
+        1,
+    );
+    assert!(
+        std::panic::catch_unwind(|| register_rows(&malformed_markdown)).is_err(),
+        "a malformed row cannot hide a later duplicate"
+    );
     assert_eq!(
         join(&mutant_differences, &[]),
         Err(JoinError::Missing(row.key.clone()))
