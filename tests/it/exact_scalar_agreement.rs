@@ -36,9 +36,8 @@ const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
 /// offline, and asserts that it succeeded and that every `#[test]` in `cases`
 /// ran and passed.
 ///
-/// By default each scratch crate has its own target directory: generated corpora may share a
-/// package identity, which makes a common target unsafe. The composite corpus has its own
-/// identity-aware runner below.
+/// Scratch packages have distinct test-only identities and share dependency artifacts.
+/// Their emitted library names stay unchanged so the authoritative cases keep their imports.
 pub(super) fn run_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -132,22 +131,16 @@ fn run_agreement_cases_with_expectation<'a>(
     let cases_path = repository.join(cases);
     let manifest_path = root.join("Cargo.toml");
     let mut manifest = fs::read_to_string(&manifest_path).expect("read generated manifest");
-    let target_dir = match shared_target {
+    manifest = match shared_target {
         Some(SharedTarget::Composite(package_name)) => {
-            manifest = composite_manifest_for_shared_target(&manifest, package_name);
-            scratch.join("composite-equality-agreement-target")
+            composite_manifest_for_shared_target(&manifest, package_name)
         }
         Some(SharedTarget::AdmittedEnum(package_name)) => {
-            manifest = enum_manifest_for_shared_target(&manifest, package_name);
-            scratch.join("admitted-enum-equality-target")
+            enum_manifest_for_shared_target(&manifest, package_name)
         }
-        None => {
-            // Keep each generated crate's own target across repeated runs. The crate
-            // directory is cleared to replace its artifacts, but rebuilding every
-            // dependency from scratch masks the generated agreement result.
-            scratch.join(format!("{label}-target"))
-        }
+        None => agreement_manifest_for_shared_target(&manifest, label),
     };
+    let target_dir = super::scratch_crate::agreement_target();
     write!(
         manifest,
         "\n[[test]]\nname = \"agreement\"\npath = {:?}\n\n[dev-dependencies]\n{AGREEMENT_DEV_DEPENDENCIES}",
@@ -157,6 +150,9 @@ fn run_agreement_cases_with_expectation<'a>(
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
     super::scratch_crate::resolve_seeded_lock(&root);
 
+    // Cargo locks compilation, but releases its lock before executing the test. Keep
+    // the complete command serialized so a sibling cannot replace its executable.
+    let build = super::scratch_crate::lock_agreement_build();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
         .env("CARGO_TARGET_DIR", target_dir)
@@ -165,6 +161,7 @@ fn run_agreement_cases_with_expectation<'a>(
         .current_dir(&root)
         .output()
         .expect("spawn cargo");
+    drop(build);
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Some(failed_test) = failed_test {
         assert_eq!(
@@ -214,6 +211,32 @@ fn run_agreement_cases_with_expectation<'a>(
     );
 }
 
+fn agreement_manifest_for_shared_target(manifest: &str, label: &str) -> String {
+    let package_prefix = "[package]\nname = \"";
+    let original_name = manifest
+        .strip_prefix(package_prefix)
+        .and_then(|rest| rest.split_once('"'))
+        .map(|(name, _)| name)
+        .expect("generated manifest starts with its package name");
+    let package = format!("{package_prefix}{original_name}\"\n");
+    assert_eq!(manifest.matches(&package).count(), 1);
+    let manifest = manifest.replacen(
+        &package,
+        &format!("{package_prefix}agreement-{label}\"\n"),
+        1,
+    );
+    let library = "[lib]\npath = \"src/lib.rs\"\n";
+    assert_eq!(manifest.matches(library).count(), 1);
+    manifest.replacen(
+        library,
+        &format!(
+            "[lib]\nname = \"{}\"\npath = \"src/lib.rs\"\n",
+            original_name.replace('-', "_")
+        ),
+        1,
+    )
+}
+
 fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> String {
     let original = format!(
         "[package]\nname = \"{}\"\n",
@@ -254,8 +277,18 @@ fn enum_manifest_for_shared_target(manifest: &str, package_name: &str) -> String
 /// Provenance: IR-1116.
 #[test]
 fn composite_shared_target_keeps_generated_libraries_distinct() {
+    assert_shared_target_isolation("composite-shared-target-isolation", false);
+}
+
+#[test]
+#[trace("TC-024", "FR-014-AC-6")]
+fn shared_target_preserves_fixed_library_imports_without_reusing_sibling_code() {
+    assert_shared_target_isolation("agreement-shared-target-isolation", true);
+}
+
+fn assert_shared_target_isolation(label: &str, preserve_library: bool) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let root = scratch.join("composite-shared-target-isolation");
+    let root = scratch.join(label);
     let _ = fs::remove_dir_all(&root);
     let target = root.join("target");
     let original = format!(
@@ -268,11 +301,19 @@ fn composite_shared_target_keeps_generated_libraries_distinct() {
             "{}-{case}",
             quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
         );
-        let crate_name = package_name.replace('-', "_");
+        let crate_name = if preserve_library {
+            quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME.replace('-', "_")
+        } else {
+            package_name.replace('-', "_")
+        };
         let directory = root.join(case);
         fs::create_dir_all(directory.join("src")).expect("create isolated scratch library");
         fs::create_dir_all(directory.join("tests")).expect("create isolated scratch tests");
-        let manifest = composite_manifest_for_shared_target(&original, &package_name);
+        let manifest = if preserve_library {
+            agreement_manifest_for_shared_target(&original, &package_name)
+        } else {
+            composite_manifest_for_shared_target(&original, &package_name)
+        };
         fs::write(directory.join("Cargo.toml"), manifest).expect("write isolated manifest");
         fs::write(
             directory.join("src/lib.rs"),
