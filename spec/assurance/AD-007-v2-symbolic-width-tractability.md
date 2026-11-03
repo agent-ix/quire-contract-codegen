@@ -132,6 +132,11 @@ its formal criterion id after owner approval; this proposal creates no new crite
 
 ## Decisions
 
+This architecture decision remains open and unapproved. Acceptance requires a clean
+16 GiB healthy installed proof, required mutant and playback outcomes, and a versioned
+record of the selected encoding policy; the teardown-failed diagnostic supplies none of
+that acceptance evidence.
+
 | Pending decision | Recommendation | Consequence |
 | --- | --- | --- |
 | Does the primary `i64` draw and lossless rebind improve the installed proof? | Keep it as the first candidate, but make no acceptance claim from the teardown-failed diagnostic. Inspect retained runner evidence before any repeat; require a clean healthy result under the original profile. | No AD-006 draw amendment, new witness schema or changed semantic identity is needed. A required V2 symbolic-encoding policy revision must rekey the generated record before accepted proof evidence. |

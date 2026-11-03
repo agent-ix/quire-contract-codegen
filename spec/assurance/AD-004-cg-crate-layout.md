@@ -2,7 +2,7 @@
 id: AD-004
 title: "CG crate layout: subsystem directories, one input model, one Kani generator"
 type: ArchitectureDescription
-status: proposed
+status: accepted
 owner: codegen-maintainers
 system: quire-contract-codegen src layout (module tree, dependency direction, the one Kani generator, the Kani run and output edge, shared helpers, identities, IR node access)
 relationships:
@@ -182,7 +182,7 @@ src/
                               its code and PublicationDestinationState (no I/O)
     source_map.rs             SourceProbe, SourceRegion
     canonical.rs              the one caller of quire-canonical's encoder and digest
-    identity.rs               HarnessSymbol, ModuleSymbol, HarnessPath, ContentDigest
+    identity.rs               HarnessSymbol, ModuleSymbol, HarnessPath
     ir/                       the one typed node-access layer over CheckedPackageV2
     profile.rs                the version profile: every spelling this build emits or requires
     diagnostic.rs             GenerationErrorCode, GenerationDiagnostic, GenerationTerminalState
@@ -504,10 +504,11 @@ one identity record, one cover rule and one entry, not one function:
   `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
   generation entry; ADR-004 owns what the frame arm asserts.
-- `ScalarObligationIdentity`, `KaniObligationIdentity` and `StateFrameIdentity` collapse into one
-  `kani/identity.rs` record with the family's own members as a typed variant, so the argument
-  vector, ceilings, symbols and bounds are spelled once. The obligation digest of AD-003
-  is computed from that record by one function.
+- A historical migration proposal would have collapsed `ScalarObligationIdentity`,
+  `KaniObligationIdentity` and `StateFrameIdentity` into one `kani/identity.rs` record with
+  family-specific typed variants. Those records still exist in `kani/identity.rs`; current replay
+  carries the QSL producer-issued structural `ObligationIdentity` unchanged and does not compute
+  an obligation digest from a Kani record.
 
 ### The HarnessSpec and render contract (step 4b)
 
@@ -871,9 +872,10 @@ records only the work order the ruling allows, because the code still has V1 rea
 - **One canonical module** `core/canonical.rs` is the one place CG calls `quire-canonical` (its own
   repository, `agent-ix/quire-canonical`; RFC 8785): `to_vec(value, Limits)` and `sha256`. CG
   depends on that crate directly, spelled `branch = "main"`, with no `qsl-replay` re-export (QSL's
-  ruling, relayed by the IR planner; not verified here). AD-003 requires the
-  same: the obligation preimage is encoded by that encoder and never by `serde_json`.
-  Every JSON CG emits, artifact files and digest preimages alike, goes through it. Both
+  ruling, relayed by the IR planner; historical migration context). Content artifact
+  preimages are encoded by that encoder and never by `serde_json`; the QSL-issued structural
+  obligation identity has no CG-encoded preimage. JSON artifacts and content digest preimages
+  go through this module. Both
   `serde_json`-based `deterministic_json` copies are deleted, not kept; this changes the bytes of
   emitted JSON artifacts once, and regeneration stays byte-identical (NFR-001). The nine `artifact`
   wrappers are deleted and callers use `Artifact::new`. The corpus case digest moves to this module
@@ -883,15 +885,13 @@ records only the work order the ruling allows, because the code still has V1 rea
   former `make deny` one-copy check (`scripts/check_one_copy.awk`) rejected it. That checker
   and the planned owned replacement retire under IR-1105; Cargo's manifest and lock remain
   the dependency authority. The historical step 1a precondition is not an active gate.
-- **One digest identity.** The only digest CG mints for a proof is the obligation digest that
-  binds a proof to its content (AD-003, E-1). `ContentDigest` in `core/identity.rs` is a CG type over
-  `quire-canonical`'s digest; it is built only by `core::canonical`, over the RFC 8785 preimage.
-  It does not wrap `qsl-replay`'s `ByteDigest`, except at a QSL API surface that requires one. It
-  is not a second digest beside QSL's `ObligationIdentity`: it is CG's typed holder of the value
-  that identity is built from. Every other digest on the chain (`package_id`, byte digests of provided
-  source) is QSL's or IR's and is carried, not recomputed. No tool, version or file digest is
-  added, and the one that exists, `ReplayInputs::backend_manifest`, is deleted at step 5 together
-  with the tool pin QSL-351 removes, with the manifest members it feeds in `spine_replay`.
+- **Separate structural identity and content digests.** CG carries QSL's producer-issued
+  structural `ObligationIdentity` through replay without minting or hashing it. `core::canonical`
+  computes bounded RFC 8785 content artifact digests; `core/identity.rs` contains harness and
+  module symbol types, not a `ContentDigest` newtype. Other chain identities (`package_id`, byte
+  digests of provided source) retain their owning QSL or IR authority. The historical step 5
+  proposal removed `ReplayInputs::backend_manifest` and its tool-pin manifest members; that
+  member is absent from current source.
 - **Identity newtypes.** `ModuleSymbol` and `HarnessSymbol` are validated Rust identifiers, built
   once where a harness is generated. `HarnessPath` is the pair. `KaniSolver` replaces the `solver:
   String` field. `generate_routed` pairs a record with its harness by the harness symbol, which is all
@@ -1777,7 +1777,7 @@ what it could against the code; the checks are stated.
 | Public entry and external consumers | Step 4f deleted `generate_kani_bundle`. Step 4e supplies the supported V2 public entry, and a QSL-owned follow-up moves QSL's quire-integration exemplars onto it. Each other former consumer is inventoried and routed to its repository owner; no compatibility entry remains in CG. | IR-348 immediate-deletion ruling |
 | Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a distinct CG-side control only if the facade allows it without copying fixtures. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL's `Inconclusive(cause)` types, merged in 02530e7 (QSL has ruled, relayed on IR-465, vacuity stays `Proved{0}`, no `NonZero`; the tool pin is gone, #551), and on the terminal value also taking the replay settlement; the FR-029 map and the IR-outcome map (FR-030, `DeclineCode::Std001`, QSL #634) are built. | QSL review of this PR |
-| `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on CG's lock resolving it to one entry. Cites AD-003, which is merged and not edited here. | QSL; relayed by the IR planner |
+| Canonical content encoding and structural obligation identity | CG calls `quire-canonical` through `core::canonical` for content artifacts and their RFC 8785 digest preimages. `core/identity.rs` has no `ContentDigest` newtype. Replay carries the QSL producer-issued structural `ObligationIdentity` unchanged; CG encodes no obligation preimage. The `serde_json` `deterministic_json` copies were deleted. The former step 1a one-copy lock precondition is historical, not an active gate. | AD-002, AD-003; `src/core/canonical.rs`, `src/core/identity.rs`, `src/replay/obligation.rs` |
 
 SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
 amended (IR planner, IR-344). V2 census generation is implemented by IR-1044; remaining QSL-authored
