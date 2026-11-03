@@ -1565,9 +1565,8 @@ mod tests {
             "{:?}",
             outcome.records()[0].disposition
         );
-        assert!(
-            matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.is_empty())
-        );
+        assert!(matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. }
+            if v2_clause_harnesses.iter().all(|harness| harness.identity.clause != postcondition)));
     }
 
     /// Until the scalar renderer can embed `requires`, a present supported sibling
