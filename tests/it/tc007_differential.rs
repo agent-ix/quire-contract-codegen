@@ -476,7 +476,7 @@ fn tc007_bound_census_and_executable_oracle_join_the_authoritative_register() {
         1,
     );
     let seeded_rows = register_rows(&seeded_markdown);
-    assert_eq!(seeded_rows, [row.clone()]);
+    assert_eq!(seeded_rows.as_slice(), std::slice::from_ref(&row));
     join(&mutant_differences, &seeded_rows).expect("temporary mutant register joins exactly once");
     let malformed_markdown = seeded_markdown.replacen(
         &row_line,
