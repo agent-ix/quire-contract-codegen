@@ -2,7 +2,7 @@
 id: AD-003
 title: "Evidence chain across IR, CG and QSL: obligation identity, corpus identity, launch evidence and the terminal value"
 type: ArchitectureDescription
-status: proposed
+status: accepted
 owner: codegen-maintainers
 system: quire-contract-codegen Kani and Evidence subsystems, and the identities and outcomes they join from Contract IR and QSL
 relationships:
@@ -58,7 +58,7 @@ then by how identity is asserted.
 | --- | --- | --- | --- |
 | 1 | Checked package, `package_id` (`quire.package.semantic/v2`) | QSpec wire, QSL emits, IR re-derives on read | digest over the package's identity preimage |
 | 2 | Finite profile and input (`ProfileSelection`, `ValidatedFiniteInput`, `KaniOutcome` for refusals) | IR | profile revision selected with the ABI and module revisions |
-| 3 | Obligation: harness, bound domains, ceilings, oracle symbols (`KaniObligationIdentity`, `ScalarObligationIdentity`, and for frame harnesses `StateFrameIdentity`, `state_frame.rs`) | CG | JSON record persisted beside the harness; no digest is computed from it (gap E-1) |
+| 3 | Obligation: QSL producer-issued structural `ObligationIdentity` plus CG's distinct harness, bound-domain, ceiling and oracle records | QSL issues claim identity; CG retains and checks harness facts | CG carries the structural identity unchanged into replay and persists the separate harness record; kind, occurrence and domains are checked separately (E-1) |
 | 4 | Corpus case: `CaseIdentity` over ceilings, construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its RFC 8785 canonical JSON without a trailing newline, which also names the artifact paths; unencodable preimages refuse as `kani_corpus_identity_unencodable` and collisions refuse as `kani_corpus_identity_collision` (`bounded_kani_corpus.rs`) |
 | 5 | Launch: argument vector, ceilings, launcher, harness-in-crate check (`execute_kani_obligation`, `kani_launch_command`, `launch_evidence`) | CG | harness source must appear byte for byte in the crate before launch (`kani_execution.rs`, FR-017 step 1) |
 | 6 | Run classification: `classify_kani_run` over the typed transcript to `KaniRunOutcome` | CG | one parser module, `kani_transcript.rs`; Kani's wording read nowhere else |
@@ -373,9 +373,8 @@ someone. This is a recommendation for PR 210 and the CG spec follow-up, not a ch
 
 ## Risks
 
-What is measured today, what is open and with whom, and what is routed. Measured on this
-repository at the IR-321 subsystem layout, IR at its `main` branch and QSL at the `qsl-replay`
-crate CG's lock selects.
+The current observations below use this repository's source and its locked IR and QSL revisions;
+historical migration observations are labelled where retained.
 
 ### Current state and gaps
 
@@ -402,32 +401,28 @@ crate CG's lock selects.
 - Sequencing (QSL's review, not assumed): an inconclusive value with a typed cause and a non-zero
   count in `Proved` change `qsl-replay` types CG builds. They have since merged in QSL
   (02530e7), before the IR-465 terminal map code was written, so that map was written once.
-- At this base there is no terminal map at all: `TerminalValue` is named in no `src` file; FR-029
-  and FR-030 and TC-040 and TC-041 are `Planned`. PR 210 merged without the map (IR-465 re-planned
-  it to AD-004 step 5). The questions above read PR 210 as input only.
+- The terminal maps are implemented in `src/kani/terminal.rs`:
+  `run_terminal_value` maps a run and its replay settlement (FR-029), while
+  `ir_outcome_terminal_value` maps a typed IR outcome and its settlement (FR-030). The driver
+  owns terminal-record construction. The earlier no-map statement described the IR-321 base
+  before AD-004 step 5 and is historical.
 - The SUCCESS-check count is not carried on `KaniExecutionEvidence`
   (`kani_execution.rs`, the struct and `classify_transcript`); see question (b).
-- IR still exports `KaniProviderResult` and `KaniProviderRecord` and maps every kind itself
-  (`src/kani/outcome.rs`, `src/kani/mod.rs:23`), although IR's spec says the map moved to CG and
-  FR-039 lists those items as not in IR's interface. Its map sends `Inconclusive` to
-  `inconclusive`; CG's FR-030 sends `Inconclusive` with any other cause to `Failed`. Two maps of
-  one row disagree. The removal is in IR-347's reopened scope; this AD files nothing new.
-- CG imports model types through IR's root-crate glob re-export (for example
-  `routed_generation.rs:20`, `generation.rs:10`, `kani.rs:8`; `Cargo.toml` has no
-  `quire-contract-model` entry). IR's AD-001 says the root crate re-exports nothing and
-  consumers import from the model crate; IR `src/lib.rs:12` still has
-  `pub use quire_contract_model::*`. Removing the glob needs CG to add the model dependency: two
-  repositories changing one import path, scheduled together, not a compatibility layer. Also in
-  IR-347's reopened scope.
+- The historical duplicate IR provider map is removed from the pinned IR interface; only
+  documentation examples still name `KaniProviderResult` and `KaniProviderRecord`. CG owns the
+  terminal maps above, so the former two-map disagreement is resolved.
+- CG's `Cargo.toml` now declares `quire-contract-model` directly. The pinned IR root crate
+  does not glob re-export model items. The earlier consumer-import migration note is complete;
+  no model type is copied across the boundary.
 
 ### Open questions
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
 | ~~Retired parity obligation-preimage decision~~ | IR FR-322 structural identity; QSL-1293 removes parity preimages | The earlier O-09 parity digest decision is historical and no longer authorizes a parity mint. CG obtains the application `NodeKey`/`CheckedNodeId` from IR admission, retains the authentic occurrence, kind and ordered arguments, and compares the complete body even when structural identity is unchanged. Full FR-015-AC-76 evidence and FR-033 same-artifact authentication remain separate. Function/frame identity now follows the same structural tuple, with their own record comparisons. |
-| Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
+| ~~Replace IR's `KaniProviderResult` map~~ | IR | Resolved: the pinned IR source has no provider-result map; CG's FR-029/FR-030 maps live in `src/kani/terminal.rs`. |
 | IR cause codes as strings | IR | Resolved for the code type: IR exports `Std001Code` with constants for the registered codes (IR FR-044). The family lowerings' own codes are typed `std001_code!` values that STD-001 does not register; they leave with the lowerings (IR-347). |
-| One map instead of two | CG after QSL | After the pending inconclusive types of (a) land. |
+| ~~One map instead of two~~ | CG after QSL | Resolved: QSL's inconclusive types and CG's terminal map are implemented; the former IR map is removed. |
 
 No compatibility layer is proposed. If a seam above would need one (for example a CG copy of
 QSL's terminal type), it is a design smell and the answer is to put the code with its owner.
@@ -458,6 +453,6 @@ filed):
 
 | Id | Stated need |
 | --- | --- |
-| R-I1 | Delete `KaniProviderResult`, `KaniProviderRecord` and the `provider_result` map from the root crate (`src/kani/outcome.rs`, `src/kani/mod.rs:23`); they duplicate the terminal map CG owns. In IR-347's reopened scope. |
+| R-I1 | Resolved: the pinned IR source contains no provider-result map or exported provider records; CG owns `src/kani/terminal.rs`. Historical documentation examples in IR do not define an interface. |
 | R-I2 | Export cause-code constants or a typed cause enum: the Kani cause codes crossed as bare strings that consumers re-spelled. Met by IR FR-044 (`Std001Code` and its constants); the family lowerings' own codes are typed but unregistered `std001_code!` values that leave with the lowerings (IR-347). |
-| R-I3 | Remove `pub use quire_contract_model::*` (`src/lib.rs:12`) together with CG adding a direct `quire-contract-model` dependency; CG imports model types through the glob. In IR-347's reopened scope. |
+| R-I3 | Resolved: the pinned IR root has no model glob re-export, and CG declares `quire-contract-model` directly in `Cargo.toml`. |

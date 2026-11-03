@@ -2,7 +2,7 @@
 id: AD-005
 title: "Source-obligation census producer and acyclic consumer seam"
 type: ArchitectureDescription
-status: proposed
+status: accepted
 owner: Contract Codegen lane
 system: selected source candidate census and separate capability, refusal and execution facts
 relationships:

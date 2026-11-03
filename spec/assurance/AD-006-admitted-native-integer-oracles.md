@@ -2,7 +2,7 @@
 id: AD-006
 title: "Admitted native integer oracles preserve the genuine proof boundary"
 type: ArchitectureDescription
-status: proposed
+status: accepted
 owner: quire-contract-codegen-maintainer
 system: CG scalar and V2 clause oracle generation over checked finite integer domains
 relationships:
