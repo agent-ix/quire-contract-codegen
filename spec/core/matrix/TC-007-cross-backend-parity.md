@@ -36,17 +36,22 @@ backend by this slice. The broader FR-005-AC-4 obligation remains open.
    absence is recorded as absence, not inferred agreement. Compare the independently computed
    tag with the compiled oracle result and require the runner to report the corresponding verdict.
 3. Preserve an outside-model candidate as `out-of-domain` on the strategy side and retain the
-   executable oracle's actual result as a separate observation. Do not pass it to the in-domain
-   census runner or a Kani proof. If those normalized outcomes differ, include the case in the
-   measured discrepancy list with its backend pair and require a documented profile/backend
-   distinction in the register. If an immediately outside mathematical value cannot fit the
-   oracle's integer input, retain the census's `unrepresentable` edge with its identity instead of
-   silently dropping it or fabricating an oracle result.
-4. Compare every measured discrepancy with the register by the exact `(case identifier, backend
-   pair)` key. Exercise a mutant that changes one census tag while leaving the oracle unchanged;
-   it must produce a named discrepancy. Independently remove its register row, duplicate the key,
-   name a nonexistent test fixture, and leave its disposition empty; each change must fail the
-   join. Do not run a Kani proof or revive the retired V1 bundle arithmetic path for this slice.
+   executable oracle's actual Boolean result as a separate observation. Its normalized pair is
+   `NotComparable` because the strategy does not admit that candidate; it is not a semantic
+   discrepancy and requires no register row. Do not pass it to the in-domain census runner or a
+   Kani proof, compare it as though both backends had evaluated it, or claim parity for it. If an
+   immediately outside mathematical value cannot fit the oracle's integer input, retain the
+   census's `unrepresentable` edge with its identity instead of silently dropping it or
+   fabricating an oracle result.
+4. Compare every measured discrepancy with the authoritative register by the exact `(case
+   identifier, backend pair)` key. Exercise a mutant that changes one admitted census tag while
+   leaving the oracle unchanged; it must produce a named discrepancy. For this control only, pass
+   the mutant measurement to the same join with a temporary in-memory register input seeded with
+   one valid row naming its real test fixture under `tests/`. From that temporary input,
+   independently remove the row, duplicate the key, name a nonexistent test fixture, and leave
+   its disposition empty; each change must fail the join. Never add the mutant row to the
+   authoritative register: the normal unmutated run would reject it as stale. Do not run a Kani
+   proof or revive the retired V1 bundle arithmetic path for this slice.
 
 ## Differential Disposition Register
 
@@ -57,10 +62,13 @@ exactly one row keyed by its case identifier and backend pair. The `Disposition`
 regression fixture under `tests/` or a nonempty explanation of the concrete profile/backend
 distinction. A missing row, duplicate key, stale row not present in the measured discrepancy
 list, nonexistent fixture, disposition without its required value, or row claiming both kinds
-fails the join. The comparison produces an inspectable list of case identifiers, pairs, normalized
-outcomes, diagnostics and dependencies even when no difference occurs. An empty register is valid
-only after an actual complete run has measured zero discrepancies. No such run or register join
-exists at this revision, so the empty table below is not completion evidence.
+fails the join. Only candidates admitted by both backends enter the semantic discrepancy list;
+outside-domain `NotComparable` observations are retained separately with no register key. The
+comparison produces an inspectable list of case identifiers, pairs, normalized outcomes,
+diagnostics and dependencies even when no difference occurs. An empty register is valid only
+after an actual complete run has measured zero discrepancies. The mutant's temporary register
+input is test data for the join and never changes this table. No such run or register join exists
+at this revision, so the empty table below is not completion evidence.
 
 | Case | Backends | Disposition | Fixture or distinction |
 |------|----------|-------------|------------------------|
@@ -68,8 +76,10 @@ exists at this revision, so the empty table below is not completion evidence.
 ## Expected Results
 
 For each admitted candidate, the independently computed census tag, compiled executable-oracle
-result and runner verdict agree after normalization. Every difference, including a measured
-outside-domain profile distinction, appears exactly once in the Differential Disposition
-Register. A zero-difference run leaves the register empty and reports the complete measured
-candidate list. The mutation and four adverse register joins fail with the exact case and pair.
-No Kani or coverage semantic-parity result is inferred from this slice.
+result and runner verdict agree after normalization. Every comparable difference appears exactly
+once in the Differential Disposition Register. A zero-difference run leaves the register empty
+and reports the complete measured candidate list, including separate outside-domain observations.
+The mutant produces a named difference; its temporary valid register input joins exactly once,
+and each of the four adverse inputs fails with the exact case and pair. The authoritative register
+remains unchanged and would reject the mutant row as stale on the unmutated run. No Kani or
+coverage semantic-parity result is inferred from this slice.
