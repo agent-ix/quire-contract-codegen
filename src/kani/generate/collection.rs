@@ -153,28 +153,35 @@ impl<'a> CollectionGraph<'a> {
         COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut index = CollectionNodeIndex::from_nodes(package.graph().nodes.iter());
         index.package = Some(package);
-        let mut preconditions = BTreeMap::<_, Vec<_>>::new();
-        for node in &package.graph().nodes {
-            let Some(CheckedTerm::Application {
-                operation,
-                arguments,
-                ..
-            }) = package.term(&node.node_id)
-            else {
-                continue;
-            };
-            if operation.state_clause_kind().ok().flatten() == Some(StateClauseKind::Precondition) {
-                if let Some(CheckedTerm::Reference { target }) = arguments.get(1) {
-                    preconditions.entry(target).or_default().push(node);
-                }
-            }
-        }
         Self {
             package,
             index,
-            preconditions,
+            preconditions: preconditions_by_anchor(package),
         }
     }
+}
+
+/// The admitted sibling set shared by collection lowering and request validation.
+pub(super) fn preconditions_by_anchor(
+    package: &CheckedPackageV2,
+) -> BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> {
+    let mut preconditions = BTreeMap::<_, Vec<_>>::new();
+    for node in &package.graph().nodes {
+        let Some(CheckedTerm::Application {
+            operation,
+            arguments,
+            ..
+        }) = package.term(&node.node_id)
+        else {
+            continue;
+        };
+        if operation.state_clause_kind().ok().flatten() == Some(StateClauseKind::Precondition) {
+            if let Some(CheckedTerm::Reference { target }) = arguments.get(1) {
+                preconditions.entry(target).or_default().push(node);
+            }
+        }
+    }
+    preconditions
 }
 
 impl<'a> CollectionNodeIndex<'a> {
@@ -542,23 +549,6 @@ pub(super) fn render_collection_operation(
     operation::validate(request, operation, &lowered.field.function)?;
     let (spec, collection) = prepare_collection(request, lowered)?;
     let context = &operation.spec.identity;
-    if operation.spec.postcondition {
-        for sibling in &context.preconditions {
-            let present = request.items.iter().any(|item| {
-                matches!(item,
-                super::outcome::ObligationItem::V2Clause { package, clause, .. }
-                    if std::ptr::eq(*package, operation.package_instance) && *clause == sibling)
-            });
-            if !present {
-                return Err(UnsupportedObligation::CollectionClaimNotRendered {
-                    node_id: collection.function_id.clone(),
-                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition {
-                        precondition: sibling.clone(),
-                    },
-                });
-            }
-        }
-    }
     let mut operation_spec = operation.spec.clone();
     operation_spec.subject_path = request.subject_path.to_owned();
     let spec = spec.into_collection_operation(operation_spec)?;
