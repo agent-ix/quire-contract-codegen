@@ -651,6 +651,7 @@ mod tests {
                 1024,
                 SolverStatus::ProcessFailed,
             ),
+            (":", 1024, SolverStatus::MalformedResponse),
             ("printf 'invalid\\n'", 1024, SolverStatus::MalformedResponse),
             (
                 "printf 'unsat\\n(extra)'",
