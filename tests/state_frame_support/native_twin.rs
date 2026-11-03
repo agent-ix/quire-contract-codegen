@@ -482,6 +482,55 @@ impl Twin {
         twin
     }
 
+    /// A QSL precondition over two operation parameters with different integer ranges.
+    pub fn with_two_bounded_parameter_precondition() -> Self {
+        let mut twin = Self::with_field_ranges((0, 1000), (-5, 10));
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["params"] = json!([
+            ("other", range_type("balance")),
+            ("offset", range_type("audit"))
+        ]
+        .into_iter()
+        .map(|(name, type_ref)| {
+            let identity = format!("{}/deposit/{name}", account_type());
+            json!({
+                "identity": identity,
+                "name": name,
+                "typeRef": type_ref,
+                "presence": "required",
+                "nullable": false,
+                "defaultKind": "none",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "origin": generated(&identity),
+            })
+        })
+        .collect::<Vec<_>>());
+        twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            "pre TwoParameters using v on Bank::Account::deposit { other < 1000 and offset > 0 }",
+        );
+        assert_ne!(
+            changed, source,
+            "the precondition replaced the postcondition"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// Source-authored condition over the existing `Int[0, 1000]` parameter.
     pub fn with_bounded_amount_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();

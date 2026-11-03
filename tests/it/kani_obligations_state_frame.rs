@@ -440,6 +440,66 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// Two source-authored operation parameters retain their distinct inclusive IR bounds and
+/// checked argument order in a single V2 precondition harness.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_two_parameter_precondition_draws_each_declared_domain() {
+    let (package, clause) =
+        Twin::with_two_bounded_parameter_precondition().emitted_package("TwoParameters");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("admitted QSL clause oracle");
+    let inputs = oracle
+        .descriptor
+        .inputs
+        .iter()
+        .map(|input| (input.name.as_str(), input.lower, input.upper))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inputs,
+        [("parameter_other", 0, 1000), ("parameter_offset", -5, 10)]
+    );
+
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the two-parameter precondition must emit: {outcome:?}");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one precondition harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|argument| (
+                argument.identifier.as_str(),
+                argument.minimum,
+                argument.maximum
+            ))
+            .collect::<Vec<_>>(),
+        inputs,
+    );
+    assert!(harness.rust.contents.contains("parameter_other >= 0"));
+    assert!(harness.rust.contents.contains("parameter_other <= 1000"));
+    assert!(harness.rust.contents.contains("parameter_offset >= -5"));
+    assert!(harness.rust.contents.contains("parameter_offset <= 10"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&parameter_other, &parameter_offset, &mut meter)"));
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 /// The public V2 request embeds the clause-identified FR-014 source for each supported
 /// connective and comparison, keeping the QSL clause node as the oracle's identity.
 #[trace("FR-015-AC-40", "TC-025")]
