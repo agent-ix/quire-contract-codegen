@@ -63,15 +63,15 @@ const IMPORTER_SOURCE: &str = concat!(
 );
 
 fn library_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "function-library", "git", "1")
+    SourceIdentity::new("agent-ix", "function-library")
 }
 
 fn importer_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "function-importer", "git", "1")
+    SourceIdentity::new("agent-ix", "function-importer")
 }
 
 fn source_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "ir595-agreement", "git", "1")
+    SourceIdentity::new("agent-ix", "ir595-agreement")
 }
 
 fn admitted_source_text(source: &str) -> CheckedPackageV2 {

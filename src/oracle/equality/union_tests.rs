@@ -314,24 +314,14 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     );
     let library = qsl_replay::SuppliedLibrary {
         identity: "admitted-composites".to_owned(),
-        source: qsl_replay::SourceIdentity::new(
-            "test",
-            "admitted-composites.native",
-            "git",
-            "fixture",
-        ),
+        source: qsl_replay::SourceIdentity::new("test", "admitted-composites.native"),
         path: "admitted-composites.native".to_owned(),
         bytes: fixture::UNION_SOURCE.as_bytes().to_vec(),
     };
     let dependencies = qsl_replay::DependencyInput::new([library]).unwrap();
     let importer = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new(
-                "test",
-                "union-importer.native",
-                "git",
-                "fixture",
-            ),
+            source: qsl_replay::SourceIdentity::new("test", "union-importer.native"),
             package_name: "union-importer".to_owned(),
             path: "union-importer.native",
             bytes:

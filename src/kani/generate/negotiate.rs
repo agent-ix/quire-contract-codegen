@@ -1790,7 +1790,7 @@ mod tests {
                 source = source.replace(&original, &distinct);
             }
             let located = qsl_replay::call_site(
-                qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin", "git", "1"),
+                qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin"),
                 "state-frame-twin".to_owned(),
                 "test:state-frame-twin",
                 source.as_bytes(),
@@ -1922,7 +1922,7 @@ mod tests {
                 .unwrap();
         let package_name = format!("ir276-collection-request-{quantifiers}");
         let located = qsl_replay::call_site(
-            qsl_replay::SourceIdentity::new("agent-ix", package_name.as_str(), "git", "fixture"),
+            qsl_replay::SourceIdentity::new("agent-ix", package_name.as_str()),
             package_name.clone(),
             package_name.as_str(),
             source.as_bytes(),

@@ -605,16 +605,11 @@ struct DocumentIdentityRead {
 struct DocumentRefRead {
     authority: String,
     identity: String,
-    revision_namespace: String,
-    revision: String,
 }
 
 impl DocumentRefRead {
     fn matches(&self, reference: &DocumentRef) -> bool {
-        self.authority == reference.authority
-            && self.identity == reference.identity
-            && self.revision_namespace == reference.revision_namespace
-            && self.revision == reference.revision
+        self.authority == reference.authority && self.identity == reference.identity
     }
 }
 

@@ -17,12 +17,7 @@ use super::admitted_enum_fixture as fixture;
 fn foreign_context() -> qsl_replay::AdmittedCompilation {
     qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new(
-                "test",
-                "foreign-enums.native",
-                "git",
-                "fixture",
-            ),
+            source: qsl_replay::SourceIdentity::new("test", "foreign-enums.native"),
             package_name: "foreign-enums".to_owned(),
             path: "foreign-enums.native",
             bytes: fixture::SOURCE.as_bytes(),

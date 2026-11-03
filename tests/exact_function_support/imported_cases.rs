@@ -22,11 +22,11 @@ use quire_semantic_value::object_closure::ObjectClosure;
 use std::sync::Arc;
 
 fn library_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "function-library", "git", "1")
+    SourceIdentity::new("agent-ix", "function-library")
 }
 
 fn importer_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "function-importer", "git", "1")
+    SourceIdentity::new("agent-ix", "function-importer")
 }
 
 fn meter() -> Meter {

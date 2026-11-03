@@ -31,7 +31,7 @@ mod tests {
     fn preparation_preserves_the_complete_owner_table_and_returned_unit_ids() {
         let compiled = compile_admitted(
             CompileUnit {
-                source: SourceIdentity::new("agent-ix", "unit-environment", "git", "1"),
+                source: SourceIdentity::new("agent-ix", "unit-environment"),
                 package_name: "unit-environment".to_owned(),
                 path: "unit-environment.native",
                 bytes: br#"language "ix:native" edition "1-draft";

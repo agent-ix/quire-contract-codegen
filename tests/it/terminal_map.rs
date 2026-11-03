@@ -138,7 +138,7 @@ fn replayed(code: Code) -> TerminalValue {
 fn library(identity: &str, owner: &str) -> SuppliedLibrary {
     SuppliedLibrary {
         identity: identity.to_owned(),
-        source: SourceIdentity::new("agent-ix", owner, "git", "r1"),
+        source: SourceIdentity::new("agent-ix", owner),
         path: owner.to_owned(),
         bytes: b"a dependency source".to_vec(),
     }

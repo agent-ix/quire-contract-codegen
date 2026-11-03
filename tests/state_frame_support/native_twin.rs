@@ -1107,7 +1107,7 @@ impl Twin {
         operation: &str,
     ) -> Result<OperationSite, Box<CallSiteRefusal>> {
         call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,
@@ -1139,7 +1139,7 @@ impl Twin {
             .map(|(name, point)| ((*name).to_owned(), point.clone()))
             .collect();
         let compiled = compile_package_with_execution_points(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,
@@ -1295,7 +1295,7 @@ impl Twin {
     ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             unit,
@@ -1581,7 +1581,7 @@ impl Twin {
     pub fn clause_site(&self, clause: &str) -> Result<ClauseSite, Box<CallSiteRefusal>> {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,

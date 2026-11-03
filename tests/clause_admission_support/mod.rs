@@ -390,7 +390,7 @@ impl Twin {
 
     pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
         let located = call_site(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            SourceIdentity::new(AUTHORITY, IDENTITY),
             IDENTITY.to_owned(),
             IDENTITY,
             &self.unit,

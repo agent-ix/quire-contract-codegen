@@ -122,7 +122,7 @@ fn checked_with_dependencies(
 fn compiled(source: &str, dependencies: &DependencyInput) -> qsl_replay::CompiledPackage {
     compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "original-eq.native"),
             package_name: "original-eq".to_owned(),
             path: "original-eq.native",
             bytes: source.as_bytes(),
@@ -1159,7 +1159,7 @@ fn original_imported_context_refuses_before_invocation() {
         };
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
+                source: SourceIdentity::new("test", "eq-library.native"),
                 package_name: "test/eq-library".to_owned(),
                 path: "eq-library.native",
                 bytes: &source.bytes,
@@ -1189,7 +1189,7 @@ fn original_imported_context_refuses_before_invocation() {
     let (original_library, original_admitted) = library("x > 1");
     let dependencies = DependencyInput::new(vec![SuppliedLibrary {
         identity: original_library.identity.clone(),
-        source: SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
+        source: SourceIdentity::new("test", "eq-library.native"),
         path: "eq-library.native".to_owned(),
         bytes: original_library.source.bytes.clone(),
     }])

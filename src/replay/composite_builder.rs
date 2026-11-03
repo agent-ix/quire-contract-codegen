@@ -490,7 +490,7 @@ mod admitted_failure_tests {
     fn boundary_mapping_retains_a_genuine_malformed_source_package_refusal() {
         let cause = compile_admitted(
             CompileUnit {
-                source: qsl_replay::SourceIdentity::new("test", "invalid.native", "git", "fixture"),
+                source: qsl_replay::SourceIdentity::new("test", "invalid.native"),
                 package_name: "invalid".to_owned(),
                 path: "invalid.native",
                 bytes: b"language \"ix:native\" edition \"1-draft\"; record { ",

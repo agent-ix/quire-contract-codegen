@@ -569,7 +569,7 @@ mod tests {
     );
 
     fn identity() -> SourceIdentity {
-        SourceIdentity::new("agent-ix", "function-owner", "git", "1")
+        SourceIdentity::new("agent-ix", "function-owner")
     }
 
     fn admitted() -> (CheckedPackageV2, CheckedNodeId, CheckedNodeId) {
@@ -648,7 +648,7 @@ mod tests {
         DependencyInput,
         String,
     ) {
-        let library_source = SourceIdentity::new("agent-ix", "function-library", "git", "1");
+        let library_source = SourceIdentity::new("agent-ix", "function-library");
         let library_compiled = acquire_checked_closure(
             CompileUnit {
                 source: library_source.clone(),

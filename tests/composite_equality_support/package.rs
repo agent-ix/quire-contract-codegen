@@ -1774,7 +1774,7 @@ pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedN
     let source = include_bytes!("recursive.native");
     let compiled = compile_package(
         CompileUnit {
-            source: SourceIdentity::new("a", "u", "git", "1"),
+            source: SourceIdentity::new("a", "u"),
             package_name: BASE_PACKAGE_NAME.to_owned(),
             path: "recursive-items.native",
             bytes: source,

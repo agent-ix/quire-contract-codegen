@@ -187,7 +187,7 @@ mod tests {
         let library_source = "language \"ix:native\" edition \"1-draft\";\n\
             profile v = \"quire.value.complete/v1\";\n\
             function add using v(a: Integer): Integer pure { a + a }\n";
-        let library_source_id = SourceIdentity::new("test", "reader-library", "git", "fixture");
+        let library_source_id = SourceIdentity::new("test", "reader-library");
         let library_compiled = compile_package(
             qsl_replay::CompileUnit {
                 source: library_source_id.clone(),
@@ -225,7 +225,7 @@ mod tests {
         .expect("one imported library");
         let program = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "reader-program", "git", "fixture"),
+                source: SourceIdentity::new("test", "reader-program"),
                 package_name: "reader-program".to_owned(),
                 path: "reader-program.native",
                 bytes: program_source.as_bytes(),
@@ -456,7 +456,7 @@ mod tests {
         let path = format!("{name}.native");
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", identity, "git", "fixture"),
+                source: SourceIdentity::new("test", identity),
                 package_name: name.to_owned(),
                 path: &path,
                 bytes: source.as_bytes(),
@@ -3087,7 +3087,7 @@ mod tests {
         let checked = admitted_source(source);
         let genuine = qsl_replay::compile_admitted(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+                source: SourceIdentity::new("test", "package-items.native"),
                 package_name: "package-items".to_owned(),
                 path: "package-items.native",
                 bytes: source.as_bytes(),
@@ -3348,7 +3348,7 @@ mod tests {
         );
         let library_compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "geometry", "git", "fixture"),
+                source: SourceIdentity::new("test", "geometry"),
                 package_name: "test/geometry".to_owned(),
                 path: "geometry.native",
                 bytes: library_source.as_bytes(),
@@ -3405,14 +3405,14 @@ mod tests {
         );
         let dependencies = DependencyInput::new([SuppliedLibrary {
             identity: "test/geometry".to_owned(),
-            source: SourceIdentity::new("test", "geometry", "git", "fixture"),
+            source: SourceIdentity::new("test", "geometry"),
             path: "geometry.native".to_owned(),
             bytes: library_source.into_bytes(),
         }])
         .expect("one supplied library");
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "program", "git", "fixture"),
+                source: SourceIdentity::new("test", "program"),
                 package_name: "program".to_owned(),
                 path: "program.native",
                 bytes: program_source.as_bytes(),

@@ -27,7 +27,7 @@ fn compile_source() -> qsl_replay::AdmittedCompilation {
     let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Int[0, 9],b: Integer): Boolean pure { convert<Integer>(a) = b }\n";
     qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            source: qsl_replay::SourceIdentity::new("test", "admitted-enums.native"),
             package_name: "admitted-enums".to_owned(),
             path: "admitted-enums.native",
             bytes: source.as_bytes(),
@@ -135,7 +135,7 @@ fn unbounded_right_values_outside_sibling_interval_still_complete() {
 fn context_free_constructor_rejects_explicit_wrong_context() {
     let other = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new("test", "other.native", "git", "fixture"),
+            source: qsl_replay::SourceIdentity::new("test", "other.native"),
             package_name: "other".to_owned(),
             path: "other.native",
             bytes: b"language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; function other using v(): Boolean pure { true }",

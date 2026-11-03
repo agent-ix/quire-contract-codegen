@@ -3781,7 +3781,7 @@ mod tests {
             function f using v(a: Int[0, 9]): Boolean pure { a < 5 }\n";
         let library_compiled = compile_package(
             CompileUnit {
-                source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+                source: SourceIdentity::new("test", "selected-library"),
                 package_name: "test/selected-library".to_owned(),
                 path: "selected-library.native",
                 bytes: library_source.as_bytes(),
@@ -3808,14 +3808,14 @@ mod tests {
             function p using v(a: Int[0, 9]): Boolean pure { g::f(a) }\n";
         let dependencies = DependencyInput::new([SuppliedLibrary {
             identity: "test/selected-library".into(),
-            source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+            source: SourceIdentity::new("test", "selected-library"),
             path: "selected-library.native".into(),
             bytes: library_source.as_bytes().to_vec(),
         }])
         .expect("one selected library");
         let compiled = compile_package(
             CompileUnit {
-                source: SourceIdentity::new("test", "selected-program", "git", "fixture"),
+                source: SourceIdentity::new("test", "selected-program"),
                 package_name: "selected-program".to_owned(),
                 path: "selected-program.native",
                 bytes: source.as_bytes(),

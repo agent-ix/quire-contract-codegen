@@ -1592,7 +1592,7 @@ function huge_nested using v(x: Int[0, 9]): Int[0, 9] pure { (x + 10000000000000
 fn nested_qsl_package() -> CheckedPackageV2 {
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "ir306-nested.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "ir306-nested.native"),
             package_name: "ir306-nested".to_owned(),
             path: "ir306-nested.native",
             bytes: NESTED_QSL_SOURCE.as_bytes(),
@@ -1622,7 +1622,7 @@ fn deep_qsl_package() -> CheckedPackageV2 {
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "ir306-deep.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "ir306-deep.native"),
             package_name: "ir306-deep".to_owned(),
             path: "ir306-deep.native",
             bytes: source.as_bytes(),
@@ -1663,7 +1663,7 @@ fn wide_qsl_package() -> CheckedPackageV2 {
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "ir306-wide.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "ir306-wide.native"),
             package_name: "ir306-wide".to_owned(),
             path: "ir306-wide.native",
             bytes: source.as_bytes(),
@@ -1706,7 +1706,7 @@ fn work_qsl_package() -> CheckedPackageV2 {
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "ir306-work.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "ir306-work.native"),
             package_name: "ir306-work".to_owned(),
             path: "ir306-work.native",
             bytes: source.as_bytes(),

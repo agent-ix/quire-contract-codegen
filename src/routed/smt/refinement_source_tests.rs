@@ -179,7 +179,7 @@ fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, 
     let source = authored_unit(row_count, reverse);
     let compiled = acquire_checked_closure(
         CompileUnit {
-            source: SourceIdentity::new("agent-ix", "ir1120-refinement", "git", "fixture"),
+            source: SourceIdentity::new("agent-ix", "ir1120-refinement"),
             package_name: "ir1120-refinement".to_owned(),
             path: "ir1120-refinement.native",
             bytes: source.as_bytes(),

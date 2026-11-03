@@ -23,7 +23,7 @@ function other_holder_same using v(a: OtherHolder,b: OtherHolder): Boolean pure 
 pub fn compile(source: &str, dependencies: &DependencyInput) -> AdmittedCompilation {
     compile_admitted(
         CompileUnit {
-            source: SourceIdentity::new("test", "admitted-composites.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "admitted-composites.native"),
             package_name: "admitted-composites".to_owned(),
             path: "admitted-composites.native",
             bytes: source.as_bytes(),
@@ -41,7 +41,7 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n";
     let library = |identity: &str, name: &str, body: &str| SuppliedLibrary {
         identity: identity.to_owned(),
-        source: SourceIdentity::new("test", name, "git", "fixture"),
+        source: SourceIdentity::new("test", name),
         path: format!("{name}.native"),
         bytes: format!("{header}{body}").into_bytes(),
     };

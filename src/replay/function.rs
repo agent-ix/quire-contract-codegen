@@ -314,31 +314,17 @@ pub struct LockedSource {
     pub authority: String,
     /// The source reference's identity.
     pub identity: String,
-    /// The revision namespace.
-    pub namespace: String,
-    /// The revision.
-    pub revision: String,
     /// The file's bytes, bound to its source identity in the request.
     pub bytes: Vec<u8>,
 }
 
 impl LockedSource {
     pub(crate) fn source_identity(&self) -> SourceIdentity {
-        SourceIdentity::new(
-            &self.authority,
-            &self.identity,
-            &self.namespace,
-            &self.revision,
-        )
+        SourceIdentity::new(&self.authority, &self.identity)
     }
 
-    pub(crate) fn wire(&self) -> (String, String, String, String) {
-        (
-            self.authority.clone(),
-            self.identity.clone(),
-            self.namespace.clone(),
-            self.revision.clone(),
-        )
+    pub(crate) fn wire(&self) -> (String, String) {
+        (self.authority.clone(), self.identity.clone())
     }
 }
 
