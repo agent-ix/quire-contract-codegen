@@ -23,7 +23,6 @@ PASS: no findings in the scoped method.
 
 ## Coverage
 
-Frozen head: `549a967d93aa0a680539a1acdfbd53b7f3b6a531`.
 Plan completion: not assessed.
 Computed Quoin matrix: FR-005-AC-3 tagged by `tc007_bound_census_and_executable_oracle_join_the_authoritative_register`; no bound run evidence. FR-005-AC-4 untagged and expressly OPEN. No new production code or CI workflow change in this diff.
 

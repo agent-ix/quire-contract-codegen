@@ -30,7 +30,7 @@ Changes requested: the mutant control needs an explicit temporary register state
 
 ## Dispositions
 
-Round 1 at 5a0a88cf02ff3d1ae40dc99aa6821be2ff69eeb1: PASS. TC-007 now uses a temporary in-memory register input seeded with a real fixture row for the mutant. The normal authoritative table rejects that mutant row as stale and is never modified by the control.
+Round 1: PASS. TC-007 now uses a temporary in-memory register input seeded with a real fixture row for the mutant. The normal authoritative table rejects that mutant row as stale and is never modified by the control.
 
 | FND | outcome | reason |
 | --- | --- | --- |

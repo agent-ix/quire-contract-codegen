@@ -23,7 +23,6 @@ PASS: no findings in the scoped method.
 
 ## Coverage
 
-Frozen head: `549a967d93aa0a680539a1acdfbd53b7f3b6a531`.
 Changed matrix status is Partial for FR-005-AC-3 and TC-007, Planned for FR-005-AC-4. No applicable AssuranceProfile found under the scoped `spec/` tree. Scoped Quire validation passed.
 
 ## Reviewed units

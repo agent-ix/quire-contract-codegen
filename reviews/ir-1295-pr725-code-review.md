@@ -24,7 +24,6 @@ CONDITIONAL: two medium defects require correction before merge.
 
 ## Coverage
 
-Frozen head: `549a967d93aa0a680539a1acdfbd53b7f3b6a531`.
 The tag-versus-oracle comparison is independent; the typed runner verdict is a consistency observation. Seven in-domain identities and two outside-domain observations are asserted. `#![allow(dead_code)]` is confined to the generated scratch consumer. No Kani proof, retired V1 path, or gate narrowing appears. Focused TC-007 test was reported 1/1 by the coder; reviewer did not repeat it. `git diff --check` and scoped Quire validation passed.
 
 ## Reviewed units
