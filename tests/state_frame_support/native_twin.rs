@@ -498,9 +498,9 @@ impl Twin {
             .iter_mut()
             .find(|operation| operation["name"] == "deposit")
             .expect("deposit operation");
-        deposit["params"] = json!([
+        let params = [
             ("other", range_type("balance")),
-            ("offset", range_type("audit"))
+            ("offset", range_type("audit")),
         ]
         .into_iter()
         .map(|(name, type_ref)| {
@@ -516,7 +516,8 @@ impl Twin {
                 "origin": generated(&identity),
             })
         })
-        .collect::<Vec<_>>());
+        .collect::<Vec<_>>();
+        deposit["params"] = json!(params);
         twin.domain = domain.to_string().into_bytes();
         let source = String::from_utf8(twin.unit).expect("native unit");
         let changed = source.replace(
