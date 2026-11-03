@@ -538,6 +538,14 @@ fn inline_v2_precondition_embeds_exact_clause_oracle() {
     };
     assert_eq!(harness.identity.clause, admitted.clause);
     assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert!(
+        harness.rust.contents.contains("kani::cover!(outcome,"),
+        "the direct Boolean oracle must be the cover condition"
+    );
+    assert!(!harness
+        .rust
+        .contents
+        .contains("kani::cover!(matches!(outcome,"));
     assert_eq!(
         harness
             .rust
