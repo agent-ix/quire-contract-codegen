@@ -347,9 +347,13 @@ QSL's `replay_frame`.
 
 ## Expected Results
 
-The QSL-authored V2 postcondition binds both `amount` reads to one drawn
-operation parameter, uses that same value in the compiled postcondition,
-clause oracle and independent native expectation, and produces a
+The QSL-authored V2 postcondition declares a Boolean operation result, binds
+both `amount` reads to one drawn operation parameter, and binds the exact
+Boolean returned by the subject to `result` without a separate draw or
+parameter argument. The compiled postcondition, clause oracle and independent
+native expectation use that same `amount`; the harness retains its native
+arithmetic probes, compares the subject result with the independent expectation,
+and separately asserts the clause oracle over that result. It produces a
 clause-identified oracle and harness, a compiled runtime-helper call, a healthy
 installed-Kani `Verified` result with satisfied cover, and a helper-body-only
 installed-Kani `Falsified` result with in-domain playback. The two runs retain
@@ -796,8 +800,8 @@ with the required author `make kani-gate`; independent review and final acceptan
 ## QSL-authored V2 clause runtime-helper mutation (IR-917, planned)
 
 49. Author a QSL operation with one finite-bounded integer parameter
-    `amount: Int[0, 1000]` and its postcondition
-    `amount < 1000 implies amount + 1 <= 1000`. Both bare `amount` reads
+    `amount: Int[0, 1000]`, a declared Boolean result, and its postcondition
+    `result = (amount < 1000 implies amount + 1 <= 1000)`. Both bare `amount` reads
     name that operation parameter; no read names a state field or
     subject-produced post-state value. Emit its exact `CheckedPackageV2`
     through QSL's public facade,
@@ -805,10 +809,14 @@ with the required author `make kani-gate`; independent review and final acceptan
     node identity. Check that the FR-014-AC-38 oracle and FR-015 harness name
     that same clause, that the oracle is embedded byte for byte, and that the
     harness draws `amount` once under its declared domain, passes that exact
-    value to the compiled subject, and independently checks native
+    value to the compiled subject, never draws or passes `result` as a parameter,
+    and binds the subject's returned `bool` to the clause oracle's `result` input.
+    Require the native arithmetic subterm probes, an assertion comparing that
+    same subject result with independent native
     `!left || right` with `left = amount < 1000` and
-    `right = amount + 1 <= 1000` over that same value. Confirm the compiled
-    postcondition and clause oracle use that same parameter value. Inspect the
+    `right = amount + 1 <= 1000` over that same value, and a separate clause
+    assertion that the oracle completes true for the produced result. Confirm
+    the compiled postcondition and clause oracle use that same parameter value. Inspect the
     compiled subject to require a call to
     `quire_contract_runtime::operators::implies_short_circuit` and inspect
     the parsed authoritative helper body; fail before running either proof if

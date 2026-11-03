@@ -105,6 +105,9 @@ an Integer result whose endpoint lies outside `i64`, or a result family with no 
 SHALL be accounted with a typed refusal and no scalar harness. These result types do not add a
 logical `arguments` entry or a `kani::any()` draw: the `result` binder is the value produced by
 the subject call, never an argument passed to that call.
+The FR-015-AC-119 implication control declares a Boolean operation result and uses the `bool`
+row; its subject result remains observable by an independent expectation assertion. It does
+not use the no-result `()` row.
 
 After the subject call and before the clause assertion, the harness SHALL assert that a produced
 Integer result lies within its admitted inclusive result domain; it SHALL NOT assume that fact.
