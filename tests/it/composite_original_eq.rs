@@ -664,7 +664,7 @@ fn wrong_source_refuses_before_invocation() {
         Err(CompositeBuildError::SourceMismatch)
     ));
     let mut wrong_revision = inputs(SOURCE);
-    wrong_revision.source.revision.push_str("-changed");
+    wrong_revision.source.identity.push_str("-changed");
     assert!(matches!(
         OriginalCompositeEqContext::new(
             checked(SOURCE),

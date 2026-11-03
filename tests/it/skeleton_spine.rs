@@ -508,15 +508,7 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let [source] = sources.as_slice() else {
         panic!("the dependency's own lock source: {sources:?}")
     };
-    assert_eq!(
-        source,
-        &(
-            AUTHORITY.to_owned(),
-            "lib-units".to_owned(),
-            NAMESPACE.to_owned(),
-            REVISION.to_owned()
-        )
-    );
+    assert_eq!(source, &(AUTHORITY.to_owned(), "lib-units".to_owned(),));
     for (entry, expected_identity, expected_source) in [
         (&wire.dependencies[0], "test/aaa", "lib-shared"),
         (&wire.dependencies[1], "test/mmm", "lib-mmm"),
@@ -525,12 +517,7 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         assert_eq!(entry.identity, expected_identity);
         assert_eq!(
             entry.sources,
-            vec![(
-                AUTHORITY.to_owned(),
-                expected_source.to_owned(),
-                NAMESPACE.to_owned(),
-                REVISION.to_owned()
-            )]
+            vec![(AUTHORITY.to_owned(), expected_source.to_owned(),)]
         );
     }
     let supplied: BTreeMap<_, _> = wire
@@ -679,12 +666,7 @@ fn tc_026_a_changed_dependency_selection_is_refused_before_replay() {
     let mut extra = base.clone();
     extra.dependencies.push(qsl_replay::DependencyEntryWire {
         identity: "test/other".to_owned(),
-        sources: vec![(
-            AUTHORITY.to_owned(),
-            "lib-other".to_owned(),
-            NAMESPACE.to_owned(),
-            REVISION.to_owned(),
-        )],
+        sources: vec![(AUTHORITY.to_owned(), "lib-other".to_owned())],
     });
     let mut reordered = base.clone();
     reordered.dependencies.swap(0, 1);

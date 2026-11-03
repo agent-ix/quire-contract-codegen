@@ -654,8 +654,6 @@ fn replay_collection_function(
         EnvironmentLabels {
             authority: "agent-ix".to_owned(),
             identity: "ix://ir268.test/collection/environment".to_owned(),
-            revision_namespace: "git".to_owned(),
-            revision: "fixture".to_owned(),
         },
         &model,
         &[EnvironmentPopulation {
@@ -694,12 +692,7 @@ fn replay_collection_function(
     let request = ReplayRequestWire {
         package_name: "ir268-symbolic".to_owned(),
         profile_selections: Vec::new(),
-        sources: vec![(
-            "agent-ix".to_owned(),
-            "ir268-symbolic.native".to_owned(),
-            "git".to_owned(),
-            "fixture".to_owned(),
-        )],
+        sources: vec![("agent-ix".to_owned(), "ir268-symbolic.native".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(selection, site.site.declaration.clone()),
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {

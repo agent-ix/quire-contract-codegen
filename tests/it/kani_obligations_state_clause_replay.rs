@@ -837,8 +837,6 @@ fn identity_member(label: &DocumentLabel) -> Value {
     json!({
         "authority": label.authority,
         "identity": label.identity,
-        "revision_namespace": label.revision_namespace,
-        "revision": label.revision,
     })
 }
 
@@ -936,8 +934,6 @@ fn tc_035_the_documents_hold_the_playback_and_post_state() {
     let label = |tag: &str| DocumentLabel {
         authority: format!("authority-{tag}"),
         identity: format!("identity-{tag}"),
-        revision_namespace: format!("namespace-{tag}"),
-        revision: format!("revision-{tag}"),
     };
     let other_address = StateObjectAddress {
         population: "ix://test/bank/other-accounts".to_owned(),

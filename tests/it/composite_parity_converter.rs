@@ -212,12 +212,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     let wire = ReplayRequestWire {
         package_name: "ir666".to_owned(),
         profile_selections: Vec::new(),
-        sources: vec![(
-            "test".to_owned(),
-            "ir666".to_owned(),
-            "git".to_owned(),
-            "r1".to_owned(),
-        )],
+        sources: vec![("test".to_owned(), "ir666".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(
             qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),
