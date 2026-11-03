@@ -625,6 +625,22 @@ impl Twin {
         Self::with_deposit_declaration(false, true)
     }
 
+    /// QSL postcondition whose condition reads the Boolean value returned by the subject.
+    pub fn with_boolean_result_postcondition(condition: &str) -> Self {
+        let mut twin = Self::with_deposit_result();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            &format!("post DepositResult using v on Bank::Account::deposit {{ {condition} }}"),
+        );
+        assert_ne!(
+            changed, source,
+            "the Boolean result replaced the field clause"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// QSL postcondition over a bounded operation result and no parameters.
     pub fn with_bounded_result_postcondition() -> Self {
         let mut twin = Self::with_deposit_declaration(false, true);

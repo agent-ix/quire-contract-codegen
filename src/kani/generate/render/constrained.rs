@@ -161,7 +161,7 @@ fn oracle(
                     .ok_or(R::Condition)?;
                 format!("*parameter_{index}")
             }
-            ClauseInputSide::Pre => return Err(R::Condition),
+            ClauseInputSide::Pre | ClauseInputSide::Result => return Err(R::Condition),
         };
         arguments.push(if input.boolean {
             value

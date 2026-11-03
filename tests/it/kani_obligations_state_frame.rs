@@ -392,8 +392,8 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     );
 }
 
-/// A result-only operation must never turn its produced value into a symbolic subject argument.
-#[trace("FR-015-AC-39", "TC-025")]
+/// The result-only subject returns an integer; its result is checked and reaches the oracle.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
 fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
     let (package, clause) =
@@ -404,29 +404,54 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         dependencies: None,
     }]);
     assert!(matches!(
-        &outcome.records()[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseResultNotRendered {
-                node_id,
-                result_node,
-            }
-        } if node_id == &clause
-            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
     ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
     } = outcome
     else {
-        panic!("a well-formed unsupported item is accounted individually");
+        panic!("the admitted result postcondition emits");
     };
-    assert!(v2_clause_harnesses.is_empty());
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one result postcondition harness");
+    };
+    assert!(harness.identity.arguments.is_empty());
+    assert!(!harness.rust.contents.contains("kani::any()"));
+    assert!(harness.rust.contents.contains("let subject_result: i64 ="));
+    assert!(harness.rust.contents.contains("subject_result >= 0"));
+    assert!(harness.rust.contents.contains("subject_result <= 1000"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("rt::Integer::from(subject_result)"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(&result_result"));
+    let domain = harness
+        .rust
+        .contents
+        .find("subject_result >= 0")
+        .expect("domain assertion");
+    let clause = harness
+        .rust
+        .contents
+        .find("the V2 postcondition holds")
+        .expect("clause assertion");
+    let cover = harness
+        .rust
+        .contents
+        .find("kani::cover!")
+        .expect("final cover");
+    assert!(domain < clause && clause < cover);
 }
 
-/// A declared operation result is not an input even when the clause body reads only a parameter.
-#[trace("FR-015-AC-39", "TC-025")]
+/// An unused result is still produced and checked, while the parameter is the sole draw.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
-fn qsl_unused_result_binder_refuses_postcondition_harness() {
+fn qsl_unused_result_binder_still_checks_produced_domain() {
     let (package, clause) =
         Twin::with_unused_bounded_result_postcondition().emitted_package("DepositParameter");
     let outcome = negotiate(&[ObligationItem::V2Clause {
@@ -435,23 +460,32 @@ fn qsl_unused_result_binder_refuses_postcondition_harness() {
         dependencies: None,
     }]);
     assert!(matches!(
-        &outcome.records()[0].disposition,
-        ObligationDisposition::Unsupported {
-            reason: UnsupportedObligation::V2ClauseResultNotRendered {
-                node_id,
-                result_node,
-            }
-        } if node_id == &clause
-            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
     ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
     } = outcome
     else {
-        panic!("a well-formed unsupported item is accounted individually");
+        panic!("the admitted result and parameter postcondition emits");
     };
-    assert!(v2_clause_harnesses.is_empty());
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one result and parameter postcondition harness");
+    };
+    let [argument] = harness.identity.arguments.as_slice() else {
+        panic!("only the operation parameter is drawn");
+    };
+    assert_eq!(argument.identifier, "parameter_other_current");
+    assert_eq!((argument.minimum, argument.maximum), (0, 1000));
+    assert_eq!(harness.rust.contents.matches("kani::any()").count(), 1);
+    assert!(harness.rust.contents.contains("subject_result: i64"));
+    assert!(harness.rust.contents.contains("subject_result >= 0"));
+    assert!(harness.rust.contents.contains("subject_result <= 1000"));
+    assert!(harness
+        .rust
+        .contents
+        .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
 }
 
 /// A V2 precondition is selected by its checked clause node, draws the operation parameter
