@@ -392,6 +392,34 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     );
 }
 
+/// A result-only operation must never turn its produced value into a symbolic subject argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
+    let (package, clause) =
+        Twin::with_bounded_result_postcondition().emitted_package("DepositResult");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(
+        matches!(
+            outcome.records()[0].disposition,
+            ObligationDisposition::Unsupported { .. }
+        ),
+        "a result-only postcondition must not draw its result as the subject argument: {outcome:?}"
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("a well-formed unsupported item is accounted individually");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
 /// A V2 precondition is selected by its checked clause node, draws the operation parameter
 /// inside the model's bound, and emits its own cover-only harness with the exact clause oracle.
 #[trace("TC-025")]
