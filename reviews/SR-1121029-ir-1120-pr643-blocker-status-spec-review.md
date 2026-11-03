@@ -94,14 +94,9 @@ bindings: []
 
 ## Dispositions
 
-| Finding | Outcome | Evidence |
+| FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | still-open: the lead decides; a one-phrase Status fix, not merge-blocking | FR-045:219 and TC-059:78 |
 | FND-002 | still-open: the lead decides whether to scope the sentence to QSL main row 1; AC5 closure needs a CG pin at or after the fix either way | FR-045:214-216; Cargo.lock:1283 |
-
-### Current-head outcomes (92262c6b)
-
-| Finding | Outcome | Evidence |
-| --- | --- | --- |
-| FND-001 | fixed | FR-045 Status names QSL's FR-314 reader immediately before the remaining readback condition; the antecedent is explicit. |
-| FND-002 | fixed as a status claim; live readback remains open | FR-045 Status describes the earlier row-1 refusals as historical, names the merged IR-1139 and QSL-1306 changes, and explicitly withholds AC-5 and TC-059 step 6 credit until current normalized cvc5 output passes QSL's FR-314 reader. IR-1287 tracks the missing public adapter. The current-head spec review passes this partial wording (IR-1120 comment `f7da0175`). |
+| FND-001 | fixed | At head `92262c6b`, FR-045 Status names QSL's FR-314 reader before the remaining readback condition; the antecedent is explicit. |
+| FND-002 | fixed | At head `92262c6b`, FR-045 Status describes the earlier row-1 refusals as historical, names the merged IR-1139 and QSL-1306 changes, and explicitly withholds AC-5 and TC-059 step 6 credit until current normalized cvc5 output passes QSL's FR-314 reader. IR-1287 tracks the missing public adapter. The current-head spec review passes this partial wording (IR-1120 comment `f7da0175`). |
