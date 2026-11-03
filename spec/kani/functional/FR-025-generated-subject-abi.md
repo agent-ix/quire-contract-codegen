@@ -27,6 +27,11 @@ complete-V1 oracle without loss. Boolean and bounded-integer arguments retain th
 one-argument/one-binding order; the planned bounded-Rational row has two ordered bindings for
 one logical argument.
 
+The scalar V2 postcondition result is separate from those drawn arguments. Until IR-948
+implements the produced-result ABI below, the scalar V2 clause path refuses a postcondition
+whose admitted operation declares a result (IR-1289). The existing collection postcondition
+result path is outside that temporary scalar refusal.
+
 The ascending order, the binding to a parameter node id and declared domain, and lossless widening
 are what AD-016 arrow 5 and QSL ADR-013 O-25 decide. The Rust-type table, the by-reference state
 argument and the frame disposition are
@@ -37,12 +42,17 @@ gets a row in the table only when its witness decodes into the complete-V1 value
 
 - The obligation's argument bindings and their IR `bounded_domain` bounds (FR-015).
 - The parameter node id of each argument in the admitted package.
+- For the planned scalar V2 postcondition result path, the admitted operation anchor and its
+  effective signature, including the optional result and ordered parameters (QSpec FR-341 and
+  FR-342).
 
 ## Outputs
 
 - A harness whose `kani::any()` calls equal its persisted physical binding order, obtained by
   row-specific expansion of the identity's ascending logical arguments.
 - Argument bindings that each carry their parameter node id and declared domain.
+- For the planned scalar V2 postcondition result path, a subject call whose produced Rust result
+  has the declared supported type and whose domain is checked after the call.
 
 ## Behavior
 
@@ -74,6 +84,36 @@ gets a row in the table only when its witness decodes into the complete-V1 value
   `requires-bound` at settlement ([FR-019](../../routed/functional/FR-019-capability-settlement.md)).
 - If an obligation is a frame obligation, then the generator shall account it `unsupported` with a
   typed reason and emit no harness.
+
+### Scalar V2 postcondition produced result (planned until IR-948 lands)
+
+Before lowering a scalar V2 postcondition, CG SHALL resolve the admitted operation anchor's
+context and operation name and read the complete effective signature with
+`CheckedPackageV2::model_operations(context, 65_536)`. The fixed `65_536` work-unit provision
+applies to each complete signature read; it is not a caller-supplied narrowing or proof bound.
+CG SHALL select exactly the operation named by that anchor and pair QSpec FR-341's aggregate
+binders in order: `self`, a `result` binder exactly when the signature declares a result, then
+the signature's parameters in their declared order. An absent, ambiguous, unavailable or
+work-exhausted signature, or a mismatched binder role, type or order, SHALL refuse the scalar
+item with a typed reason and no harness. A refused `model_operations` read SHALL retain its
+`CheckedOperationReadError` code, context, charged work and limit; no partial signature is used.
+
+For a supported scalar result, the generated customer subject SHALL return `bool` for a declared
+Boolean result or `i64` for a declared bounded Integer result whose inclusive endpoints fit
+`i64`. A subject with no declared result returns `()`. A result with no available finite domain,
+an Integer result whose endpoint lies outside `i64`, or a result family with no supported row
+SHALL be accounted with a typed refusal and no scalar harness. These result types do not add a
+logical `arguments` entry or a `kani::any()` draw: the `result` binder is the value produced by
+the subject call, never an argument passed to that call.
+
+After the subject call and before the clause assertion, the harness SHALL assert that a produced
+Integer result lies within its admitted inclusive result domain; it SHALL NOT assume that fact.
+The `bool` return type itself enforces the declared Boolean domain. The clause oracle SHALL
+receive that same produced value, with an Integer widened to `rt::Integer::from(i64)` without
+loss. A subject-produced Integer outside the admitted domain therefore falsifies the harness's
+assertion rather than disappearing behind an assumption. FR-015's final cover follows the
+result-domain and clause assertions. Until this planned path lands, IR-1289's typed scalar
+result-binder refusal remains in force; the collection result path retains its own ABI.
 
 ### Bounded-Rational grouping and lossless witness contract (planned IR-258)
 
@@ -132,6 +172,9 @@ adds no unsupported-family machine ABI or implicit integer narrowing.
 | FR-025-AC-8 | A harness over a state-reading obligation passes each state value to the subject as `&mut` to a harness-owned value and copies it before the call; the pre-state the harness asserts over is the copy, and the post-state is the value after the call. | Test (TC-036) |
 | FR-025-AC-9 | PLANNED (IR-806). Every emitted composite shadow leaf binding retains its original operand/parameter node, typed path, declared domain and primitive draw type in symbolic call order; controls distinguish absent/null/present slots and option/union members. A missing, duplicate, unknown or domain/type-conflicting leaf refuses with a typed reason and no harness; parameter/literal and literal/literal operands retain their literal singleton identity/value with no unconstrained draw. Public reconstruction preserves these facts through FR-033. | Test |
 | FR-025-AC-10 | PLANNED (IR-258). Every supported FR-046 Rational argument has exactly two ordered I64 physical bindings grouped to its one original parameter, complete domain and canonical value. Actual playback decodes losslessly with existing I64 width/comment checks and physical byte/value-count caps, then reconstructs and submits exactly one canonical owner Rational per parameter. Missing, duplicate, foreign, role-swapped or bound-conflicting schema, malformed entries, noncanonical pairs and over-limit witnesses refuse at their responsible typed boundary; no alternate normalized witness is replayed. Existing Boolean/integer controls remain unchanged. | Test |
+| FR-025-AC-11 | PLANNED until IR-948 lands. A scalar V2 postcondition's operation anchor selects one complete effective `model_operations(context, 65_536)` signature; its binders match `self`, optional `result`, then declared parameters in order. An unavailable, ambiguous, work-exhausted or mismatched read gives a typed refusal with no harness, retaining the read's code, context, work and limit when the read itself refuses. No caller value changes the fixed work provision or supplies a partial signature. | Test (TC-036) |
+| FR-025-AC-12 | PLANNED until IR-948 lands. A scalar V2 postcondition subject with a declared Boolean result returns `bool`, one with a finite bounded Integer result within signed-i64 capacity returns `i64`, and one with no result returns `()`; an unsupported or unavailable result domain gives a typed refusal with no harness. A declared result is neither drawn with `kani::any()` nor recorded as a parameter argument nor passed to the subject as one. | Test (TC-036) |
+| FR-025-AC-13 | PLANNED until IR-948 lands. After a scalar V2 postcondition subject returns, the harness asserts a produced Integer result's admitted inclusive domain before asserting the clause and passes the same losslessly widened value to its oracle; it never assumes the result domain or substitutes a draw. A produced out-of-domain Integer falsifies the assertion, and the family cover remains after both assertions. A Boolean result is carried as the returned `bool`. | Test (TC-036) |
 
 ## Dependencies
 

@@ -50,6 +50,17 @@ yield no harness.
     canonicality and public typed replay controls. Request missing, duplicate, foreign,
     role-swapped and domain-conflicting component schemas; no invented parameter may replace
     either component. Keep all legacy Boolean/integer controls unchanged.
+11. For the planned scalar V2 postcondition result path, select an admitted QSL operation anchor
+    and compare its complete `model_operations(context, 65_536)` signature with the clause's
+    `self`, optional `result` and ordered parameter binders. Exercise a work-limit refusal and
+    an unavailable or mismatched signature, retaining the IR read refusal's fields.
+12. Select admitted scalar postconditions for a Boolean result, a bounded Integer result, no
+    result, an unbounded result and an Integer range beyond signed-i64 capacity. Inspect the
+    generated subject return type, parameter draws and call arguments; keep the existing
+    supported collection result path as a separate control.
+13. For a bounded Integer result, compare the value returned by the subject with the value
+    passed to the clause oracle. Check an in-domain value and a produced out-of-domain value,
+    and inspect the order of the result-domain assertion, clause assertion and final cover.
 
 ## Expected Results
 
@@ -77,6 +88,15 @@ yield no harness.
     limits before reconstructing one canonical owner Rational and submitting one typed witness
     value per parameter. Malformed schema/entries and noncanonical pairs refuse with typed causes
     and no replayed failure; legacy values/order remain unchanged (FR-025-AC-10).
+11. The complete admitted signature is read under the fixed per-read provision and matched to
+    the binder order. Failed or partial reads and mismatches produce typed no-harness refusals;
+    an IR read refusal retains code, context, work and limit (FR-025-AC-11).
+12. Boolean, bounded Integer and absent results produce `bool`, `i64` and `()` subject returns,
+    respectively. Unsupported result domains refuse; no result is drawn, recorded as a parameter
+    or passed as a subject argument. Collection result support is unchanged (FR-025-AC-12).
+13. The returned Integer reaches the oracle unchanged after lossless widening. An out-of-domain
+    return fails an assertion after the subject call, without an assumption hiding it; the clause
+    assertion and final cover follow. Boolean returns remain typed `bool` (FR-025-AC-13).
 
 ## Status
 
@@ -89,3 +109,8 @@ planned. Step 9 is planned (IR-806) and has no executable coverage.
 Step 10 and the Rational extensions of steps 1, 2 and 7 are planned (IR-258), with
 no executable binder, decoder/grouping implementation or actual backend/replay credit yet.
 The planned row does not retrospectively qualify the existing legacy ABI controls.
+
+Steps 11 to 13 are planned until IR-948 lands. IR-1289 currently refuses a scalar V2 clause
+postcondition with a declared result, including when the clause body does not read that result;
+the supported collection result path is separate. No generated scalar return, produced-result
+domain assertion or `model_operations` binder-mapping evidence is credited yet.
