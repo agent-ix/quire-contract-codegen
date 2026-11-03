@@ -456,7 +456,7 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
 /// An unused result is still produced and checked, while the parameter is the sole draw.
 #[trace("FR-025-AC-11", "FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
-fn qsl_unused_result_binder_still_checks_produced_domain() {
+fn qsl_result_unused_binder_still_checks_produced_domain() {
     let (package, clause) =
         Twin::with_unused_bounded_result_postcondition().emitted_package("DepositParameter");
     let outcome = negotiate(&[ObligationItem::V2Clause {
@@ -540,7 +540,7 @@ fn qsl_result_postcondition_keeps_declared_parameter_call_order() {
 /// The emitted Boolean result oracle reads the exact returned bit for both values.
 #[trace("FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]
-fn qsl_boolean_result_uses_the_same_subject_value_for_both_bits() {
+fn qsl_result_boolean_uses_the_same_subject_value_for_both_bits() {
     let (package, clause) =
         Twin::with_boolean_result_postcondition("result").emitted_package("DepositResult");
     let oracle = generate_v2_clause_oracle(&package, &clause).expect("Boolean result oracle");
@@ -615,7 +615,7 @@ fn qsl_boolean_result_uses_the_same_subject_value_for_both_bits() {
 /// An unbounded selected result is refused before any scalar harness is exposed.
 #[trace("FR-025-AC-12", "TC-036")]
 #[test]
-fn qsl_unbounded_result_refuses_without_a_scalar_harness() {
+fn qsl_result_unbounded_refuses_without_a_scalar_harness() {
     let (package, clause) =
         Twin::with_unbounded_result_postcondition().emitted_package("DepositResult");
     let outcome = negotiate(&[ObligationItem::V2Clause {
