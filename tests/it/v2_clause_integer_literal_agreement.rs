@@ -186,7 +186,7 @@ fn case_{index}() {{
     fs::write(scratch.path.join("src/lib.rs"), source).expect("write public native agreement");
     scratch_crate::resolve_seeded_lock(&scratch.path);
     let agreement_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let _build = scratch_crate::lock_agreement_build();
+    let build = scratch_crate::lock_agreement_build();
     let output = Command::new(agreement_cargo)
         .args([
             "test",
@@ -204,6 +204,7 @@ fn case_{index}() {{
         .current_dir(&scratch.path)
         .output()
         .expect("run native agreement");
+    drop(build);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     println!("{stdout}\n{stderr}");

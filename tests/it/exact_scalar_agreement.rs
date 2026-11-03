@@ -152,7 +152,7 @@ fn run_agreement_cases_with_expectation<'a>(
 
     // Cargo locks compilation, but releases its lock before executing the test. Keep
     // the complete command serialized so a sibling cannot replace its executable.
-    let _build = super::scratch_crate::lock_agreement_build();
+    let build = super::scratch_crate::lock_agreement_build();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
         .env("CARGO_TARGET_DIR", target_dir)
@@ -161,6 +161,7 @@ fn run_agreement_cases_with_expectation<'a>(
         .current_dir(&root)
         .output()
         .expect("spawn cargo");
+    drop(build);
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Some(failed_test) = failed_test {
         assert_eq!(
