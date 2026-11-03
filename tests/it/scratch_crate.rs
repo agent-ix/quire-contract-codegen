@@ -19,9 +19,12 @@ use quire_contract_codegen::RUNTIME_DEPENDENCY_SOURCE;
 
 static AGREEMENT_BUILD: Mutex<()> = Mutex::new(());
 
-/// Dependency artifacts shared by generated native agreement crates in this target.
+/// Reuse this integration binary's target artifacts for generated native agreements.
 pub(crate) fn agreement_target() -> PathBuf {
-    Path::new(env!("CARGO_TARGET_TMPDIR")).join("generated-agreement-target")
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .parent()
+        .expect("Cargo scratch directory belongs to the target directory")
+        .to_path_buf()
 }
 
 /// Keep compilation and execution together: Cargo releases its build lock before a
