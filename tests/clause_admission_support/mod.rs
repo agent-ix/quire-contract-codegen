@@ -256,6 +256,27 @@ impl Twin {
         twin
     }
 
+    pub fn with_scalar_postcondition_siblings(unsupported_second: bool) -> Self {
+        let mut twin = Self::with_bounded_other_condition();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let source = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= other }",
+            "post DepositBound using v on Bank::Account::deposit { other < 1000 }",
+        );
+        let second = if unsupported_second {
+            "self.balance >= 0"
+        } else {
+            "other >= 0"
+        };
+        twin.unit = format!(
+            "{source}\npre DepositPositive using v on Bank::Account::deposit {{ other > 0 }}\n\
+             pre DepositSecond using v on Bank::Account::deposit {{ {second} }}\n\
+             pre TransferOnly using v on Bank::Account::transfer {{ true }}\n"
+        )
+        .into_bytes();
+        twin
+    }
+
     fn with_deposit_declaration(parameter: bool, result: bool) -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");

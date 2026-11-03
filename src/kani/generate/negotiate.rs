@@ -1397,6 +1397,34 @@ mod tests {
 
     use super::*;
 
+    /// A postcondition cannot produce a harness when the request omits an admitted
+    /// precondition of the same operation, even when the post body itself lowers.
+    #[trace("FR-015-AC-43", "TC-025")]
+    #[test]
+    fn scalar_postcondition_refuses_a_missing_same_anchor_precondition() {
+        let twin = native_twin::Twin::with_scalar_postcondition_siblings(false);
+        let (package, postcondition) = twin.emitted_package("DepositBound");
+        let (_, first) = twin.emitted_package("DepositPositive");
+        let items = [ObligationItem::V2Clause {
+            package: &package,
+            clause: &postcondition,
+            dependencies: None,
+        }];
+        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            items: &items,
+            subject_path: "crate::subject::deposit",
+            unwind: 8,
+        })
+        .expect("admitted request");
+        assert!(matches!(
+            &outcome.records()[0].disposition,
+            ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseMissingSiblingPrecondition { precondition, .. } }
+                if *precondition == first
+        ));
+        assert!(matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.is_empty()));
+    }
+
     #[test]
     fn request_views_keep_every_original_source_occurrence_and_package_separate() {
         let declarations = [
