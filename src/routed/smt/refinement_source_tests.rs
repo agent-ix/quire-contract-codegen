@@ -28,7 +28,6 @@ use crate::{
 
 const ABSTRACT: &str = "ir1120.test/abstract";
 const CONCRETE: &str = "ir1120.test/concrete";
-const ZERO_DIGEST: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 fn key(package: &str, name: &str) -> String {
     format!("ix://{package}/{name}")
@@ -50,7 +49,6 @@ fn model(package: &str, operations: &[&str]) -> Vec<u8> {
     .map(|(name, meaning)| {
         json!({
             "kind": {"module": package, "name": name}, "moduleVersion": "1.0.0",
-            "manifestDigest": ZERO_DIGEST,
             "construct": {"identity": "none", "shape": "record", "members": {}, "meaning": meaning}
         })
     })
@@ -82,11 +80,11 @@ fn model(package: &str, operations: &[&str]) -> Vec<u8> {
         .collect();
     let document = json!({
         "contractVersion": "2.0.0",
-        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
+        "canonicalization": {"algorithm": "rfc8785-v1"},
         "source": {"identity": key(package, "spec"), "version": "1.0.0",
-            "dialect": "spec-bundle", "digest": ZERO_DIGEST},
-        "package": {"identity": package, "version": "1.0.0", "manifestDigest": ZERO_DIGEST,
-            "mappingVersions": [], "profileVersions": [], "lockDigest": ZERO_DIGEST},
+            "dialect": "spec-bundle"},
+        "package": {"identity": package, "version": "1.0.0",
+            "mappingVersions": [], "profileVersions": []},
         "occurrences": [], "extensions": [], "constructs": constructs,
         "types": [{"identity": object, "displayName": "Object",
             "kind": {"module": package, "name": "object_type"}, "roles": [],
