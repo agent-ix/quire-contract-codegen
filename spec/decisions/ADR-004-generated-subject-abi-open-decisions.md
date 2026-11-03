@@ -79,7 +79,8 @@ declared bounded Integer result whose inclusive domain fits signed `i64`; an ope
 a declared result returns `()`. The result is never a symbolic parameter draw or a subject
 argument. After the call, the harness asserts an Integer result's admitted inclusive domain
 before the clause assertion and gives that same result to the clause oracle, widening it
-losslessly as `rt::Integer::from(i64)`. A Boolean return's Rust type enforces its domain.
+losslessly as `rt::Integer::from(i64)`. A Boolean return's Rust type enforces its domain,
+and the exact returned `bool` reaches the clause oracle unchanged.
 An unsupported, unavailable or out-of-i64 result domain produces a typed refusal and no scalar
 harness. The existing collection result path remains governed by its own supported ABI.
 

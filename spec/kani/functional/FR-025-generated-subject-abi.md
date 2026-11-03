@@ -111,9 +111,12 @@ Integer result lies within its admitted inclusive result domain; it SHALL NOT as
 The `bool` return type itself enforces the declared Boolean domain. The clause oracle SHALL
 receive that same produced value, with an Integer widened to `rt::Integer::from(i64)` without
 loss. A subject-produced Integer outside the admitted domain therefore falsifies the harness's
-assertion rather than disappearing behind an assumption. FR-015's final cover follows the
-result-domain and clause assertions. Until this planned path lands, IR-1289's typed scalar
-result-binder refusal remains in force; the collection result path retains its own ABI.
+assertion rather than disappearing behind an assumption. For a Boolean result, the oracle
+SHALL receive the exact `bool` returned by the subject for both `true` and `false`; changing
+only that oracle argument to the opposite Boolean fails the argument-identity control.
+FR-015's final cover follows the result-domain and clause assertions. Until this planned path
+lands, IR-1289's typed scalar result-binder refusal remains in force; the collection result path
+retains its own ABI.
 
 ### Bounded-Rational grouping and lossless witness contract (planned IR-258)
 
@@ -174,7 +177,7 @@ adds no unsupported-family machine ABI or implicit integer narrowing.
 | FR-025-AC-10 | PLANNED (IR-258). Every supported FR-046 Rational argument has exactly two ordered I64 physical bindings grouped to its one original parameter, complete domain and canonical value. Actual playback decodes losslessly with existing I64 width/comment checks and physical byte/value-count caps, then reconstructs and submits exactly one canonical owner Rational per parameter. Missing, duplicate, foreign, role-swapped or bound-conflicting schema, malformed entries, noncanonical pairs and over-limit witnesses refuse at their responsible typed boundary; no alternate normalized witness is replayed. Existing Boolean/integer controls remain unchanged. | Test |
 | FR-025-AC-11 | PLANNED until IR-948 lands. A scalar V2 postcondition's operation anchor selects one complete effective `model_operations(context, 65_536)` signature; its binders match `self`, optional `result`, then declared parameters in order. An unavailable, ambiguous, work-exhausted or mismatched read gives a typed refusal with no harness, retaining the read's code, context, work and limit when the read itself refuses. No caller value changes the fixed work provision or supplies a partial signature. | Test (TC-036) |
 | FR-025-AC-12 | PLANNED until IR-948 lands. A scalar V2 postcondition subject with a declared Boolean result returns `bool`, one with a finite bounded Integer result within signed-i64 capacity returns `i64`, and one with no result returns `()`; an unsupported or unavailable result domain gives a typed refusal with no harness. A declared result is neither drawn with `kani::any()` nor recorded as a parameter argument nor passed to the subject as one. | Test (TC-036) |
-| FR-025-AC-13 | PLANNED until IR-948 lands. After a scalar V2 postcondition subject returns, the harness asserts a produced Integer result's admitted inclusive domain before asserting the clause and passes the same losslessly widened value to its oracle; it never assumes the result domain or substitutes a draw. A produced out-of-domain Integer falsifies the assertion, and the family cover remains after both assertions. A Boolean result is carried as the returned `bool`. | Test (TC-036) |
+| FR-025-AC-13 | PLANNED until IR-948 lands. After a scalar V2 postcondition subject returns, the harness asserts a produced Integer result's admitted inclusive domain before asserting the clause and passes the same losslessly widened value to its oracle; it never assumes the result domain or substitutes a draw. A produced out-of-domain Integer falsifies the assertion, and the family cover remains after both assertions. For both `true` and `false` subject returns, the oracle receives that exact returned `bool`; a control changing only the oracle-bound Boolean to its opposite fails the argument-identity check. | Test (TC-036) |
 
 ## Dependencies
 

@@ -60,7 +60,9 @@ yield no harness.
     supported collection result path as a separate control.
 13. For a bounded Integer result, compare the value returned by the subject with the value
     passed to the clause oracle. Check an in-domain value and a produced out-of-domain value,
-    and inspect the order of the result-domain assertion, clause assertion and final cover.
+    and inspect the order of the result-domain assertion, clause assertion and final cover. For
+    a Boolean result, check `true` and `false` subject returns against the exact oracle-bound
+    Boolean; change only that oracle argument to its opposite as a negative control.
 
 ## Expected Results
 
@@ -96,7 +98,9 @@ yield no harness.
     or passed as a subject argument. Collection result support is unchanged (FR-025-AC-12).
 13. The returned Integer reaches the oracle unchanged after lossless widening. An out-of-domain
     return fails an assertion after the subject call, without an assumption hiding it; the clause
-    assertion and final cover follow. Boolean returns remain typed `bool` (FR-025-AC-13).
+    assertion and final cover follow. For both Boolean returns, the oracle-bound value equals
+    the subject-returned `bool`; the opposite-value control fails this identity check
+    (FR-025-AC-13).
 
 ## Status
 
