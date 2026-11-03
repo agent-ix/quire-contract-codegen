@@ -640,6 +640,38 @@ impl Twin {
         twin
     }
 
+    /// QSL postcondition with a bounded result and parameter, but no result read.
+    pub fn with_unused_bounded_result_postcondition() -> Self {
+        let mut twin = Self::with_bounded_other_condition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"] = json!({
+            "typeRef": range_type("balance"),
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "nullable": false,
+        });
+        twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= other }",
+            "post DepositParameter using v on Bank::Account::deposit { other < 1000 }",
+        );
+        assert_ne!(changed, source, "the parameter clause replaced the field clause");
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     fn with_deposit_declaration(parameter: bool, result: bool) -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");

@@ -226,6 +226,14 @@ pub enum UnsupportedObligation {
         /// Selected clause node.
         node_id: CheckedNodeId,
     },
+    /// The admitted postcondition has a result binder, which the scalar renderer cannot
+    /// distinguish from a drawn operation parameter yet.
+    V2ClauseResultNotRendered {
+        /// Selected postcondition.
+        node_id: CheckedNodeId,
+        /// Admitted result parameter declaration.
+        result_node: CheckedNodeId,
+    },
     /// A postcondition request omits an admitted precondition of the same anchor.
     V2ClauseMissingSiblingPrecondition {
         /// Selected postcondition.

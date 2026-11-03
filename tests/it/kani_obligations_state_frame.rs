@@ -403,13 +403,47 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         clause: &clause,
         dependencies: None,
     }]);
-    assert!(
-        matches!(
-            outcome.records()[0].disposition,
-            ObligationDisposition::Unsupported { .. }
-        ),
-        "a result-only postcondition must not draw its result as the subject argument: {outcome:?}"
-    );
+    assert!(matches!(
+        &outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseResultNotRendered {
+                node_id,
+                result_node,
+            }
+        } if node_id == &clause
+            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("a well-formed unsupported item is accounted individually");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+}
+
+/// A declared operation result is not an input even when the clause body reads only a parameter.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_unused_result_binder_refuses_postcondition_harness() {
+    let (package, clause) = Twin::with_unused_bounded_result_postcondition()
+        .emitted_package("DepositParameter");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        &outcome.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseResultNotRendered {
+                node_id,
+                result_node,
+            }
+        } if node_id == &clause
+            && package.parameter_declaration(result_node).is_ok_and(|declaration| declaration.name.as_ref() == "result")
+    ));
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
