@@ -55,6 +55,15 @@ atomically and shall retain differential and cross-backend semantic-parity resul
 | FR-005-AC-9 | When replacement fails and restoring the prior destination also fails, the publisher reports destination state `unknown`, the destination path is absent, and the complete prior bundle and the complete staged bundle remain in their sibling directories for recovery. | Test (TC-002) |
 | FR-005-AC-10 | When two artifacts of one bundle share the same path, bundle construction is refused with `DuplicateArtifactPath` naming the later `bundle.artifacts[i].path`, before any destination or staging I/O begins. | Test (TC-002) |
 
+CG owns the differential comparison and the TC-007 register for backend paths that it currently
+generates. The executable bound-integer oracle and the independently computed bound-strategy
+census are the first qualified pair. The generated strategy runner is an additional observation
+of that pair because it calls the oracle; it is not a third independent semantic backend. This
+qualification can establish the differential-register obligation in FR-005-AC-3 for its measured
+corpus. It does not close FR-005-AC-4: the surviving Kani and coverage paths have no independent
+semantic outcome in this comparison, and unrun backend pairs remain open. The retired V1 bundle
+arithmetic path supplies no agreement evidence.
+
 ## Dependencies
 
 - **Upstream**: [FR-002](../../strategy/functional/FR-002-tristate-proptest.md), [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), and [FR-004](../../evidence/functional/FR-004-vacuity-evidence.md).
