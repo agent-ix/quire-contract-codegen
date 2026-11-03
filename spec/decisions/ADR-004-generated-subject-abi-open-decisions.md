@@ -29,6 +29,12 @@ For each one, the harness needs a symbolic argument type, and the IR node needs 
 operation that the oracle calls. A copied argument cannot carry
 `kani::modifies`.
 
+The scalar V2 clause path currently refuses an operation with a declared result (IR-1289).
+QSpec FR-341 binds `result` between `self` and the operation's parameters, whereas the result
+is produced by the subject call, not drawn as a parameter. FR-025 needs an explicit Rust
+return type and a bounded admitted-signature read before that scalar path can support it.
+The collection postcondition result path has its own supported lowering and is unaffected.
+
 AD-016 decides the frame subject: the `modifies`, `creates` and `deletes` sets of the obligation's
 checked `relation` and `model` node keys, each resolved to its `DeclarationKey` through the
 package's model correspondence. Frame counterexample replay is QSL's `replay_frame` (QSL FR-116),
@@ -66,7 +72,31 @@ the call.
 A frame harness is written over AD-016's frame subject. FR-025 accounts every frame obligation
 `unsupported`.
 
+### Q4: a scalar V2 postcondition result is a typed subject return (planned until IR-948 lands)
+
+The generated customer subject returns `bool` for a declared Boolean result and `i64` for a
+declared bounded Integer result whose inclusive domain fits signed `i64`; an operation without
+a declared result returns `()`. The result is never a symbolic parameter draw or a subject
+argument. After the call, the harness asserts an Integer result's admitted inclusive domain
+before the clause assertion and gives that same result to the clause oracle, widening it
+losslessly as `rt::Integer::from(i64)`. A Boolean return's Rust type enforces its domain,
+and the exact returned `bool` reaches the clause oracle unchanged.
+An unsupported, unavailable or out-of-i64 result domain produces a typed refusal and no scalar
+harness. The existing collection result path remains governed by its own supported ABI.
+
+### Q5: the admitted operation signature read has a fixed work provision (planned until IR-948 lands)
+
+CG resolves the QSpec FR-342 operation anchor's context and name, then calls IR
+`CheckedPackageV2::model_operations(context, 65_536)` for a complete effective signature.
+The fixed work limit is charged per read and is not taken from a caller or a proof bound.
+CG matches QSpec FR-341's `self`, optional `result` and declared parameter order against that
+signature before lowering. An ambiguous, unavailable, work-exhausted or mismatched read
+refuses the scalar item with a typed reason and no harness. A refusal from IR retains its
+code, context, work and limit; partial signatures are never used. IR-1289's scalar typed
+result-binder refusal stays in effect until this planned route is implemented.
+
 ## Consequences
 
 - FR-025 states the no-applicable-row refusal, planned Rational grouping/lossless witness contract
-  and the by-reference state argument as criteria.
+  and the by-reference state argument as criteria. Its planned scalar V2 result criteria state
+  the return mapping, fixed signature-read work provision and post-call result-domain assertion.
