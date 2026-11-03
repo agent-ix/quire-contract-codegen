@@ -128,8 +128,8 @@ fn initial(package: &str, snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>) -> Doc
     reference
 }
 
-fn authored_rows(reverse: bool) -> String {
-    let mut names: Vec<_> = (0..7).map(|index| format!("op{index}")).collect();
+fn authored_rows(row_count: usize, reverse: bool) -> String {
+    let mut names: Vec<_> = (0..row_count).map(|index| format!("op{index}")).collect();
     if reverse {
         names.reverse();
     }
@@ -139,7 +139,7 @@ fn authored_rows(reverse: bool) -> String {
         .collect()
 }
 
-fn authored_unit(reverse: bool) -> String {
+fn authored_unit(row_count: usize, reverse: bool) -> String {
     let mapping = (0..7)
         .map(|index| format!("flag{index} = self.flag{index};"))
         .collect::<Vec<_>>()
@@ -154,7 +154,7 @@ fn authored_unit(reverse: bool) -> String {
          object Abstract::Object from Concrete::Object {{ {mapping} }}\n\
          {}\
          }}\n",
-        authored_rows(reverse)
+        authored_rows(row_count, reverse)
     )
 }
 
@@ -162,8 +162,12 @@ type Expected = RefinementExpected<NodeKey, [String; 2]>;
 type Run = RefinementRun<NodeKey, [String; 2]>;
 
 fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
+    source_records_with_rows(7, reverse)
+}
+
+fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     let abstract_bytes = model(ABSTRACT, &[]);
-    let names: Vec<_> = (0..7).map(|index| format!("op{index}")).collect();
+    let names: Vec<_> = (0..row_count).map(|index| format!("op{index}")).collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
     let concrete_bytes = model(CONCRETE, &names);
     let mut packages = BTreeMap::new();
@@ -172,7 +176,7 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     let mut snapshots = BTreeMap::new();
     let abstract_initial = initial(ABSTRACT, &mut snapshots);
     let concrete_initial = initial(CONCRETE, &mut snapshots);
-    let source = authored_unit(reverse);
+    let source = authored_unit(row_count, reverse);
     let compiled = acquire_checked_closure(
         CompileUnit {
             source: SourceIdentity::new("agent-ix", "ir1120-refinement", "git", "fixture"),
@@ -223,8 +227,8 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     );
     let mut expected = Vec::new();
     let mut records = Vec::new();
-    for role in
-        std::iter::once(RefinementRole::Base).chain((0..7).map(|row| RefinementRole::Step { row }))
+    for role in std::iter::once(RefinementRole::Base)
+        .chain((0..row_count).map(|row| RefinementRole::Step { row }))
     {
         let kind = match role {
             RefinementRole::Base => RefinementQueryKind::Initial,
@@ -359,5 +363,21 @@ fn source_row_permutation_moves_refinement_query_bindings_with_named_rows() {
     assert_eq!(
         refinement_handoff(7, &reordered_expected, &reordered_records),
         Err(RefinementHandoffError::Association)
+    );
+}
+
+/// A source-authored refinement with no step rows still requires one Base record.
+#[trace("TC-059", "FR-045-AC-4")]
+#[test]
+fn source_refinement_with_zero_step_rows_has_only_base() {
+    let (expected, records) = source_records_with_rows(0, false);
+    assert_eq!(expected.len(), 1);
+    assert_eq!(records.len(), 1);
+    assert_eq!(expected[0].role, RefinementRole::Base);
+    assert_eq!(records[0].role(), RefinementRole::Base);
+    let bytes = refinement_handoff(0, &expected, &records).expect("Base-only handoff");
+    assert_eq!(
+        u64::from_le_bytes(bytes[..8].try_into().expect("record count")),
+        1
     );
 }
