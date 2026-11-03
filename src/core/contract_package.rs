@@ -359,6 +359,13 @@ impl<'a> PackageItems<'a> {
         self.package.wire().source_keys.get(*index)
     }
 
+    /// Compare two QSL keys through their owning admitted V2 frame.
+    pub(crate) fn same_source_node(&self, left: &CheckedNodeId, right: &CheckedNodeId) -> bool {
+        ContractSourceKeyV1::from_v2_request(self.source, left)
+            .zip(ContractSourceKeyV1::from_v2_request(self.source, right))
+            .is_some_and(|(left, right)| left == right)
+    }
+
     /// Resolve a V2 request into the represented output-graph frame.
     pub(crate) fn represented_node(&self, request: &CheckedNodeId) -> Option<&'a CheckedNodeId> {
         self.represented_nodes.get(request).copied()

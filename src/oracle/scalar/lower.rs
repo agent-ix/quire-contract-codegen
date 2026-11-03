@@ -1972,10 +1972,15 @@ pub(super) fn selected_scalar_key(
     else {
         return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
     };
-    if application.node_id != *node_id || application.role != CheckedOccurrenceRole::Expression {
+    if !items.same_source_node(&application.node_id, node_id)
+        || application.role != CheckedOccurrenceRole::Expression
+    {
         return None;
     }
     let admitted_node = items.accounted_node(node_id)?;
+    let PackageItem::Lowered { closure, .. } = items.at(request_index, node_id).ok()? else {
+        return None;
+    };
     let admitted_application = ContractOccurrenceKeyV1 {
         node_id: admitted_node.clone(),
         role: application.role.clone(),
@@ -1984,12 +1989,14 @@ pub(super) fn selected_scalar_key(
     #[cfg(test)]
     source_selection_work::source(true);
     package
-        .source_occurrences(admitted_node)?
+        .source_occurrences(&closure.root.node_id)?
         .iter()
         .find(|source| {
             #[cfg(test)]
             source_selection_work::occurrence(false);
-            source.role == application.role && source.ordinal == application.ordinal
+            source.node_id == *admitted_node
+                && source.role == application.role
+                && source.ordinal == application.ordinal
         })?;
     let admitted_conversion = if let Some(conversion) = conversion {
         if conversion.role != CheckedOccurrenceRole::Expression
@@ -1998,15 +2005,18 @@ pub(super) fn selected_scalar_key(
             return None;
         }
         let admitted_conversion_node = items.accounted_node(&conversion.node_id)?;
+        let represented_conversion_node = items.represented_node(&conversion.node_id)?;
         #[cfg(test)]
         source_selection_work::source(true);
         package
-            .source_occurrences(admitted_conversion_node)?
+            .source_occurrences(represented_conversion_node)?
             .iter()
             .find(|entry| {
                 #[cfg(test)]
                 source_selection_work::occurrence(true);
-                entry.role == conversion.role && entry.ordinal == conversion.ordinal
+                entry.node_id == *admitted_conversion_node
+                    && entry.role == conversion.role
+                    && entry.ordinal == conversion.ordinal
             })?;
         Some(ContractOccurrenceKeyV1 {
             node_id: admitted_conversion_node.clone(),
