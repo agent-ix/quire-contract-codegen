@@ -542,23 +542,6 @@ pub(super) fn render_collection_operation(
     operation::validate(request, operation, &lowered.field.function)?;
     let (spec, collection) = prepare_collection(request, lowered)?;
     let context = &operation.spec.identity;
-    if operation.spec.postcondition {
-        for sibling in &context.preconditions {
-            let present = request.items.iter().any(|item| {
-                matches!(item,
-                super::outcome::ObligationItem::V2Clause { package, clause, .. }
-                    if std::ptr::eq(*package, operation.package_instance) && *clause == sibling)
-            });
-            if !present {
-                return Err(UnsupportedObligation::CollectionClaimNotRendered {
-                    node_id: collection.function_id.clone(),
-                    reason: CollectionUnsupportedReason::MissingSiblingPrecondition {
-                        precondition: sibling.clone(),
-                    },
-                });
-            }
-        }
-    }
     let mut operation_spec = operation.spec.clone();
     operation_spec.subject_path = request.subject_path.to_owned();
     let spec = spec.into_collection_operation(operation_spec)?;

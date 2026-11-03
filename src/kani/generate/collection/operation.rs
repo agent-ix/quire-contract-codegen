@@ -18,8 +18,8 @@ use crate::kani::{
     },
 };
 use quire_contract_model::{
-    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedPackageV2, CheckedTerm,
-    LiteralKind, StateClauseKind,
+    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedTerm, LiteralKind,
+    StateClauseKind,
 };
 use std::collections::BTreeSet;
 
@@ -31,7 +31,6 @@ struct ConditionBindings<'a> {
 
 pub(super) struct LoweredOperation {
     pub(super) spec: CollectionOperationSpec,
-    pub(super) package_instance: *const CheckedPackageV2,
 }
 
 fn refused(reason: CollectionUnsupportedReason) -> CollectionDomainRefusal {
@@ -274,10 +273,7 @@ pub(super) fn lower(
             spec.identity.precondition_bodies.push(condition);
         }
     }
-    Ok(LoweredOperation {
-        spec,
-        package_instance: std::ptr::from_ref(graph.package),
-    })
+    Ok(LoweredOperation { spec })
 }
 
 pub(super) fn first_quantifier<'a>(
