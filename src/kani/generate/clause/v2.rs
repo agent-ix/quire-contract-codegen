@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 
 use crate::{
     core::ir::{
-        checked_term::application,
+        checked_term::{application, reference},
         clause::{read_clause, ClauseGraphView, ClauseTerm, MAX_CONDITION_TERMS},
     },
     kani::{
@@ -76,6 +76,14 @@ pub(in crate::kani::generate) fn lower(
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
+    if kind == ObligationKind::Postcondition {
+        if let Some(result_node) = result_binder(view, clause) {
+            return Err(UnsupportedObligation::V2ClauseResultNotRendered {
+                node_id: clause.clone(),
+                result_node,
+            });
+        }
+    }
     if let Some(operation_identity) = unsupported_checked_clause_operator(view, clause) {
         return Err(UnsupportedObligation::V2ClauseOperatorNotSupported {
             node_id: clause.clone(),
@@ -189,6 +197,30 @@ pub(in crate::kani::generate) fn lower(
         }
         .to_owned(),
     })
+}
+
+fn result_binder(view: &ClauseGraphView<'_>, clause: &CheckedNodeId) -> Option<CheckedNodeId> {
+    let [parameters, _, _] = application(
+        view.package().term(clause)?,
+        ApplicationOperator::StateClause,
+        "quire.op.state.clause",
+    )?
+    else {
+        return None;
+    };
+    let CheckedTerm::Aggregate { members } = parameters else {
+        return None;
+    };
+    // The admitted clause binds self first, then its optional result, then operation parameters.
+    let result_node = reference(members.get(1)?)?;
+    (view
+        .package()
+        .parameter_declaration(result_node)
+        .ok()?
+        .name
+        .as_ref()
+        == "result")
+        .then(|| result_node.clone())
 }
 
 fn unsupported_checked_clause_operator(
