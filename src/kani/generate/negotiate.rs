@@ -1536,7 +1536,7 @@ mod tests {
             &outcome.records()[0].disposition,
             ObligationDisposition::Unsupported { reason: UnsupportedObligation::V2ClauseMissingSiblingPrecondition { precondition, .. } }
                 if *precondition == first
-        ));
+        ), "{:?}", outcome.records()[0].disposition);
         assert!(
             matches!(outcome, KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.is_empty())
         );
