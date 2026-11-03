@@ -253,7 +253,10 @@ pub(crate) fn scalar_source_fixture(
         ],
     };
     let source = "pub fn oracle(left: i64, right: i64, meter: &mut ()) -> i64 { let _ = meter; left + right }\n";
-    let rust = Artifact::new("src/generated/host_scalar.rs", source);
+    let harness_source = format!(
+        "{source}pub fn check() {{ let mut meter = (); assert_eq!(oracle(4, 1, &mut meter), 5); }}\n"
+    );
+    let rust = Artifact::new("src/generated/host_scalar.rs", harness_source);
     let record = Artifact::new(
         "kani-obligations/host_scalar.json",
         serde_json::json!({
