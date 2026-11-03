@@ -456,7 +456,7 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
         .collect::<Vec<_>>();
     assert_eq!(
         inputs,
-        [("parameter_other", 0, 1000), ("parameter_offset", -5, 10)]
+        [("parameter_offset", -5, 10), ("parameter_other", 0, 1000)]
     );
 
     let outcome = negotiate(&[ObligationItem::V2Clause {
@@ -495,7 +495,7 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
     assert!(harness
         .rust
         .contents
-        .contains("oracle_clause(&parameter_other, &parameter_offset, &mut meter)"));
+        .contains("oracle_clause(&parameter_offset, &parameter_other, &mut meter)"));
     assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
     assert!(harness.rust.contents.contains(&oracle.source));
 }
