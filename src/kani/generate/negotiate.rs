@@ -362,6 +362,7 @@ fn negotiate_integer_policy(
         Vec::new();
     let mut v2_clause_harnesses = Vec::new();
     let mut constrained_harnesses = Vec::new();
+    let mut scalar_source_authorities = BTreeMap::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness(request)
@@ -377,7 +378,16 @@ fn negotiate_integer_policy(
                     }
                 }
                 Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
-                    Ok(harness) => {
+                    Ok(mut harness) => {
+                        if let ObligationItem::ScalarClaim { source, .. } = request.items[index] {
+                            let authority = scalar_source_authorities
+                                .entry(std::ptr::from_ref(source))
+                                .or_insert_with(|| std::sync::Arc::new(source.clone()));
+                            harness.bind_scalar_replay_body(
+                                lowered.replay_body(source),
+                                std::sync::Arc::clone(authority),
+                            );
+                        }
                         let symbol = harness.identity.harness_symbol.clone();
                         scalar_harnesses.push(harness);
                         ObligationDisposition::Supported {

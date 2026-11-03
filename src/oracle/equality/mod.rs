@@ -69,6 +69,9 @@
 use crate::core::artifact::{
     Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES, MAX_GENERATED_SOURCE_BYTES,
 };
+use crate::core::composite_authority::{
+    CompositeOriginRefusal, CompositeReplayAuthority, CompositeReplayEntry, CompositeReplayOrigin,
+};
 use crate::core::contract_package::{
     ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
@@ -715,7 +718,7 @@ pub struct CompositeEqualityClaim {
 
 /// Generation output: the crate files and the claim map they are described
 /// by.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CompositeEqualityOracles {
     /// `Cargo.toml`, generated Rust, the original checked-package bytes when supplied,
     /// and `claim-map.json`, in that order.
@@ -727,6 +730,34 @@ pub struct CompositeEqualityOracles {
     /// generator records are `QuireSpecLanguage120`, `QuireSpecLanguage121`,
     /// `QuireContractRuntime34` and `OperationIdentityNotConsumed`.
     pub claim_map: ClaimMap<CompositeEqualityClaim>,
+    replay_origin: Option<std::sync::Arc<CompositeReplayOrigin>>,
+    replay_claim_map: Option<std::sync::Arc<ClaimMap<CompositeEqualityClaim>>>,
+}
+
+// Whole-call retained authority does not change the public generation result's equality.
+impl PartialEq for CompositeEqualityOracles {
+    fn eq(&self, other: &Self) -> bool {
+        self.artifacts == other.artifacts && self.claim_map == other.claim_map
+    }
+}
+impl Eq for CompositeEqualityOracles {}
+
+impl crate::core::composite_authority::sealed::Sealed for CompositeEqualityOracles {}
+impl CompositeReplayAuthority for CompositeEqualityOracles {
+    fn replay_origin(
+        &self,
+    ) -> Result<&std::sync::Arc<CompositeReplayOrigin>, CompositeOriginRefusal> {
+        let origin = self
+            .replay_origin
+            .as_ref()
+            .ok_or(CompositeOriginRefusal::Unavailable)?;
+        if self.artifacts != *origin.artifacts
+            || self.replay_claim_map.as_deref() != Some(&self.claim_map)
+        {
+            return Err(CompositeOriginRefusal::Changed);
+        }
+        Ok(origin)
+    }
 }
 
 /// Generate composite equality oracles for `items` from one admitted FR-330 package.
@@ -1144,9 +1175,39 @@ pub fn generate_composite_equality_oracles(
             limit: MAX_BUNDLE_BYTES,
         });
     }
+    let replay_origin = original.map(|original| {
+        std::sync::Arc::new(CompositeReplayOrigin {
+            original: std::sync::Arc::new(original.clone()),
+            artifacts: std::sync::Arc::new(artifacts.clone()),
+            entries: claim_map
+                .items
+                .iter()
+                .filter_map(|claim| {
+                    let ClaimDisposition::Generated(item) = &claim.result else {
+                        return None;
+                    };
+                    (item.descriptor.left_conversion_target.is_none()
+                        && item.descriptor.right_conversion_target.is_none())
+                    .then(|| CompositeReplayEntry {
+                        node: claim.node_id.clone(),
+                        equal: item.descriptor.operator == EqualityOperatorKind::Equal,
+                        left: item.descriptor.left_source_type.clone(),
+                        right: item.descriptor.right_source_type.clone(),
+                        oracle: item.oracle_symbol.clone(),
+                        environment: item.environment_symbol.clone(),
+                    })
+                })
+                .collect(),
+        })
+    });
+    let replay_claim_map = replay_origin
+        .as_ref()
+        .map(|_| std::sync::Arc::new(claim_map.clone()));
     Ok(CompositeEqualityOracles {
         artifacts,
         claim_map,
+        replay_claim_map,
+        replay_origin,
     })
 }
 

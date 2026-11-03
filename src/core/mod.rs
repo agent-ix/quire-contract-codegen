@@ -34,3 +34,6 @@ pub(crate) mod source_map;
 // Target-owned scratch allocation shared by subsystem unit tests.
 #[cfg(test)]
 pub(crate) mod test_support;
+
+pub(crate) mod composite_authority;
+pub(crate) mod scalar_authority;
