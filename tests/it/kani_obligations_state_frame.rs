@@ -493,6 +493,50 @@ fn qsl_unused_result_binder_still_checks_produced_domain() {
         .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
 }
 
+/// Signature order controls the subject call while logical draws ascend by parameter name.
+#[trace("FR-025-AC-1", "FR-025-AC-11", "FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_result_postcondition_keeps_declared_parameter_call_order() {
+    let (package, clause) =
+        Twin::with_two_parameter_result_postcondition().emitted_package("ResultWithParameters");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("ordered result postcondition emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one ordered result postcondition harness");
+    };
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|argument| argument.identifier.as_str())
+            .collect::<Vec<_>>(),
+        ["parameter_offset_current", "parameter_other_current"]
+    );
+    assert!(harness.rust.contents.contains(&format!(
+        "{REQUEST_SUBJECT}(parameter_other_current, parameter_offset_current)"
+    )));
+    assert_eq!(harness.rust.contents.matches("kani::any()").count(), 2);
+    assert!(harness
+        .rust
+        .contents
+        .contains("rt::Integer::from(subject_result)"));
+}
+
 /// The emitted Boolean result oracle reads the exact returned bit for both values.
 #[trace("FR-025-AC-12", "FR-025-AC-13", "TC-036")]
 #[test]

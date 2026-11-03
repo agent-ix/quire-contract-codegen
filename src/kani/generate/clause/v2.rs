@@ -240,16 +240,17 @@ fn result_binder(view: &ClauseGraphView<'_>, clause: &CheckedNodeId) -> Option<C
     let CheckedTerm::Aggregate { members } = parameters else {
         return None;
     };
-    // The admitted clause binds self first, then its optional result, then operation parameters.
-    let result_node = reference(members.get(1)?)?;
-    (view
-        .package()
-        .parameter_declaration(result_node)
-        .ok()?
-        .name
-        .as_ref()
-        == "result")
-        .then(|| result_node.clone())
+    members.iter().skip(1).find_map(|member| {
+        let result_node = reference(member)?;
+        (view
+            .package()
+            .parameter_declaration(result_node)
+            .ok()?
+            .name
+            .as_ref()
+            == "result")
+            .then(|| result_node.clone())
+    })
 }
 
 fn machine_scalar(member: &CheckedMemberType) -> Option<MachineScalar> {
@@ -750,9 +751,10 @@ fn render_result_postcondition(
     };
     let mut body = Vec::new();
     let mut arguments = Vec::new();
-    let mut subject_arguments = Vec::new();
     let mut oracle_bindings = BTreeSet::new();
-    for parameter in &signature.parameters {
+    let mut drawn_parameters = signature.parameters.iter().collect::<Vec<_>>();
+    drawn_parameters.sort_by_key(|parameter| &parameter.name);
+    for parameter in drawn_parameters {
         let oracle_name = format!("parameter_{}", parameter.name);
         let symbolic = format!("{oracle_name}_current");
         if syn::parse_str::<syn::Ident>(&symbolic).is_err() {
@@ -795,9 +797,13 @@ fn render_result_postcondition(
             minimum: i64::try_from(domain.0).map_err(|_| refusal())?,
             maximum: i64::try_from(domain.1).map_err(|_| refusal())?,
         });
-        subject_arguments.push(symbolic);
         oracle_bindings.insert(oracle_name);
     }
+    let subject_arguments = signature
+        .parameters
+        .iter()
+        .map(|parameter| format!("parameter_{}_current", parameter.name))
+        .collect::<Vec<_>>();
     let (result_type, result_domain) = match signature.result {
         MachineScalar::Boolean => (LetType::Boolean, None),
         MachineScalar::Integer { minimum, maximum } => (LetType::I64, Some((minimum, maximum))),

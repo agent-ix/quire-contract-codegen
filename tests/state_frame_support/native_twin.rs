@@ -703,6 +703,41 @@ impl Twin {
         twin
     }
 
+    /// A result postcondition whose two declared parameters have a different draw order.
+    pub fn with_two_parameter_result_postcondition() -> Self {
+        let mut twin = Self::with_two_bounded_parameter_precondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["returns"] = json!({
+            "typeRef": range_type("balance"),
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "nullable": false,
+        });
+        twin.domain = domain.to_string().into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "pre TwoParameters using v on Bank::Account::deposit { other < 1000 and offset > 0 }",
+            "post ResultWithParameters using v on Bank::Account::deposit { result >= other }",
+        );
+        assert_ne!(
+            changed, source,
+            "the result postcondition replaced the precondition"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// QSL postcondition with a bounded result and parameter, but no result read.
     pub fn with_unused_bounded_result_postcondition() -> Self {
         let mut twin = Self::with_bounded_other_condition();
