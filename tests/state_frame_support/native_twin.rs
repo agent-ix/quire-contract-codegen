@@ -531,6 +531,48 @@ impl Twin {
         twin
     }
 
+    /// The same QSL precondition with an unbounded second operation parameter.
+    pub fn with_unbounded_second_parameter_precondition() -> Self {
+        let mut twin = Self::with_two_bounded_parameter_precondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["params"][1]["typeRef"] = json!("ix://quire/native/Integer");
+        twin.domain = domain.to_string().into_bytes();
+        twin
+    }
+
+    /// The second parameter keeps a finite IR range that exceeds the `i64` harness ABI.
+    pub fn with_wide_second_parameter_precondition() -> Self {
+        let mut twin = Self::with_two_bounded_parameter_precondition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let offset = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("offset value type");
+        let maximum = offset["constraints"]
+            .as_array_mut()
+            .expect("constraints")
+            .iter_mut()
+            .find(|constraint| constraint["keyword"] == "max")
+            .expect("maximum bound");
+        maximum["operands"]["value"] = json!("9223372036854775808");
+        twin.domain = domain.to_string().into_bytes();
+        twin
+    }
+
     /// Source-authored condition over the existing `Int[0, 1000]` parameter.
     pub fn with_bounded_amount_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();

@@ -504,6 +504,38 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// Adding a second parameter does not turn an unbounded or unrepresentable IR domain into
+/// a caller-supplied bound or an emitted proof claim.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_two_parameter_precondition_refuses_unrenderable_domains() {
+    for twin in [
+        Twin::with_unbounded_second_parameter_precondition(),
+        Twin::with_wide_second_parameter_precondition(),
+    ] {
+        let (package, clause) = twin.emitted_package("TwoParameters");
+        let outcome = negotiate(&[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: None,
+        }]);
+        assert!(matches!(
+            &outcome.records()[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+            } if node_id == &clause
+        ));
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("a well-formed unsupported item is accounted individually");
+        };
+        assert!(v2_clause_harnesses.is_empty());
+    }
+}
+
 /// The public V2 request embeds the clause-identified FR-014 source for each supported
 /// connective and comparison, keeping the QSL clause node as the oracle's identity.
 #[trace("FR-015-AC-40", "TC-025")]
