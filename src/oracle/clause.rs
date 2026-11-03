@@ -23,7 +23,7 @@ use super::scalar::{
 /// A state field or bounded operation value supplied to one generated clause oracle.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ClauseOracleInput {
-    /// The generated parameter name.
+    /// The generated input name.
     pub name: String,
     /// Admitted declaring field and name when this input reads model state.
     #[serde(skip_serializing_if = "Option::is_none")]

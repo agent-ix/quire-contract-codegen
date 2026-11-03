@@ -462,7 +462,7 @@ pub(in crate::kani::generate) fn render_clause(
                 } else {
                     "matches!(outcome, Ok(rt::Outcome::Completed(true)))"
                 })?,
-                message: "the V2 precondition is satisfiable within admitted parameter bounds"
+                message: "the V2 precondition is satisfiable within admitted input bounds"
                     .to_owned(),
             },
         )
