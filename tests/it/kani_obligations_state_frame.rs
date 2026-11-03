@@ -529,14 +529,14 @@ fn qsl_boolean_result_uses_the_same_subject_value_for_both_bits() {
     assert!(harness
         .rust
         .contents
-        .contains("oracle_clause(&result_result)"));
+        .contains("oracle_clause(result_result)"));
     assert!(harness.rust.contents.contains(&oracle.source));
 
     let directory = super::scratch_crate::TemporaryDirectory::new("ir948-boolean-result-oracle");
     fs::write(
         directory.path.join("src/main.rs"),
         format!(
-            "mod emitted {{\n{}\npub fn check() {{ for returned in [false, true] {{ let actual = oracle_clause(&returned); assert_eq!(actual, returned); let opposite = oracle_clause(&!returned); assert_ne!(opposite, returned); }} }}\n}}\nfn main() {{ emitted::check(); }}\n",
+            "mod emitted {{\n{}\npub fn check() {{ for returned in [false, true] {{ let actual = oracle_clause(returned); assert_eq!(actual, returned); let opposite = oracle_clause(!returned); assert_ne!(opposite, returned); }} }}\n}}\nfn main() {{ emitted::check(); }}\n",
             oracle.source
         ),
     )

@@ -830,7 +830,13 @@ fn render_result_postcondition(
         .descriptor
         .inputs
         .iter()
-        .map(|input| Argument::Borrow(input.name.clone()))
+        .map(|input| {
+            if input.boolean {
+                Argument::Value(input.name.clone())
+            } else {
+                Argument::Borrow(input.name.clone())
+            }
+        })
         .collect::<Vec<_>>();
     if !direct_boolean {
         oracle_arguments.push(Argument::BorrowMut("meter".to_owned()));
