@@ -4,19 +4,22 @@
 //! Admitted scalar source-selection work controls.
 
 use super::super::generate_contract_scalar_oracles;
+use super::selected_scalar_key;
 use super::source_selection_work;
 use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
+    PackageItems,
 };
 use crate::oracle::claim::ClaimDisposition;
+use ix_trace_rs::trace;
 use qsl_replay::{
     compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm,
-    ContractDependencies, ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1,
+    CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CheckedTerm, ContractDependencies, ContractOccurrenceKeyV1, ContractPackageReadResult,
+    ContractPackageV1, ContractPackageWireV1,
 };
 
 fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
@@ -176,6 +179,78 @@ fn admitted_case(
         other => panic!("genuine boundary family must admit: {other:?}"),
     };
     (checked, *admitted, positions)
+}
+
+/// The selected occurrence survives when lowering omits an independent sibling.
+#[trace("FR-039-AC-2", "TC-053")]
+#[test]
+fn ir_1299_selected_scalar_key_uses_the_admitted_occurrence_frame() {
+    let (checked, _, all_positions) = admitted_case(3, 0);
+    let unsupported = checked
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.declaration.as_ref().is_some_and(|declaration| {
+                declaration.qualified_name.len() == 1
+                    && declaration.qualified_name[0].as_ref() == "f1"
+            })
+        })
+        .expect("QSL middle function")
+        .node_id
+        .clone();
+    let positions = vec![
+        all_positions[0].clone(),
+        all_positions[1].clone(),
+        ContractRequestPosition::Excluded {
+            node_id: unsupported,
+        },
+        all_positions[4].clone(),
+        all_positions[5].clone(),
+    ];
+    let roots = positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let mut profile = routed_contract_lowering_profile();
+    profile.supported_tags.remove(&CheckedNodeTag::Function);
+    let lowered = checked.lower(&roots, &profile);
+    let admitted = match ContractPackageWireV1::read(
+        lowered
+            .package
+            .canonical_bytes()
+            .expect("lowered package bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("selected siblings admit: {other:?}"),
+    };
+    let items = PackageItems::new(&checked, &admitted, &positions)
+        .expect("selected request keys correspond to admitted accounting");
+    for request_index in [0, 2] {
+        let node_id = items.driver_node(request_index).expect("selected driver");
+        let selection = items.result_selection(request_index).expect("own result");
+        assert_ne!(
+            items.accounted_node(node_id),
+            items.represented_node(node_id),
+            "the selected sibling must cross distinct admitted IR frames"
+        );
+        assert!(
+            selected_scalar_key(&admitted, &items, request_index, node_id, selection).is_some(),
+            "QSL-selected application remains valid after independent sibling omission: {node_id:?}"
+        );
+    }
+    let (generated, indexes) =
+        generate_contract_scalar_oracles(&checked, &admitted, &positions, &[0, 2])
+            .expect("two selected QSL scalar siblings generate");
+    assert_eq!(indexes.len(), 2);
+    for index in indexes {
+        assert!(matches!(
+            &generated.claim_map.items[index].result,
+            ClaimDisposition::Generated(_)
+        ));
+    }
 }
 
 /// Provenance: IR-988 AC1-3; SR-16303 FND-003.
