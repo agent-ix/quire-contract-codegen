@@ -435,6 +435,11 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         .contents
         .find("subject_result >= 0")
         .expect("domain assertion");
+    let oracle_call = harness
+        .rust
+        .contents
+        .find("let outcome = oracle_clause(")
+        .expect("oracle call");
     let clause = harness
         .rust
         .contents
@@ -445,7 +450,7 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
         .contents
         .find("kani::cover!")
         .expect("final cover");
-    assert!(domain < clause && clause < cover);
+    assert!(domain < oracle_call && oracle_call < clause && clause < cover);
 }
 
 /// An unused result is still produced and checked, while the parameter is the sole draw.

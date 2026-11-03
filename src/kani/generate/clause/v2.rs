@@ -849,6 +849,14 @@ fn render_result_postcondition(
             true,
         ));
     }
+    if let Some((minimum, maximum)) = result_domain {
+        body.push(Statement::ProducedResultDomainAssert {
+            condition: expression(format!(
+                "subject_result >= {minimum} && subject_result <= {maximum}"
+            ))?,
+            message: "the produced V2 result lies in its admitted domain".to_owned(),
+        });
+    }
     let mut oracle_arguments = lowered
         .oracle
         .descriptor
@@ -870,14 +878,6 @@ fn render_result_postcondition(
         callee: "oracle_clause".to_owned(),
         args: oracle_arguments,
     });
-    if let Some((minimum, maximum)) = result_domain {
-        body.push(Statement::Assert {
-            condition: expression(format!(
-                "subject_result >= {minimum} && subject_result <= {maximum}"
-            ))?,
-            message: "the produced V2 result lies in its admitted domain".to_owned(),
-        });
-    }
     body.push(Statement::Assert {
         condition: expression(if direct_boolean {
             "outcome"

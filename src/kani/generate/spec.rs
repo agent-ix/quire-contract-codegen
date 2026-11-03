@@ -230,6 +230,11 @@ pub(super) enum Statement {
         condition: ExprText,
         message: String,
     },
+    /// The produced result's admitted domain, checked before invoking its clause oracle.
+    ProducedResultDomainAssert {
+        condition: ExprText,
+        message: String,
+    },
     /// A post-call probe executes only on the checked short-circuit path.
     ConditionalProbe {
         condition: ExprText,
@@ -534,6 +539,12 @@ impl HarnessSpec {
                 Statement::SubjectImplicationCall => {}
                 Statement::Assert { message: text, .. } => {
                     if !called {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                    message(text)?;
+                }
+                Statement::ProducedResultDomainAssert { message: text, .. } => {
+                    if called || !names.contains("subject_result") {
                         return Err(HarnessSpecError::AssertBeforeCall);
                     }
                     message(text)?;

@@ -245,6 +245,10 @@ fn render_statements(
                 &mut source,
                 &format!("assert!({}, \"{message}\");", condition.as_str()),
             ),
+            Statement::ProducedResultDomainAssert { condition, message } => line(
+                &mut source,
+                &format!("assert!({}, \"{message}\");", condition.as_str()),
+            ),
             Statement::ConditionalProbe { condition, body } => {
                 line(&mut source, &format!("if {} {{", condition.as_str()));
                 for item in body {
