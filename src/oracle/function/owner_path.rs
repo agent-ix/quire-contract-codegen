@@ -280,6 +280,7 @@ fn package_bytes(package: &CheckedPackageV2) -> Result<Vec<u8>, CheckedFunctionE
         CheckedPackageSidecarsRef {
             checked_term_data: package.checked_term_data(),
             temporal_bindings: package.temporal_bindings(),
+            temporal_clause_names: package.temporal_clause_names(),
             schedulability_claims: package.schedulability_claim_rows(),
             operation_effects: package.operation_effect_rows(),
         },

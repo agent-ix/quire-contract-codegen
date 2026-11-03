@@ -618,6 +618,7 @@ fn source_context_comparison_distinguishes_checked_term_sidecar_presence() {
         CheckedPackageSidecarsRef {
             checked_term_data: None,
             temporal_bindings: original.temporal_bindings(),
+            temporal_clause_names: original.temporal_clause_names(),
             schedulability_claims: original.schedulability_claim_rows(),
             operation_effects: original.operation_effect_rows(),
         },
