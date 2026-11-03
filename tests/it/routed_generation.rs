@@ -3,6 +3,8 @@
 //!
 //! The fixtures are TC-024/TC-025's: `kani_obligations::scalar_package` and its claim map.
 
+use std::sync::OnceLock;
+
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
     generate_exact_scalar_oracles, generate_routed as generate_routed_impl,
@@ -230,7 +232,14 @@ fn admitted_routing_input_with_limits<'a>(
     }
 }
 
-fn fixture() -> Fixture {
+/// All routed tests read this same admitted corpus and scalar baseline without mutation.
+fn fixture() -> &'static Fixture {
+    static FIXTURE: OnceLock<Fixture> = OnceLock::new();
+    FIXTURE.get_or_init(build_fixture)
+}
+
+#[ix_trace_rs::string_edge]
+fn build_fixture() -> Fixture {
     let (_, baseline, baseline_ids) = scalar_package();
     let generated = baseline
         .items
@@ -730,10 +739,10 @@ fn generate_step_one(fixture: &Fixture, routed: &[RoutedGenerationItem]) -> Rout
 #[test]
 fn tc_033_routed_kani_items_equal_fr015_output_keyed_by_request_index() {
     let fixture = fixture();
-    let generation = generate_step_one(&fixture, &step_one_routing(&fixture));
+    let generation = generate_step_one(fixture, &step_one_routing(fixture));
     // The routed arm's own claim map: generated oracle names count within one generation run.
     let (records, harnesses) = fr015(
-        &fixture,
+        fixture,
         generation.claim_map.as_ref().expect("a Kani group ran"),
         &[
             &fixture.rendered[1],
@@ -853,7 +862,7 @@ fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
 #[test]
 fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
     let fixture = fixture();
-    let routed = step_one_routing(&fixture);
+    let routed = step_one_routing(fixture);
     let input = admitted_routing_input(&fixture.package, &routed);
     assert_eq!(
         generate_routed(
@@ -892,7 +901,7 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
         route(6, &fixture.rendered[0]),
         route(20, &fixture.rendered[1]),
     ];
-    let generation = generate_step_one(&fixture, &routed);
+    let generation = generate_step_one(fixture, &routed);
     assert_eq!(generation.rejected, [BackendKind::Kani]);
     // The rejected group retains the package-derived oracle crate and claim map.
     assert_eq!(
@@ -971,7 +980,7 @@ fn tc_033_an_empty_routed_set_returns_an_empty_result() {
 #[test]
 fn tc_033_output_is_deterministic_and_independent_of_the_request_index() {
     let fixture = fixture();
-    let routed = step_one_routing(&fixture);
+    let routed = step_one_routing(fixture);
     let input = admitted_routing_input(&fixture.package, &routed);
     let contexts = kani_context("crate::subject", 1);
     let generate = |items: &[RoutedGenerationItem]| {
