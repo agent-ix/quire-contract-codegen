@@ -241,32 +241,6 @@ impl Twin {
         twin
     }
 
-    pub fn with_bounded_result_postcondition() -> Self {
-        let mut twin = Self::with_deposit_declaration(false, true);
-        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
-        let account = domain["types"]
-            .as_array_mut()
-            .expect("types")
-            .iter_mut()
-            .find(|ty| ty["identity"] == account_type())
-            .expect("account type");
-        let deposit = account["operations"]
-            .as_array_mut()
-            .expect("operations")
-            .iter_mut()
-            .find(|operation| operation["name"] == "deposit")
-            .expect("deposit operation");
-        deposit["returns"]["typeRef"] = json!(range_type("balance"));
-        twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&[CLAUSES[0]], 0)
-            .replace(
-                "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
-                "post DepositResult using v on Bank::Account::deposit { result >= 0 }",
-            )
-            .into_bytes();
-        twin
-    }
-
     pub fn with_bounded_other_precondition() -> Self {
         let mut twin = Self::with_bounded_other_condition();
         let source = String::from_utf8(twin.unit).expect("native unit");
