@@ -87,14 +87,13 @@ pub(super) fn stage_composite_agreement_case<'a>(
     let expected = source
         .lines()
         .zip(source.lines().skip(1))
-        .filter_map(|(attribute, next)| {
-            (attribute.trim() == "#[test]").then(|| {
-                next.trim()
-                    .strip_prefix("fn ")
-                    .and_then(|signature| signature.split_once('('))
-                    .map(|(name, _)| name.to_owned())
-                    .expect("composite test name follows #[test]")
-            })
+        .filter(|(attribute, _)| attribute.trim() == "#[test]")
+        .map(|(_, next)| {
+            next.trim()
+                .strip_prefix("fn ")
+                .and_then(|signature| signature.split_once('('))
+                .map(|(name, _)| name.to_owned())
+                .expect("composite test name follows #[test]")
         })
         .collect::<Vec<_>>();
     assert!(!expected.is_empty(), "{label}: {cases} declares no test");
