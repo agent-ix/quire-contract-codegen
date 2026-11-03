@@ -612,6 +612,50 @@ fn qsl_result_boolean_uses_the_same_subject_value_for_both_bits() {
     );
 }
 
+/// Boolean parameters are drawn, then passed by value to both the subject and clause oracle.
+#[trace("FR-025-AC-11", "FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_result_boolean_parameter_preserves_value_binding() {
+    let (package, clause) =
+        Twin::with_boolean_result_parameter_postcondition().emitted_package("DepositResult");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    assert!(matches!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("Boolean parameter and result emit");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one Boolean parameter and result harness");
+    };
+    let [parameter] = harness.identity.arguments.as_slice() else {
+        panic!("only the Boolean parameter is drawn");
+    };
+    assert_eq!(parameter.identifier, "parameter_other_current");
+    assert_eq!((parameter.minimum, parameter.maximum), (0, 1));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let parameter_other_current: bool = kani::any()"));
+    assert!(harness
+        .rust
+        .contents
+        .contains(&format!("{REQUEST_SUBJECT}(parameter_other_current)")));
+    assert!(harness
+        .rust
+        .contents
+        .contains("oracle_clause(parameter_other, result_result"));
+}
+
 /// An unbounded selected result is refused before any scalar harness is exposed.
 #[trace("FR-025-AC-12", "TC-036")]
 #[test]
