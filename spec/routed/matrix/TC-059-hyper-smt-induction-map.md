@@ -15,8 +15,10 @@ typed non-success over QSL-owned canonical HP-2 queries. QSL owns the query
 encoder, method outcome and terminal settlement; this test does not build a
 second encoder or claim CG execution alone proves a hyperproperty.
 Also verify CG's typed refinement Base and Step run-record handoff to the
-QSL FR-314 certificate adapter. The refinement procedures are planned and
-do not claim coverage by the existing HP-2 pair tests.
+QSL FR-314 certificate adapter. The refinement procedures are partial:
+synthetic handoff, source-authored seven-row permutation and Base-only zero-step
+controls exist, while the production FR-315 driver, FR-315 refusal control and
+live proof readback through QSL FR-314's public adapter (IR-1287) remain open.
 
 ## Test Procedure
 
