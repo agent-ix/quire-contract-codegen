@@ -472,7 +472,7 @@ fn present_unsupported_sibling_refuses_collection_postcondition() {
                 reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedSiblingPrecondition { precondition },
                 ..
             }
-        } if precondition == *pre
+        } if precondition == pre
     )));
     assert!(v2_clause_harnesses
         .iter()
