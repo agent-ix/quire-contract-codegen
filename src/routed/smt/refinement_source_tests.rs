@@ -219,7 +219,7 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     };
     let request = RefinementQueryRequest::new(
         handle,
-        refinement,
+        refinement.clone(),
         subject(CONCRETE, concrete_initial),
         subject(ABSTRACT, abstract_initial),
     );
@@ -238,7 +238,7 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
         let execution = run_solver_query(
             QuerySelection {
                 product: (),
-                item: refinement,
+                item: refinement.clone(),
                 instance: (),
                 depth: NonZeroU64::MIN,
                 kind: role,
@@ -267,7 +267,7 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
         let attempt = execution.query().association.attempt();
         let subjects = [CONCRETE.to_owned(), ABSTRACT.to_owned()];
         expected.push(Expected {
-            item: refinement,
+            item: refinement.clone(),
             subjects: subjects.clone(),
             role,
             attempt,
