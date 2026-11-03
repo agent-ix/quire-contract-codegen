@@ -78,3 +78,12 @@ bindings: []
 | FND-003 | still-open: replace "complete SMT-LIB expressions" with parenthesized commands | Spec wording only; no code change. |
 | FND-004 | still-open: update both lines to Partial | Spec wording only. |
 | FND-005 | still-open: name the owning ticket in Status | The lead should confirm the ticket in Linear; this reviewer did not read it. |
+
+### Current-head outcomes (92262c6b)
+
+| Finding | Outcome | Evidence |
+| --- | --- | --- |
+| FND-002 | fixed for the stated partial slice | FR-045 Status and `spec/routed/matrix/tests.md:34,66` name the delivered synthetic controls and keep the production FR-315 driver, encoding refusal, and live QSL readback open. The current-head spec review passes this scope (IR-1120 comment `f7da0175`). |
+| FND-003 | fixed | FR-045:124-130 now requires parenthesized SMT-LIB commands, matching the extractor. |
+| FND-004 | fixed | TC-059's description and `spec/spec.md:96` say Partial, consistent with the matrix. |
+| FND-005 | fixed for blocker tracking; readback remains open | FR-045 Status names IR-1287 as the public QSL FR-314 adapter dependency and keeps AC-5 and TC-059 step 6 partial. |

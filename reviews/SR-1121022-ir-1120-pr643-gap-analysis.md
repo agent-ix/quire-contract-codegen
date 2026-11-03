@@ -94,3 +94,13 @@ bindings: []
 | FND-003 | still-open: record the missing production driver in FR-045 Status or add it in a tracked follow-up | Lead decides whether it belongs in this slice. A partial merge is acceptable only if Status says so (SR-1121024 FND-002). |
 | FND-004 | still-open: add the recompiled zero-step case and the FR-315 refusal path, or keep steps 5 and 8 listed as open | Cases listed in the finding. |
 | FND-005 | still-open: supersede SR-1121019's dispositions with this artifact | No change to the PR branch was made by this review. |
+
+### Current-head outcomes (92262c6b)
+
+| Finding | Outcome | Evidence |
+| --- | --- | --- |
+| FND-001 | fixed for the source-authored seven-row control | `src/routed/smt/refinement_source_tests.rs:285-319` checks distinct Step queries and all seven named-row movements; `:329-366` checks row and byte association refusals. Current-head gap review passes AC-4 in the stated partial slice (IR-1120 comment `869b5b9a`). |
+| FND-002 | open: AC-5 and TC-059 step 6 remain partial | The current-head gap review gives no live FR-314 readback credit; QSL's public adapter remains IR-1287. No historical `ProofStepInvalid` or `Unverifiable` observation is treated as a current reader verdict. |
+| FND-003 | status fixed; production driver remains open | FR-045 Status names the missing production FR-315 query driver; the current-head gap review explicitly excludes it from delivered scope. |
+| FND-004 | zero-step and direct non-proof controls fixed; FR-315 refusal remains open | `src/routed/smt/refinement_source_tests.rs:370-382` recompiles a Base-only source refinement. `src/routed/smt/refinement.rs:447-680` covers direct non-proof results. FR-045 Status and TC-059 keep the FR-315 encoding-refusal control open. |
+| FND-005 | superseded for current-head assessment | This current-head table replaces the historical disposition in SR-1121019 for evaluating #643. SR-1121019's original evidence remains a record of its earlier head. |

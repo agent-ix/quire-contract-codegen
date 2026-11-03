@@ -80,3 +80,9 @@ bindings: []
 | --- | --- | --- |
 | FND-001 | fixed | `valid_solver_tail` accepts a whitespace-delimited `success` (src/routed/smt/mod.rs:326-330) and the proof test asserts `parse_solver_status(b"unsat\nsuccess\n") == Unsat`. `captured_alethe_proof` still refuses that tail, so no proof is taken from it. |
 | FND-002 | still-open: give the seven operations distinct encoded behavior (for example, a different frame per operation), assert pairwise-distinct Step queries, and assert `reordered_sources[r] == 6 - first_sources[r]` for every row. |  Static derivation from `qsl-eval/src/smt/relation.rs:471-503,617-633` and `qsl-eval/src/smt/refinement.rs:259-275,562-581`. QSL's own facade test asserts distinct row scripts (`qsl-replay/tests/it/refinement_query_facade.rs:112`); this test does not. |
+
+### Current-head outcome (92262c6b)
+
+| Finding | Outcome | Evidence |
+| --- | --- | --- |
+| FND-002 | fixed for the source-authored seven-row control | `src/routed/smt/refinement_source_tests.rs:285-319` asserts pairwise-distinct Step query bytes and each named row's reversed canonical position; `:329-366` refuses changed row bindings and query bytes. The current-head code review found no Rust behavior defect in this scope (IR-1120 comment `67dabd1a`). |
