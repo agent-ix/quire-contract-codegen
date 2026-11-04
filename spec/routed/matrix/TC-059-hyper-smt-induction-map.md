@@ -93,9 +93,13 @@ executable; synthetic solver stdout supplies no execution credit for it.
    removing only those delimiters leaves the original interior bytes and
    that the public QSL FR-314 adapter preserves those commands byte-for-byte
    when assembling the complete certificate. Invoke its native proof checker
-   and retain the exact typed result without treating `Unverifiable`,
-   rejection, stop or fault as `Verified`. This checks assembly and typed
-   readback, not checked-refutation acceptance or certified settlement;
+   and require either native `Verified` or the independently expected typed
+   `Unverifiable` result for the unchanged matched queries. A query mismatch,
+   shape mismatch, `Unencodable`, rejection, stop or fault fails this positive
+   control; retain that native result unchanged rather than accepting it or
+   relabelling it `Verified`. An expected `Unverifiable` gives no checked-proof
+   credit. This checks assembly and typed readback, not checked-refutation
+   acceptance or certified settlement;
    QSL TC-893 owns those stronger obligations. Supply records in two
    different orders. Decode
    the serialized handoff and assert both byte streams are identical and
