@@ -114,6 +114,26 @@ Alethe proof bytes emitted by that invocation. Query bytes are never inferred
 from proof output, and proof bytes are never inserted into or substituted for
 the query field. A present empty proof remains present and empty.
 
+The production refinement driver SHALL borrow one replay-owned
+`RefinementQueryRequest` and obtain both the selected refinement key and the
+number of declaration-order rows from that request. It SHALL encode `Initial`
+and all `Step { row }` queries through the public FR-315 facade before launching
+any solver process. A QSL encoding refusal SHALL preserve the original
+`SmtEncodingRefusal` and the failing role (when selected); no solver process or
+handoff is produced. Caller cancellation checked between encodings SHALL remain
+a separate typed cancellation with its native cause, not an encoding refusal.
+Fallible collection reservation or an unrepresentable row count SHALL remain
+typed resource/representation failures. These checks introduce no fixed row cap.
+
+The complete prepared collection SHALL retain a borrow of the same immutable
+request, binding its ordered concrete and abstract subjects without copying a
+parallel subject schema or inferring subject identity from document names.
+Each process SHALL receive the exact prepared bytes. Completed records SHALL
+remain available even if a later process mechanism fails. Non-proof responses
+remain records and are judged by the existing handoff validator. Only that
+validator may produce the serialized sequence; QSL's public request adapter
+and checker own subsequent certificate assembly and proof checking.
+
 The supported direct cvc5 proof-capture mode selects `--dump-proofs` and
 `--proof-format-mode=alethe` in the retained argument vector. Those arguments
 request proof output after an unsatisfiable `(check-sat)` without changing any

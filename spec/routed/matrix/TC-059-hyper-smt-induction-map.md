@@ -17,8 +17,10 @@ second encoder or claim CG execution alone proves a hyperproperty.
 Also verify CG's typed refinement Base and Step run-record handoff to the
 QSL FR-314 certificate adapter. The refinement procedures are partial:
 synthetic handoff, source-authored seven-row permutation and Base-only zero-step
-controls exist, while the production FR-315 driver, FR-315 refusal control and
-live proof readback through QSL FR-314's public adapter (IR-1287) remain open.
+controls exist. Production preparation/execution, actual FR-315 refusal and
+live proof readback through QSL FR-314's public adapter are planned until
+IR-1120 and IR-1287 land. The live control requires a selected real cvc5
+executable; synthetic solver stdout supplies no execution credit for it.
 
 ## Test Procedure
 
@@ -50,7 +52,11 @@ live proof readback through QSL FR-314's public adapter (IR-1287) remain open.
    any emitted model/proof bytes. Neither refusal is `Unsat`; the reached
    resource limit is handed to QSL FR-182 V-7 as incomplete
    (FR-045-AC-2, AC-3).
-5. Using a recompiled refinement with seven step rows, take row `r` from
+5. Through the production driver, take the selected refinement key and row
+   count from its replay-owned request. Pre-encode every query before any solver
+   launch; preserve a real `any`-row encoding refusal and pre-encoding
+   cancellation as distinct typed failures, with no executable collection.
+   Using a recompiled refinement with seven step rows, take row `r` from
    its `steps` array in authored declaration order under QSpec FR-375-AC-22.
    Obtain `Initial` and each `Step { row: r }` query from FR-315.
    Observe the selected solver's stdin for every invocation.
@@ -71,7 +77,9 @@ live proof readback through QSL FR-314's public adapter (IR-1287) remain open.
    and no handoff. Repeat with a zero-step
    refinement and assert that only `Base` is required. Change one query byte
    and exchange a base and step role, then assert no handoff (FR-045-AC-4).
-6. Return completed `Unsat` and distinct Alethe proof byte strings for the
+6. Compile seven matching concrete and abstract operation rows over an
+   identity-mapped Boolean state. Run the actual direct solver; do not substitute
+   a synthetic response for this positive control. Return completed `Unsat` and distinct Alethe proof byte strings for the
    base and every step row from separate direct proof-producing solver
    invocations. In cvc5 proof-capture mode, use `--dump-proofs` and
    `--proof-format-mode=alethe` with each unchanged FR-315 query on stdin;

@@ -38,7 +38,7 @@ fn origin(identity: &str) -> Value {
         "inputIdentities": [identity]}})
 }
 
-fn model(package: &str, operations: &[&str]) -> Vec<u8> {
+fn model_with_fields(package: &str, operations: &[&str], field_count: usize) -> Vec<u8> {
     let object = key(package, "Object");
     let population = key(package, "objects");
     let constructs: Vec<_> = [
@@ -57,7 +57,8 @@ fn model(package: &str, operations: &[&str]) -> Vec<u8> {
         .iter()
         .map(|name| {
             let identity = key(package, &format!("Object/{name}"));
-            let field = key(package, &format!("Object/flag{}", &name[2..]));
+            let field_index = name[2..].parse::<usize>().expect("authored operation") % field_count;
+            let field = key(package, &format!("Object/flag{field_index}"));
             json!({
                 "identity": identity, "name": name, "params": [], "pre": [], "post": [],
                 "origin": {"source": {"sourceIdentity": key(package, "spec"), "path": "spec.qspec",
@@ -67,7 +68,7 @@ fn model(package: &str, operations: &[&str]) -> Vec<u8> {
             })
         })
         .collect();
-    let fields: Vec<_> = (0..7)
+    let fields: Vec<_> = (0..field_count)
         .map(|index| {
             let name = format!("flag{index}");
             let identity = key(package, &format!("Object/{name}"));
@@ -100,9 +101,13 @@ fn model(package: &str, operations: &[&str]) -> Vec<u8> {
     quire_canonical::to_vec(&document, limits).expect("model bytes")
 }
 
-fn initial(package: &str, snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>) -> DocumentRef {
+fn initial_with_fields(
+    package: &str,
+    snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>,
+    field_count: usize,
+) -> DocumentRef {
     let name = format!("{package}/start");
-    let fields: BTreeMap<_, _> = (0..7)
+    let fields: BTreeMap<_, _> = (0..field_count)
         .map(|index| (format!("flag{index}"), json!({"boolean": false})))
         .collect();
     let snapshot = json!({
@@ -163,18 +168,42 @@ fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     source_records_with_rows(7, reverse)
 }
 
-fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, Vec<Run>) {
-    let abstract_bytes = model(ABSTRACT, &[]);
+fn with_source_request<T>(
+    row_count: usize,
+    reverse: bool,
+    matched: bool,
+    any: bool,
+    body: impl FnOnce(&RefinementQueryRequest<'_>) -> T,
+) -> T {
     let names: Vec<_> = (0..row_count).map(|index| format!("op{index}")).collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
-    let concrete_bytes = model(CONCRETE, &names);
+    let field_count = if matched { 1 } else { 7 };
+    let abstract_bytes =
+        model_with_fields(ABSTRACT, if matched { &names } else { &[] }, field_count);
+    let concrete_bytes = model_with_fields(CONCRETE, &names, field_count);
     let mut packages = BTreeMap::new();
     packages.insert(ABSTRACT.to_owned(), abstract_bytes);
     packages.insert(CONCRETE.to_owned(), concrete_bytes);
     let mut snapshots = BTreeMap::new();
-    let abstract_initial = initial(ABSTRACT, &mut snapshots);
-    let concrete_initial = initial(CONCRETE, &mut snapshots);
-    let source = authored_unit(row_count, reverse);
+    let abstract_initial = initial_with_fields(ABSTRACT, &mut snapshots, field_count);
+    let concrete_initial = initial_with_fields(CONCRETE, &mut snapshots, field_count);
+    let mut source = authored_unit(row_count, reverse);
+    if matched {
+        // Seven named matching operations over one Boolean keep the genuine
+        // positive proof finite without weakening any individual transition.
+        for index in 1..7 {
+            source = source.replace(&format!("flag{index} = self.flag{index};"), "");
+        }
+        for name in &names {
+            source = source.replace(
+                &format!("step Concrete::Object::{name} -> stutter;"),
+                &format!("step Concrete::Object::{name} -> Abstract::Object::{name}(self);"),
+            );
+        }
+    }
+    if any {
+        source = source.replace("-> stutter;", "-> any;");
+    }
     let compiled = acquire_checked_closure(
         CompileUnit {
             source: SourceIdentity::new("agent-ix", "ir1120-refinement"),
@@ -223,59 +252,66 @@ fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, 
         subject(CONCRETE, concrete_initial),
         subject(ABSTRACT, abstract_initial),
     );
-    let mut expected = Vec::new();
-    let mut records = Vec::new();
-    for role in std::iter::once(RefinementRole::Base)
-        .chain((0..row_count).map(|row| RefinementRole::Step { row }))
-    {
-        let kind = match role {
-            RefinementRole::Base => RefinementQueryKind::Initial,
-            RefinementRole::Step { row } => RefinementQueryKind::Step {
-                row: u64::try_from(row).expect("seven rows fit u64"),
-            },
-        };
-        let query = encode_refinement_query(&request, kind).expect("QSL canonical query");
-        let execution = run_solver_query(
-            QuerySelection {
-                product: (),
+    body(&request)
+}
+
+fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, Vec<Run>) {
+    with_source_request(row_count, reverse, false, false, |request| {
+        let refinement = request.refinement_key().clone();
+        let mut expected = Vec::new();
+        let mut records = Vec::new();
+        for role in std::iter::once(RefinementRole::Base)
+            .chain((0..row_count).map(|row| RefinementRole::Step { row }))
+        {
+            let kind = match role {
+                RefinementRole::Base => RefinementQueryKind::Initial,
+                RefinementRole::Step { row } => RefinementQueryKind::Step {
+                    row: u64::try_from(row).expect("seven rows fit u64"),
+                },
+            };
+            let query = encode_refinement_query(request, kind).expect("QSL canonical query");
+            let execution = run_solver_query(
+                QuerySelection {
+                    product: (),
+                    item: refinement.clone(),
+                    instance: (),
+                    depth: NonZeroU64::MIN,
+                    kind: role,
+                    query_bytes: query.clone(),
+                },
+                "/bin/sh".into(),
+                vec![
+                    OsString::from("-c"),
+                    OsString::from("cat >&2; printf 'unsat\\n((proof))'"),
+                    OsString::from("--dump-proofs"),
+                    OsString::from("--proof-format-mode=alethe"),
+                ],
+                ProcessLimits {
+                    input_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
+                    wall_clock: Duration::from_secs(5),
+                    memory_bytes: NonZeroU64::new(128 << 20).expect("limit"),
+                    output_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
+                },
+                Cancel::new(),
+            )
+            .expect("bounded solver invocation");
+            assert_eq!(
+                execution.process().stderr.as_deref(),
+                Some(query.as_slice())
+            );
+            let attempt = execution.query().association.attempt();
+            let subjects = [CONCRETE.to_owned(), ABSTRACT.to_owned()];
+            expected.push(Expected {
                 item: refinement.clone(),
-                instance: (),
-                depth: NonZeroU64::MIN,
-                kind: role,
-                query_bytes: query.clone(),
-            },
-            "/bin/sh".into(),
-            vec![
-                OsString::from("-c"),
-                OsString::from("cat >&2; printf 'unsat\\n((proof))'"),
-                OsString::from("--dump-proofs"),
-                OsString::from("--proof-format-mode=alethe"),
-            ],
-            ProcessLimits {
-                input_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
-                wall_clock: Duration::from_secs(5),
-                memory_bytes: NonZeroU64::new(128 << 20).expect("limit"),
-                output_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
-            },
-            Cancel::new(),
-        )
-        .expect("bounded solver invocation");
-        assert_eq!(
-            execution.process().stderr.as_deref(),
-            Some(query.as_slice())
-        );
-        let attempt = execution.query().association.attempt();
-        let subjects = [CONCRETE.to_owned(), ABSTRACT.to_owned()];
-        expected.push(Expected {
-            item: refinement.clone(),
-            subjects: subjects.clone(),
-            role,
-            attempt,
-            query_bytes: query,
-        });
-        records.push(Run::from_execution(subjects, execution));
-    }
-    (expected, records)
+                subjects: subjects.clone(),
+                role,
+                attempt,
+                query_bytes: query,
+            });
+            records.push(Run::from_execution(subjects, execution));
+        }
+        (expected, records)
+    })
 }
 
 /// A named step row carries its query bytes to its new declaration-order position.
@@ -378,4 +414,92 @@ fn source_refinement_with_zero_step_rows_has_only_base() {
         u64::from_le_bytes(bytes[..8].try_into().expect("record count")),
         1
     );
+}
+
+/// A genuine FR-315 refusal is retained before any solver can be selected.
+#[trace("TC-059", "FR-045-AC-7")]
+#[test]
+fn production_refinement_preserves_encoding_refusal_and_cancellation() {
+    use crate::routed::smt::refinement_driver::{prepare_refinement, RefinementPreparationError};
+    with_source_request(1, false, false, true, |request| {
+        let refusal = prepare_refinement(request, &Cancel::new());
+        assert!(
+            matches!(
+                refusal,
+                Err(RefinementPreparationError::Encoding {
+                    role: Some(RefinementRole::Step { row: 0 }),
+                    refusal: qsl_replay::SmtEncodingRefusal::Refused(_),
+                })
+            ),
+            "the admitted any row must retain the original encoding refusal"
+        );
+        let cancel = Cancel::new();
+        cancel.cancel(quire_exact::CancelCause::Requested);
+        assert!(matches!(
+            prepare_refinement(request, &cancel),
+            Err(RefinementPreparationError::Cancelled(
+                quire_exact::CancelCause::Requested
+            ))
+        ));
+    });
+}
+
+/// Real cvc5 proofs cross the public request adapter without a copied certificate.
+#[trace("TC-059", "FR-045-AC-4", "FR-045-AC-5")]
+#[test]
+fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
+    use crate::routed::smt::refinement_driver::prepare_refinement;
+    let executable = std::env::var_os("QUIRE_CVC5_BIN")
+        .expect("live refinement qualification requires QUIRE_CVC5_BIN");
+    with_source_request(7, false, true, false, |request| {
+        let cancel = Cancel::new();
+        let prepared = prepare_refinement(request, &cancel).expect("matched queries encode");
+        let execution = prepared
+            .execute(
+                std::path::Path::new(&executable),
+                &[
+                    "--lang=smt2".into(),
+                    "--dump-proofs".into(),
+                    "--proof-format-mode=alethe".into(),
+                ],
+                ProcessLimits {
+                    input_bytes: NonZeroUsize::new(16 << 20).expect("finite"),
+                    wall_clock: Duration::from_secs(60),
+                    memory_bytes: NonZeroU64::new(1 << 30).expect("finite"),
+                    output_bytes: NonZeroUsize::new(64 << 20).expect("finite"),
+                },
+                &cancel,
+            )
+            .expect("direct bounded solver invocations");
+        assert_eq!(execution.records().len(), 8);
+        for (expected, record) in execution.expected().iter().zip(execution.records()) {
+            assert_eq!(record.item(), request.refinement_key());
+            assert!(std::ptr::eq(record.subjects().request(), request));
+            assert_eq!(record.query_bytes(), Some(expected.query_bytes.as_slice()));
+            assert_eq!(
+                record.status(),
+                crate::routed::smt::SolverStatus::Unsat,
+                "role {:?}, stderr {:?}, stdout {:?}",
+                record.role(),
+                record.process().stderr,
+                record.process().stdout
+            );
+            assert!(record.proof_bytes().is_some());
+        }
+        let handoff = execution
+            .handoff()
+            .expect("complete authenticated collection");
+        assert_eq!(execution.handoff().expect("repeat"), handoff);
+        let limits = qsl_replay::CertificateCheckLimits::default();
+        let certificate = request
+            .assemble_smt_certificate(&handoff, &limits, &cancel)
+            .expect("public QSL assembly");
+        let checked = request
+            .check_smt_proof(&certificate, &limits, &cancel)
+            .expect("QSL proof reader accepts real emitted Alethe");
+        assert!(
+            matches!(checked, qsl_replay::SmtProofCheck::Verified),
+            "real proof result: {checked:?}"
+        );
+    });
 }
