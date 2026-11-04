@@ -241,12 +241,19 @@ concrete/abstract operation rows over seven identity-mapped Boolean fields;
 each operation modifies its own field and preserves the other six. It retains
 eight real cvc5 `Unsat` responses with pairwise distinct queries and emitted
 proofs and passes their exact fields through the public QSL request adapter.
-Synthetic proof output supplies no live proof credit. The strict native-reader
-`Verified` assertion remains required: the current distinct-frame control
-reaches `Unverifiable` at cvc5's `symm` command, which is outside QSL's current
-checked-rule set. This is a measured QSL proof-rule qualification gap, not a
-CG proof or an impossible refinement claim.
+Synthetic proof output supplies no live proof credit. The unchanged strict native-reader
+`Verified` assertion currently fails at cvc5's `symm` command with native
+`Unverifiable`, outside QSL's current checked-rule set. No proof-verification
+or certified-settlement credit follows from that result.
 
+**Proposed clarification pending CG owner decision (IR-1120):** TC-059 step 6
+would require byte-exact public adapter assembly and faithful native typed
+readback under AC-5, while QSL TC-893 retains checked-refutation acceptance
+and settlement. The formerly added mandatory-`Verified` status assumption is
+not an independent AC-5 requirement. This proposal does not change the current
+strict test assertion or grant acceptance credit before the owner rules. All
+real-solver, seven-row, distinctness, association and exact-byte controls remain
+required.
 The public facade publication and final unpatched consumer qualification remain
 planned until IR-1287 and IR-1120 land. HP-2 production integration remains
 planned under IR-974. AC-5 and TC-059 step 6 remain partial until the published

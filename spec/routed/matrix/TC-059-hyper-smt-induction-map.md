@@ -77,6 +77,11 @@ executable; synthetic solver stdout supplies no execution credit for it.
    and no handoff. Repeat with a zero-step
    refinement and assert that only `Base` is required. Change one query byte
    and exchange a base and step role, then assert no handoff (FR-045-AC-4).
+> **Proposed clarification, pending CG owner decision (IR-1120):** the step-6
+> adapter/readback wording below aligns with FR-045-AC-5 and its prohibition
+> on CG proof-verification claims. It is not adopted acceptance credit until
+> the owner rules. The current strict `Verified` test assertion remains unchanged.
+
 6. Compile seven matching concrete and abstract operation rows over an
    identity-mapped Boolean state. Run the actual direct solver; do not substitute
    a synthetic response for this positive control. Return completed `Unsat` and distinct Alethe proof byte strings for the
@@ -86,8 +91,13 @@ executable; synthetic solver stdout supplies no execution credit for it.
    capture real cvc5 output and assert that the proof field equals the
    exact bytes between the one outer proof list's parentheses. Check that
    removing only those delimiters leaves the original interior bytes and
-   that QSL's FR-314 reader accepts the extracted Alethe commands. Supply
-   records in two different orders. Decode
+   that the public QSL FR-314 adapter preserves those commands byte-for-byte
+   when assembling the complete certificate. Invoke its native proof checker
+   and retain the exact typed result without treating `Unverifiable`,
+   rejection, stop or fault as `Verified`. This checks assembly and typed
+   readback, not checked-refutation acceptance or certified settlement;
+   QSL TC-893 owns those stronger obligations. Supply records in two
+   different orders. Decode
    the serialized handoff and assert both byte streams are identical and
    contain `Base` followed by rows 0 through 6, with the exact query and
    proof bytes in separate length-delimited fields. Repeat the serialization;
