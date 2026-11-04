@@ -189,24 +189,26 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 CG obtains the scalar claim identity from the admitted IR reader's FR-322 structural `NodeKey`/`CheckedNodeId` for the original application and retains the authentic expression occurrence from that read. CG typed generation supplies the scalar kind and positional operand identities, ranges and provenance; CG retains their complete checked claim body for comparison. The identity is compared as an exact string or structural value; CG does not derive an obligation hash or encode a parity preimage. QSL-1293 owns removal of the old shared mint and digest check. A different package, path, or producer ordinal yields a different structural identity; a body-only change under the same identity is refused by the retained-body comparison.
 `operator_parity.rs` recompiles the original context, checks the application node/operator and
 selected enclosing-function membership, authenticates the occurrence and positional operands,
-then compares the claimed structural identity and complete retained claim body before scalar comparison. A mismatched identity or body refuses with the owning typed stale-dependency/revision-mismatch result; there are no claimed or recomputed digests. This is source inspection, not a passing-test claim. Actual
-CG/QSL conformance remains planned. Function/clause carry-only contracts and function/frame
-preimages remain unchanged.
+then compares the claimed structural identity and complete retained claim body before scalar comparison. A mismatched identity or body refuses with the owning typed stale-dependency/revision-mismatch result; there are no claimed or recomputed digests. The native CG/QSL controls below exercise this boundary; the complete
+same-proved-artifact pipeline remains Planned under IR-631. Function/clause
+carry-only contracts and function/frame identity rules remain unchanged.
 
-The following CG-owned allocation defines the closed scalar wire vocabulary. It is a new
-specification allocation, not a member already present in `ScalarObligationIdentity` or the
-clause-role `ObligationKind`. QSL carries this string opaquely.
+The following CG-owned allocation defines the closed scalar wire vocabulary.
+CG retains it as `ScalarReplayKind` in the original `ScalarReplayBody`; it is
+separate from the clause-role `ObligationKind`. QSL carries the wire string
+opaquely.
 
 | Scalar family actually minted by this route | O-09 `obligation_kind` wire value | Authority/source |
 |---|---|---|
-| Integer arithmetic lowering parity (`add`, `subtract`, `multiply`, `negate`) | `operator_parity` | This FR-032 allocation; CG generation shall supply a typed family value and retain it in the proving record. Its typed implementation/accessor is CODE-gated and unrun. |
+| Integer arithmetic lowering parity (`add`, `subtract`, `multiply`, `negate`) | `operator_parity` | CG generation retains `ScalarReplayKind::OperatorParity` in the original scalar body and generated record. Native public-accessor and replay tests exercise it; the full proved-artifact pipeline remains Planned under IR-631. |
 
 This is the sole current scalar-family value. CG shall not derive it from `operation_identity`,
 reuse a precondition/postcondition/invariant/frame role, or accept a caller-chosen free string.
 Future parity families require their own owning allocation; the composite family is specified
-separately. Current CG has no typed scalar-kind source. Until generation implements and retains
-this allocation, the route returns the named unavailable-capability refusal without minting an
-identity.
+separately. When original typed retention is unavailable,
+`scalar_replay_body()` returns its typed authority refusal and the builder
+refuses without minting an identity. This refusal remains required even though
+the typed generation/accessor is implemented.
 
 **Scalar identity conformance.** For an admitted current-run scalar claim, the replacement AC-15/AC-16 checks use the authoritative IR-read application identity and expression occurrence together with the CG-generated and retained scalar kind and ordered operand identities and ranges, then require the actual QSL operator route to accept the matching structural claim. The adverse controls change one included member at a time, retain
 repeated operand positions and refuse invented occurrence or operand membership. A synthetic
