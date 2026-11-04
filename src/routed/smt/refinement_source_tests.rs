@@ -428,7 +428,9 @@ fn production_refinement_preserves_encoding_refusal_and_cancellation() {
                 refusal,
                 Err(RefinementPreparationError::Encoding {
                     role: Some(RefinementRole::Step { row: 0 }),
-                    refusal: qsl_replay::SmtEncodingRefusal::Refused(_),
+                    refusal: qsl_replay::SmtEncodingRefusal::Refused(
+                        qsl_replay::Refusal::RefinementAnyRow { row: 0 }
+                    ),
                 })
             ),
             "the admitted any row must retain the original encoding refusal"
@@ -500,6 +502,44 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
         assert!(
             matches!(checked, qsl_replay::SmtProofCheck::Verified),
             "real proof result: {checked:?}"
+        );
+    });
+}
+
+/// The production Base-only case retains unavailable execution as non-proof evidence.
+#[trace("TC-059", "FR-045-AC-4", "FR-045-AC-7")]
+#[test]
+fn production_refinement_zero_rows_preserves_missing_tool() {
+    use crate::routed::smt::refinement_driver::prepare_refinement;
+    with_source_request(0, false, false, false, |request| {
+        let cancel = Cancel::new();
+        let execution = prepare_refinement(request, &cancel)
+            .expect("Initial encodes")
+            .execute(
+                std::path::Path::new("/nonexistent/ir1120/solver"),
+                &[],
+                ProcessLimits {
+                    input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                    wall_clock: Duration::from_secs(1),
+                    memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
+                    output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                },
+                &cancel,
+            )
+            .expect("unavailable execution is a typed record");
+        assert_eq!(execution.records().len(), 1);
+        assert_eq!(execution.records()[0].role(), RefinementRole::Base);
+        assert_eq!(
+            execution.records()[0].status(),
+            crate::routed::smt::SolverStatus::MissingTool
+        );
+        assert!(!execution.records()[0].process().started);
+        assert!(execution.records()[0].proof_bytes().is_none());
+        assert_eq!(
+            execution.handoff(),
+            Err(RefinementHandoffError::NonProof(
+                crate::routed::smt::SolverStatus::MissingTool
+            ))
         );
     });
 }
