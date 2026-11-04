@@ -17,7 +17,7 @@ The production driver borrows the retained request, pre-encodes the complete sel
 
 ## Verdict
 
-CONDITIONAL
+PASS for the reviewed CG-owned slice after disposition round 1. Original findings remain below; this is not native proof qualification or merge authorization.
 
 ## Findings
 
@@ -54,3 +54,13 @@ Existing synthetic source/provenance controls retain association/framing credit 
 ### Method selection
 
 Code review includes Rust. Gap analysis includes the requested semantic binding check. Base, EARS, integrity and scope-boundary cover the changed requirements and public interface. No new spec object or relationship edge requires object/dependency analysis. No second reviewer or heavy build was used.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The PR description now names the seven-field distinct live control, its unchanged failing strict Verified assertion, the native QSL unsupported-rule seam, and the pending public-facade/final consumer gates. |
+
+### Disposition verification
+
+Inspected the frozen fix diff and current PR description. No production driver, live strict Verified assertion, query/proof interpretation or acceptance boundary was weakened. The new subprocess controls use the actual production preparation/execution path; the second failure comes from the native selected-executable check, not an injected semantic result or public fault API. No new findings. The QSL checked-rule and public facade/final unpatched gate blockers remain; draft PR 742 is not merge-ready. Reviewer ran no Cargo.
