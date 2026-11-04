@@ -151,11 +151,11 @@ impl OriginalScalarContext {
                 left: left.clone(),
                 right: right.clone(),
             },
-            ("quire.op.integer.subtract", [left, right]) => ScalarOperation::Subtract {
+            ("quire.op.integer.sub", [left, right]) => ScalarOperation::Subtract {
                 left: left.clone(),
                 right: right.clone(),
             },
-            ("quire.op.integer.multiply", [left, right]) => ScalarOperation::Multiply {
+            ("quire.op.integer.mul", [left, right]) => ScalarOperation::Multiply {
                 left: left.clone(),
                 right: right.clone(),
             },

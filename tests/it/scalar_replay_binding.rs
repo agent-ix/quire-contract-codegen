@@ -19,7 +19,7 @@ fn source(fixture: &ReplayFixture) -> LockedSource {
         bytes: fixture.source.as_bytes().to_vec(),
     }
 }
-fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
+pub(super) fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
     let source = source(fixture);
     OriginalScalarContext::new(
         fixture.checked.clone(),
@@ -42,7 +42,7 @@ fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
     )
     .expect("original source context")
 }
-fn plan(fixture: &ReplayFixture, values: &[i64]) -> ScalarReplayPlan {
+pub(super) fn plan(fixture: &ReplayFixture, values: &[i64]) -> ScalarReplayPlan {
     context(fixture)
         .plan(
             &fixture.harness,
@@ -68,7 +68,7 @@ impl Drop for Scratch {
 // the actual staged oracle, executes it at the decoded vector and retained limits,
 // then independently reads back every original staged path. No expected outcome
 // is supplied to this helper, and mutation is never overwritten by regeneration.
-fn observe(
+pub(super) fn observe(
     fixture: &ReplayFixture,
     plan: &ScalarReplayPlan,
     mutate: bool,

@@ -106,7 +106,10 @@ pub(super) fn replay_fixture_with_extra(
         .filter(|node| operation_identity(&node.body) == Some(operation))
         .collect::<Vec<_>>();
     let [application] = applications.as_slice() else {
-        panic!("one authored scalar application")
+        panic!(
+            "one authored scalar application for {operation}, found {}",
+            applications.len()
+        )
     };
     let node_id = application.node_id.clone();
     let conversion = checked

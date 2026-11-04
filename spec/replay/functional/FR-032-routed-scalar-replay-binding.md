@@ -34,8 +34,11 @@ actual generated harness checked. This requirement owns a public request builder
 settlement converter; the driver owns the intervening QSL replay call. QSL owns the operator-level
 exact evaluation, envelope arm, evidence and terminal causes.
 
-This is planned IR-631 work. The QSL operator and full-report identity contracts are merged and measured below.
-CG metadata retention, consumer conformance and the driver-observation contract remain CODE gates. No CG implementation or passing scalar-replay test is claimed.
+The full proof-driven replay pipeline remains Planned under IR-631. CG's
+original scalar body/limits retention, checked plan completion and native
+observation comparison are implemented. Native tests exercise the actual QSL
+operator route; they do not establish execution of the same proved artifact
+or supply a backend-success receipt.
 
 ## Scope
 
@@ -47,9 +50,10 @@ function-level declared-parameter parity route, new operation-contract clause-ki
 moving existing replay calls, a local exact evaluator or direct exact-kernel dependency in CG,
 copied QSL types, and conversion through `KaniObligationIdentity` or V1 `ReplayPackage`.
 
-The proposed scalar plan is constrained by
+The scalar plan is constrained by
 [AD-002](../../assurance/AD-002-cg-qsl-replay-seam.md), including R-6 and R-7. Their scalar
-contract fit is supplied by the merged operator contract; CG conformance remains planned. This document grants no exception to those
+contract fit is supplied by the merged operator contract; native input-binding
+controls do not close the full proof-driven pipeline. This document grants no exception to those
 rules. Scalar lowering parity is never a source-property refutation.
 
 ## Inputs
@@ -67,9 +71,10 @@ rules. Scalar lowering parity is never a source-property refutation.
   limits alongside the generated source. CG's scalar generation authority records those
   original limits; the caller preserves that record through the proving run. The builder
   compares replay limits with that original context, not with a caller's new replay budget.
-  This context producer is planned IR-631 work: `ScalarObligationIdentity` does not currently
-  persist limits. The current renderer's limit fields are all `u64::MAX`; there is no missing-
-  context default or inference from the current identity. The limits and generated source must be retained with the original proving context.
+  The generated harness retains these limits through `original_scalar_limits()`
+  alongside its original body and artifacts. The driver must preserve that
+  authority through the proving run; this full pipeline remains IR-631 work.
+  There is no missing-context default or inference from the current identity.
 - The checked/emitted package used to derive this node's operand and result ranges, the proving
   context, and the original proving `call_site` package identity and source bytes needed by
   QSL's envelope. Locating the enclosing source function for compilation does not turn this
@@ -184,24 +189,26 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 CG obtains the scalar claim identity from the admitted IR reader's FR-322 structural `NodeKey`/`CheckedNodeId` for the original application and retains the authentic expression occurrence from that read. CG typed generation supplies the scalar kind and positional operand identities, ranges and provenance; CG retains their complete checked claim body for comparison. The identity is compared as an exact string or structural value; CG does not derive an obligation hash or encode a parity preimage. QSL-1293 owns removal of the old shared mint and digest check. A different package, path, or producer ordinal yields a different structural identity; a body-only change under the same identity is refused by the retained-body comparison.
 `operator_parity.rs` recompiles the original context, checks the application node/operator and
 selected enclosing-function membership, authenticates the occurrence and positional operands,
-then compares the claimed structural identity and complete retained claim body before scalar comparison. A mismatched identity or body refuses with the owning typed stale-dependency/revision-mismatch result; there are no claimed or recomputed digests. This is source inspection, not a passing-test claim. Actual
-CG/QSL conformance remains planned. Function/clause carry-only contracts and function/frame
-preimages remain unchanged.
+then compares the claimed structural identity and complete retained claim body before scalar comparison. A mismatched identity or body refuses with the owning typed stale-dependency/revision-mismatch result; there are no claimed or recomputed digests. The native CG/QSL controls below exercise this boundary; the complete
+same-proved-artifact pipeline remains Planned under IR-631. Function/clause
+carry-only contracts and function/frame identity rules remain unchanged.
 
-The following CG-owned allocation defines the closed scalar wire vocabulary. It is a new
-specification allocation, not a member already present in `ScalarObligationIdentity` or the
-clause-role `ObligationKind`. QSL carries this string opaquely.
+The following CG-owned allocation defines the closed scalar wire vocabulary.
+CG retains it as `ScalarReplayKind` in the original `ScalarReplayBody`; it is
+separate from the clause-role `ObligationKind`. QSL carries the wire string
+opaquely.
 
 | Scalar family actually minted by this route | O-09 `obligation_kind` wire value | Authority/source |
 |---|---|---|
-| Integer arithmetic lowering parity (`add`, `subtract`, `multiply`, `negate`) | `operator_parity` | This FR-032 allocation; CG generation shall supply a typed family value and retain it in the proving record. Its typed implementation/accessor is CODE-gated and unrun. |
+| Integer arithmetic lowering parity (`add`, `subtract`, `multiply`, `negate`) | `operator_parity` | CG generation retains `ScalarReplayKind::OperatorParity` in the original scalar body and generated record. Native public-accessor and replay tests exercise it; the full proved-artifact pipeline remains Planned under IR-631. |
 
 This is the sole current scalar-family value. CG shall not derive it from `operation_identity`,
 reuse a precondition/postcondition/invariant/frame role, or accept a caller-chosen free string.
 Future parity families require their own owning allocation; the composite family is specified
-separately. Current CG has no typed scalar-kind source. Until generation implements and retains
-this allocation, the route returns the named unavailable-capability refusal without minting an
-identity.
+separately. When original typed retention is unavailable,
+`scalar_replay_body()` returns its typed authority refusal and the builder
+refuses without minting an identity. This refusal remains required even though
+the typed generation/accessor is implemented.
 
 **Scalar identity conformance.** For an admitted current-run scalar claim, the replacement AC-15/AC-16 checks use the authoritative IR-read application identity and expression occurrence together with the CG-generated and retained scalar kind and ordered operand identities and ranges, then require the actual QSL operator route to accept the matching structural claim. The adverse controls change one included member at a time, retain
 repeated operand positions and refuse invented occurrence or operand membership. A synthetic
@@ -353,15 +360,16 @@ Cross-binding converter failures return no settlement rather than settling anoth
 
 ## Intent and Existing Coverage
 
-This table records the authoring gap analysis, not a computed test matrix.
+This table separates delivered native input-binding evidence from complete
+proof-driven pipeline qualification; it is not a computed test matrix.
 
 | Intent | Existing authority and measured tests | Remaining gap |
 |---|---|---|
-| Real routed scalar generation | [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-2/10/13/15; `tests/it/routed_generation.rs` carries those trace tags | The returned scalar identity has no public replay binding |
-| Typed ordered playback and domain validation | [FR-016](./FR-016-witness-native-replay.md) AC-1/2/5/8; surviving `skeleton_spine.rs` tests exercise native replay with a direct identity fixture. The removed `kani_witness_join.rs` and `kani_argument_order.rs` were V1-only historical controls. | Direct scalar schema and operator-level replay inputs |
-| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Planned checked scalar conversion to the measured QSL causes; predicate violation/parity readings do not establish scalar semantics |
+| Real routed scalar generation | [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-2/10/13/15; `tests/it/routed_generation.rs` carries those trace tags | `OriginalScalarContext` binds the retained body; the same-proved-artifact pipeline remains Planned under IR-631 |
+| Typed ordered playback and domain validation | [FR-016](./FR-016-witness-native-replay.md) AC-1/2/5/8; surviving `skeleton_spine.rs` tests exercise native replay with a direct identity fixture. The removed `kani_witness_join.rs` and `kani_argument_order.rs` were V1-only historical controls. | Native scalar schema/operator inputs are exercised in `scalar_replay_binding.rs` and `scalar_replay_residuals.rs`; full proof-driven qualification remains Planned under IR-631 |
+| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Native actual-sent/report ties are exercised in `scalar_replay_binding.rs`; complete scalar vector coverage remains Planned under IR-631, and predicate violation/parity does not establish it |
 | Missing settlement produces no terminal value | [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15; `tests/it/terminal_map.rs` | Reuse in the routed integration without duplicating the terminal requirement |
-| Driver calls QSL between public typed builder and converter | No scalar requirement or test on the inspected source | This requirement and planned [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md) |
+| Driver calls QSL between public typed builder and converter | `scalar_replay_binding.rs` and `scalar_replay_residuals.rs` execute the native observation and real QSL operator entry | The complete same-proved-artifact pipeline in [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md) remains Planned under IR-631 |
 
 ## Prerequisites and Implementation Status
 
@@ -395,10 +403,12 @@ On measured merged QSL change #650, `OperatorParityReport::claim()` exposes
 `OperatorIdentity` on every outcome and `ValueParityReport::claim()` exposes `ValueIdentity`;
 FR-357 AC-13 specifies full-claim retention. The
 operator report retains the obligation, node, operator, operands/ranges, result range, limits,
-occurrence and kind even when request decoding or context validation refuses. The current full claim also retains the native outcome; an obligation-only comparison cannot pass. This is source inspection,
-not a passing-test claim; no QSL or CG scalar tests were run for this SPEC change.
+occurrence and kind even when request decoding or context validation refuses. The current full claim also retains the native outcome; an obligation-only
+comparison cannot pass. The native binding tests below exercise these public
+interfaces; they do not supply proof-driven pipeline qualification.
 
-The positive operator-level route has these explicit **CODE gates**:
+The complete proved-artifact route has these explicit **CODE gates**. Native
+constructor/replay controls exercise the CG seams without closing that pipeline:
 
 1. CG's consumer must conform to the merged full-claim report API. For this operator slice
    the full claim is the retained obligation identity, scalar node/occurrence, kind,
@@ -460,3 +470,17 @@ scalar route is gated.
 - **Downstream**: [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md), planned public
   consumer and real-backend evidence for IR-631; driver E9 calls the admitted QSL seam once
   its prerequisites are resolved.
+
+## Native Input-Binding Evidence
+
+`tests/it/scalar_replay_binding.rs` exercises repeated parameter draws and
+actual driver/QSL ties. `tests/it/scalar_replay_residuals.rs` adds every current
+integer operator, distinct parameters, an occurrence-qualified inline literal,
+source-span invariance, independently observed result changes and missing-body
+refusals. The subtract and multiply paths consume the catalogue identities
+`quire.op.integer.sub` and `quire.op.integer.mul` stated above.
+
+These are real native executions and owner replay calls, not proof receipts.
+The complete same-proved-artifact falsification pipeline remains Planned under
+IR-631. The AC-15 through AC-18 requirement text remains unchanged; native
+input-binding evidence alone does not upgrade whole-pipeline status.
