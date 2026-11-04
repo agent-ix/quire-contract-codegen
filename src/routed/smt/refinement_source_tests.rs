@@ -710,8 +710,12 @@ fn production_refinement_retains_completed_records_after_a_later_mechanism_error
         },
     };
     use std::os::unix::fs::PermissionsExt;
-    let directory = tempfile::tempdir().expect("owned selected executable directory");
-    let executable = directory.path().join("selected-solver");
+    let directory = std::env::temp_dir().join(format!(
+        "cg-refinement-selected-executable-{}",
+        std::process::id(),
+    ));
+    std::fs::create_dir(&directory).expect("create exclusive owned executable directory");
+    let executable = directory.join("selected-solver");
     std::fs::write(
         &executable,
         "#!/bin/sh\ncat >&2\nrm -- \"$0\"\nmkdir -- \"$0\"\nprintf 'unsat\\n((proof))'\n",
@@ -787,4 +791,5 @@ fn production_refinement_retains_completed_records_after_a_later_mechanism_error
             "a retained prefix is not a complete certificate collection"
         );
     });
+    std::fs::remove_dir_all(directory).expect("remove owned executable directory");
 }
