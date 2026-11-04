@@ -358,15 +358,16 @@ Cross-binding converter failures return no settlement rather than settling anoth
 
 ## Intent and Existing Coverage
 
-This table records the authoring gap analysis, not a computed test matrix.
+This table separates delivered native input-binding evidence from complete
+proof-driven pipeline qualification; it is not a computed test matrix.
 
 | Intent | Existing authority and measured tests | Remaining gap |
 |---|---|---|
-| Real routed scalar generation | [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-2/10/13/15; `tests/it/routed_generation.rs` carries those trace tags | The returned scalar identity has no public replay binding |
-| Typed ordered playback and domain validation | [FR-016](./FR-016-witness-native-replay.md) AC-1/2/5/8; surviving `skeleton_spine.rs` tests exercise native replay with a direct identity fixture. The removed `kani_witness_join.rs` and `kani_argument_order.rs` were V1-only historical controls. | Direct scalar schema and operator-level replay inputs |
-| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Planned checked scalar conversion to the measured QSL causes; predicate violation/parity readings do not establish scalar semantics |
+| Real routed scalar generation | [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-2/10/13/15; `tests/it/routed_generation.rs` carries those trace tags | `OriginalScalarContext` binds the retained body; the same-proved-artifact pipeline remains Planned under IR-631 |
+| Typed ordered playback and domain validation | [FR-016](./FR-016-witness-native-replay.md) AC-1/2/5/8; surviving `skeleton_spine.rs` tests exercise native replay with a direct identity fixture. The removed `kani_witness_join.rs` and `kani_argument_order.rs` were V1-only historical controls. | Native scalar schema/operator inputs are exercised in `scalar_replay_binding.rs` and `scalar_replay_residuals.rs`; full proof-driven qualification remains Planned under IR-631 |
+| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Native actual-sent/report ties are exercised in `scalar_replay_binding.rs`; complete scalar vector coverage remains Planned under IR-631, and predicate violation/parity does not establish it |
 | Missing settlement produces no terminal value | [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15; `tests/it/terminal_map.rs` | Reuse in the routed integration without duplicating the terminal requirement |
-| Driver calls QSL between public typed builder and converter | No scalar requirement or test on the inspected source | This requirement and planned [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md) |
+| Driver calls QSL between public typed builder and converter | `scalar_replay_binding.rs` and `scalar_replay_residuals.rs` execute the native observation and real QSL operator entry | The complete same-proved-artifact pipeline in [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md) remains Planned under IR-631 |
 
 ## Prerequisites and Implementation Status
 
@@ -400,10 +401,12 @@ On measured merged QSL change #650, `OperatorParityReport::claim()` exposes
 `OperatorIdentity` on every outcome and `ValueParityReport::claim()` exposes `ValueIdentity`;
 FR-357 AC-13 specifies full-claim retention. The
 operator report retains the obligation, node, operator, operands/ranges, result range, limits,
-occurrence and kind even when request decoding or context validation refuses. The current full claim also retains the native outcome; an obligation-only comparison cannot pass. This is source inspection,
-not a passing-test claim; no QSL or CG scalar tests were run for this SPEC change.
+occurrence and kind even when request decoding or context validation refuses. The current full claim also retains the native outcome; an obligation-only
+comparison cannot pass. The native binding tests below exercise these public
+interfaces; they do not supply proof-driven pipeline qualification.
 
-The positive operator-level route has these explicit **CODE gates**:
+The complete proved-artifact route has these explicit **CODE gates**. Native
+constructor/replay controls exercise the CG seams without closing that pipeline:
 
 1. CG's consumer must conform to the merged full-claim report API. For this operator slice
    the full claim is the retained obligation identity, scalar node/occurrence, kind,
