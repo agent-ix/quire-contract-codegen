@@ -233,10 +233,10 @@ planned. The refinement Base/Step record collection, validation, cvc5 proof
 framing, and deterministic FR-314 handoff are partial after CG #630 and the
 subsequent IR-1120 implementation. The source-authored seven-row permutation
 test checks QSL's canonical row mapping and distinct exact query bytes against
-CG's solver invocation and handoff records using synthetic proof output. A
-production FR-315 query driver is still absent. TC-059 step 5's source-authored
-zero-step refinement has a Base-only control; step 8 still needs an FR-315
-encoding-refusal control. Direct solver invocations retain `Sat`, `Unknown`,
+CG's solver invocation and handoff records using synthetic proof output. Production FR-315 preparation/execution, the actual encoding-refusal
+control and live public-adapter readback are planned until IR-1120 and
+IR-1287 land. TC-059 step 5's source-authored zero-step refinement has a
+Base-only control. Direct solver invocations retain `Sat`, `Unknown`,
 absent/malformed response, failed-process and reached-limit non-proof results.
 The merged
 IR-1139 congruence fix and QSL-1306 FR-315 query normalization address the
