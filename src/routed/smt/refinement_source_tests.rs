@@ -177,7 +177,7 @@ fn with_source_request<T>(
 ) -> T {
     let names: Vec<_> = (0..row_count).map(|index| format!("op{index}")).collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
-    let field_count = if matched { 1 } else { 7 };
+    let field_count = 7;
     let abstract_bytes =
         model_with_fields(ABSTRACT, if matched { &names } else { &[] }, field_count);
     let concrete_bytes = model_with_fields(CONCRETE, &names, field_count);
@@ -189,11 +189,8 @@ fn with_source_request<T>(
     let concrete_initial = initial_with_fields(CONCRETE, &mut snapshots, field_count);
     let mut source = authored_unit(row_count, reverse);
     if matched {
-        // Seven named matching operations over one Boolean keep the genuine
-        // positive proof finite without weakening any individual transition.
-        for index in 1..7 {
-            source = source.replace(&format!("flag{index} = self.flag{index};"), "");
-        }
+        // Each matched row changes its own field and preserves the other six.
+        // The resulting symbolic frame contradiction differs for every row.
         for name in &names {
             source = source.replace(
                 &format!("step Concrete::Object::{name} -> stutter;"),
@@ -508,6 +505,24 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
                 record.process().stdout.as_ref().map(Vec::len)
             );
             assert!(record.proof_bytes().is_some());
+        }
+        for (index, left) in execution.records().iter().enumerate() {
+            for right in &execution.records()[index + 1..] {
+                assert_ne!(
+                    left.query_bytes(),
+                    right.query_bytes(),
+                    "roles {:?}/{:?} retain distinct authoritative queries",
+                    left.role(),
+                    right.role()
+                );
+                assert_ne!(
+                    left.proof_bytes(),
+                    right.proof_bytes(),
+                    "roles {:?}/{:?} retain distinct actual emitted proofs",
+                    left.role(),
+                    right.role()
+                );
+            }
         }
         let handoff = execution
             .handoff()
