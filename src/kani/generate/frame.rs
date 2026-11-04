@@ -895,6 +895,8 @@ pub(crate) fn field_range(
             | CheckedMemberType::Timestamp
             | CheckedMemberType::Clock
             | CheckedMemberType::Quantity(_)
+            | CheckedMemberType::RationalRange { .. }
+            | CheckedMemberType::CarriedRational { .. }
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
             | CheckedMemberType::Tuple(_)
