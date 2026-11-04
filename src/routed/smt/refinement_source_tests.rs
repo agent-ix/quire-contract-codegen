@@ -532,6 +532,15 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
         let certificate = request
             .assemble_smt_certificate(&handoff, &limits, &cancel)
             .expect("public QSL assembly");
+        assert_eq!(certificate.steps.len(), 7);
+        for (record, part) in execution
+            .records()
+            .iter()
+            .zip(std::iter::once(&certificate.base).chain(&certificate.steps))
+        {
+            assert_eq!(Some(part.query.as_slice()), record.query_bytes());
+            assert_eq!(Some(part.proof.as_slice()), record.proof_bytes());
+        }
         let checked = request
             .check_smt_proof(&certificate, &limits, &cancel)
             .expect("QSL proof reader accepts real emitted Alethe");
