@@ -653,6 +653,8 @@ impl PackageBuilder {
             "generated"
         } else if (tag, form) == ("value", "parameter") {
             "expression"
+        } else if (tag, form) == ("temporal", "temporal_clause") {
+            "claim"
         } else {
             "declaration"
         };
@@ -1772,7 +1774,7 @@ pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedN
     let source = include_bytes!("recursive.native");
     let compiled = compile_package(
         CompileUnit {
-            source: SourceIdentity::new("a", "u", "git", "1"),
+            source: SourceIdentity::new("a", "u"),
             package_name: BASE_PACKAGE_NAME.to_owned(),
             path: "recursive-items.native",
             bytes: source,
@@ -1998,7 +2000,14 @@ mod fixture_identity_tests {
             panic!("the corpus has one clock-configured clause");
         };
         assert_eq!(binding.declaration, code_id(T_BARE));
+        assert_eq!(binding.occurrence, 0);
         assert_eq!(binding.clock_name.as_ref(), "c");
+        let [name] = admitted.temporal_clause_names().expect("clause name") else {
+            panic!("the corpus has one named clause occurrence");
+        };
+        assert_eq!(name.declaration, binding.declaration);
+        assert_eq!(name.occurrence, binding.occurrence);
+        assert_eq!(name.name.as_ref(), "Clause0");
         assert_eq!(
             binding.clock,
             ClockConfiguration::EventPosition {

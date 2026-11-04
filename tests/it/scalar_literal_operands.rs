@@ -27,7 +27,7 @@ fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "scalar-literals.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "scalar-literals.native"),
             package_name: "scalar-literals".to_owned(),
             path: "scalar-literals.native",
             bytes: source.as_bytes(),

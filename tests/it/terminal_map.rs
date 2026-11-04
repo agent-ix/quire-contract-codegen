@@ -138,7 +138,7 @@ fn replayed(code: Code) -> TerminalValue {
 fn library(identity: &str, owner: &str) -> SuppliedLibrary {
     SuppliedLibrary {
         identity: identity.to_owned(),
-        source: SourceIdentity::new("agent-ix", owner, "git", "r1"),
+        source: SourceIdentity::new("agent-ix", owner),
         path: owner.to_owned(),
         bytes: b"a dependency source".to_vec(),
     }
@@ -706,8 +706,6 @@ fn repeated_identity_refusal() -> ReplayPackageError {
     let locked = |identity: &str| LockedSource {
         authority: "agent-ix".to_owned(),
         identity: identity.to_owned(),
-        namespace: "git".to_owned(),
-        revision: "r1".to_owned(),
         bytes: b"a source".to_vec(),
     };
     let dependency = |source: &str| DependencyLock {

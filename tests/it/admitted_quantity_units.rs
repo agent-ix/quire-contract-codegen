@@ -32,7 +32,7 @@ function healthy using v(a: Int[0,9], b: Int[0,9]): Boolean pure { a = b }
 fn compile() -> AdmittedCompilation {
     compile_admitted(
         CompileUnit {
-            source: SourceIdentity::new("agent-ix", "quantity-owner-source", "git", "1"),
+            source: SourceIdentity::new("agent-ix", "quantity-owner-source"),
             package_name: "quantity-owner-source".to_owned(),
             path: "quantity-owner.native",
             bytes: SOURCE.as_bytes(),
@@ -218,7 +218,7 @@ fn nested_quantity_stays_unsupported_with_owner_metadata_and_healthy_unions() {
 
     let other = compile_admitted(
         CompileUnit {
-            source: SourceIdentity::new("agent-ix", "foreign-quantity-owner", "git", "1"),
+            source: SourceIdentity::new("agent-ix", "foreign-quantity-owner"),
             package_name: "foreign-quantity-owner".to_owned(),
             path: "foreign-quantity.native",
             bytes: SOURCE

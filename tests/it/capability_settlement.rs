@@ -572,7 +572,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
              function f using v(a: Int[0, 9]): Int[0, 18] pure { a + a }\n";
         let compiled = compile_package(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
+                source: SourceIdentity::new("test", "selected-add.native"),
                 package_name: "selected-add".to_owned(),
                 path: "selected-add.native",
                 bytes: source.as_bytes(),

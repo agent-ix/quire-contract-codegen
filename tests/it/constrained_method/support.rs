@@ -61,7 +61,7 @@ pub(super) fn fixture(doc: &Value, name: &str, safety: &str, constraints: &[&str
 }
 pub(super) fn fixture_source(bytes: Vec<u8>, name: &str, source: String) -> Fixture {
     let site = call_site(
-        SourceIdentity::new("agent-ix", format!("{name}.native"), "git", "fixture"),
+        SourceIdentity::new("agent-ix", format!("{name}.native")),
         name.to_owned(),
         "constrained.native",
         source.as_bytes(),
@@ -242,7 +242,7 @@ pub(super) fn owner_evaluation(
         "populations":[{"population":population,"complete":true,"objects":[{"key":"self","type":OBJECT,"fields":fields}]}]
     });
     qsl_replay::evaluate_clause(qsl_replay::ClauseEvaluationRequest {
-        source: SourceIdentity::new("agent-ix", format!("{}.native", f.name), "git", "fixture"),
+        source: SourceIdentity::new("agent-ix", format!("{}.native", f.name)),
         package_name: f.name.clone(),
         path: "constrained.native".into(),
         bytes: f.source.as_bytes().to_vec(),

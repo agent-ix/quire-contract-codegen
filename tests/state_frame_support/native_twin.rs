@@ -1107,7 +1107,7 @@ impl Twin {
         operation: &str,
     ) -> Result<OperationSite, Box<CallSiteRefusal>> {
         call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,
@@ -1139,7 +1139,7 @@ impl Twin {
             .map(|(name, point)| ((*name).to_owned(), point.clone()))
             .collect();
         let compiled = compile_package_with_execution_points(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,
@@ -1295,7 +1295,7 @@ impl Twin {
     ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             unit,
@@ -1554,8 +1554,6 @@ impl Twin {
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: self.identity.to_owned(),
-                namespace: "git".to_owned(),
-                revision: "1".to_owned(),
                 bytes: self.unit.clone(),
             },
             dependencies: Vec::<DependencyLock>::new(),
@@ -1581,7 +1579,7 @@ impl Twin {
     pub fn clause_site(&self, clause: &str) -> Result<ClauseSite, Box<CallSiteRefusal>> {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         call_site(
-            SourceIdentity::new(AUTHORITY, self.identity, "git", "1"),
+            SourceIdentity::new(AUTHORITY, self.identity),
             self.identity.to_owned(),
             self.identity,
             &self.unit,
@@ -1621,8 +1619,6 @@ impl Twin {
         let label = |name: &str| DocumentLabel {
             authority: "test".to_owned(),
             identity: name.to_owned(),
-            revision_namespace: "ns".to_owned(),
-            revision: "1".to_owned(),
         };
         let [balance, audit] = model::FIELDS.map(|(name, _)| name.to_owned());
         StateClauseReplayInputs {
@@ -1705,8 +1701,6 @@ fn label(name: &str) -> DocumentRef {
     DocumentRef {
         authority: "test".to_owned(),
         identity: name.to_owned(),
-        revision_namespace: "ns".to_owned(),
-        revision: "1".to_owned(),
     }
 }
 
@@ -1714,8 +1708,6 @@ fn identity_json(reference: &DocumentRef) -> Value {
     json!({
         "authority": reference.authority,
         "identity": reference.identity,
-        "revision_namespace": reference.revision_namespace,
-        "revision": reference.revision,
     })
 }
 

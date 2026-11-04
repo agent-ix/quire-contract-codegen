@@ -13,12 +13,7 @@ use quire_contract_codegen::{
 fn foreign_context() -> qsl_replay::AdmittedCompilation {
     qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new(
-                "test",
-                "foreign-composites.native",
-                "git",
-                "fixture",
-            ),
+            source: qsl_replay::SourceIdentity::new("test", "foreign-composites.native"),
             package_name: "foreign-composites".to_owned(),
             path: "foreign-composites.native",
             bytes: fixture::SOURCE.as_bytes(),
@@ -618,6 +613,7 @@ fn source_context_comparison_distinguishes_checked_term_sidecar_presence() {
         CheckedPackageSidecarsRef {
             checked_term_data: None,
             temporal_bindings: original.temporal_bindings(),
+            temporal_clause_names: original.temporal_clause_names(),
             schedulability_claims: original.schedulability_claim_rows(),
             operation_effects: original.operation_effect_rows(),
         },

@@ -42,7 +42,7 @@ fn first_reference(node: &CheckedSemanticNodeV2) -> Option<&CheckedNodeId> {
 fn admitted_source(source: &str) -> CheckedPackageV2 {
     let compiled = compile_package(
         CompileUnit {
-            source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "package-items.native"),
             package_name: "package-items".to_owned(),
             path: "package-items.native",
             bytes: source.as_bytes(),

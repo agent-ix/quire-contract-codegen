@@ -1416,12 +1416,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     );
     let result = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new(
-                "test",
-                "duplicate-field.native",
-                "git",
-                "fixture",
-            ),
+            source: qsl_replay::SourceIdentity::new("test", "duplicate-field.native"),
             package_name: "duplicate-field".to_owned(),
             path: "duplicate-field.native",
             bytes: source.as_bytes(),

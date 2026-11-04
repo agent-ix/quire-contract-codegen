@@ -18,7 +18,7 @@ const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\nprofile v = \
 fn checked_source(source: &str) -> quire_contract_model::CheckedPackageV2 {
     let compiled = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new("test", "implication.native", "git", "current"),
+            source: qsl_replay::SourceIdentity::new("test", "implication.native"),
             package_name: "current-implication".to_owned(),
             path: "implication.native",
             bytes: source.as_bytes(),

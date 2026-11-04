@@ -18,7 +18,7 @@ function other_same using v(a: Other,b: Other): Boolean pure { a = b }\n";
 pub fn compile(source: &str) -> AdmittedCompilation {
     compile_admitted(
         CompileUnit {
-            source: SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "admitted-enums.native"),
             package_name: "admitted-enums".to_owned(),
             path: "admitted-enums.native",
             bytes: source.as_bytes(),
@@ -36,7 +36,7 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n";
     let library = |identity: &str, name: &str, body: &str| qsl_replay::SuppliedLibrary {
         identity: identity.to_owned(),
-        source: SourceIdentity::new("test", name, "git", "fixture"),
+        source: SourceIdentity::new("test", name),
         path: format!("{name}.native"),
         bytes: format!("{HEADER}{body}").into_bytes(),
     };
@@ -80,7 +80,7 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
     );
     let compiled = compile_admitted(
         CompileUnit {
-            source: SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "admitted-enums.native"),
             package_name: "admitted-enums".to_owned(),
             path: "admitted-enums.native",
             bytes: text.as_bytes(),

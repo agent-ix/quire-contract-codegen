@@ -516,7 +516,7 @@ pub mod rt_side {
             source.push_str("function fixture using v(): Boolean pure { true }\n");
             let compiled = qsl_replay::compile_admitted(
                 qsl_replay::CompileUnit {
-                    source: qsl_replay::SourceIdentity::new("agent-ix", owner, "git", "1"),
+                    source: qsl_replay::SourceIdentity::new("agent-ix", owner),
                     package_name: owner.to_owned(),
                     path: "fixture.native",
                     bytes: source.as_bytes(),
@@ -635,7 +635,7 @@ pub mod rt_side {
         let admitted = enums.entry(source.clone()).or_insert_with(|| {
             let compiled = qsl_replay::compile_admitted(
                 qsl_replay::CompileUnit {
-                    source: qsl_replay::SourceIdentity::new("agent-ix", "example-model", "git", "1"),
+                    source: qsl_replay::SourceIdentity::new("agent-ix", "example-model"),
                     package_name: "example-model".to_owned(),
                     path: "enum.native",
                     bytes: source.as_bytes(),

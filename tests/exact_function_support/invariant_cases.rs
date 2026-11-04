@@ -66,7 +66,7 @@ mod membership_capacity {
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/fixture.rs"));
 
 fn identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "ir595-agreement", "git", "1")
+    SourceIdentity::new("agent-ix", "ir595-agreement")
 }
 fn acquired() -> qsl_replay::CheckedClosureCompilation {
     acquire_checked_closure(

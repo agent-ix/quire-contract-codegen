@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Clock bindings authored beside synthetic temporal clauses.
 
-use quire_contract_model::{CheckedNodeId, ClockConfiguration, TemporalBinding};
+use quire_contract_model::{
+    CheckedNodeId, ClockConfiguration, TemporalBinding, TemporalClauseName,
+};
 use serde_json::{json, Value};
 
 /// Bind one clock-configured clause using its authored identity, clock argument, and lock profile.
@@ -16,6 +18,16 @@ pub(super) fn bind_clause(wire: &mut Value, declaration: CheckedNodeId) {
         .expect("authored temporal clause");
     assert_eq!(clause["node_tag"], "temporal");
     assert_eq!(clause["semantic_form"], "temporal_clause");
+    let occurrences = clause["occurrences"]
+        .as_array()
+        .expect("temporal clause occurrences");
+    let [occurrence] = occurrences.as_slice() else {
+        panic!("fixture temporal clause has one claim occurrence");
+    };
+    assert_eq!(occurrence["role"], "claim");
+    let occurrence = occurrence["ordinal"]
+        .as_u64()
+        .expect("fixture claim occurrence ordinal");
     let laws = clause["body"]["operation"]["laws"]
         .as_array()
         .expect("temporal clause laws");
@@ -47,7 +59,8 @@ pub(super) fn bind_clause(wire: &mut Value, declaration: CheckedNodeId) {
         other => panic!("fixture needs explicit clock parameters for profile {other}"),
     };
     let binding = TemporalBinding {
-        declaration,
+        declaration: declaration.clone(),
+        occurrence,
         clock_name: clock_name.into(),
         clock,
     };
@@ -58,19 +71,51 @@ pub(super) fn bind_clause(wire: &mut Value, declaration: CheckedNodeId) {
     )
     .expect("fixture temporal bindings");
     rows.push(binding);
-    rows.sort_by(|left, right| left.declaration.cmp(&right.declaration));
+    rows.sort_by(|left, right| {
+        (&left.declaration, left.occurrence).cmp(&(&right.declaration, right.occurrence))
+    });
     assert!(rows
         .windows(2)
-        .all(|pair| pair[0].declaration != pair[1].declaration));
+        .all(|pair| (&pair[0].declaration, pair[0].occurrence)
+            != (&pair[1].declaration, pair[1].occurrence)));
     root.insert(
         "temporal_bindings".into(),
         serde_json::to_value(rows).expect("typed temporal bindings serialize"),
+    );
+    let name = TemporalClauseName {
+        declaration,
+        occurrence,
+        name: "Clause0".into(),
+    };
+    let mut names: Vec<TemporalClauseName> = serde_json::from_value(
+        root.remove("temporal_clause_names")
+            .unwrap_or_else(|| json!([])),
+    )
+    .expect("fixture temporal clause names");
+    names.push(name);
+    names.sort_by(|left, right| {
+        (&left.declaration, left.occurrence).cmp(&(&right.declaration, right.occurrence))
+    });
+    root.insert(
+        "temporal_clause_names".into(),
+        serde_json::to_value(names).expect("typed temporal clause names serialize"),
     );
 }
 
 /// Keep clock rows aligned with the graph nodes retained by a focused fixture.
 pub(super) fn retain_for_nodes(wire: &mut Value, keep: impl Fn(&CheckedNodeId) -> bool) {
     let root = wire.as_object_mut().expect("fixture package object");
+    if let Some(names) = root.remove("temporal_clause_names") {
+        let mut names: Vec<TemporalClauseName> =
+            serde_json::from_value(names).expect("fixture temporal clause names");
+        names.retain(|row| keep(&row.declaration));
+        if !names.is_empty() {
+            root.insert(
+                "temporal_clause_names".into(),
+                serde_json::to_value(names).expect("typed temporal clause names serialize"),
+            );
+        }
+    }
     let Some(rows) = root.remove("temporal_bindings") else {
         return;
     };

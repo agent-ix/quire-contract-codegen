@@ -81,7 +81,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     let source = b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { a = b }\n";
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "ir666", "git", "r1"),
+            source: SourceIdentity::new("test", "ir666"),
             package_name: "ir666".to_owned(),
             path: "ir666.native",
             bytes: source,
@@ -212,12 +212,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     let wire = ReplayRequestWire {
         package_name: "ir666".to_owned(),
         profile_selections: Vec::new(),
-        sources: vec![(
-            "test".to_owned(),
-            "ir666".to_owned(),
-            "git".to_owned(),
-            "r1".to_owned(),
-        )],
+        sources: vec![("test".to_owned(), "ir666".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(
             qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),

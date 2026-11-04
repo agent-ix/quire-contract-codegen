@@ -19,8 +19,6 @@ fn source() -> LockedSource {
     LockedSource {
         authority: "test".to_owned(),
         identity: "composite-agreement.native".to_owned(),
-        namespace: "git".to_owned(),
-        revision: "fixture".to_owned(),
         bytes: composite_original_eq::SOURCE.as_bytes().to_vec(),
     }
 }
@@ -128,7 +126,7 @@ use quire_exact as exact;
 use exact::{{ScalarLimits, Integer, IntegerInterval, Value, ValueType, CollectionType, CollectionKind, CardinalityBound, Meter}};
 fn main() {{
  let source=include_bytes!("original.native");
- let compiled=qsl_replay::compile_admitted(qsl_replay::CompileUnit {{ source:qsl_replay::SourceIdentity::new("test","composite-agreement.native","git","fixture"),package_name:"composite-agreement".to_owned(),path:"composite-agreement.native",bytes:source }},[],&qsl_replay::DependencyInput::default(),qsl_replay::StageLimits::default(),qsl_replay::ReplayLimits::default()).expect("same actual original context");
+ let compiled=qsl_replay::compile_admitted(qsl_replay::CompileUnit {{ source:qsl_replay::SourceIdentity::new("test", "composite-agreement.native"),package_name:"composite-agreement".to_owned(),path:"composite-agreement.native",bytes:source }},[],&qsl_replay::DependencyInput::default(),qsl_replay::StageLimits::default(),qsl_replay::ReplayLimits::default()).expect("same actual original context");
  let environment=generated::{}(Some(compiled.context())).expect("original generated environment");
  let limits={:?};
  let ty=CollectionType::new(CollectionKind::Sequence,ValueType::Int(IntegerInterval::new(Integer::from(0_i64),Integer::from(9_i64)).unwrap()),Some(CardinalityBound::new(0,3).unwrap()));

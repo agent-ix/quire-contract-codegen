@@ -25,7 +25,7 @@ use quire_semantic_value::object_closure::ObjectClosure;
 use std::num::NonZeroU64;
 
 fn source_identity() -> SourceIdentity {
-    SourceIdentity::new("agent-ix", "ir595-agreement", "git", "1")
+    SourceIdentity::new("agent-ix", "ir595-agreement")
 }
 
 fn source<'a>(dependencies: &'a DependencyInput) -> CheckedFunctionSource<'a> {

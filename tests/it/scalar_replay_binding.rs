@@ -16,8 +16,6 @@ fn source(fixture: &ReplayFixture) -> LockedSource {
     LockedSource {
         authority: "test".to_owned(),
         identity: "scalar-playback.native".to_owned(),
-        namespace: "git".to_owned(),
-        revision: "fixture".to_owned(),
         bytes: fixture.source.as_bytes().to_vec(),
     }
 }
@@ -441,7 +439,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
             4 => bad.operands.swap(0, 1),
             5 => bad.limits.work_units -= 1,
             6 => bad.source.bytes.push(b' '),
-            7 => bad.source.revision.push_str("-other"),
+            7 => bad.source.identity.push_str("-other"),
             _ => unreachable!(),
         }
         assert!(

@@ -620,6 +620,7 @@ impl PackageBuilder {
             ("state", "frame") => "generated",
             ("state", "operation_anchor") => "anchor",
             ("state", "state_clause") => "claim",
+            ("temporal", "temporal_clause") => "claim",
             _ => "declaration",
         };
         let source = self.value["lock"]["sources"][0].clone();

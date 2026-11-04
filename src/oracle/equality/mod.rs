@@ -804,6 +804,7 @@ pub fn generate_composite_equality_oracles(
                 CheckedPackageSidecarsRef {
                     checked_term_data: original.checked_term_data(),
                     temporal_bindings: original.temporal_bindings(),
+                    temporal_clause_names: original.temporal_clause_names(),
                     schedulability_claims: original.schedulability_claim_rows(),
                     operation_effects: original.operation_effect_rows(),
                 },
@@ -2761,7 +2762,7 @@ mod tests {
         );
         let compiled = compile_admitted(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("a", "u", "git", "1"),
+                source: SourceIdentity::new("a", "u"),
                 package_name: "recursive".to_owned(),
                 path: "recursive.native",
                 bytes: source.as_bytes(),
@@ -2818,12 +2819,7 @@ mod tests {
         );
         let compiled = qsl_replay::compile_admitted(
             qsl_replay::CompileUnit {
-                source: qsl_replay::SourceIdentity::new(
-                    "test",
-                    "numeric-member.native",
-                    "git",
-                    "fixture",
-                ),
+                source: qsl_replay::SourceIdentity::new("test", "numeric-member.native"),
                 package_name: "numeric-member".to_owned(),
                 path: "numeric-member.native",
                 bytes: source.as_bytes(),
@@ -3219,7 +3215,7 @@ mod tests {
         );
         let admitted = compile_admitted(
             qsl_replay::CompileUnit {
-                source: SourceIdentity::new("test", "deep.native", "git", "fixture"),
+                source: SourceIdentity::new("test", "deep.native"),
                 package_name: "deep".to_owned(),
                 path: "deep.native",
                 bytes: source.as_bytes(),
@@ -3960,6 +3956,7 @@ mod tests {
             CheckedPackageSidecarsRef {
                 checked_term_data: original.checked_term_data(),
                 temporal_bindings: original.temporal_bindings(),
+                temporal_clause_names: original.temporal_clause_names(),
                 schedulability_claims: original.schedulability_claim_rows(),
                 operation_effects: original.operation_effect_rows(),
             },
@@ -4162,7 +4159,7 @@ fn deep_matches_shallow() {
     let source = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/deep.native"));
     let admitted = qsl_replay::compile_admitted(
         qsl_replay::CompileUnit {
-            source: qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
+            source: qsl_replay::SourceIdentity::new("test", "deep.native"),
             package_name: "deep".to_owned(),
             path: "deep.native",
             bytes: source,
@@ -4784,7 +4781,7 @@ fn deep_matches_shallow() {
         let mut claims = vec![generated_claim('1'), generated_claim('2')];
         let admitted = qsl_replay::compile_admitted(
             qsl_replay::CompileUnit {
-                source: qsl_replay::SourceIdentity::new("test", "render-boundary.native", "git", "fixture"),
+                source: qsl_replay::SourceIdentity::new("test", "render-boundary.native"),
                 package_name: "render-boundary".to_owned(),
                 path: "render-boundary.native",
                 bytes: b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nfunction same using v(a: Quantity<m>, b: Quantity<m>): Boolean pure { a = b }\n",

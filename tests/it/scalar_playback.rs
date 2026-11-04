@@ -78,7 +78,7 @@ pub(super) fn replay_fixture_with_extra(
     );
     let compiled = compile_package(
         qsl_replay::CompileUnit {
-            source: SourceIdentity::new("test", "scalar-playback.native", "git", "fixture"),
+            source: SourceIdentity::new("test", "scalar-playback.native"),
             package_name: "scalar-playback".to_owned(),
             path: "scalar-playback.native",
             bytes: source.as_bytes(),

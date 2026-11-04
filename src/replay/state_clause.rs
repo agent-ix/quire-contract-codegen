@@ -67,17 +67,13 @@ pub struct StateObjectAddress {
     pub object_type: String,
 }
 
-/// The identity label of one document: its authority, identity and revision.
+/// The two labels that identify one document.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentLabel {
     /// The document's authority.
     pub authority: String,
     /// The document's identity.
     pub identity: String,
-    /// The namespace its revision is named in.
-    pub revision_namespace: String,
-    /// The revision.
-    pub revision: String,
 }
 
 /// Everything one state-clause replay needs beyond the proved unit.
@@ -768,8 +764,6 @@ impl DocumentLabel {
         DocumentRef {
             authority: self.authority.clone(),
             identity: self.identity.clone(),
-            revision_namespace: self.revision_namespace.clone(),
-            revision: self.revision.clone(),
         }
     }
 }
@@ -784,8 +778,6 @@ fn document_identity(bytes: &[u8]) -> Option<DocumentRef> {
     Some(DocumentRef {
         authority: identity.authority,
         identity: identity.identity,
-        revision_namespace: identity.revision_namespace,
-        revision: identity.revision,
     })
 }
 
@@ -808,8 +800,6 @@ fn ensure_unique_documents(documents: &[&[u8]]) -> Result<(), StateClauseReplayE
 pub(crate) struct IdentityMember {
     authority: String,
     identity: String,
-    revision_namespace: String,
-    revision: String,
 }
 
 impl From<&DocumentLabel> for IdentityMember {
@@ -817,8 +807,6 @@ impl From<&DocumentLabel> for IdentityMember {
         Self {
             authority: label.authority.clone(),
             identity: label.identity.clone(),
-            revision_namespace: label.revision_namespace.clone(),
-            revision: label.revision.clone(),
         }
     }
 }
@@ -881,8 +869,6 @@ impl SnapshotLink {
         DocumentRef {
             authority: self.identity.authority.clone(),
             identity: self.identity.identity.clone(),
-            revision_namespace: self.identity.revision_namespace.clone(),
-            revision: self.identity.revision.clone(),
         }
     }
 }
@@ -1296,15 +1282,14 @@ mod tests {
     #[trace("FR-024-AC-52", "TC-035")]
     #[test]
     fn tc_035_duplicate_document_labels_refuse_before_request() {
-        let first = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":1}"#;
-        let changed = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":2}"#;
+        let first = br#"{"identity":{"authority":"a","identity":"i"},"value":1}"#;
+        let changed = br#"{"identity":{"authority":"a","identity":"i"},"value":2}"#;
         for second in [first.as_slice(), changed.as_slice()] {
             let error = ensure_unique_documents(&[first.as_slice(), second])
                 .expect_err("repeated labels refuse regardless of bytes");
             assert!(
                 matches!(error, StateClauseReplayError::DuplicateDocumentIdentity { identity }
-                if identity.authority == "a" && identity.identity == "i"
-                    && identity.revision_namespace == "n" && identity.revision == "r")
+                    if identity.authority == "a" && identity.identity == "i")
             );
         }
     }

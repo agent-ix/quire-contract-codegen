@@ -68,7 +68,7 @@ fn fixture_with_body(doc: &Value, preconditions: &str, body: &str) -> CheckedPac
     let bytes = quire_canonical::to_vec(doc, quire_canonical::Limits::new(1 << 20)).unwrap();
     let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\n{preconditions}\npost CollectionReady using v on M::Node::step {{ {body} }}\n");
     let site = call_site(
-        SourceIdentity::new("agent-ix", "ir1091-operation.native", "git", "fixture"),
+        SourceIdentity::new("agent-ix", "ir1091-operation.native"),
         "ir1091-operation".to_owned(),
         "ir1091-operation.native",
         source.as_bytes(),

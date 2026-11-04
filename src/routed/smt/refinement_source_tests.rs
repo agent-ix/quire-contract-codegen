@@ -121,8 +121,6 @@ fn initial(package: &str, snapshots: &mut BTreeMap<DocumentRef, Vec<u8>>) -> Doc
     let reference = DocumentRef {
         authority: "test".to_owned(),
         identity: name,
-        revision_namespace: "fixture".to_owned(),
-        revision: "fixture:1".to_owned(),
     };
     snapshots.insert(reference.clone(), bytes);
     reference
@@ -179,7 +177,7 @@ fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, 
     let source = authored_unit(row_count, reverse);
     let compiled = acquire_checked_closure(
         CompileUnit {
-            source: SourceIdentity::new("agent-ix", "ir1120-refinement", "git", "fixture"),
+            source: SourceIdentity::new("agent-ix", "ir1120-refinement"),
             package_name: "ir1120-refinement".to_owned(),
             path: "ir1120-refinement.native",
             bytes: source.as_bytes(),
