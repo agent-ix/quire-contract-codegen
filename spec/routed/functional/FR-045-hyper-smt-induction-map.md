@@ -233,15 +233,17 @@ planned. The refinement Base/Step record collection, validation, cvc5 proof
 framing, and deterministic FR-314 handoff are partial after CG #630 and the
 subsequent IR-1120 implementation. The source-authored seven-row permutation
 test checks QSL's canonical row mapping and distinct exact query bytes against
-CG's solver invocation and handoff records using synthetic proof output. Production FR-315 preparation/execution, the actual encoding-refusal
-control and live public-adapter readback are planned until IR-1120 and
-IR-1287 land. TC-059 step 5's source-authored zero-step refinement has a
-Base-only control. Direct solver invocations retain `Sat`, `Unknown`,
-absent/malformed response, failed-process and reached-limit non-proof results.
-The merged
-IR-1139 congruence fix and QSL-1306 FR-315 query normalization address the
-previously measured row-1 proof refusals. Live cvc5 output over the normalized
-queries has not yet been checked through QSL's FR-314 reader; its public
-adapter is pending IR-1287. AC-5 and TC-059 step 6 remain partial until that
-readback succeeds. CG SHALL pass the exact extracted interior bytes through
+CG's solver invocation and handoff records using synthetic proof output. The production driver in `src/routed/smt/refinement_driver.rs` prepares the
+complete QSL query set before direct bounded execution. Source controls exercise
+an admitted `any` row's original encoding refusal, native caller cancellation,
+and a Base-only missing-tool record. The live control compiles seven matched
+concrete/abstract operation rows over an identity-mapped Boolean state and passes
+eight actual cvc5 refutations through the public QSL request adapter and native
+proof reader. This is distinct from the synthetic framing/permutation controls;
+synthetic proof output supplies no live proof credit.
+
+The public facade publication and final unpatched consumer qualification remain
+planned until IR-1287 and IR-1120 land. HP-2 production integration remains
+planned under IR-974. AC-5 and TC-059 step 6 remain partial until the published
+facade passes the final consumer gate. CG SHALL pass the exact extracted interior bytes through
 the reader before claiming either covered.
