@@ -240,7 +240,11 @@ and a Base-only missing-tool record. The live control compiles seven matched
 concrete/abstract operation rows over an identity-mapped Boolean state and passes
 eight actual cvc5 refutations through the public QSL request adapter and native
 proof reader. This is distinct from the synthetic framing/permutation controls;
-synthetic proof output supplies no live proof credit.
+synthetic proof output supplies no live proof credit. The matched Boolean step
+queries normalize identically and their real emitted proofs are identical;
+this control does not discharge TC-059 step 6's distinct live-proof requirement.
+That part remains planned until IR-1120 lands with a genuine distinct-query
+live control.
 
 The public facade publication and final unpatched consumer qualification remain
 planned until IR-1287 and IR-1120 land. HP-2 production integration remains
