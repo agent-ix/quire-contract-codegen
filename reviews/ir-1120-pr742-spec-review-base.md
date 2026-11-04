@@ -17,7 +17,7 @@ The mixed spec/code/test slice retains the exact existing run-record format and 
 
 ## Verdict
 
-PASS
+PASS for the concrete unadopted wording proposal after disposition round 2. This review does not adopt the proposal, change the strict test assertion, or award acceptance credit; the CG owner decision remains required.
 
 ## Findings
 
@@ -54,3 +54,26 @@ Existing synthetic source/provenance controls retain association/framing credit 
 ### Method selection
 
 Code review includes Rust. Gap analysis includes the requested semantic binding check. Base, EARS, integrity and scope-boundary cover the changed requirements and public interface. No new spec object or relationship edge requires object/dependency analysis. No second reviewer or heavy build was used.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The proposed positive readback procedure only says to retain a typed result and not call it Verified. That permits QueryMismatch, ShapeMismatch, Stopped or Fault to satisfy the readback step, so a broken query join or a check that never completes could still count as this positive control. State an explicit successful transport/readback oracle: complete byte-exact assembly, then native Verified or the expected typed Unverifiable result; rejection, Unencodable, stop and fault fail this positive control. Preserve all outcomes unchanged and grant no proof-verification credit to Unverifiable. | spec/routed/matrix/TC-059-hyper-smt-induction-map.md:95-98 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | still-open | The pending-owner proposal preserves ownership and existing AC rows, but does not yet distinguish a successful typed readback from a failed check in its positive oracle. |
+| FND-002 | fixed | The proposal now requires the independently expected native readback result and rejects all typed positive-control failures without granting proof credit; owner adoption remains pending. |
+
+### Proposal scope verification
+
+Reviewed only the concrete pending-owner FR-045 Status and TC-059 step-6 wording. The explicit unadopted label, unchanged strict code assertion, unchanged AC-4 through AC-7, genuine seven-row/distinctness/byte-preservation requirements and QSL TC-893 ownership remain intact. Aligning this procedure with existing AC-5 is a CG owner decision; this review does not adopt it or award coverage. No production/test edit or Cargo run by reviewer.
+
+### Disposition round 2
+
+The positive oracle now requires complete byte-exact assembly followed by native Verified or an independently expected typed Unverifiable result for unchanged matched queries. Query/shape mismatch, Unencodable, rejection, stop and fault fail; all native results remain unchanged, with no checked-proof credit for Unverifiable.
+
+The pending-owner labels remain, AC-4 through AC-7 are unchanged, and the strict code assertion remains unchanged. The proposal keeps genuine seven-row solver/association/distinctness/byte-preservation requirements and QSL TC-893 ownership. No new findings; no Cargo or source edits by reviewer. Review-clear means ready for the owner’s contract decision, not adopted or merge-ready.
