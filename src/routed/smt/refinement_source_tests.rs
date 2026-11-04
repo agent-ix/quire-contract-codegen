@@ -474,6 +474,27 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
             )
             .expect("direct bounded solver invocations");
         assert_eq!(execution.records().len(), 8);
+        if let Some(directory) = std::env::var_os("QUIRE_SMT_EVIDENCE_DIR") {
+            let directory = std::path::Path::new(&directory);
+            std::fs::create_dir_all(directory).expect("external evidence directory");
+            for record in execution.records() {
+                let name = match record.role() {
+                    RefinementRole::Base => "base".to_owned(),
+                    RefinementRole::Step { row } => format!("step-{row}"),
+                };
+                for (suffix, bytes) in [
+                    ("query.smt2", record.query_bytes()),
+                    ("stdout", record.process().stdout.as_deref()),
+                    ("stderr", record.process().stderr.as_deref()),
+                    ("alethe", record.proof_bytes()),
+                ] {
+                    if let Some(bytes) = bytes {
+                        std::fs::write(directory.join(format!("{name}.{suffix}")), bytes)
+                            .expect("external actual invocation evidence");
+                    }
+                }
+            }
+        }
         for (expected, record) in execution.expected().iter().zip(execution.records()) {
             assert_eq!(record.item(), request.refinement_key());
             assert!(std::ptr::eq(record.subjects().request(), request));
@@ -481,10 +502,10 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
             assert_eq!(
                 record.status(),
                 crate::routed::smt::SolverStatus::Unsat,
-                "role {:?}, stderr {:?}, stdout {:?}",
+                "role {:?}, stderr bytes {:?}, stdout bytes {:?}",
                 record.role(),
-                record.process().stderr,
-                record.process().stdout
+                record.process().stderr.as_ref().map(Vec::len),
+                record.process().stdout.as_ref().map(Vec::len)
             );
             assert!(record.proof_bytes().is_some());
         }
