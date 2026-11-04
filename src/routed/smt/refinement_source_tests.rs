@@ -588,3 +588,203 @@ fn production_refinement_zero_rows_preserves_missing_tool() {
         );
     });
 }
+
+/// Production preparation/execution follows named rows through both source
+/// orders. Synthetic stdout supplies association/framing credit only.
+#[trace("TC-059", "FR-045-AC-4")]
+#[test]
+fn production_refinement_source_permutation_preserves_named_query_associations() {
+    use crate::routed::smt::refinement_driver::prepare_refinement;
+    let collect = |reverse| {
+        with_source_request(7, reverse, false, false, |request| {
+            let authoritative = std::iter::once(RefinementQueryKind::Initial)
+                .chain((0..7).map(|row| RefinementQueryKind::Step { row }))
+                .map(|kind| {
+                    encode_refinement_query(request, kind).expect("authoritative QSL query")
+                })
+                .collect::<Vec<_>>();
+            let cancel = Cancel::new();
+            let execution = prepare_refinement(request, &cancel)
+                .expect("all source queries prepare")
+                .execute(
+                    std::path::Path::new("/bin/sh"),
+                    &[
+                        "-c".into(),
+                        "cat >&2; printf 'unsat\\n((proof))'".into(),
+                        "--dump-proofs".into(),
+                        "--proof-format-mode=alethe".into(),
+                    ],
+                    ProcessLimits {
+                        input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                        wall_clock: Duration::from_secs(5),
+                        memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
+                        output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                    },
+                    &cancel,
+                )
+                .expect("production direct execution");
+            assert_eq!(execution.records().len(), 8);
+            let mut retained = Vec::new();
+            for (slot, ((expected, record), query)) in execution
+                .expected()
+                .iter()
+                .zip(execution.records())
+                .zip(authoritative)
+                .enumerate()
+            {
+                let role = if slot == 0 {
+                    RefinementRole::Base
+                } else {
+                    RefinementRole::Step { row: slot - 1 }
+                };
+                assert_eq!(record.role(), role);
+                assert_eq!(expected.role, role);
+                assert_eq!(record.item(), request.refinement_key());
+                assert!(std::ptr::eq(record.subjects().request(), request));
+                assert_eq!(record.query_bytes(), Some(query.as_slice()));
+                assert_eq!(
+                    record.process().stderr.as_deref(),
+                    Some(query.as_slice()),
+                    "the selected process receives exactly the independently encoded query"
+                );
+                assert_eq!(expected.query_bytes, query);
+                assert_eq!(record.attempt(), expected.attempt);
+                assert_eq!(record.status(), crate::routed::smt::SolverStatus::Unsat);
+                retained.push((role, query, record.attempt()));
+            }
+            assert!(
+                execution.handoff().is_ok(),
+                "framing/association only, no QSL proof credit"
+            );
+            retained
+        })
+    };
+    let first = collect(false);
+    let reversed = collect(true);
+    assert_eq!(
+        first[0].1, reversed[0].1,
+        "Base is unchanged by the row permutation"
+    );
+    for named_row in 0..7 {
+        let old = &first[named_row + 1];
+        let new = &reversed[7 - named_row];
+        assert_eq!(old.0, RefinementRole::Step { row: named_row });
+        assert_eq!(new.0, RefinementRole::Step { row: 6 - named_row });
+        assert_eq!(
+            old.1, new.1,
+            "op{named_row}'s actual query follows its declared position"
+        );
+        assert_ne!(old.2, new.2, "new genuine invocations have new attempts");
+    }
+    let attempts = first
+        .iter()
+        .chain(&reversed)
+        .map(|entry| entry.2)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        attempts.len(),
+        16,
+        "every production invocation has its own attempt"
+    );
+    for left in 1..8 {
+        for right in left + 1..8 {
+            assert_ne!(
+                first[left].1, first[right].1,
+                "named rows have distinct QSL queries"
+            );
+        }
+    }
+}
+
+/// The first selected process replaces its own executable with a directory.
+/// Its real completed record survives the next invocation's typed selection
+/// error. Synthetic proof stdout supplies no live proof-reader credit.
+#[trace("TC-059", "FR-045-AC-7")]
+#[test]
+fn production_refinement_retains_completed_records_after_a_later_mechanism_error() {
+    use crate::{
+        kani::run::process::{ProcessError, ProcessFailurePhase},
+        routed::smt::{
+            refinement_driver::{prepare_refinement, RefinementExecutionError},
+            SolverRunError,
+        },
+    };
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().expect("owned selected executable directory");
+    let executable = directory.path().join("selected-solver");
+    std::fs::write(
+        &executable,
+        "#!/bin/sh\ncat >&2\nrm -- \"$0\"\nmkdir -- \"$0\"\nprintf 'unsat\\n((proof))'\n",
+    )
+    .expect("write the actual selected executable");
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
+        .expect("make the selected executable runnable");
+    with_source_request(1, false, false, false, |request| {
+        let base_query = encode_refinement_query(request, RefinementQueryKind::Initial)
+            .expect("independent authoritative Base bytes");
+        let cancel = Cancel::new();
+        let result = prepare_refinement(request, &cancel)
+            .expect("both queries prepare")
+            .execute(
+                &executable,
+                &["--dump-proofs".into(), "--proof-format-mode=alethe".into()],
+                ProcessLimits {
+                    input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                    wall_clock: Duration::from_secs(5),
+                    memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
+                    output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
+                },
+                &cancel,
+            );
+        let Err(RefinementExecutionError::Process {
+            role,
+            error,
+            completed,
+        }) = result
+        else {
+            panic!("the later non-file selection must preserve a typed process error");
+        };
+        assert_eq!(role, RefinementRole::Step { row: 0 });
+        assert!(
+            executable.is_dir(),
+            "the first genuine process completed its deterministic change"
+        );
+        let SolverRunError::Process(ProcessError::Io { phase, source }) = error else {
+            panic!("the original native process-selection error remains distinct");
+        };
+        assert_eq!(phase, ProcessFailurePhase::Selection);
+        assert_eq!(source.kind(), std::io::ErrorKind::Other);
+        assert_eq!(completed.records().len(), 1);
+        assert_eq!(completed.expected().len(), 1);
+        let record = &completed.records()[0];
+        let expected = &completed.expected()[0];
+        assert_eq!(record.role(), RefinementRole::Base);
+        assert_eq!(record.item(), request.refinement_key());
+        assert!(std::ptr::eq(record.subjects().request(), request));
+        assert_eq!(record.query_bytes(), Some(base_query.as_slice()));
+        assert_eq!(
+            record.process().stderr.as_deref(),
+            Some(base_query.as_slice())
+        );
+        assert_eq!(
+            record.process().stdout.as_deref(),
+            Some(b"unsat\n((proof))".as_slice())
+        );
+        assert_eq!(record.proof_bytes(), Some(b"(proof)".as_slice()));
+        assert!(record.process().started);
+        assert!(matches!(
+            record.process().outcome,
+            crate::kani::run::process::ProcessOutcome::Completed { success: true, .. }
+        ));
+        assert_eq!(record.status(), crate::routed::smt::SolverStatus::Unsat);
+        assert_eq!(expected.item, *request.refinement_key());
+        assert_eq!(expected.role, record.role());
+        assert_eq!(expected.attempt, record.attempt());
+        assert_eq!(expected.query_bytes, base_query);
+        assert_eq!(
+            completed.handoff(),
+            Err(RefinementHandoffError::Shape),
+            "a retained prefix is not a complete certificate collection"
+        );
+    });
+}
