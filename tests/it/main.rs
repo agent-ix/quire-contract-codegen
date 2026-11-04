@@ -66,6 +66,7 @@ mod composite_equality_agreement;
 mod composite_equality_generation;
 mod composite_original_eq;
 mod composite_parity_converter;
+mod composite_record_residuals;
 mod cover_last;
 mod exact_function_agreement;
 mod exact_function_generation;

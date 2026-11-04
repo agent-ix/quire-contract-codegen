@@ -400,3 +400,14 @@ The Eq verified constructor controls use supplied verified evidence and establis
 backend proof or native observation. Actual CG driver authentication, generated-family proofs and
 tests remain PLANNED/UNRUN CODE gates;
 public API availability and specification publication establish none of that evidence.
+
+## Native Publication-Boundary Evidence
+
+`tests/it/composite_artifact_binding.rs` executes the original generated native
+oracle and refuses independent body, context and artifact mutations.
+`tests/it/composite_record_residuals.rs` additionally refuses a change to each
+published native file and to typed claim-map fields while the node identity
+stays equal. These are native publication/authentication controls. They do not
+supply the full proved-artifact record, backend success, falsified conversion
+or shadow pair-count evidence still Planned under IR-806. AC-18 retains its
+complete proving-record and same-artifact requirements.

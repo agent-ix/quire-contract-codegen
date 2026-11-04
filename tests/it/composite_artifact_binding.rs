@@ -58,7 +58,7 @@ fn context(package: &CheckedPackageV2) -> OriginalCompositeEqContext {
     )
     .unwrap()
 }
-fn binding(
+pub(super) fn binding(
     package: &CheckedPackageV2,
     generated: &CompositeEqualityOracles,
     node: &CheckedNodeId,

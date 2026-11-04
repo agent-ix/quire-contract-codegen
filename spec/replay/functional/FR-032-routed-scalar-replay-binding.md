@@ -34,8 +34,11 @@ actual generated harness checked. This requirement owns a public request builder
 settlement converter; the driver owns the intervening QSL replay call. QSL owns the operator-level
 exact evaluation, envelope arm, evidence and terminal causes.
 
-This is planned IR-631 work. The QSL operator and full-report identity contracts are merged and measured below.
-CG metadata retention, consumer conformance and the driver-observation contract remain CODE gates. No CG implementation or passing scalar-replay test is claimed.
+The full proof-driven replay pipeline remains Planned under IR-631. CG's
+original scalar body/limits retention, checked plan completion and native
+observation comparison are implemented. Native tests exercise the actual QSL
+operator route; they do not establish execution of the same proved artifact
+or supply a backend-success receipt.
 
 ## Scope
 
@@ -47,9 +50,10 @@ function-level declared-parameter parity route, new operation-contract clause-ki
 moving existing replay calls, a local exact evaluator or direct exact-kernel dependency in CG,
 copied QSL types, and conversion through `KaniObligationIdentity` or V1 `ReplayPackage`.
 
-The proposed scalar plan is constrained by
+The scalar plan is constrained by
 [AD-002](../../assurance/AD-002-cg-qsl-replay-seam.md), including R-6 and R-7. Their scalar
-contract fit is supplied by the merged operator contract; CG conformance remains planned. This document grants no exception to those
+contract fit is supplied by the merged operator contract; native input-binding
+controls do not close the full proof-driven pipeline. This document grants no exception to those
 rules. Scalar lowering parity is never a source-property refutation.
 
 ## Inputs
@@ -67,9 +71,10 @@ rules. Scalar lowering parity is never a source-property refutation.
   limits alongside the generated source. CG's scalar generation authority records those
   original limits; the caller preserves that record through the proving run. The builder
   compares replay limits with that original context, not with a caller's new replay budget.
-  This context producer is planned IR-631 work: `ScalarObligationIdentity` does not currently
-  persist limits. The current renderer's limit fields are all `u64::MAX`; there is no missing-
-  context default or inference from the current identity. The limits and generated source must be retained with the original proving context.
+  The generated harness retains these limits through `original_scalar_limits()`
+  alongside its original body and artifacts. The driver must preserve that
+  authority through the proving run; this full pipeline remains IR-631 work.
+  There is no missing-context default or inference from the current identity.
 - The checked/emitted package used to derive this node's operand and result ranges, the proving
   context, and the original proving `call_site` package identity and source bytes needed by
   QSL's envelope. Locating the enclosing source function for compilation does not turn this
@@ -460,3 +465,17 @@ scalar route is gated.
 - **Downstream**: [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md), planned public
   consumer and real-backend evidence for IR-631; driver E9 calls the admitted QSL seam once
   its prerequisites are resolved.
+
+## Native Input-Binding Evidence
+
+`tests/it/scalar_replay_binding.rs` exercises repeated parameter draws and
+actual driver/QSL ties. `tests/it/scalar_replay_residuals.rs` adds every current
+integer operator, distinct parameters, an occurrence-qualified inline literal,
+source-span invariance, independently observed result changes and missing-body
+refusals. The subtract and multiply paths consume the catalogue identities
+`quire.op.integer.sub` and `quire.op.integer.mul` stated above.
+
+These are real native executions and owner replay calls, not proof receipts.
+The complete same-proved-artifact falsification pipeline remains Planned under
+IR-631. The AC-15 through AC-18 requirement text remains unchanged; native
+input-binding evidence alone does not upgrade whole-pipeline status.
