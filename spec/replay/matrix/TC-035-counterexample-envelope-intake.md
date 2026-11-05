@@ -391,3 +391,13 @@ QSL-973 replay-target and STD-264 occurrence-key implementations and authentic a
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
 Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
+
+## Scoped evidence status (IR-1316)
+
+FR-024-AC-7/8 and AC-36 through AC-40 remain Planned (IR-1316; IR-335): there is no
+production minimizer, common two-backend typed intake or immutable minimization lineage.
+AC-35 remains Planned (IR-1316; IR-624; QSL-642) because the required QSL-produced same-model
+wide-range replay is unavailable; a synthetic admitted-model override is not replay evidence.
+AC-49/51 remain Planned (IR-1316; IR-1079): copied producer identities and field-set checks do
+not establish changed-grant rekeying and held-node full-body rejection. AC-1/14/20/21/24 retain
+their retired/replacement vocabulary and receive no implementation credit.
