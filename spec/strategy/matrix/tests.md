@@ -11,8 +11,9 @@ type: TestMatrix
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
-| FR-002 | FR-002-AC-7, FR-002-AC-8, FR-002-AC-10 through FR-002-AC-24 | TC-004 | 🚧 Planned (IR-1316; IR-815/IR-364): selected V2 harness and non-completed terminals are absent |
+| FR-002 | FR-002-AC-7, FR-002-AC-8, FR-002-AC-10 through FR-002-AC-20, FR-002-AC-22, FR-002-AC-24 | TC-004 | 🚧 Planned (IR-1316; IR-815/IR-364): selected V2 harness and non-completed terminals are absent |
 | FR-002 | FR-002-AC-9 | Inspection | 🚧 Planned (IR-1316; IR-815): harness generator still uses V1 typed bodies outside the V2 access path |
+| FR-002 | FR-002-AC-21, FR-002-AC-23 | TC-004 | Retired; no implementation credit; replaced by AC-25 and AC-26 respectively |
 | FR-002 | FR-002-AC-25, FR-002-AC-26 | TC-004 | 🚧 Planned (IR-1316; IR-815): V2 harness structural identity propagation and text refusals are absent |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-AC-6 | TC-017 | 🚧 V2 planned (V1 tests exist) |
