@@ -126,8 +126,12 @@ use quire_eval::{self as eval, Body, BodyFactory, ChildRequest, FamilyOutcome, R
 use quire_exact::{self as exact, Meter, Outcome, Refusal, Value};
 use quire_semantic_value::{self as sv, object_closure::ObjectClosure};
 
-fn evaluated(outcome: Outcome<Value>) -> eval::Evaluation {
-    eval::Evaluation { outcome: FamilyOutcome::Evaluated(outcome), location: None, losses: Vec::new() }
+fn evaluated(outcome: Outcome<Value>, location: &sv::location::Location) -> eval::Evaluation {
+    let location = match &outcome {
+        Outcome::Completed(_) => None,
+        Outcome::Undefined(_) | Outcome::Refused(_) | Outcome::Incomplete(_) => Some(location.clone()),
+    };
+    eval::Evaluation { outcome: FamilyOutcome::Evaluated(outcome), location, losses: Vec::new() }
 }
 #[derive(Clone)]
 struct PreparedFunction {
@@ -195,10 +199,13 @@ impl PreparedFunction {
         match &self.environment {
             Ok(_) => Ok(None),
             Err(sv::declaration::EnvironmentFailure::Refused(invalid)) => {
-                let mut evaluation = evaluated(Outcome::Refused(Refusal::CheckedInvariant {
-                    cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected,
-                }));
-                evaluation.location = Some(sv::location::Location::root(sv::location::Origin::TypeDeclaration { name: invalid.declaration.clone() }));
+                let evaluation = eval::Evaluation {
+                    outcome: FamilyOutcome::Evaluated(Outcome::Refused(Refusal::CheckedInvariant {
+                        cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected,
+                    })),
+                    location: Some(sv::location::Location::root(sv::location::Origin::TypeDeclaration { name: invalid.declaration.clone() })),
+                    losses: Vec::new(),
+                };
                 Ok(Some(evaluation))
             }
             Err(failure) => Err(self.failure(failure.clone())),
@@ -317,7 +324,7 @@ pub(crate) mod body_{symbol} {{
                 Resume::Start(args) => {{
                     if let Some(rejected) = self.0.ready()? {{ return Ok(Transition::Done(rejected)); }}
                     let environment = self.0.environment.as_ref().map_err(|failure| self.0.failure(failure.clone()))?;
-                    Ok(Transition::Done(self.0.finish(evaluated(run(args, meter, &self.0.parameters, environment)))?))
+                    Ok(Transition::Done(self.0.finish(evaluated(run(args, meter, &self.0.parameters, environment), &self.0.location))?))
                 }},
                 Resume::Again | Resume::Child(_) =>
                     Err(sv::catalog::InternalFault::new("generated_function", "unexpected_resume").into()),
