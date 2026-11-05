@@ -1491,8 +1491,8 @@ fn application_arguments(body: Option<&CheckedTerm>) -> Option<&[CheckedTerm]> {
 /// type is that of the conversion's first argument, followed through nested conversions to the
 /// first node that is not one, which is the descriptor's `source_type`. The conversion's own
 /// `result_type` is not read: whether the descriptor's conversion is admitted is the runtime's
-/// `check_equality` verdict on the descriptor, never the body's. An inline term (a `literal`, an
-/// inline `application`) is not an operand QSL emits and reads as no type.
+/// `check_equality` verdict on the descriptor, never the body's. An admitted inline scalar
+/// `literal` carries its own type node id; other inline terms read as no type.
 ///
 /// This is the generator's only read of body content (FR-018's Behavior clause "disagrees with
 /// its descriptor's arity or operand types"): the type used to build the runtime call always
@@ -1506,6 +1506,9 @@ fn operand_type_id<Body: GraphBody>(
     // Each step follows one reference to a distinct-or-repeated node; the graph's size bounds a
     // chain that does not cycle, and a cycle of conversions reads as no type.
     for _ in 0..=graph.len() {
+        if let CheckedTerm::Literal { type_id, .. } = term {
+            return Some(type_id.clone());
+        }
         let target = read_reference(term)?;
         let node = graph.node(&target)?;
         let conversion = (&*node.node_tag == CheckedNodeTag::Expression.as_wire())
