@@ -494,6 +494,26 @@ Record/tuple member semantics stay unchanged. Their unresolved genuine member
 bound association must not be filled by guessing lexical ownership or adding
 a public descriptor field; this control is direct-root-only.
 
+### Inline Integer literal operand controls
+
+For FR-018-AC-47, compile a genuine QSL source containing a closed Integer
+equality over two inline literals. Read its unchanged checked package through
+Contract IR and select the emitted `binary` expression and the authentic
+Integer type node. Confirm the admitted `CheckedTerm::Literal` operands retain
+that type node id. Give CG a descriptor naming it on both sides and require a
+generated claim and oracle. Execute the generated oracle on an independently
+supplied Integer pair and compare its completed Boolean result with direct
+runtime equality for the same pair and operator; the generated source or its
+claim map is not the expected-value oracle.
+
+Keep the admitted package fixed and change one descriptor source type to a
+different admitted type node. Require `OperandTypeMismatch` at that position,
+with `found` equal to the original literal type id, no symbol for the refused
+item, and the healthy original item unchanged. This control fails if CG reads
+the descriptor or the literal's syntax in place of IR's retained type id. A
+literal inside a nested conversion is outside this direct-operand control;
+the independent conversion-reference controls above remain required.
+
 ### Admitted Union consumer controls
 
 Planned host verification for FR-018-AC-44 (IR-17): compile authentic source
