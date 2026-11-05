@@ -1748,6 +1748,56 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
     }
 }
 
+#[trace("TC-030", "FR-019-AC-3")]
+#[test]
+fn bounded_only_kani_requires_a_bound_or_warns_without_one() {
+    let kind = CapabilityKind::ValueValidity;
+    let backend = BackendKind::Kani.identity().to_owned();
+    for finite_bound_available in [true, false] {
+        let settlement = settle_one(
+            vec![kani(vec![(kind, Mode::Bounded)])],
+            RequestItem {
+                extent: unbounded(finite_bound_available),
+                ..item(
+                    RequestedKind::Known(kind),
+                    Candidates::Set(vec![candidate(&backend)]),
+                )
+            },
+        );
+        assert_eq!(settlement.request_index, 0);
+        assert_eq!(settlement.kind, Some(kind));
+        if finite_bound_available {
+            assert_eq!(
+                settlement.disposition,
+                Disposition::RequiresBound {
+                    backend: backend.clone()
+                }
+            );
+            assert_eq!(settlement.warning(), None);
+        } else {
+            assert_eq!(
+                settlement.disposition,
+                Disposition::Unsupported {
+                    cause: Cause::UnboundedExtent {
+                        kind,
+                        backend: backend.clone()
+                    }
+                }
+            );
+            let Disposition::Unsupported { cause } = &settlement.disposition else {
+                panic!("an unboundable item must be unsupported");
+            };
+            assert_eq!(cause.code(), "unsupported_projection");
+            assert_eq!(
+                settlement.warning().as_deref(),
+                Some(
+                    "kani advertises value-validity bounded only and no finite bound is available"
+                )
+            );
+        }
+    }
+}
+
 /// The Kani arm checks typed form support before extent and advertised mode.
 #[trace(
     "FR-019-AC-25",

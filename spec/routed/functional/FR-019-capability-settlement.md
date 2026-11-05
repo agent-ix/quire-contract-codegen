@@ -570,6 +570,28 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-43 | Two driver items selecting distinct `expression` occurrences of one checked `integer.add` node and different direct `numeric.narrow` occurrences in one admitted ContractPackage settle independently under the same Kani descriptor. Each preflight result is classified from its own selected result context; changing the selected narrow changes that item's typed result identity or refusal without changing the other. A node-only classifier or package-wide choice of either bound fails this control. | Test (TC-030) |
 | FR-019-AC-44 | For a V2 scalar claim, an absent `OwnResult`, an application occurrence absent from the admitted source, a conversion occurrence from another source or unrelated to the application, a missing conversion context root, or a ContractPackage source identity different from the checked source settles `invalid-request` with a typed form/context cause and no artifact or harness. Request and candidate/manifest defects retain their earlier precedence; for a valid candidate this selected-form refusal precedes extent and advertised-mode refusal. Neither a source message nor a caller maximum repairs the selection. | Test (TC-030) |
 
+## Coverage triage
+
+IR-1316 owns these remaining non-Kani coverage gaps. AC-3 concerns negotiation,
+so it needs no installed prover: `bounded_only_kani_requires_a_bound_or_warns_without_one`
+in TC-030 checks both finite-bound cases, exact dispositions, cause code and warning.
+No Kani execution outcome is claimed.
+
+| Criteria | Status | Concrete reason |
+|---|---|---|
+| FR-019-AC-9 | Planned (IR-1316) | `negotiate_arm` is an exhaustive closed-kind match, but no retained compile-fail control proves a newly unhandled kind fails compilation. The source-level analysis alone has no criterion-bound evidence in strict coverage. |
+| FR-019-AC-10 | Planned (IR-1316) | CG generation takes already routed items. The supported-only routing decision belongs to quire-driver/QSL; a CG generation test cannot prove that upstream filter. Composed routing evidence is not retained here. |
+| FR-019-AC-14 | Planned (IR-1316) | `negotiate_process` returns `Disposition` without result/artifact fields, but no criterion-bound compile-fail evidence proves an added terminal/artifact return is rejected. |
+| FR-019-AC-15 | Planned (IR-1316; driver work IR-633) | CG already has typed `ProviderOrigin` and consumes it. Its local descriptor tests do not establish the driver's one-time exhaustive projection from QSL `Registry::descriptors()`, unchanged advertisements, or the wire/dependency boundary. Full cross-repository projection evidence is missing. |
+| FR-019-AC-24 | Planned (IR-1316; composition IR-338) | Generic extent tests do not admit QSL FR-335's concrete collection claim and its distinct bounded/unbounded driver requests. The source-to-driver composition remains untested here. |
+| FR-019-AC-34 through FR-019-AC-38 | Planned (IR-1316; implementation IR-516) | `BackendKind` has only Kani and Process variants. No EN-1 explicit-state or EN-2/EN-3 SMT temporal settlement arm exists for the specified TP/HP/SG form, subject and advertisement controls. Existing SMT execution helpers do not supply negotiation arms. |
+| FR-019-AC-39 | Planned (IR-1316; implementation IR-516) | The settlement request/descriptor has no selected reduction advertisement or POR-footprint negotiation input. Reduction preservation and request/obligation identity controls cannot run through this seam. |
+| FR-019-AC-40, FR-019-AC-41 | Planned (IR-1316; implementation IR-516) | Negotiation has no resolved weak-memory model or separate model/protocol subject-class input. Neither memory-model preservation nor class-specific engine admission is implemented at this boundary. |
+| FR-019-AC-47 | Planned (IR-1316; QSL producer evidence) | CG refuses repeated manifest identities under AC-45/46, but this does not prove QSL's registry snapshot never produces them. The upstream registry invariant has no criterion-bound evidence retained in CG. |
+
+AC-48 is retired in favor of AC-54 and earns no implementation credit. This
+triage does not add installed-Kani evidence for surviving Kani-form obligations.
+
 ## Dependencies
 
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), the
