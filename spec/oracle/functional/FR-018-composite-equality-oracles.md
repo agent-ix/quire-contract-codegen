@@ -579,17 +579,20 @@ acceptance.
   and no package when its canonical bytes exceed the ceiling. With no admitted
   package, FR-039 refuses the whole call before CG can produce any item claim or
   artifact; the producer's `limit` and `consumed` remain authoritative.
-- Each operand of a `binary` node is a `reference` to the node that denotes it, as a
-  checked package keys every operand as its own node. The generator shall read an
-  operand's type as that node's `semantic_type`, except where the node is an
+- For a `reference` operand of a `binary` node, the generator shall read the
+  referenced node's `semantic_type`, except where that node is an
   `expression` whose body is an `application` of operator `convert`: that operand is a
   conversion, and the generator shall read the type of the conversion's first argument,
   following nested conversions to the first node that is not one. That type is compared
   with the descriptor's `source_type`. The conversion's own `result_type` is not
   compared with the descriptor's conversion target: whether the descriptor's
   conversion is admitted is `check_equality`'s verdict on the descriptor, not the
-  body's. An operand that is not a `reference` has no type to read and disagrees with
-  its descriptor.
+  body's. For an inline scalar `literal` operand retained in the admitted
+  `CheckedTerm`, the generator shall read its `type_id` as the operand type and
+  compare that id with the descriptor's `source_type`. It shall not derive an
+  operand type from the literal kind or value, the enclosing expression's result
+  type, or the caller's descriptor. Any other inline term has no operand type
+  under this rule and disagrees with its descriptor.
 - If one node id appears more than once in the request under one descriptor, then
   the generator shall refuse every copy. One node id under two descriptors is not
   a duplicate: the operation law is caller-declared and V2 does not carry it, so
@@ -727,6 +730,7 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-44 | Genuine Union equality generation preserves the facade declaration key, settled node, authoritative member bindings and declared member/payload order across a nested Union closure, using the specified lookup and verified sealing in both generator and emitted preparation. In-process owner-API controls admit values of every member, including record and nested-Union payloads; distinct same-shaped unions retain incompatible identities. Missing/wrong capability, Unknown/Foreign/WrongKind lookup, name/form disagreement and seal faults retain their typed causes, no successful prepared wrapper and no equality-meter charge; per-item refusals emit no symbols and leave a healthy sibling unchanged, while wrong-package context retains the whole-request guard. TC-029's planned host controls distinguish consumed identities and sealing from a mere Union rendering arm; they establish neither emitted-crate execution nor Kani acceptance. PLANNED (IR-17). | Test |
 | FR-018-AC-45 | After the existing setting/accounting and original-package context guards succeed, generation-time construction and emitted preparation supplied Some(context) attach a clone of that context's complete authoritative unit_table() to the constructed TypeEnvironment, retaining declared but unused units without rebuilding a table, deriving UnitId/NodeKey or substituting another package's table. Valid context-free None behavior remains unchanged. Wrong-package refusal retains its whole-request precedence; direct and nested Quantity items retain their existing typed Unsupported behavior and refusal precedence, emit no symbols, and leave independent healthy siblings unchanged. TC-029's planned host checks inspect consumed metadata and the emitted attachment recipe separately; they establish no positive Quantity equality, conversion, emitted-crate execution or Kani acceptance. PLANNED (IR-17). | Test |
 | FR-018-AC-46 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item. For every V2 node id its operand types reach, the declaration key is the exact owner-issued `NodeKey` selected through admitted QSL lookup: its package, ordered path segments and ordinal equal the admitted node's structural identity. A malformed, unknown or foreign identity retains its typed owning refusal and cannot become a valid key. Claim selection and order remain deterministic; CG and emitted source do not construct or decode keys. | Test (TC-029) |
+| FR-018-AC-47 | For a genuine QSL source whose checked `binary` equality has inline Integer literal operands, CG reads each admitted IR `CheckedTerm::Literal.type_id` and generates the item when both ids equal the descriptor's source types. An independently supplied Integer value pair evaluates through the generated oracle to the same completed Boolean value as direct runtime equality. Changing one descriptor source type to a different admitted type while retaining the original package refuses that item as `OperandTypeMismatch` at the changed operand position, with `found` equal to the original literal `type_id`, no generated symbol, and an unchanged healthy sibling. A literal's kind, value, outer result type, or descriptor alone cannot supply its type. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -755,6 +759,7 @@ without one is not written.
 | FR-018-AC-11 | Mark the operation checked rather than `caller_declared`; refuse the second descriptor as a duplicate; or build both symbols from the node's declaration name, so neither names its operator. |
 | FR-018-AC-12 | Emit the plan's pair count or a charge amount as a literal constant in the generated source. |
 | FR-018-AC-46 | Key declarations by request ordinal instead of the admitted V2 structural identity, or accept a foreign key as local. |
+| FR-018-AC-47 | Require every operand to be a reference and refuse an admitted inline Integer literal with `found: None`; or infer its type from the literal token or caller descriptor, allowing a mismatched descriptor to generate over the original source. |
 | FR-018-AC-14 | Treat reordered or malformed integer/collection bounds as reader-admitted generator inputs, count private parser defense as their public acceptance, or read an admitted bound under a wrong name/value so it becomes another range. |
 | FR-018-AC-15 | Read a conversion's own `result_type` or its first nested conversion's result as the source type, or read every application operand through to its first argument, so a descriptor naming the conversion target (or the inner result) as its source type is accepted over a body that converts from another type, or a `rational.div` operand is typed as its integer argument. |
 | FR-018-AC-16 | Read a `bounded_domain` member as its base scalar's unbounded type or through the union of every bound over that base, take the first sibling bound, or skip the form check, so a mismatched bound (`text_bounds` over an integer, a bound over a boolean) generates as an unbounded type instead of being refused, or refuse a `float_rounding` member as unsupported so the IEEE refusal never fires. Or count private two-form/malformed-member controls as genuine public acceptance, drop their exact assertions, or claim an unrelated sibling bound proves public member ownership. |
