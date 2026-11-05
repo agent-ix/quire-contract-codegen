@@ -11,9 +11,9 @@ relationships:
 ## Description
 
 Verify selected-claim V2 strategy admission through IR's public clause-context comparison accessor,
-exact domain checks, first-defect diagnostics and atomic bundle output. This case is planned until
-CG's V2 strategy implementation, V2 comparison oracle and a CG-side real QSL ConfigVersion V2
-producer fixture exist; IR-703's public accessor is implemented in Contract IR.
+exact domain checks, first-defect diagnostics and atomic bundle output. This case is partial: AC-9's public-accessor comparison is covered, while the remaining planned
+controls still require the specified V2 implementation and ConfigVersion producer evidence.
+IR-703's public accessor is implemented in Contract IR.
 
 ## Test Procedure
 
@@ -78,5 +78,10 @@ producer fixture exist; IR-703's public accessor is implemented in Contract IR.
 ## Scoped evidence status (IR-1316)
 
 Step 8's no-body-read inspection (FR-008-AC-10) is covered by the inspection recorded in FR-008.
-The shared FR-014 lowerer/valuation agreement and full typed projection/refusal variants of
-FR-008-AC-7/8/9 remain Planned (IR-1316; IR-364); six selected State comparisons do not cover them.
+FR-008-AC-9 is covered by
+`tests/it/v2_integer_comparison_admission.rs::v2_accessor_population_and_refusal_fields_agree`,
+traced to TC-017. It checks six operators, both closed read-provenance variants, all three
+observation variants, ordered census bounds/tags and four authentic source refusal controls
+through public IR APIs and CG admission/generation. Its bounded scope is recorded in FR-008;
+it does not establish exhaustive small-domain selected/clause oracle agreement or a shared
+FR-014 lowerer. FR-008-AC-7/8 remain Planned (IR-1316; IR-364).
