@@ -114,6 +114,26 @@ Alethe proof bytes emitted by that invocation. Query bytes are never inferred
 from proof output, and proof bytes are never inserted into or substituted for
 the query field. A present empty proof remains present and empty.
 
+The production refinement driver SHALL borrow one replay-owned
+`RefinementQueryRequest` and obtain both the selected refinement key and the
+number of declaration-order rows from that request. It SHALL encode `Initial`
+and all `Step { row }` queries through the public FR-315 facade before launching
+any solver process. A QSL encoding refusal SHALL preserve the original
+`SmtEncodingRefusal` and the failing role (when selected); no solver process or
+handoff is produced. Caller cancellation checked between encodings SHALL remain
+a separate typed cancellation with its native cause, not an encoding refusal.
+Fallible collection reservation or an unrepresentable row count SHALL remain
+typed resource/representation failures. These checks introduce no fixed row cap.
+
+The complete prepared collection SHALL retain a borrow of the same immutable
+request, binding its ordered concrete and abstract subjects without copying a
+parallel subject schema or inferring subject identity from document names.
+Each process SHALL receive the exact prepared bytes. Completed records SHALL
+remain available even if a later process mechanism fails. Non-proof responses
+remain records and are judged by the existing handoff validator. Only that
+validator may produce the serialized sequence; QSL's public request adapter
+and checker own subsequent certificate assembly and proof checking.
+
 The supported direct cvc5 proof-capture mode selects `--dump-proofs` and
 `--proof-format-mode=alethe` in the retained argument vector. Those arguments
 request proof output after an unsatisfiable `(check-sat)` without changing any
@@ -213,15 +233,27 @@ planned. The refinement Base/Step record collection, validation, cvc5 proof
 framing, and deterministic FR-314 handoff are partial after CG #630 and the
 subsequent IR-1120 implementation. The source-authored seven-row permutation
 test checks QSL's canonical row mapping and distinct exact query bytes against
-CG's solver invocation and handoff records using synthetic proof output. A
-production FR-315 query driver is still absent. TC-059 step 5's source-authored
-zero-step refinement has a Base-only control; step 8 still needs an FR-315
-encoding-refusal control. Direct solver invocations retain `Sat`, `Unknown`,
-absent/malformed response, failed-process and reached-limit non-proof results.
-The merged
-IR-1139 congruence fix and QSL-1306 FR-315 query normalization address the
-previously measured row-1 proof refusals. Live cvc5 output over the normalized
-queries has not yet been checked through QSL's FR-314 reader; its public
-adapter is pending IR-1287. AC-5 and TC-059 step 6 remain partial until that
-readback succeeds. CG SHALL pass the exact extracted interior bytes through
-the reader before claiming either covered.
+CG's solver invocation and handoff records using synthetic proof output. The production driver in `src/routed/smt/refinement_driver.rs` prepares the
+complete QSL query set before direct bounded execution. Source controls exercise
+an admitted `any` row's original encoding refusal, native caller cancellation,
+and a Base-only missing-tool record. The live control compiles seven matched
+concrete/abstract operation rows over seven identity-mapped Boolean fields;
+each operation modifies its own field and preserves the other six. It retains
+eight real cvc5 `Unsat` responses with pairwise distinct queries and emitted
+proofs and passes their exact fields through the public QSL request adapter.
+Synthetic proof output supplies no live proof credit. TC-059 step 6 requires
+byte-exact public adapter assembly and faithful native typed readback under
+AC-5; QSL TC-893 owns checked-refutation acceptance and settlement. The live
+cvc5 proof contains `symm`, currently outside QSL's checked-rule set, so an
+independently expected native `Unverifiable` readback earns no proof-verification
+or certified-settlement credit. All real-solver, seven-row, distinctness,
+association and exact-byte controls remain required.
+
+| Planned work | Owner | Qualification boundary |
+| --- | --- | --- |
+| Checked Alethe `symm` rule support | QSL FR-314 / TC-893 | Needed for native `Verified` and checked-proof credit; CG preserves `Unverifiable` meanwhile. |
+| HP-2 production integration | IR-974 | Requires QSL's production hyper encoder and outcome path. |
+
+The published QSL facade and final unpatched CG consumer gate must pass before
+AC-5 and TC-059 step 6 receive completed integration credit. CG SHALL pass the
+exact extracted interior bytes through the reader before claiming either covered.
