@@ -137,7 +137,7 @@ broader clause forms do not enlarge FR-008's admitted relation grammar.
 | FR-008-AC-6 | PLANNED (IR-364). Either read endpoint or a literal at i64::MIN - 1, i64::MAX + 1, i128::MIN or i128::MAX refuses `UnsupportedRelation` at that operand without narrowing. Two individually i64-representable reads with unequal ranges also refuse; equal ranges admit when other rules hold. | Test |
 | FR-008-AC-7 | PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat, for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. For every such valuation, the FR-014 clause oracle's result for the same direct comparison is identical to the selected oracle's result and to that independent relation. | Test |
 | FR-008-AC-8 | PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim. Source inspection finds exactly one `lower_typed_integer_comparison` function under `src/oracle` used by both the selected strategy oracle and FR-014's clause oracle for all six operators and the ordered direct read/read and read/literal forms; neither path has a second CG comparison lowerer or evaluator module, and no V1 bound oracle, `BoundPackage` or V1-to-V2 adapter is an input to the V2 path. | Inspection |
-| FR-008-AC-9 | PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant. | Test |
+| FR-008-AC-9 | A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant. | Test |
 | FR-008-AC-10 | Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1). | Inspection |
 
 ## Dependencies
@@ -159,8 +159,18 @@ publication serializes the typed comparison into its map. The `rust_body` helper
 Rust headers; it does not open semantic-node bodies. No V2 strategy path reads a
 `CheckedSemanticNodeV2.body` or decodes body JSON. This is inspection evidence, not a runtime test.
 
-FR-008-AC-7/8/9 remain Planned (IR-1316; IR-364). The sole comparison lowerer currently has only
-the selected-strategy production caller, so FR-014 shared-path agreement is absent. The existing
-six-operator projection control does not cover every provenance/observation variant and typed
-refusal, nor the exhaustive small-domain selected/clause oracle comparison. IR-703's upstream
-accessor implementation does not establish those CG obligations.
+FR-008-AC-7/8 remain Planned (IR-1316; IR-364). The sole comparison lowerer currently has only
+the selected-strategy production caller, so FR-014 shared-path agreement and the exhaustive
+small-domain selected/clause oracle comparison are absent. IR-703's upstream accessor
+implementation does not establish those CG obligations.
+
+FR-008-AC-9 is covered by
+`tests/it/v2_integer_comparison_admission.rs::v2_accessor_population_and_refusal_fields_agree`
+(TC-017). Real QSL-produced, IR-admitted comparisons cover all six operators, `StateField` and
+`OperationInput` provenance, and `Current`, `Pre` and `Post` observations. The test compares the
+public accessor's complete projection, operand ordinals and bounds with CG admission, then
+checks census bounds and tags against independently evaluated authored-order relations. Four
+source-authored adverse fixtures compare the accessor's complete typed refusal, path, reached
+child and selected key with admission and complete-generation diagnostics; generation returns no
+artifact bundle. The implicit numeric-narrow literal remains an adverse control. This evidence
+does not establish AC-7's exhaustive valuations or AC-8's shared FR-014 lowerer.

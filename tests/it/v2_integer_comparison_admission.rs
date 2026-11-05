@@ -242,3 +242,196 @@ fn v2_comparison_refusals_preserve_selected_key_and_ir_cause() {
     assert_eq!(wrong_owner.cause, V2ComparisonRefusal::WrongClaimOwner);
     assert_eq!(wrong_owner.claim_owner, foreign);
 }
+
+/// Public IR projections remain exact across every comparison, read provenance and observation.
+#[trace("FR-008-AC-9", "TC-017")]
+#[test]
+fn v2_accessor_population_and_refusal_fields_agree() {
+    use quire_contract_codegen::{prepare_v2_numeric_population, CensusTag, Population};
+    use quire_contract_model::{
+        CheckedComparisonObservation as Observation, CheckedComparisonOperandKind as Kind,
+        CheckedComparisonRead as Read,
+    };
+
+    let mut observations = [false; 3];
+    let mut provenances = [false; 2];
+    for symbol in ["=", "!=", "<", "<=", ">", ">="] {
+        for (twin, name) in [
+            (
+                if symbol == ">=" {
+                    Twin::new()
+                } else {
+                    Twin::with_balance_condition(&format!(
+                        "self.balance {symbol} pre(self.balance)"
+                    ))
+                },
+                "BalanceNeverDrops",
+            ),
+            (
+                Twin::with_balance_invariant_condition(&format!(
+                    "self.balance {symbol} self.audit"
+                )),
+                "BalanceNonnegative",
+            ),
+            (
+                Twin::with_bounded_other_precondition_condition(&format!(
+                    "self.balance {symbol} other"
+                )),
+                "OtherBelowLimit",
+            ),
+            (Twin::with_bounded_other_condition(), "BalanceNeverDrops"),
+        ] {
+            let (package, clause) = twin.emitted_package(name);
+            let claim = package
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| node.node_id == clause)
+                .expect("authored clause")
+                .occurrences
+                .iter()
+                .find(|occurrence| occurrence.role == CheckedOccurrenceRole::Claim)
+                .expect("authentic claim");
+            let direct = package
+                .direct_integer_comparison(&clause, claim)
+                .expect("public clause-context projection");
+            let selected = admit_v2_integer_comparison(
+                &package,
+                V2SelectedClaimKey {
+                    clause: &clause,
+                    claim_owner: &clause,
+                    occurrence: claim,
+                },
+            )
+            .expect("generator admits the projected comparison");
+            assert_eq!(selected.projection, direct);
+            for (ordinal, operand) in direct.operands.iter().enumerate() {
+                assert_eq!(
+                    operand.ordinal,
+                    u64::try_from(ordinal).expect("two operands")
+                );
+                if let Kind::Read {
+                    provenance,
+                    observation,
+                } = &operand.kind
+                {
+                    match provenance {
+                        Read::StateField { .. } => provenances[0] = true,
+                        Read::OperationInput { ordinal, .. } => {
+                            assert_eq!(*ordinal, 0);
+                            provenances[1] = true;
+                        }
+                    }
+                    observations[match observation {
+                        Observation::Current => 0,
+                        Observation::Pre => 1,
+                        Observation::Post => 2,
+                    }] = true;
+                    assert_eq!(i128::from(selected.domain.minimum), operand.range.lower);
+                    assert_eq!(i128::from(selected.domain.maximum), operand.range.upper);
+                }
+            }
+            let generated = prepare_v2_numeric_population(&selected, Population::Broad)
+                .expect("both comparison sides are nonempty");
+            assert_eq!(generated.census.relation(), selected.relation);
+            assert!(!generated.census.in_domain().is_empty());
+            for case in generated.census.in_domain() {
+                let primary = i128::from(case.primary);
+                let partner = match selected.relation.partner() {
+                    Partner::Read => i128::from(case.partner.expect("second read")),
+                    Partner::Literal(value) => {
+                        assert_eq!(case.partner, None);
+                        i128::from(value)
+                    }
+                };
+                let (left, right) = match selected.relation.primary() {
+                    OperandPosition::Left => (primary, partner),
+                    OperandPosition::Right => (partner, primary),
+                };
+                for (value, operand) in [left, right].into_iter().zip(&direct.operands) {
+                    assert!((operand.range.lower..=operand.range.upper).contains(&value));
+                }
+                let holds = match direct.operator {
+                    CheckedComparisonOperator::Eq => left == right,
+                    CheckedComparisonOperator::Ne => left != right,
+                    CheckedComparisonOperator::Lt => left < right,
+                    CheckedComparisonOperator::Le => left <= right,
+                    CheckedComparisonOperator::Gt => left > right,
+                    CheckedComparisonOperator::Ge => left >= right,
+                };
+                assert_eq!(
+                    case.tag,
+                    if holds {
+                        CensusTag::Holds
+                    } else {
+                        CensusTag::Violated
+                    }
+                );
+            }
+        }
+    }
+    assert_eq!(observations, [true; 3]);
+    assert_eq!(provenances, [true; 2]);
+
+    for (twin, name) in [
+        (Twin::with_negated_balance_clause(), "BalanceNeverDrops"),
+        (Twin::without_balance_range(), "BalanceNeverDrops"),
+        (
+            Twin::with_balance_condition("self.balance + 1 >= pre(self.balance)"),
+            "BalanceNeverDrops",
+        ),
+        (
+            Twin::with_balance_invariant_condition("self.balance = 500"),
+            "BalanceNonnegative",
+        ),
+    ] {
+        let (package, clause) = twin.emitted_package(name);
+        let claim = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == clause)
+            .expect("authored clause")
+            .occurrences
+            .iter()
+            .find(|occurrence| occurrence.role == CheckedOccurrenceRole::Claim)
+            .expect("authentic claim");
+        let direct = package
+            .direct_integer_comparison(&clause, claim)
+            .expect_err("IR refuses shape or range");
+        let refused = admit_v2_integer_comparison(
+            &package,
+            V2SelectedClaimKey {
+                clause: &clause,
+                claim_owner: &clause,
+                occurrence: claim,
+            },
+        )
+        .expect_err("generator preserves IR refusal");
+        assert_eq!(refused.clause, clause);
+        assert_eq!(&refused.occurrence, claim);
+        assert_eq!(refused.claim_owner, clause);
+        assert_eq!(refused.path, direct.path);
+        assert_eq!(refused.child, direct.child);
+        assert_eq!(refused.cause, V2ComparisonRefusal::Ir(direct));
+        let generation = quire_contract_codegen::generate_v2_numeric_strategy(
+            &quire_contract_codegen::V2NumericRequest {
+                package: &package,
+                key: V2SelectedClaimKey {
+                    clause: &clause,
+                    claim_owner: &clause,
+                    occurrence: claim,
+                },
+                population: Population::Broad,
+                policy: quire_contract_codegen::V2NumericPolicy {
+                    minimum_accepted_cases: 0,
+                    minimum_rejected_cases: 0,
+                    maximum_discarded_cases: 0,
+                },
+                process_source: None,
+            },
+        )
+        .expect_err("refused comparison produces no artifact bundle");
+        assert_eq!(generation.comparison.as_ref(), Some(refused.as_ref()));
+    }
+}
