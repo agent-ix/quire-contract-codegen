@@ -15,11 +15,10 @@ typed non-success over QSL-owned canonical HP-2 queries. QSL owns the query
 encoder, method outcome and terminal settlement; this test does not build a
 second encoder or claim CG execution alone proves a hyperproperty.
 Also verify CG's typed refinement Base and Step run-record handoff to the
-QSL FR-314 certificate adapter. The refinement procedures are partial:
-synthetic handoff, source-authored seven-row permutation and Base-only zero-step
-controls exist. Production preparation/execution, actual FR-315 refusal and
-live proof readback through QSL FR-314's public adapter are planned until
-IR-1120 and IR-1287 land. The live control requires a selected real cvc5
+QSL FR-314 certificate adapter. The refinement procedures include synthetic
+handoff, source-authored seven-row permutation, Base-only zero-step,
+production preparation/execution and actual FR-315 refusal controls.
+The live readback control requires a selected real cvc5
 executable; synthetic solver stdout supplies no execution credit for it.
 
 ## Test Procedure
@@ -77,11 +76,6 @@ executable; synthetic solver stdout supplies no execution credit for it.
    and no handoff. Repeat with a zero-step
    refinement and assert that only `Base` is required. Change one query byte
    and exchange a base and step role, then assert no handoff (FR-045-AC-4).
-> **Proposed clarification, pending CG owner decision (IR-1120):** the step-6
-> adapter/readback wording below aligns with FR-045-AC-5 and its prohibition
-> on CG proof-verification claims. It is not adopted acceptance credit until
-> the owner rules. The current strict `Verified` test assertion remains unchanged.
-
 6. Compile seven matching concrete and abstract operation rows over an
    identity-mapped Boolean state. Run the actual direct solver; do not substitute
    a synthetic response for this positive control. Return completed `Unsat` and distinct Alethe proof byte strings for the

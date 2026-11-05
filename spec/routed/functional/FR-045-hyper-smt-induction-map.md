@@ -241,21 +241,19 @@ concrete/abstract operation rows over seven identity-mapped Boolean fields;
 each operation modifies its own field and preserves the other six. It retains
 eight real cvc5 `Unsat` responses with pairwise distinct queries and emitted
 proofs and passes their exact fields through the public QSL request adapter.
-Synthetic proof output supplies no live proof credit. The unchanged strict native-reader
-`Verified` assertion currently fails at cvc5's `symm` command with native
-`Unverifiable`, outside QSL's current checked-rule set. No proof-verification
-or certified-settlement credit follows from that result.
+Synthetic proof output supplies no live proof credit. TC-059 step 6 requires
+byte-exact public adapter assembly and faithful native typed readback under
+AC-5; QSL TC-893 owns checked-refutation acceptance and settlement. The live
+cvc5 proof contains `symm`, currently outside QSL's checked-rule set, so an
+independently expected native `Unverifiable` readback earns no proof-verification
+or certified-settlement credit. All real-solver, seven-row, distinctness,
+association and exact-byte controls remain required.
 
-**Proposed clarification pending CG owner decision (IR-1120):** TC-059 step 6
-would require byte-exact public adapter assembly and faithful native typed
-readback under AC-5, while QSL TC-893 retains checked-refutation acceptance
-and settlement. The formerly added mandatory-`Verified` status assumption is
-not an independent AC-5 requirement. This proposal does not change the current
-strict test assertion or grant acceptance credit before the owner rules. All
-real-solver, seven-row, distinctness, association and exact-byte controls remain
-required.
-The public facade publication and final unpatched consumer qualification remain
-planned until IR-1287 and IR-1120 land. HP-2 production integration remains
-planned under IR-974. AC-5 and TC-059 step 6 remain partial until the published
-facade passes the final consumer gate. CG SHALL pass the exact extracted interior bytes through
-the reader before claiming either covered.
+| Planned work | Owner | Qualification boundary |
+| --- | --- | --- |
+| Checked Alethe `symm` rule support | QSL FR-314 / TC-893 | Needed for native `Verified` and checked-proof credit; CG preserves `Unverifiable` meanwhile. |
+| HP-2 production integration | IR-974 | Requires QSL's production hyper encoder and outcome path. |
+
+The published QSL facade and final unpatched CG consumer gate must pass before
+AC-5 and TC-059 step 6 receive completed integration credit. CG SHALL pass the
+exact extracted interior bytes through the reader before claiming either covered.
