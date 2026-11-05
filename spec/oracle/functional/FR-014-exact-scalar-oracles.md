@@ -345,6 +345,20 @@ otherwise.
   `UnitScope::form` before resolving a completed result as a later operand
   (FR-014-AC-52). These call-time library inputs do not add QSL unit grammar,
   unit-table lowering or quantity Kani support.
+- For a reader-admitted quantity operation, the generator SHALL classify a
+  checked `scalar_type`/`unit` or `scalar_type`/`compound_unit` as a quantity
+  operand form when the operation takes a quantity. The admitted result of
+  quantity multiplication, division or integer power SHALL be the checked
+  `scalar_type`/`compound_unit`, including its empty dimensionless form; its
+  exact unit identity and value remain QSV's, not a CG inference from the
+  expression. Addition and subtraction SHALL retain the admitted operand's
+  quantity form as their result, and comparison SHALL retain Boolean. A
+  descriptor or admitted node with an unrelated scalar result or a nonquantity
+  operand SHALL keep its typed result or operand mismatch refusal and emit no
+  oracle. This form check SHALL NOT treat a quantity-typed parameter as
+  bounded: Contract IR's `RequiresBound` record remains terminal before CG
+  generation. The exact quantity-conversion target rule below is unchanged
+  (FR-014-AC-58..60).
 - If a requested node's `operation.identity` is `quire.op.quantity.convert`,
   then the generator shall derive or accept a descriptor for it whose oracle
   calls QSV `convert_quantity(operand, unit.unit(), &QuantityTarget::Exact, meter)`.
@@ -630,15 +644,17 @@ otherwise.
 | FR-014-AC-53 | RETIRED, replaced by FR-014-AC-57; body-only mutation under a producer-assigned structural key does not cause a stale-key reader refusal. | Inspection |
 | FR-014-AC-54 | PLANNED (IR-917). A QSL-authored V2 clause comparison containing an integer literal wrapped by the checked FR-093 `quire.op.numeric.narrow` shape derives and generates its clause-identified oracle when the complete literal parses and lies in the target `Int[..]` interval. The oracle uses the unchanged integer value and yields the same ordered admitted charges, consumed counters and outcome as independent direct-owner evaluation of that clause arithmetic with that integer; the wrapper itself admits no charge. Missing target or operand, out-of-range literal, nonliteral operand and unparseable literal each refuse with a typed cause and no oracle, independently of a generated sibling; reader-rejected shapes are tested at the owner boundary, and unreachable malformed shapes only at CG's defensive seam. A node with another `convert` identity remains refused with a typed cause and no oracle. | Test (TC-024) |
 | FR-014-AC-55 | A plain reader-admitted V1 package with a represented application that reaches a mode, law-definition or member-target view required by a routed request is refused by `generate_routed` as the whole-call `RoutedGenerationError::UnauthenticatedOperationView { request_index, node_id }` naming the lowest `request_index` among such routed items, independent of the caller's routed-item slice order, before oracle, capability settlement or harness output. This includes quantity conversion and division-profile selection; a supported view-independent integer route over a plain-read package retains its existing disposition. The corresponding source-authenticated package uses the admitted view values and preserves all generated oracle, provenance and capability results specified by AC-18, AC-48, AC-50 and AC-51. No represented JSON field or admitted absence substitutes for a `NotAdmitted` operation view. | Test (TC-024) |
-
 | FR-014-AC-56 | Every claim-map entry retains its item’s exact requested structural `CheckedNodeId`, the admitted `ContractSourceV1` package name and complete immutable lock as `contract_package_identity`, originating checked-package structural `package_id`, admitted `source_map`, typed `claims` and `bounds`, and the item’s operation identity and provenance; a `quire.op.quantity.convert` entry also records its `type_argument` structural type node ID (FR-014-AC-48). No generated scalar claim serializes an `ir_id` or derives a substitute node or package digest. | Test (TC-024) |
-
 | FR-014-AC-57 | Through public V2 clause oracle generation, complete canonical signed-i64 spellings use the public `Integer::from(i64)` constructor, including both endpoints, zero, both signs and ordinary constants; endpoint neighbors, i128 boundaries and beyond-i128 values retain the original general parse and typed failure behavior. An actual i64-MIN leaf is distinct from a negate application over positive 2^63, whose child retains parse and whose tree is not folded. Packages refused by the owner reader, including malformed-bound controls, remain refused. A changed literal body under the same valid structural key is compared with the expected admitted source body or checked shape at the authority boundary and is not credited as the original fixture; it is not claimed as a stale-key reader refusal. Any general integer leaf the reader admits with an ineligible spelling retains the original runtime canonical parse and typed `InvalidConstant` failure mapping, never the primitive constructor; defensive private-seam controls retain the same fallback. Against independently prepared parse-based direct-owner operands, generated comparisons and add/subtract/multiply/negate preserve mathematical results, result-domain refusals, full typed stopped outcomes, admitted charges, counters and every charge-denial prefix, including child-stop propagation, skipped-branch laziness and genuine BigInt continuation. Existing checked identities, domains and owner calls remain unchanged; the existing determinism, provenance and oracle-embedding requirements still apply. | Test |
+| FR-014-AC-58 | When the exact scalar generator receives the four reader-admitted TC-187 U12 operation nodes for `2 m * 3 s`, `6 m / 2 s`, `2 m ^ 2` and `5 m / 5 m`, it derives and generates four `ir_confirmed` oracles. Executed with the original operands, they produce exact magnitudes 6, 3, 4 and 1 with QSV-identified compound units whose root terms are respectively `m*s`, `m*s^-1`, `m^2` and empty. No `compound_unit` result is refused as `ResultTypeMismatch`; their outcomes and charges retain FR-014-AC-52's QSV agreement. | Test (TC-024; QSpec TC-187 U12) |
+| FR-014-AC-59 | A completed `2 m * 3 s` result recorded through `UnitScope::form` resolves as a compound quantity operand for a subsequent multiplication by `2 m`; the generated oracle returns exact `12` in QSV's identified `m^2*s` compound unit, with no operand-form refusal and no CG-created unit id. | Test (TC-024) |
+| FR-014-AC-60 | A multiplication with an unrelated Integer result reaching CG's defensive form check refuses `ResultTypeMismatch` and emits no symbol. A plain quantity-typed parameter remains `RequiresBound` in Contract IR's bounds-required profile and generates no CG oracle; accepting a `compound_unit` result does not relax that refusal. | Test (TC-024) |
 ## Dependencies
 
 - **Upstream**: Contract IR
   FR-036/FR-038 (CheckedPackage V2 lowering), Contract Runtime FR-007 (exact
-  scalar operators), QSpec FR-196.
+  scalar operators), QSpec FR-142 (quantity unit algebra), FR-146 (quantity
+  division obligations) and FR-196.
 - **Shared CG comparison lowering**: [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md)
   uses the same planned `lower_typed_integer_comparison` unit for its selected V2 strategy oracle;
   FR-008-AC-7 and AC-8 verify cross-path results and one CG lowering function.
