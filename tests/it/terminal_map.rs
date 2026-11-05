@@ -10,11 +10,12 @@ use ix_trace_rs::trace;
 use qsl_replay::{
     std001_code, AdmissionFailure, CallSiteRefusal, Certification, ClauseName, Code, DeclineCode,
     DependencyInput, DependencyInputRefusal, DisagreementCause, FieldName, FrameCounterexample,
-    Identifier, IncompleteCause, InconclusiveCause, LibraryName, MalformedTranscript,
-    OperationName, PopulationName, ProofBasis, ProofRefusalCause, QualifiedName, ReplayLimits,
-    ReplayRefusal, ReplayTargetMembers, ReportedInconclusiveCause, ScalarLimits, SourceIdentity,
-    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
-    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
+    Identifier, ImportedFunctionName, IncompleteCause, InconclusiveCause, LibraryName,
+    MalformedTranscript, OperationName, PopulationName, ProofBasis, ProofRefusalCause,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayTargetMembers, ReportedInconclusiveCause,
+    ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code, SuppliedLibrary,
+    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
+    WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -587,6 +588,49 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
     for_each_setup_refusal(|code, settlement| {
         assert_eq!(map_run(&falsified(), Some(settlement)), replayed(code));
     });
+}
+
+/// Imported function selection failures preserve QSL's distinct refusal codes; an internal
+/// call-site fault still fails the run instead of becoming a replay refusal.
+#[trace("FR-029-AC-10", "FR-029-AC-13", "TC-040")]
+#[test]
+fn imported_function_setup_refusals_keep_their_codes() {
+    let package = LibraryName::new("terminal-map").expect("fixture package name");
+    let selection = ImportedFunctionName {
+        library: LibraryName::new("functions").expect("fixture library name"),
+        function: identifier("f"),
+    };
+    for (refusal, expected) in [
+        (
+            CallSiteRefusal::UnknownImport {
+                selection: selection.clone(),
+                package: package.clone(),
+            },
+            Code::MissingImport,
+        ),
+        (
+            CallSiteRefusal::UnknownImportedFunction {
+                selection: selection.clone(),
+                package: package.clone(),
+            },
+            Code::MissingDeclaration,
+        ),
+        (
+            CallSiteRefusal::NotImportable { selection, package },
+            Code::IllTyped,
+        ),
+    ] {
+        assert_eq!(
+            map_run(&falsified(), Some((&refusal).into())),
+            replayed(expected),
+            "{refusal}"
+        );
+    }
+    let fault = CallSiteRefusal::Fault(InternalFault::new("call_site", "broken"));
+    assert_eq!(
+        map_run(&falsified(), Some((&fault).into())),
+        TerminalValue::Failed
+    );
 }
 
 /// Hands `check` the code QSL's refusal supplies and the settlement of each non-fault

@@ -1221,7 +1221,10 @@ impl<'a> From<&'a CallSiteRefusal> for ReplaySettlement<'a> {
             | CallSiteRefusal::AmbiguousOperation { .. }
             | CallSiteRefusal::UnknownClause { .. }
             | CallSiteRefusal::UnknownField { .. }
-            | CallSiteRefusal::UnknownPopulation { .. } => Self::SetupRefused(refusal.code()),
+            | CallSiteRefusal::UnknownPopulation { .. }
+            | CallSiteRefusal::UnknownImport { .. }
+            | CallSiteRefusal::UnknownImportedFunction { .. }
+            | CallSiteRefusal::NotImportable { .. } => Self::SetupRefused(refusal.code()),
         }
     }
 }
