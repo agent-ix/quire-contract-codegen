@@ -695,6 +695,24 @@ with no declared range is carried in the record and decode, which draw it uncons
 not refused (FR-024-AC-23; the AD-003 owner may tighten that later, as a function argument with
 no bound is refused under AD-016 arrow 5).
 
+## Coverage triage
+
+IR-1316 owns the following remaining non-Kani coverage gaps. Each remains Planned;
+existing frame replay and structural identity tests retain their narrower claims.
+
+| Criteria | Status | Concrete reason |
+|---|---|---|
+| FR-024-AC-7, FR-024-AC-8 | Planned (IR-1316; implementation IR-335) | No production minimizer proposes a reduced witness, reruns its backend and retains it only after native replay. There is no reduced envelope whose own rerun transcript can be checked. |
+| FR-024-AC-36, FR-024-AC-37 | Planned (IR-1316; implementation IR-335) | Replay still uses individual Kani adapters. A common typed intake for two backend adapters and the distinct decode/domain/QSL-admission/verdict evidence-failure partition are absent. |
+| FR-024-AC-38 through FR-024-AC-40 | Planned (IR-1316; implementation IR-335) | CG has no immutable minimization lineage record or retain/reject transition. Existing QSL envelope equality does not prove CG parent/revision preservation or candidate-owned transcripts. |
+| FR-024-AC-49 | Planned (IR-1316; structural controls IR-1079) | The frame path already copies QSL's producer identity, but no complete frame node/model/ordinal mutation and display/grant stability suite establishes this criterion. Existing packet-identity mismatch tests cover only part of the requested controls. |
+| FR-024-AC-51 | Planned (IR-1316; structural controls IR-1079) | `FrameReplayInputs` already omits caller obligation identity and `frame_identity` copies the producer claim. The required changed-grant/rekey and held-node full-body mismatch controls are not covered together through the replay path; field-set membership checks alone do not prove them. |
+
+Retired identity/digest criteria AC-1, AC-14, AC-20, AC-21 and AC-24 earn no
+implementation credit. AC-35's same-model wide-range replay remains owned by
+IR-624 and blocked on QSL-642 as stated above; its real-Kani evidence is outside
+this non-Kani triage.
+
 ## Dependencies
 
 - **Upstream**: [FR-016](./FR-016-witness-native-replay.md), which decodes the playback, refuses and

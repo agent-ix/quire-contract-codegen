@@ -230,6 +230,19 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   Completed oracle cases continue to use runtime verdicts. No new runtime verdict kind or runtime
   accounting category is required for this V2 harness boundary.
 
+## Coverage triage
+
+IR-1316 owns the following remaining non-Kani coverage gaps. All remain Planned;
+V1 harness tests do not establish the selected V2 behavior. The structural replacement
+criteria AC-25 and AC-26 exist and remain in scope; AC-21 and AC-23 are retired.
+
+| Criteria | Status | Concrete reason |
+|---|---|---|
+| FR-002-AC-7 through FR-002-AC-15 | Planned (IR-1316; implementation IR-815) | `src/strategy/harness.rs::HarnessRequest` still takes V1 `TypedExpression` pre/post bodies and one caller execution-point string. It has no admitted V2 package and selected-claim pair, so embedding, ordering, typed selection refusals and repeatability have no V2 harness to exercise. |
+| FR-002-AC-16, FR-002-AC-24 | Planned (IR-1316; implementation IR-364) | The generator has no `V2HarnessCaseResult` or `V2HarnessCampaignResult` terminal. Exact typed stops, non-completed counts and saturated-report preservation cannot be tested through that absent path. |
+| FR-002-AC-17 through FR-002-AC-20, FR-002-AC-22 | Planned (IR-1316; implementation IR-815) | V2 selected pre/post oracle execution and authentic-claim/point validation are absent from the harness entry. The numeric V2 strategy runner is a different producer and cannot establish these harness guarantees. |
+| FR-002-AC-25, FR-002-AC-26 | Planned (IR-1316; implementation IR-815) | The V1 harness request has no selected structural occurrence/package pair or V2 identity-text boundary. Existing canonical rendering helpers do not prove propagation or refusal through a V2 harness. |
+
 ## Dependencies
 
 - **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md);

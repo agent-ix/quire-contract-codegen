@@ -10,19 +10,19 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-004 | FR-004-AC-1 through FR-004-AC-7 | TC-006 | 🚧 Planned / UNRUN; primitive controls are partial evidence, while production live campaign binding and consuming-obligation evidence are unrun |
-| FR-004 | FR-004-AC-8 | TC-006 | 🚧 Planned / UNRUN; adverse-run coverage discharge through the consuming obligation is unrun |
+| FR-004 | FR-004-AC-1 through FR-004-AC-7 | TC-006 | 🚧 Planned (IR-1316): primitive controls are partial; AC-6 has no campaign-count/native-outcome input or retention |
+| FR-004 | FR-004-AC-8 | TC-006 | 🚧 Planned (IR-1316): consuming coverage-obligation boundary is absent |
 | FR-004 | FR-004-AC-9 | TC-006 | 🚧 Planned |
-| FR-004 | FR-004-AC-10 | TC-006 | 🚧 Planned / UNRUN; production live campaign/profile/export binding and CG consumption are unrun |
-| FR-004 | FR-004-AC-11 | TC-006 | 🚧 Planned / UNRUN; consuming-obligation evidence and proof-credit denial are unrun |
+| FR-004 | FR-004-AC-10 | TC-006 | 🚧 Planned (IR-1316): no live campaign/profile/export chain; analyzers accept detached bytes |
+| FR-004 | FR-004-AC-11 | TC-006 | 🚧 Planned (IR-1316): consuming coverage-obligation/proof-accounting evidence is absent |
 | FR-004 | FR-004-AC-16, FR-004-AC-18 through FR-004-AC-24 | TC-006 | 🚧 V2 planned (IR-815); the V2 population analyzer is not implemented |
-| FR-004 | FR-004-AC-17 | Inspection | 🚧 Planned / UNRUN (IR-815; pending IR-1013); V2 analyzer source inspection is unrun |
+| FR-004 | FR-004-AC-17 | Inspection | 🚧 Planned (IR-1316; IR-815): V2 population scan reads package.graph directly outside core/ir |
 | FR-004 | FR-004-AC-25 | TC-006, TC-020 | SUPERSEDED by AC-26; original same-node/different-point case infeasible; no implementation credit |
 | FR-004 | FR-004-AC-26 | TC-006, TC-020 | 🚧 Planned (IR-1070); node-qualified point admission and generated-campaign evidence binding are not implemented |
-| FR-004 | FR-004-AC-12 | TC-006 | 🚧 Planned / UNRUN; QSL-520 public `/2` producer and strict reader are delivered, but CG consumer evidence is unrun |
-| FR-004 | FR-004-AC-13 | TC-006 | 🚧 Planned / UNRUN; QSL-520 public `/2` producer and strict reader are delivered, but CG disposition and coverage-gate evidence is unrun |
-| FR-004 | FR-004-AC-14 | TC-006 | 🚧 Planned / UNRUN; CG live context and producer/artifact binding evidence is unrun |
-| FR-004 | FR-004-AC-15 | TC-006 | 🚧 Planned / UNRUN; CG foreign-run refusal and replay evidence is unrun |
+| FR-004 | FR-004-AC-12 | TC-006 | 🚧 Planned (IR-1316): CG analyzer has no QSL typed /2 reader input or consumer |
+| FR-004 | FR-004-AC-13 | TC-006 | 🚧 Planned (IR-1316): CG has no typed QSL disposition retention/separation at the analyzer |
+| FR-004 | FR-004-AC-14 | TC-006 | 🚧 Planned (IR-1316): private live run context and bounded process admission are absent |
+| FR-004 | FR-004-AC-15 | TC-006 | 🚧 Planned (IR-1316): no live context to exercise foreign-run association refusals |
 | FR-036 | FR-036-AC-1 through FR-036-AC-7 | [TC-051](TC-051-source-obligation-census.md) | 🚧 Planned; separate inventories/complete candidate tuples and typed artifact/run controls Gated on IR-759 reviewed neutral correspondence; IR-740 owns implementation |
 
 ## Test Case Summary

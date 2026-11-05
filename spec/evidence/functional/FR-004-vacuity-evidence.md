@@ -271,6 +271,22 @@ this analyzer supplies execution observations and the coverage-obligation decisi
   `analyze_bound_coverage`; the package id alone cannot bind result, execution, source, map, and
   LLVM export to one producer run.
 
+## Coverage triage
+
+IR-1316 owns the following remaining non-Kani coverage gaps. Primitive LLVM
+observation tests are partial evidence; these rows remain Planned without new trace credit.
+
+| Criteria | Status | Concrete reason |
+|---|---|---|
+| FR-004-AC-6 | Planned (IR-1316) | `BoundCoverageInputs` and `V2ClauseCoverageInput` accept artifact/probe observations, not runtime campaign counts or a native execution outcome. Their analysis bodies cannot yet retain those complete independent facts. |
+| FR-004-AC-8, FR-004-AC-11 | Planned (IR-1316) | Observation serialization exists, but the consuming coverage-obligation/proof-accounting boundary is absent. A serialized adverse observation alone does not test discharge denial. |
+| FR-004-AC-10, FR-004-AC-14, FR-004-AC-15 | Planned (IR-1316) | The analyzers accept detached caller-supplied source/map/export bytes. There is no private live campaign/profile/export context, child-stream association or bounded cross-process admission to exercise; observation comparison is insufficient. |
+| FR-004-AC-12, FR-004-AC-13 | Planned (IR-1316) | Neither analyzer accepts QSL's strict-reader `native-run-result/2` result. QSL reader delivery does not establish a CG consumer or typed disposition retention and separation. |
+| FR-004-AC-17 | Planned (IR-1316; implementation IR-815) | The V2 analyzer exists in `src/evidence/v2_llvm.rs`, but its population scan still reads `package.graph().nodes` directly outside `core/ir/`. The V1 analyzer separately names `BoundPackage` and `ClauseRef`; no compliant V2-only access-layer inspection is claimed. |
+
+AC-25 is superseded by AC-26 and earns no implementation credit. The latter's
+existing trace evidence is unaffected by this triage.
+
 ## Dependencies
 
 - **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md),
