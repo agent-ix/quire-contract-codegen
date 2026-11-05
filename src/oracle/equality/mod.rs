@@ -1484,12 +1484,12 @@ fn application_arguments(body: Option<&CheckedTerm>) -> Option<&[CheckedTerm]> {
     application_of(body, ApplicationOperator::Binary)
 }
 
-/// The type a `binary` operand stands for, read as QSL emits operands: each operand is its own
-/// node, and the equality's `arguments` hold a `reference` to it (FR-018). The operand's type is
-/// that node's `semantic_type`, except that a node that is an `expression` whose body is an
-/// `application` of operator `convert` is a conversion, and the operand is read through it: the
-/// type is that of the conversion's first argument, followed through nested conversions to the
-/// first node that is not one, which is the descriptor's `source_type`. The conversion's own
+/// The type a `binary` operand stands for, read from the admitted QSL body (FR-018). An argument
+/// can reference its own checked node or carry an admitted inline scalar `literal` with its
+/// checked type node id. A referenced operand's type is its node's `semantic_type`, except that an
+/// `expression` with a `convert` application body is a conversion, and the operand is read through
+/// it. The type is that of the conversion's first argument, followed through nested conversions
+/// to the first node that is not one, which is the descriptor's `source_type`. The conversion's own
 /// `result_type` is not read: whether the descriptor's conversion is admitted is the runtime's
 /// `check_equality` verdict on the descriptor, never the body's. An admitted inline scalar
 /// `literal` carries its own type node id; other inline terms read as no type.

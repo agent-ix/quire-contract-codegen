@@ -130,4 +130,20 @@ fn genuine_inline_integer_literals_generate_and_wrong_descriptor_refuses() {
             }
         } if expected == &boolean && found == left
     ));
+    fn emitted(artifacts: &[quire_contract_codegen::Artifact]) -> &str {
+        artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("generated Rust library")
+            .contents
+            .as_str()
+    }
+    let mixed_lib = emitted(&mixed.artifacts);
+    assert_eq!(mixed_lib.matches("pub fn oracle_").count(), 1);
+    assert_eq!(mixed_lib.matches("pub fn environment_").count(), 1);
+    assert_eq!(
+        mixed_lib,
+        emitted(&baseline.artifacts),
+        "refusal emits no function and leaves the healthy oracle code unchanged"
+    );
 }
