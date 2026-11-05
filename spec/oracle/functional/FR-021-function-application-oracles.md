@@ -424,6 +424,15 @@ session; CG's current schedule and location map do not supply it.
   The body forwards `Undefined`, `Refused` and `Incomplete` unchanged, including
   payload, location and admitted charges. The selected signature is never
   replaced by a CG-derived or caller-supplied result type.
+- When a generated exact-function scalar or equality body stops at its result
+  expression with `Undefined`, `Refused` or `Incomplete`, its evaluation shall
+  carry the selected body's checked result occurrence as `Location::root` with
+  `Origin::Body { function, index }`. The function name and body index come
+  from the admitted declaring graph, including imported owners. Completed
+  evaluations retain no result location. A stop before body execution keeps
+  the location assigned by that earlier boundary; a nested call forwards its
+  child's evaluation location. The generated result wrapper shall not change
+  the stopped outcome, losses or admitted charges.
 - Before executing a generated body that needs nominal types, its emitted
   preparation shall construct the QSV type environment from the actual
   checker-owned nominal declarations of the selected checked closure. If
@@ -498,6 +507,7 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-40 | The generated guard uses the same checker-issued selection.signature().result() and actual owner QSV environment, never a replacement result type. Undefined, Refused and Incomplete retain their variants, payloads, locations and admitted charge prefixes. Err(EnvironmentFailure) remains BodyFailure::QsvEnvironment / CallFailure::Body, never false, Completed or a genuine invariant fault. Boolean/Integer result membership allocates no storage: Allocation/Capacity mapping has inspection evidence with no execution credit. The first shipped allocating-result membership family activates the actual-request execution condition in TC-057 and IR-1235. | Test and Inspection (TC-031, TC-057) |
 | FR-021-AC-41 | For a plain strict-reader-admitted V1 package, after existing duplicate, capability and item-precedence checks, an eligible selected call item or declaration body with an admitted `Unsupported` accounting record whose `node_tag` is `"temporal"` and whose requested-root-kind view is `NotAdmitted` causes whole-call `OracleGenerationError::UnauthenticatedRequestedRootKind { request_index, node_id }` before claim map, schedule, oracle or partial publication. These V1 facts trigger refusal without deciding whether the requested root is direct `formula`, direct `fairness` or a temporal clause. For a direct call item the error names its own driver request index and call-node root; for a declared body reached through a distinct valid call item it names the body's declaration driver request index and body root, never that call item's index/root. The lowest eligible driver request index wins across both kinds, independent of function and item slice order. The first reachable `unsupported_node_id` and `node_tag` do not substitute for the requested root. The same canonical V1 bytes read through authenticated `read_with_source` retain AC-11's clause blocker and AC-33's direct formula/fairness `Unsupported` claim, including unaffected sibling results. A plain-read request without an eligible temporal-tag `Unsupported` record retains its existing result. | Test (TC-031) |
 | FR-021-AC-42 | The emitted function-oracle crate, compiled with `cfg(kani)`, declares every `body_{symbol}` module `pub(crate)` with a `pub(crate)` `Factory` and omits every `oracle_{symbol}` host entry, and compiled without `cfg(kani)` is unchanged (all `oracle_{symbol}` entries present and behaving as AC-35 through AC-37 require). A source-level check of the emitted text proves the `#[cfg(not(kani))]` gate on each host entry and the module visibility; the Kani obligation and its explicit exclusions are as stated in Behavior, and no test, doc comment or matrix row credits the host glue to a Kani proof. | Test (TC-031), Inspection |
+| FR-021-AC-43 | Given a checked scalar function whose result expression is stopped by a work limit of one, the generated oracle and an independent FR-485 application of the same checked source return the same `Incomplete` payload and admitted charge prefix. Both evaluations name the checked result occurrence with `Location::root(Origin::Body { function, index })`, including the same depth and last index. A completed invocation has no result location. The generated wrapper also assigns that occurrence to body-local `Undefined` and `Refused` results, while an earlier preparation stop and a nested child's location retain their own origins. | Test and Inspection (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -545,6 +555,7 @@ written.
 | FR-021-AC-40 | Derive the result type outside the selected signature, turn an undecided membership error into false or Completed, relabel stopped outcomes, claim primitive storage-failure execution without an actual reservation or drop the first-allocating-family execution condition. |
 | FR-021-AC-41 | Inspect an unavailable requested-root kind to decide whether the plain-read guard runs, infer a direct formula or fairness root from the V1 `node_tag` or a represented node, report the call item's index for a declaration-body refusal, or change the selected index when either slice is permuted. |
 | FR-021-AC-42 | Leave an `oracle_{symbol}` host entry compiled under `cfg(kani)` (re-importing the QSL compiler into the proof), gate out the body module so the proof has nothing to drive, add a QSL-closure constructor from bytes, or credit registry/selection/begin_call behaviour to the Kani proof. |
+| FR-021-AC-43 | Leave the generated body wrapper's stopped `Evaluation.location` empty, use the requested call site's origin in place of the checked result occurrence, or change a stopped payload or charge prefix while assigning the location. |
 
 ## Dependencies
 

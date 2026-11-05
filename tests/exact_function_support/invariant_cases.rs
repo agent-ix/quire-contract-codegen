@@ -253,7 +253,7 @@ fn invariant(evaluation: &quire_eval::Evaluation, expected: CheckedInvariantCaus
     );
 }
 
-#[trace("TC-057", "FR-042-AC-2", "FR-021-AC-38", "FR-021-AC-40")]
+#[trace("TC-057", "FR-042-AC-2", "FR-021-AC-38", "FR-021-AC-40", "FR-021-AC-43")]
 #[test]
 fn result_membership_uses_real_signature_and_preserves_stopped_arms_and_charges() {
     let package = package();
@@ -274,6 +274,11 @@ fn result_membership_uses_real_signature_and_preserves_stopped_arms_and_charges(
         &healthy.outcome,
         FamilyOutcome::Evaluated(Outcome::Completed(Value::Boolean(true)))
     ));
+    assert_eq!(healthy.location, None);
+    let result_location = Some(Location::root(Origin::Body {
+        function: "bool_eq".into(),
+        index: 1,
+    }));
     let expected = counters(&baseline);
     let mut actual = meter();
     let mismatch = wrong::oracle_bool_eq(
@@ -310,7 +315,7 @@ fn result_membership_uses_real_signature_and_preserves_stopped_arms_and_charges(
         &stopped.outcome,
         FamilyOutcome::Evaluated(Outcome::Undefined(quire_exact::Undefined::DivisionByZero))
     ));
-    assert_eq!(stopped.location, healthy.location);
+    assert_eq!(stopped.location, result_location);
     assert_eq!(counters(&actual), expected);
     let mut actual = meter();
     let stopped = refused::oracle_bool_eq(
@@ -327,7 +332,7 @@ fn result_membership_uses_real_signature_and_preserves_stopped_arms_and_charges(
         &stopped,
         CheckedInvariantCause::GeneratedDescriptorReconstructionFailed,
     );
-    assert_eq!(stopped.location, healthy.location);
+    assert_eq!(stopped.location, result_location);
     assert_eq!(counters(&actual), expected);
     let mut actual = meter();
     let stopped = incomplete::oracle_bool_eq(
@@ -353,7 +358,7 @@ fn result_membership_uses_real_signature_and_preserves_stopped_arms_and_charges(
             charge_point: quire_exact::ChargePoint::BooleanResultRetain,
         }
     );
-    assert_eq!(stopped.location, healthy.location);
+    assert_eq!(stopped.location, result_location);
     assert_eq!(counters(&actual), expected);
 }
 

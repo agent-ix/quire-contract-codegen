@@ -131,6 +131,22 @@ fn meter() -> Meter {
     })
 }
 
+fn meter_with_one_work_unit() -> Meter {
+    let ceiling = u64::from(u32::MAX);
+    Meter::new(ScalarLimits {
+        integer_bits: ceiling,
+        decimal_digits: ceiling,
+        scale_expansion: ceiling,
+        text_input_bytes: ceiling,
+        text_scalars: ceiling,
+        normalized_scalars: ceiling,
+        unit_edges: ceiling,
+        value_occurrences: ceiling,
+        work_units: 1,
+        result_units: ceiling,
+    })
+}
+
 fn direct(
     name: &str,
     package: &CheckedPackageV2,
@@ -246,6 +262,39 @@ fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
             actual.outcome,
             FamilyOutcome::Evaluated(Outcome::Completed(_))
         ));
+    }
+}
+
+#[trace("TC-031", "FR-021-AC-43")]
+#[test]
+fn stopped_result_expression_keeps_checked_body_location() {
+    let package = package();
+    let arguments = vec![
+        Value::Integer(Integer::from(3_u64)),
+        Value::Integer(Integer::from(4_u64)),
+    ];
+    let mut generated_meter = meter_with_one_work_unit();
+    let actual = generated("add", &package, arguments.clone(), &mut generated_meter);
+    let mut direct_meter = meter_with_one_work_unit();
+    let expected = direct("add", &package, arguments, &mut direct_meter);
+    assert!(matches!(
+        &actual.outcome,
+        FamilyOutcome::Evaluated(Outcome::Incomplete(_))
+    ));
+    assert_eq!(format!("{:?}", actual.outcome), format!("{:?}", expected.outcome));
+    assert_eq!(actual.location, expected.location);
+    let location = actual.location.expect("stopped expression identifies its checked body");
+    assert!(matches!(
+        location.origin,
+        quire_semantic_value::location::Origin::Body { ref function, index: 0 }
+            if function == "add"
+    ));
+    assert_eq!(location.depth(), 0);
+    assert_eq!(location.last_index(), None);
+    assert_eq!(actual.losses, expected.losses);
+    assert_eq!(generated_meter.admitted_charges(), direct_meter.admitted_charges());
+    for kind in LimitKind::ALL {
+        assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind), "{kind:?}");
     }
 }
 
