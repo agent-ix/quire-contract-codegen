@@ -20,3 +20,9 @@ Ticket: IR-1329. Reviewed frozen PR #744 head 6c250a70. Scope: FR-021-AC-43 exam
 ## Verdict
 
 CONDITIONAL. The new rule is concrete, but the adjacent forwarding language conflicts with its location assignment.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-021 now preserves variants, payloads and admitted charges while assigning evaluation locations by AC-43 stop boundary. |
