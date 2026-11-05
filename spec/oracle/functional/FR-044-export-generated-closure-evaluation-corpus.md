@@ -114,5 +114,13 @@ is enabled and the log is not truncated, otherwise `charges` is `null`.
 
 ## Status
 
-PLANNED (IR-591, IR-976). CG's current corpus is held in test builders; no
+PLANNED (IR-1316; IR-591, IR-976). CG's current corpus is held in test builders; no
 `quire.evaluator-case/v1` export or non-null expected result is claimed.
+
+## Scoped evidence status (IR-1316)
+
+FR-044-AC-1/2/3/4 remain Planned (IR-1316; IR-591, IR-976). CG has neither an
+evaluator-case exporter nor shared `quire-eval-corpus` writer/loader integration. Existing
+closure builders do not export a loadable bundle, and the absence of a CG-local codec cannot
+satisfy AC-3's positive shared-codec integration requirement. AC-4 additionally requires a real
+registered-generated-body evaluator run; no vacuous inspection credit is claimed.

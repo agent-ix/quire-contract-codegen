@@ -74,3 +74,9 @@ producer fixture exist; IR-703's public accessor is implemented in Contract IR.
   lowerer/evaluator or V1 input/adapter (FR-008-AC-8).
 - Every CG census, relation and diagnostic field equals the accessor's value (FR-008-AC-9), and
   inspection finds no body read (FR-008-AC-10).
+
+## Scoped evidence status (IR-1316)
+
+Step 8's no-body-read inspection (FR-008-AC-10) is covered by the inspection recorded in FR-008.
+The shared FR-014 lowerer/valuation agreement and full typed projection/refusal variants of
+FR-008-AC-7/8/9 remain Planned (IR-1316; IR-364); six selected State comparisons do not cover them.

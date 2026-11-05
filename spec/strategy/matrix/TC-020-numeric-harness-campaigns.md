@@ -156,3 +156,11 @@ exact rates.
   invocation. Published bytes, detached results and refused selections grant no authenticated
   campaign, measured coverage or proof credit; FR-004 live binding remains necessary
   (FR-011-AC-18).
+
+## Scoped evidence status (IR-1316)
+
+FR-011-AC-12 is covered by the tagged repeated source/map generation and generated-consumer run in
+`v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes`. TC-020 remains partial. Scoped
+FR-011-AC-10/18/19/20/21 remain Planned (IR-1316; IR-1124 or IR-1079 as recorded in FR-011),
+with no live producer binding, complete identity-mutation suite or canonical-text refusal boundary.
+Retired and superseded criteria receive no replacement coverage credit.

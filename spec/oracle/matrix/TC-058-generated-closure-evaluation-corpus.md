@@ -62,3 +62,10 @@ never publishes a partial bundle. Before registered-body execution exists,
 `expected` is `null`; after it exists, non-null expectations pass QSL's
 expected/std check under the FR-402 encoding rules. QSL FR-402-AC-10 owns
 its differential harness run over CG's bundle.
+
+## Scoped evidence status (IR-1316)
+
+All steps remain Planned (IR-1316; IR-591, IR-976): there is no CG evaluator-case exporter or
+shared writer/loader integration. Existing closure test builders do not establish export, census,
+atomic retention or registered-body evaluator expectations. The absence of a local codec alone
+is not AC-3 evidence.

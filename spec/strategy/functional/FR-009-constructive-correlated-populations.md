@@ -74,7 +74,7 @@ generator never draws a candidate and then filters it out.
 | FR-009-AC-4 | PLANNED (IR-364). For `amount < 0` over 0..=1000, `Satisfying` and `Broad` are refused with `EmptyPopulation` naming `Satisfying`, and `Violating` generates; for `amount >= 0`, `Violating` and `Broad` are refused naming `Violating`; no refused request emits an artifact. | Test (TC-018) |
 | FR-009-AC-5 | PLANNED (IR-364). A domain of `i64::MIN..=i64::MAX` with `NotEqual`, `Less`, and `Equal` compiles as generated Rust and generates 10,000 seeded cases without overflow or panic, every case in domain and on its side. | Test (TC-018) |
 | FR-009-AC-6 | PLANNED (IR-364). Repeated generation for the same `CheckedPackageV2`, selected clause id, authentic claim occurrence, and population is byte-identical. | Test (TC-018) |
-| FR-009-AC-7 | PLANNED. For each noncommutative operator, a comparison written with the literal in the first position produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently. | Test (TC-018) |
+| FR-009-AC-7 | For each noncommutative operator, a comparison written with the literal in the first position produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently. | Test (TC-018) |
 
 ## Dependencies
 
@@ -84,3 +84,14 @@ generator never draws a candidate and then filters it out.
 - **Downstream**: [FR-011](./FR-011-numeric-harness-campaigns.md),
   [FR-012](./FR-012-constraint-preserving-shrinking.md),
   [TC-018](../matrix/TC-018-constructive-correlated-populations.md).
+
+## Scoped evidence status (IR-1316)
+
+FR-009-AC-7 is backed by
+`tests/it/v2_numeric_population.rs::selected_v2_literal_mirrors_generate_exact_population_sets`.
+Eight real QSL-produced, IR-admitted comparisons cover `<`, `<=`, `>` and `>=` in read-first and
+literal-first mirrored forms over the model-declared four-member domain 0..=3 with literal 1.
+Each side's complete membership is compared with independent Rust predicates. All three emitted
+populations are compiled and checked against those independently enumerated tagged sets using
+the existing seeded simplify/complicate value-tree walker. This gives no credit to the separate
+all-domain, all-operator obligation FR-009-AC-2 or to the other Planned criteria.

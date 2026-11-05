@@ -362,7 +362,7 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-17 | PLANNED (IR-629). A routed `Process(id)` item appears exactly once with its own identity and empty `KindOutput::Process`, without a generation context or membership in `BackendKind::ALL`. | Test (TC-046) |
 | FR-022-AC-18 | PLANNED (IR-629). A crate-internal routed `Process(id)` item whose private backend and kind disagree refuses the whole call as `BackendKindDisagrees` with `converted=Some(Process(item.backend.identity))` and no generated output. | Test (TC-046) |
 | FR-022-AC-19 | PLANNED (IR-629). Permuting a routed-item slice containing Kani and multiple process identities leaves its request-index-ordered output unchanged. | Test (TC-046) |
-| FR-022-AC-20 | PLANNED (IR-629). `RoutedGenerationItem.backend` and `.kind` are private while `request_index` and `node_id` remain public; external callers cannot create an item with a hand-built `Process(id)` or reassign its backend after `from_descriptor` construction. | Analysis |
+| FR-022-AC-20 | `RoutedGenerationItem.backend` and `.kind` are private while `request_index` and `node_id` remain public; external callers cannot create an item with a hand-built `Process(id)` or reassign its backend after `from_descriptor` construction. | Analysis |
 | FR-022-AC-21 | PLANNED (IR-629). `from_descriptor` constructs Kani for a linked `kani` descriptor and `Process(id)` for a process descriptor with the same identity text. An unknown linked identity never produces Process. | Test (TC-046) |
 | FR-022-AC-22 | PLANNED (IR-629). `from_descriptor` rejects a backend identity different from the descriptor identity as `DescriptorBackendMismatch`, naming both; it rejects an unknown linked identity as `UnknownLinkedBackend`, naming the backend. Neither refusal produces a routed item. | Test (TC-046) |
 | FR-022-AC-23 | After FR-019 authenticates two `integer.add` driver items on one admitted ContractPackage with distinct selected application/direct-`numeric.narrow` pairs, routed generation retains the pair for each item in its claim and harness identity and asserts against its own selected result bound. The two generated harnesses have distinct identities and expected ranges; a fresh settlement of a changed selection changes or refuses only that item, without borrowing the other bound. | Test (TC-033) |
@@ -415,3 +415,25 @@ output belong to IR-629; they do not change this crate boundary.
 3. **Where the driver gets the Kani context values** (subject path and
    unwind). *Recommendation:* they are driver or command inputs.
    *Blocks:* the quire-driver step 7 wiring, not this crate.
+
+## Scoped evidence status (IR-1316)
+
+FR-022-AC-1 is backed by analysis of `src/routed/generate.rs`: both
+`GenerationContexts::has` and the generation dispatch explicitly match `BackendKind::Kani` and
+`BackendKind::Process(_)` with no catch-all. The Process context check returns true and dispatch
+constructs empty `KindOutput::Process`. Rust's exhaustiveness check rejects an added enum variant
+without a corresponding arm in both matches. This is a compiler-enforced source fact, not backend
+execution evidence.
+
+FR-022-AC-20 is backed by analysis of the same module: `RoutedGenerationItem.backend` and `kind`
+are private, `request_index` and `node_id` are public, and the public `from_descriptor` constructor
+checks descriptor/backend identity before deriving the closed kind. There is no public mutable
+backend/kind accessor. Rust field privacy prevents external struct construction or reassignment
+of those fields. This is an API/privacy fact; constructor tests alone are not its proof method.
+
+FR-022-AC-26/27/28 remain Planned (IR-1316; IR-304). Routed items retain a package source and
+`ContractDriverResultSelection`, without the QSL occurrence requirement-record/path-condition
+intake. Current selected-bound controls do not establish occurrence-specific record association,
+ordered branch guards in proof obligations or the required missing/wrong-keyed-record refusals.
+The routed matrix's existing Planned labels for the analysis rows need reconciliation; this
+artifact records the scoped analysis conclusions without claiming runtime coverage.
