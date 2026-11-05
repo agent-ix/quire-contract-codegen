@@ -282,7 +282,7 @@ producer and artifact association required by FR-004.
 | FR-011-AC-9 | RETIRED, replaced by FR-011-AC-20; the former domain/algorithm/digest owner comparison is obsolete and earns no implementation credit. | Inspection |
 | FR-011-AC-10 | PLANNED. The QSL driver forwards only FR-331 items accepted by `export_bindings`; its `UnknownItem`, `Unbound`, and `Fault` results stay driver-side. An out-of-driver non-claim or absent occurrence returns CG `StrategyErrorCode::MissingClaimOccurrence`, and a selected claim with an unbound referenced model element returns `StrategyErrorCode::UnboundModelElement` naming it. Neither produces an artifact or verdict, and a matched sibling remains unaffected. | Test (TC-020) |
 | FR-011-AC-11 | RETIRED, replaced by FR-011-AC-21; the former digest-shaped text control is obsolete and earns no implementation credit. | Inspection |
-| FR-011-AC-12 | PLANNED. Repeated numeric runner generation with the same admitted package, selected driver-bound FR-331 claim, checked clause, and campaign policy yields byte-identical source and map. | Test (TC-020) |
+| FR-011-AC-12 | Repeated numeric runner generation with the same admitted package, selected driver-bound FR-331 claim, checked clause, and campaign policy yields byte-identical source and map. | Test (TC-020) |
 | FR-011-AC-13 | PLANNED (IR-1072). The public V2 selected-claim entry accepts an admitted `CheckedPackageV2` and a typed complete claim key (checked clause id, claim owner node id, authentic `claim` `CheckedOccurrence`) without a second caller-supplied owner; a matching key selects only that claim and its exact checked point. With the same clause and occurrence but a different claim owner, the entry returns a distinct typed V2 diagnostic retaining Contract IR `CheckedExecutionPointRefusal::MissingClaimOccurrence` and the supplied clause, owner, and occurrence, and publishes no artifact. The V1 `BoundPackage` entry and `StrategyDiagnostic` are unchanged. | Test |
 | FR-011-AC-14 | PLANNED (IR-1070). For selected authentic `claim` occurrences of distinct V2 invariant clause nodes whose condition and anchor are equal but whose accepted points are respectively `initialization{name: "startup"}` and `handler{name: "tick"}`, each constructed verdict carries the exact point of its selected node through the FR-058 accessor and injective runtime rendering. The nodes and otherwise identical packages have distinct identities; changing only the accepted handler name changes its rederived node and package identities and runtime point. Precondition and postcondition claims preserve their accepted `pre` and `post` points, including their operation names (QSpec FR-322-AC-131, FR-341-AC-14, FR-342-AC-10; IR FR-058-AC-9). Two authentic claims of one pointed node return its one identical point; no claim occurrence supplies a second point. | Test (TC-020) |
 | FR-011-AC-15 | PLANNED (IR-1070). An absent checked clause returns `StrategyErrorCode::UnknownClause`, a non-state clause returns `StrategyErrorCode::UnsupportedClauseKind`, and a wrong-role, wrong-ordinal, or other-node occurrence returns `StrategyErrorCode::MissingClaimOccurrence`, each before artifact publication and without substituting another claim or node's point. An authentic claim of a separate V2 clause node whose optional point is absent returns `StrategyErrorCode::MissingExecutionPoint` without borrowing a pointed sibling node's point. A renderer mutant changing only the selected point returns `StrategyErrorCode::ExecutionPointMismatch` before publication. Two authentic claims of one pointed node use the same point; clause kind and anchor never synthesize a missing point. | Test (TC-020) |
@@ -322,3 +322,26 @@ producer and artifact association required by FR-004.
   retains E5's admission of those bytes; the process frame carries a reader-validated package id.
   CG receives the bound claim, checks the admitted package's occurrence and V2 relation, and on
   the process route compares that frame id; it adds no QSL export facade or copied relation type.
+
+## Scoped evidence status (IR-1316)
+
+FR-011-AC-12 is backed by
+`tests/it/v2_numeric_strategy.rs::v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes`:
+the same QSL-produced admitted package, selected authentic claim and policy produce equal complete
+source/map artifacts; the generated consumer executes its population and census runners.
+
+The remaining scoped rows stay Planned:
+
+- FR-011-AC-10: IR-1316 with IR-1124; CG has no selected V2 `UnboundModelElement`
+  validation, and the driver-export boundary is not established by these CG tests.
+- FR-011-AC-18: IR-1316 with IR-1124 and FR-004; the emitted runner returns a detached summary,
+  without the private same-invocation source/map/result association required for evidence binding.
+- FR-011-AC-19: IR-1316 with IR-1079; the existing canonical identity check covers one identity,
+  not each independent component mutation and held-identity admitted-body comparison.
+- FR-011-AC-20: IR-1316 with IR-1079; the changed process-name control is partial. Complete-lock,
+  reader package-byte mismatch and linked E4/E5 handoff controls are not established together.
+- FR-011-AC-21: IR-1316 with IR-1079; V2 requests take typed keys and have no canonical-text
+  parsing/refusal boundary or `InvalidIdentityRendering` diagnostic.
+
+AC-6/7 remain superseded and AC-8/9/11 remain retired with no implementation credit. Existing
+V2 runner tests do not make all of TC-020 complete.

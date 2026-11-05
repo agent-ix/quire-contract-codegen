@@ -49,3 +49,11 @@ QSL-produced ConfigVersion control.
   side.
 - Repeated generation is byte-identical.
 - The literal-first form yields the same sets as its mirrored read-first form (FR-009-AC-7).
+
+## Scoped evidence status (IR-1316)
+
+Step 7 (FR-009-AC-7) is covered by the tagged QSL-produced mirror population control in
+`tests/it/v2_numeric_population.rs`. The compiled consumer compares all three populations' reachable
+values and tags with independently enumerated four-member sets for all four noncommutative
+operators and both authored positions. Steps 1–6 retain their existing Planned status; this control
+does not establish the full all-domain census of step 3.

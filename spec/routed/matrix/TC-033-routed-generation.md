@@ -263,3 +263,11 @@ diagnostic-string parsing.
     `ExcludedDriverIndex` whole-call refusal before any oracle or harness;
     routed items at bound indexes `0` and `2` retain their own selections
     (FR-022-AC-29).
+
+## Scoped evidence status (IR-1316)
+
+FR-022-AC-26/27/28 remain Planned (IR-1316; IR-304): the production routed item carries no typed
+QSL occurrence-record/path-condition intake. Same-node selected-bound controls do not establish
+record-key association, ordered guards or typed missing/mismatched-record refusal. FR-022-AC-1
+and AC-20 are separate analysis obligations; the source/API analysis is recorded in FR-022 and
+receives no backend-execution credit.

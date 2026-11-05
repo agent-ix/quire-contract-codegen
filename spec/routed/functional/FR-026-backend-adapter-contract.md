@@ -57,8 +57,8 @@ driver's plugin host owns its process adapter (QSL ADR-029 PV-4).
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-026-AC-1 | The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani adapter's generation arm, execution, transcript parser and witness renderer through it. | Test (TC-037) |
-| FR-026-AC-4 | The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`. | Test (TC-037) |
+| FR-026-AC-1 | PLANNED (IR-1316; IR-629). The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani adapter's generation arm, execution, transcript parser and witness renderer through it. | Test (TC-037) |
+| FR-026-AC-4 | PLANNED (IR-1316; IR-629). The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`. | Test (TC-037) |
 | FR-026-AC-5 | PLANNED (IR-629). `Process(id)` has no CG adapter trait implementation or CG execution path; an inspection of all adapter implementations and execution dispatch arms finds no process arm. | Analysis |
 
 ## Dependencies
@@ -68,3 +68,11 @@ driver's plugin host owns its process adapter (QSL ADR-029 PV-4).
   FR-331 provider envelope.
 - **Downstream**: [TC-037](../matrix/TC-037-backend-adapter-contract.md),
   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md).
+
+## Scoped evidence status (IR-1316)
+
+FR-026-AC-1/4/5 remain Planned (IR-1316; IR-629). No production adapter trait or associated
+execution-evidence contract exists, so direct Kani generation/parser/witness APIs do not prove a
+function generic over the required trait reaches all four parts. The Process generation arm is
+empty, but that limited absence fact does not establish the specified adapter architecture or an
+inspection of implemented adapter/dispatch boundaries. No CG backend-execution credit is inferred.

@@ -611,7 +611,7 @@ fn relation_closure(relation: Relation) -> String {
     }
 }
 
-const GENERATED_SUPPORT: &str = r#"use std::{cell::Cell, collections::BTreeSet, fmt::Debug};
+pub(super) const GENERATED_SUPPORT: &str = r#"use std::{cell::Cell, collections::BTreeSet, fmt::Debug};
 
 use proptest::{
     strategy::{BoxedStrategy, Strategy as _, ValueTree as _},

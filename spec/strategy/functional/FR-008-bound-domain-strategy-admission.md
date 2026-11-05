@@ -138,7 +138,7 @@ broader clause forms do not enlarge FR-008's admitted relation grammar.
 | FR-008-AC-7 | PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat, for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. For every such valuation, the FR-014 clause oracle's result for the same direct comparison is identical to the selected oracle's result and to that independent relation. | Test |
 | FR-008-AC-8 | PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim. Source inspection finds exactly one `lower_typed_integer_comparison` function under `src/oracle` used by both the selected strategy oracle and FR-014's clause oracle for all six operators and the ordered direct read/read and read/literal forms; neither path has a second CG comparison lowerer or evaluator module, and no V1 bound oracle, `BoundPackage` or V1-to-V2 adapter is an input to the V2 path. | Inspection |
 | FR-008-AC-9 | PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant. | Test |
-| FR-008-AC-10 | PLANNED. Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1). | Inspection |
+| FR-008-AC-10 | Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1). | Inspection |
 
 ## Dependencies
 
@@ -148,3 +148,19 @@ broader clause forms do not enlarge FR-008's admitted relation grammar.
 - **Downstream**: [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md),
   [TC-017](../matrix/TC-017-bound-domain-admission.md).
+
+## Scoped evidence status (IR-1316)
+
+FR-008-AC-10 is covered by source inspection of `src/strategy/v2_comparison.rs`,
+`v2_selected_claim.rs`, `v2_population.rs` and `v2_numeric.rs`: selection calls
+`direct_integer_comparison` and `clause_execution_point`; operand lowering reads the returned
+`CheckedClauseComparison`. Population construction uses that admitted relation, and numeric
+publication serializes the typed comparison into its map. The `rust_body` helper strips generated
+Rust headers; it does not open semantic-node bodies. No V2 strategy path reads a
+`CheckedSemanticNodeV2.body` or decodes body JSON. This is inspection evidence, not a runtime test.
+
+FR-008-AC-7/8/9 remain Planned (IR-1316; IR-364). The sole comparison lowerer currently has only
+the selected-strategy production caller, so FR-014 shared-path agreement is absent. The existing
+six-operator projection control does not cover every provenance/observation variant and typed
+refusal, nor the exhaustive small-domain selected/clause oracle comparison. IR-703's upstream
+accessor implementation does not establish those CG obligations.

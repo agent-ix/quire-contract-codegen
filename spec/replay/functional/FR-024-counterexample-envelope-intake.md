@@ -724,3 +724,8 @@ this non-Kani triage.
   result and errors (FR-029-AC-16); QSpec FR-323's replay-target selection; QSL ADR-017 PF-4
   and QSL's `qsl-replay` crate.
 - **Downstream**: [TC-035](../matrix/TC-035-counterexample-envelope-intake.md).
+
+FR-024-AC-35 remains Planned (IR-1316; IR-624; producer blocker QSL-642). The admitted
+selected-model wide-range override is not a QSL-produced same-model wide-range replay. It cannot
+establish the required typed native refusal, retained `TypeNotRange` reason and unaffected
+in-range sibling together; no replay credit follows from the synthetic override.

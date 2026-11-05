@@ -25,4 +25,5 @@ execution evidence type.
 
 ## Status
 
-Planned. No adapter trait exists at this revision.
+Planned (IR-1316; IR-629). No adapter trait exists at this revision. Direct Kani APIs and empty
+Process generation do not prove the generic four-part adapter or associated evidence type.

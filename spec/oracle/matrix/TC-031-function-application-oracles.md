@@ -351,3 +351,13 @@ record and unavailable requested-root kind refuse the whole call with the
 lowest eligible driver request index and that record's requested root id before
 output; direct items and declaration bodies report their own driver request loci.
 Other plain-read requests retain their prior result.
+
+## Scoped evidence status (IR-1316)
+
+FR-021-AC-18/31 remain inspection obligations, with the existing oracle matrix recording their
+no-authority-agreement/no-unrun-owner-path-claim boundaries. No runtime tag is added for them.
+FR-021-AC-30 remains Planned (IR-1316; IR-511): `WorkCounter::new` rejects MAX before graph
+construction, but the public result retains `ScheduleRefusal::InvalidWorkLimit`, rather than the
+criterion's `InvalidGenerationWorkLimit`. No mapping to that required name exists, and the full
+near-MAX first-denial/unchanged-counter control is not established. Existing AC-25 controls do
+not discharge AC-30.

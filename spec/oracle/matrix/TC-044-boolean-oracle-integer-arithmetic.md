@@ -275,3 +275,10 @@ comparisons agree with the kernel. IR-1045 measures FR-031-AC-2/6/16/17/18/22/26
 surviving native path. The V1 bundle expected results recorded in the procedure are retired
 historical claims, not expected results for the active route. IR-348 removes the interim error
 code under AC-27 after its native replacement can emit the specified outcomes.
+
+## Scoped evidence status (IR-1316)
+
+FR-031-AC-27 remains Planned (IR-1316; IR-348): the public `UnsupportedIntegerDivision` variant,
+its rendered code and IR-601 documentation remain in `src/core/diagnostic.rs`. No absence
+control passes on this tree. Retired V1 bundle-only AC-11/19/20/21/23/24/25 retain their
+original criteria and earn no QI, native differential or V2 replacement credit.

@@ -34,7 +34,7 @@ fn request<'a>(
 }
 
 /// One QSL-authored selected claim yields one complete source/map bundle and executable runners.
-#[trace("TC-020", "FR-011-AC-16", "FR-011-AC-17")]
+#[trace("TC-020", "FR-011-AC-12", "FR-011-AC-16", "FR-011-AC-17")]
 #[test]
 fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
     let (package, clause, claim) = admitted("self.balance >= pre(self.balance)");

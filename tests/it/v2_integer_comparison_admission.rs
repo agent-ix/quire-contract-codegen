@@ -26,6 +26,16 @@ pub(super) fn admitted(
     } else {
         Twin::with_balance_condition(condition)
     };
+    admit_twin(twin)
+}
+
+pub(super) fn admit_twin(
+    twin: Twin,
+) -> (
+    quire_contract_model::CheckedPackageV2,
+    quire_contract_model::CheckedNodeId,
+    CheckedOccurrence,
+) {
     let point = ExecutionPoint::Post {
         operation: ExecutionPointName::new("deposit").expect("point name"),
     };
