@@ -14,9 +14,7 @@ use quire_exact::{
     CarriedQuantityType, DecimalLoss, DecimalType, IllTyped, Integer, IntegerInterval,
     Outcome, QuantityCarrier, Rational, RationalDomain, RoundingMode,
 };
-use quire_semantic_value::quantity::{
-    convert_quantity, Conversion, ConvertedValue, QuantityTarget,
-};
+use quire_semantic_value::quantity::{Conversion, ConvertedValue};
 use serde_json::Value;
 
 fn carrier(vectors: &Value) -> QuantityCarrier {
@@ -110,9 +108,11 @@ fn published_carried_values_losses_units_and_accounting_agree() {
     let carrier = carrier(&vectors);
     let expected_type = CarriedQuantityType::new(target.id(), carrier.clone());
     let mut executed = 0;
+    let mut failed = Vec::new();
     for row in rows.iter().filter(|row| row["target"] == generated::TARGET) {
         executed += 1;
         let id = row["id"].as_str().unwrap();
+        let result = std::panic::catch_unwind(|| {
         let spelling = row["source"]["magnitude"].as_str().unwrap();
         let (n, d) = spelling.split_once('/').unwrap_or((spelling, "1"));
         let source = fixture.q(
@@ -238,6 +238,8 @@ fn published_carried_values_losses_units_and_accounting_agree() {
             }
             other => panic!("{id}: unexpected outcome {other:?}"),
         }
+        });
+        if result.is_err() { failed.push(id); }
     }
     let incompatible = fixture.qi(1, "s");
     let incompatible = fixture.resolve(&incompatible);
@@ -261,4 +263,5 @@ fn published_carried_values_losses_units_and_accounting_agree() {
         executed > 0,
         "every generated carrier executes published vectors"
     );
+    assert!(failed.is_empty(), "published carried vectors that failed: {failed:?}");
 }
