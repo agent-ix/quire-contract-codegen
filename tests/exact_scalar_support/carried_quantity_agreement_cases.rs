@@ -11,7 +11,7 @@ mod generated {
 }
 use ix_trace_rs::trace;
 use quire_exact::{
-    CarriedQuantityType, DecimalLoss, DecimalType, IllTyped, Integer, IntegerInterval, Meter,
+    CarriedQuantityType, DecimalLoss, DecimalType, IllTyped, Integer, IntegerInterval,
     Outcome, QuantityCarrier, Rational, RationalDomain, RoundingMode,
 };
 use quire_semantic_value::quantity::{
@@ -120,15 +120,15 @@ fn published_carried_values_losses_units_and_accounting_agree() {
             row["source"]["unit"].as_str().unwrap(),
         );
         let source = fixture.resolve(&source);
-        let limits = if row["limits"].is_null() {
+        let bounds = if row["limits"].is_null() {
             support::rt_side::UNLIMITED
         } else {
             support::rt_side::unit_tuple(std::array::from_fn(|i| {
                 row["limits"][i].as_u64().unwrap()
             }))
         };
-        agree2! { limits: limits, setup: {}, direct: |meter| convert_quantity(source,target.unit(),&QuantityTarget::Carried(carrier.clone()),meter), generated: |meter| project(generated::convert(source,&target,meter),&expected_type), };
-        let observed = support::rt_side::metered(limits, |meter| {
+        agree2! { limits: bounds, setup: {}, direct: |meter| convert_quantity(source,target.unit(),&QuantityTarget::Carried(carrier.clone()),meter), generated: |meter| project(generated::convert(source,&target,meter),&expected_type), };
+        let observed = support::rt_side::metered(bounds, |meter| {
             project(generated::convert(source, &target, meter), &expected_type)
         });
         let points = observed
@@ -186,12 +186,12 @@ fn published_carried_values_losses_units_and_accounting_agree() {
                     }
                     ConvertedValue::Decimal(result) => {
                         assert_eq!(
-                            result.value().coefficient().to_string(),
+                            result.value().representation().coefficient().to_string(),
                             expected["coefficient"].to_string(),
                             "{id}"
                         );
                         assert_eq!(
-                            u64::from(result.value().scale()),
+                            u64::from(result.value().representation().scale()),
                             expected["scale"].as_u64().unwrap(),
                             "{id}"
                         );
