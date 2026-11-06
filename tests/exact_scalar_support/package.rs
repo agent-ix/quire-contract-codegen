@@ -5011,8 +5011,8 @@ mod fixture_identity_tests {
     }
 }
 
-/// Admitted conversions with a compound target and a compound source.
-pub fn compound_conversion_package() -> PackageBuilder {
+/// Admitted compound quantity conversions and an inline-exponent square.
+pub fn compound_quantity_package() -> PackageBuilder {
     let mut builder = derivation_package();
     let compound = key(9901);
     builder.node(
@@ -5074,6 +5074,19 @@ pub fn compound_conversion_package() -> PackageBuilder {
             vec![reference(&source)],
         ),
         &[],
+    );
+    builder.application_bounded(
+        9905,
+        "expression",
+        "binary",
+        &compound,
+        application(
+            "binary",
+            op("quire.op.quantity.pow"),
+            &compound,
+            vec![reference(&key(V_QUANTITY)), literal("integer", "2")],
+        ),
+        &[INT],
     );
     builder
 }

@@ -9,7 +9,7 @@ mod generated {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
-use generated::{compound_source, compound_target, OracleStop};
+use generated::{compound_source, compound_target, quantity_square, OracleStop};
 use ix_trace_rs::trace;
 use quire_exact::{IllTyped, Integer, Meter, Outcome, Quantity, Rational};
 use quire_semantic_value::quantity::{IdentifiedUnit, UnitQuantity};
@@ -133,4 +133,38 @@ fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials()
             target.id(),
         )))
     );
+}
+
+/// The exponent is an inline Integer literal in the admitted package. Its
+/// generated oracle must still agree with the owning runtime on the U12 square.
+#[trace("FR-014-AC-59", "TC-024")]
+#[test]
+fn inline_integer_exponent_u12_square_agrees_in_value_charges_counters_and_denials() {
+    use quire_semantic_value::quantity::{evaluate_quantity_unit, QuantityOperation};
+
+    let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
+    let (expected, expected_unit) = compound(&mut fixture, 4, &[("m", 2)]);
+    let base = fixture.qi(2, "m");
+    let base = fixture.resolve(&base);
+    let exponent = Integer::from(2);
+    let bounds = support::rt_side::UNLIMITED;
+    let generated = |meter: &mut Meter| {
+        quantity_square(base, &exponent, meter).map_err(|stop| match stop {
+            OracleStop::Quantity(cause) => cause,
+            other => panic!("unexpected generated stop: {other:?}"),
+        })
+    };
+    agree2! {
+        limits: bounds,
+        setup: {},
+        direct: |meter| evaluate_quantity_unit(QuantityOperation::Power(base, &exponent), meter),
+        generated: |meter| generated(meter),
+    };
+    let actual = support::rt_side::metered(bounds, generated);
+    let (value, unit) = match actual.0 {
+        Ok((Outcome::Completed(value), unit)) => (value, unit),
+        other => panic!("U12 square did not complete: {other:?}"),
+    };
+    assert_eq!(value, expected);
+    assert_eq!(unit, expected_unit);
 }

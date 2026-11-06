@@ -4307,7 +4307,7 @@ fn caller_declared_quantity_conversion_is_confirmed() {
 #[trace("FR-014-AC-48", "FR-014-AC-61", "TC-024")]
 #[test]
 fn admitted_compound_conversion_target_generates_without_changing_sibling() {
-    let (package, ids) = compound_conversion_package().admit_resolved();
+    let (package, ids) = compound_quantity_package().admit_resolved();
     let nodes = [
         ids.resolve(&code_id(9902)),
         ids.resolve(&code_id(9904)),

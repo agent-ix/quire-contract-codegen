@@ -636,8 +636,8 @@ fn admitted_compound_conversion_oracles_agree_with_runtime() {
     use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};
 
     let (package, ids) =
-        super::exact_scalar_generation::package::compound_conversion_package().admit_resolved();
-    let codes = [9902, 9904];
+        super::exact_scalar_generation::package::compound_quantity_package().admit_resolved();
+    let codes = [9902, 9904, 9905];
     let nodes =
         codes.map(|code| ids.resolve(&super::exact_scalar_generation::package::code_id(code)));
     let items = derive_exact_scalar_items(&package, &nodes)
@@ -648,7 +648,7 @@ fn admitted_compound_conversion_oracles_agree_with_runtime() {
         .expect("admitted compound conversions generate");
     let aliases = nodes
         .iter()
-        .zip(["compound_target", "compound_source"])
+        .zip(["compound_target", "compound_source", "quantity_square"])
         .map(|(node, alias)| {
             let claim = oracles
                 .claim_map
