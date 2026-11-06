@@ -5222,7 +5222,7 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
         &unit_type(),
         json!({"term":"literal", "type":node_ref(&rational), "value_kind":"rational", "value":"1"}),
     );
-    builder.application_code(
+    builder.application_bounded(
         code,
         "expression",
         "conversion",
@@ -5241,6 +5241,7 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
             &target_key,
             vec![reference(&source)],
         ),
+        &[],
     );
     builder
 }

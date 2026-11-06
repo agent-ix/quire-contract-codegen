@@ -846,6 +846,52 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
                 oracles.claim_map.items[0]
             );
         };
+        assert_eq!(
+            oracles.claim_map.items[0].operation.provenance,
+            quire_contract_codegen::OperationProvenance::IrConfirmed
+        );
+        let operation_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == items[0].node_id)
+            .unwrap();
+        let operation_body = serde_json::to_value(&operation_node.body).unwrap();
+        let target_id: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(operation_body["operation"]["member"]["declaration"].clone())
+                .unwrap();
+        assert_eq!(
+            generated.quantity_conversion_target.as_ref(),
+            Some(&target_id)
+        );
+        let target_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == target_id)
+            .unwrap();
+        let target_body = serde_json::to_value(&target_node.body).unwrap();
+        let member_target = |name: &str| -> quire_contract_model::CheckedNodeId {
+            let member = target_body["members"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|member| member["name"] == name)
+                .unwrap();
+            serde_json::from_value(member["value"]["target"].clone()).unwrap()
+        };
+        let carrier_id = member_target("carrier");
+        assert!(
+            generated.checked_bounds.contains(&carrier_id),
+            "checked carrier is the target's actual bounded node"
+        );
+        let quire_contract_codegen::ExactScalarOperation::CarriedQuantityConversion {
+            unit, ..
+        } = &items[0].operation
+        else {
+            panic!("carried descriptor expected");
+        };
+        assert_eq!(unit, &member_target("unit"));
         let names = names_file(
             quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
             &[(generated.symbol.clone(), "convert".to_owned())],

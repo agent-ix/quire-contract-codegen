@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Agent-IX
+
 //! Native execution of the published CQ-E vectors, without reproducing conversion semantics.
 #[path = "agreement.rs"]
 #[macro_use]
@@ -128,7 +131,42 @@ fn published_carried_values_losses_units_and_accounting_agree() {
         let observed = support::rt_side::metered(limits, |meter| {
             project(generated::convert(source, &target, meter), &expected_type)
         });
+        let points = observed
+            .1
+            .iter()
+            .map(|point| point.as_str())
+            .collect::<Vec<_>>();
         let expected = &row["expected"];
+        if let Some(before) = expected["before"].as_str() {
+            assert!(
+                !points.contains(&before),
+                "{id}: forbidden later charge {before}"
+            );
+        }
+        if let Some(after) = expected["after"].as_str() {
+            assert!(
+                points.contains(&after),
+                "{id}: required preceding charge {after}"
+            );
+        }
+        if let Some(consumed) = expected["consumed"].as_object() {
+            for (name, count) in consumed {
+                let actual = if name == "work_units" {
+                    let position = quire_exact::LimitKind::ALL
+                        .iter()
+                        .position(|kind| kind.as_str() == name)
+                        .unwrap();
+                    observed.2[position]
+                } else {
+                    u64::try_from(points.iter().filter(|point| **point == name).count()).unwrap()
+                };
+                assert_eq!(
+                    actual,
+                    count.as_u64().unwrap(),
+                    "{id}: published accounting {name}"
+                );
+            }
+        }
         match observed.0.expect("compatible quantity dimensions") {
             Outcome::Completed(conversion) => {
                 assert_eq!(expected["disposition"], "completed", "{id}");
@@ -201,6 +239,24 @@ fn published_carried_values_losses_units_and_accounting_agree() {
             other => panic!("{id}: unexpected outcome {other:?}"),
         }
     }
+    let incompatible = fixture.qi(1, "s");
+    let incompatible = fixture.resolve(&incompatible);
+    agree2! { limits: support::rt_side::UNLIMITED, setup: {}, direct: |meter|convert_quantity(incompatible,target.unit(),&QuantityTarget::Carried(carrier.clone()),meter), generated: |meter|project(generated::convert(incompatible,&target,meter),&expected_type), };
+    let rejected = support::rt_side::metered(support::rt_side::UNLIMITED, |meter| {
+        project(
+            generated::convert(incompatible, &target, meter),
+            &expected_type,
+        )
+    });
+    assert!(rejected.0.is_err(), "incompatible dimensions are ill typed");
+    assert!(
+        rejected.1.is_empty(),
+        "ill-typed carried conversion admits no charge"
+    );
+    assert!(
+        rejected.2.iter().all(|count| *count == 0),
+        "ill-typed carried conversion consumes no counter"
+    );
     assert!(
         executed > 0,
         "every generated carrier executes published vectors"
