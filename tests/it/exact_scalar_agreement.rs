@@ -630,7 +630,7 @@ fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
 
 /// The admitted compound forms are generated and then executed against the
 /// owning quantity runtime, including each admitted charge and its denial.
-#[trace("FR-014-AC-60", "FR-014-AC-61", "TC-024")]
+#[trace("FR-014-AC-61", "TC-024")]
 #[test]
 fn admitted_compound_conversion_oracles_agree_with_runtime() {
     use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};

@@ -4361,6 +4361,34 @@ fn admitted_compound_conversion_target_generates_without_changing_sibling() {
     );
 }
 
+/// A bare quantity parameter remains bounded by neither the unit declaration nor CG's
+/// compound-result acceptance. IR's `RequiresBound` record must stop emission.
+#[trace("FR-014-AC-60", "TC-024")]
+#[test]
+fn admitted_bare_compound_quantity_parameter_requires_bound_without_oracle() {
+    let (package, ids) = bare_compound_quantity_parameter_package().admit_resolved();
+    let parameter = ids.resolve(&code_id(9908));
+    let expected_type = ids.resolve(&id(&key(9901)));
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: parameter.clone(),
+            operation: ExactScalarOperation::QuantityArithmetic {
+                operator: quire_contract_codegen::QuantityOperator::Multiply,
+            },
+        }],
+    )
+    .expect("typed refusal is a generated claim map");
+    assert_eq!(oracles.claim_map.items.len(), 1);
+    assert!(matches!(
+        &oracles.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactScalarRefusal::RequiresBound { unbounded_type },
+        } if unbounded_type == &expected_type
+    ));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&parameter)));
+}
+
 #[trace("FR-014-AC-2", "FR-014-AC-50", "TC-024")]
 #[test]
 fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings() {

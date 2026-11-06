@@ -5111,3 +5111,16 @@ pub fn compound_quantity_package() -> PackageBuilder {
     );
     builder
 }
+
+/// A quantity-typed parameter whose admitted type supplies no finite bound.
+pub fn bare_compound_quantity_parameter_package() -> PackageBuilder {
+    let mut builder = compound_quantity_package();
+    builder.code(
+        9908,
+        "value",
+        "parameter",
+        &key(9901),
+        parameter_body("q", 0),
+    );
+    builder.focused(&[code_id(9908)])
+}

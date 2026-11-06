@@ -86,7 +86,7 @@ fn record_compound_source(
     )
 }
 
-#[trace("FR-014-AC-61", "TC-024")]
+#[trace("FR-014-AC-48", "TC-024")]
 #[test]
 fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
     let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
@@ -121,7 +121,7 @@ fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
     }
 }
 
-#[trace("FR-014-AC-60", "TC-024")]
+#[trace("FR-014-AC-61", "TC-024")]
 #[test]
 fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials() {
     let fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
