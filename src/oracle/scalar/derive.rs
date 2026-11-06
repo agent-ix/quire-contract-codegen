@@ -100,6 +100,7 @@ pub(super) fn quantity_conversion_operation<Body: GraphBody, NodeBody>(
     }
 }
 
+/// The placement mode owned by a retained carrier.
 pub(super) fn carrier_rounding(carrier: &quire_exact::QuantityCarrier) -> RoundingMode {
     match carrier {
         quire_exact::QuantityCarrier::Integer { rounding, .. } => *rounding,

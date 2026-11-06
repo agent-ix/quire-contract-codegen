@@ -5243,5 +5243,54 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
         ),
         &[],
     );
+    // The carried type's identity is the published structural path over the
+    // imported operands, rather than the generic fixture declaration label.
+    let old_target = node_ref(&target_key);
+    let path = vectors["nodes"][target]["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|segment| {
+            if let Some(name) = segment.get("node").and_then(Value::as_str) {
+                node_ref(if name == "unit_m" {
+                    &unit_type()
+                } else {
+                    &imported[name]
+                })
+            } else {
+                segment.clone()
+            }
+        })
+        .collect::<Vec<_>>();
+    let structural_target = json!({"package":BASE_PACKAGE_NAME,"path":path,"ordinal":0});
+    fn replace(value: &mut Value, old: &Value, new: &Value) {
+        if value == old {
+            *value = new.clone();
+            return;
+        }
+        match value {
+            Value::Array(items) => {
+                for item in items {
+                    replace(item, old, new);
+                }
+            }
+            Value::Object(fields) => {
+                for item in fields.values_mut() {
+                    replace(item, old, new);
+                }
+            }
+            _ => {}
+        }
+    }
+    replace(&mut builder.value, &old_target, &structural_target);
+    for node in builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+    {
+        node["dependencies"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by_cached_key(|id| serde_json::from_value::<CheckedNodeId>(id.clone()).unwrap());
+    }
     builder
 }
