@@ -147,7 +147,8 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             expected_arguments: shape.operands.len(),
         })?;
     let result = scalar_type_form(graph, &node.semantic_type);
-    let expected_result = expected_result_form(graph, &node.node, operation, arguments, shape.result);
+    let expected_result =
+        expected_result_form(graph, &node.node, operation, arguments, shape.result);
     if result.as_deref() != Some(expected_result.wire()) {
         return Err(ExactScalarRefusal::ResultTypeMismatch {
             expected: expected_result,
@@ -339,7 +340,10 @@ fn expected_result_form<Body: GraphBody, NodeBody>(
         }
         ExactScalarOperation::QuantityArithmetic {
             operator: QuantityOperator::Add | QuantityOperator::Subtract,
-        } if arguments.first().and_then(|term| operand_form(graph, term)).as_deref()
+        } if arguments
+            .first()
+            .and_then(|term| operand_form(graph, term))
+            .as_deref()
             == Some("compound_unit") =>
         {
             ScalarForm::CompoundUnit
@@ -1434,8 +1438,9 @@ impl Shape {
             }
             ExactScalarOperation::QuantityArithmetic { operator } => match operator {
                 QuantityOperator::Power => Self::binary(&[F::Unit, F::Integer], F::CompoundUnit),
-                QuantityOperator::Add
-                | QuantityOperator::Subtract => Self::binary(&[F::Unit, F::Unit], F::Unit),
+                QuantityOperator::Add | QuantityOperator::Subtract => {
+                    Self::binary(&[F::Unit, F::Unit], F::Unit)
+                }
                 QuantityOperator::Multiply | QuantityOperator::Divide => {
                     Self::binary(&[F::Unit, F::Unit], F::CompoundUnit)
                 }
