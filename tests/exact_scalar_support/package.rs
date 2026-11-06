@@ -847,14 +847,12 @@ impl PackageBuilder {
         sorted_keys.sort();
         let digest = authored_key("unit_operand_", &json!(sorted_keys));
         if self.dedicated_operands.insert(digest.clone()) {
-            let rational_bound = self.bound(&RAT);
-            self.node_with(
+            self.node(
                 &digest,
                 "value",
                 "literal",
                 &unit_type(),
                 literal("rational", "1"),
-                &[rational_bound],
             );
         }
         digest
@@ -949,8 +947,18 @@ impl PackageBuilder {
                     })
                 })
             });
-            for key in &keys {
-                self.add_dependency(&anchor, key);
+            let literal_anchor = self.value["semantic_graph"]["nodes"]
+                .as_array()
+                .expect("nodes")
+                .iter()
+                .find(|node| node["node_id"] == node_ref(&anchor))
+                .is_some_and(|node| {
+                    node["node_tag"] == "value" && node["semantic_form"] == "literal"
+                });
+            if !literal_anchor {
+                for key in &keys {
+                    self.add_dependency(&anchor, key);
+                }
             }
         }
         dependencies.sort();
@@ -2739,14 +2747,12 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
     // expression that references this node needs one reachable, so it is
     // wired as `V_QUANTITY`'s own dependency rather than repeated per call
     // site.
-    let rational_bound = builder.bound(&RAT);
-    builder.node_with(
+    builder.node(
         &key(V_QUANTITY),
         "value",
         "literal",
         &unit_type(),
         literal("rational", "1"),
-        &[rational_bound],
     );
     builder.code(
         V_BOOLEAN,
@@ -5048,14 +5054,12 @@ pub fn compound_quantity_package() -> PackageBuilder {
         &[],
     );
     let source = key(9903);
-    let rational_bound = builder.bound(&RAT);
-    builder.node_with(
+    builder.node(
         &source,
         "value",
         "literal",
         &compound,
         literal("rational", "1"),
-        &[rational_bound],
     );
     builder.application_bounded(
         9904,
