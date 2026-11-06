@@ -5252,11 +5252,11 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
         .iter()
         .map(|segment| {
             if let Some(name) = segment.get("node").and_then(Value::as_str) {
-                node_ref(if name == "unit_m" {
-                    &unit_type()
+                if name == "unit_m" {
+                    node_ref(&unit_type())
                 } else {
-                    &imported[name]
-                })
+                    node_ref(&imported[name])
+                }
             } else {
                 segment.clone()
             }
