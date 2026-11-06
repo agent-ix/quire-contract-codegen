@@ -4,7 +4,8 @@
 //! Lower and check scalar claims against admitted checked nodes.
 
 use super::derive::{
-    conversion_target, derive_operation_from_view, quantity_conversion_target_form, Derivation,
+    carrier_rounding, conversion_target, derive_operation_from_view, quantity_conversion_operation,
+    quantity_conversion_target_form, Derivation,
 };
 use super::{
     BooleanOperator, BoundForm, DecimalOperator, EqualityOperandKind, ExactScalarOperation,
@@ -104,15 +105,27 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         }
         .into());
     }
-    if matches!(operation, ExactScalarOperation::QuantityConversion) {
+    if matches!(
+        operation,
+        ExactScalarOperation::QuantityConversion
+            | ExactScalarOperation::CarriedQuantityConversion { .. }
+    ) {
         let derivation = Derivation {
             graph,
             node: &node.node,
             bounds: BoundView::complete(node),
             identity: QUANTITY_CONVERT_IDENTITY,
         };
-        derivation.require_mode(RoundingMode::Exact)?;
-        if quantity_conversion_target_form(graph, &node.node).is_none() {
+        let actual = quantity_conversion_operation(graph, &node.node)
+            .ok_or_else(|| derivation.operand_forms_not_derivable())?;
+        let rounding = match &actual {
+            ExactScalarOperation::CarriedQuantityConversion { carrier, .. } => {
+                carrier_rounding(carrier)
+            }
+            _ => RoundingMode::Exact,
+        };
+        derivation.require_mode(rounding)?;
+        if &actual != operation {
             return Err(derivation.operand_forms_not_derivable().into());
         }
     }
@@ -335,7 +348,8 @@ fn expected_result_form<Body: GraphBody, NodeBody>(
     default: ScalarForm,
 ) -> ScalarForm {
     match operation {
-        ExactScalarOperation::QuantityConversion => {
+        ExactScalarOperation::QuantityConversion
+        | ExactScalarOperation::CarriedQuantityConversion { .. } => {
             quantity_conversion_target_form(graph, node).unwrap_or(default)
         }
         ExactScalarOperation::QuantityArithmetic {
@@ -924,7 +938,8 @@ pub(super) fn check_parameters_from_view<Body: GraphBody, NodeBody>(
         | ExactScalarOperation::EnumComparison { .. }
         | ExactScalarOperation::QuantityArithmetic { .. }
         | ExactScalarOperation::QuantityComparison { .. }
-        | ExactScalarOperation::QuantityConversion => return Ok(Vec::new()),
+        | ExactScalarOperation::QuantityConversion
+        | ExactScalarOperation::CarriedQuantityConversion { .. } => return Ok(Vec::new()),
     };
     Ok(vec![checked])
 }
@@ -1300,6 +1315,7 @@ impl ScalarForm {
             Self::Enum => "enum",
             Self::Unit => "unit",
             Self::CompoundUnit => "compound_unit",
+            Self::CarriedQuantity => "carried_quantity",
         }
     }
 }
@@ -1446,6 +1462,9 @@ impl Shape {
                 }
             },
             ExactScalarOperation::QuantityConversion => Self::conversion(&[F::Unit], F::Unit),
+            ExactScalarOperation::CarriedQuantityConversion { .. } => {
+                Self::conversion(&[F::Unit], F::CarriedQuantity)
+            }
             ExactScalarOperation::QuantityComparison { .. } => {
                 Self::binary(&[F::Unit, F::Unit], F::Boolean)
             }
@@ -1657,6 +1676,9 @@ pub(super) fn catalogued_operation(
             plain(comparison_identity(ComparisonFamily::Enum, operator)?)
         }
         Op::QuantityConversion => with_rounding(QUANTITY_CONVERT_IDENTITY, RoundingMode::Exact),
+        Op::CarriedQuantityConversion { carrier, .. } => {
+            with_rounding(QUANTITY_CONVERT_IDENTITY, carrier_rounding(carrier))
+        }
         Op::QuantityArithmetic { operator } => plain(match operator {
             QuantityOperator::Add => "quire.op.quantity.add",
             QuantityOperator::Subtract => "quire.op.quantity.sub",
@@ -1940,6 +1962,9 @@ pub(super) fn operation_identity(
             format!("enum.compare.{}", comparison_name(*operator)?)
         }
         ExactScalarOperation::QuantityConversion => "quantity.convert.exact".to_owned(),
+        ExactScalarOperation::CarriedQuantityConversion { carrier, .. } => {
+            format!("quantity.convert.carried.{carrier:?}")
+        }
         ExactScalarOperation::QuantityArithmetic { operator } => {
             let name = match operator {
                 QuantityOperator::Add => "add",

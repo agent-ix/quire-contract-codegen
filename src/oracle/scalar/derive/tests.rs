@@ -193,7 +193,7 @@ fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
         Op::TextAdmission { .. } => Family::NumericConvert,
         Op::TextComparison { operator } => Family::TextComparison(*operator),
         Op::EnumComparison { operator } => Family::EnumComparison(*operator),
-        Op::QuantityConversion => Family::QuantityConversion,
+        Op::QuantityConversion | Op::CarriedQuantityConversion { .. } => Family::QuantityConversion,
         Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
         Op::QuantityComparison { operator } => Family::QuantityComparison(*operator),
     })

@@ -329,6 +329,13 @@ pub enum ExactScalarOperation {
     },
     /// Exact quantity conversion into the unit supplied at call time.
     QuantityConversion,
+    /// Conversion into an admitted bounded carrier, preserving its representation and loss.
+    CarriedQuantityConversion {
+        /// Admitted target unit declaration.
+        unit: CheckedNodeId,
+        /// Retained bounded carrier and placement mode.
+        carrier: quire_exact::QuantityCarrier,
+    },
     /// `evaluate_quantity`.
     QuantityArithmetic {
         /// Operator.
@@ -387,6 +394,8 @@ pub enum ScalarForm {
     Unit,
     /// `compound_unit`.
     CompoundUnit,
+    /// `carried_quantity`.
+    CarriedQuantity,
 }
 
 impl ScalarForm {

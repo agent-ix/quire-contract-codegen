@@ -44,9 +44,60 @@ pub(super) fn quantity_conversion_target_form<Body: GraphBody, NodeBody>(
             |target| match (target.node_tag.as_ref(), target.semantic_form.as_ref()) {
                 ("scalar_type", "unit") => Some(ScalarForm::Unit),
                 ("scalar_type", "compound_unit") => Some(ScalarForm::CompoundUnit),
+                ("scalar_type", "carried_quantity") => Some(ScalarForm::CarriedQuantity),
                 _ => None,
             },
         )
+}
+
+/// Read the carrier through the admitted target's typed references, never through result bounds.
+pub(super) fn quantity_conversion_operation<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+) -> Option<ExactScalarOperation> {
+    use crate::core::ir::checked_term::aggregate_members;
+    use quire_exact::QuantityCarrier;
+    match quantity_conversion_target_form(graph, node)? {
+        ScalarForm::Unit | ScalarForm::CompoundUnit => {
+            Some(ExactScalarOperation::QuantityConversion)
+        }
+        ScalarForm::CarriedQuantity => {
+            let target = conversion_target(graph, node)?;
+            let (unit, carrier, rounding) = scalar_ir::carried_target(graph.term(&target))?;
+            let bound = graph.node(carrier)?;
+            let members = aggregate_members(graph.term(carrier))?;
+            let carrier = match (bound.node_tag.as_ref(), bound.semantic_form.as_ref()) {
+                ("bounded_domain", "integer_range") => QuantityCarrier::Integer {
+                    domain: read_integer_range(members)?,
+                    rounding,
+                },
+                ("bounded_domain", "decimal_range") => {
+                    let decimal = read_decimal_range(members)?;
+                    if decimal.rounding() != rounding {
+                        return None;
+                    }
+                    QuantityCarrier::Decimal(decimal)
+                }
+                ("bounded_domain", "rational_range") if rounding == RoundingMode::Exact => {
+                    QuantityCarrier::Rational(read_rational_range(members)?)
+                }
+                _ => return None,
+            };
+            Some(ExactScalarOperation::CarriedQuantityConversion {
+                unit: unit.clone(),
+                carrier,
+            })
+        }
+        _ => None,
+    }
+}
+
+pub(super) fn carrier_rounding(carrier: &quire_exact::QuantityCarrier) -> RoundingMode {
+    match carrier {
+        quire_exact::QuantityCarrier::Integer { rounding, .. } => *rounding,
+        quire_exact::QuantityCarrier::Decimal(decimal) => decimal.rounding(),
+        quire_exact::QuantityCarrier::Rational(_) => RoundingMode::Exact,
+    }
 }
 
 /// An operation identity with the parameters that are not read from the node's bounds, laws,
@@ -562,11 +613,14 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         Family::TextComparison(operator) => Op::TextComparison { operator },
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
         Family::QuantityConversion => {
-            derivation.require_mode(RoundingMode::Exact)?;
-            if quantity_conversion_target_form(graph, node).is_none() {
-                return Err(derivation.operand_forms_not_derivable());
-            }
-            Op::QuantityConversion
+            let operation = quantity_conversion_operation(graph, node)
+                .ok_or_else(|| derivation.operand_forms_not_derivable())?;
+            let rounding = match &operation {
+                Op::CarriedQuantityConversion { carrier, .. } => carrier_rounding(carrier),
+                _ => RoundingMode::Exact,
+            };
+            derivation.require_mode(rounding)?;
+            operation
         }
         Family::QuantityArithmetic(operator) => Op::QuantityArithmetic { operator },
         Family::QuantityComparison(operator) => Op::QuantityComparison { operator },

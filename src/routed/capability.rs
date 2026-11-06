@@ -614,9 +614,10 @@ fn scalar_family_from_item(item: crate::oracle::scalar::ExactScalarItem) -> Kani
         }
         Op::TextAdmission { .. } | Op::TextComparison { .. } => KaniFormFamily::Text,
         Op::EnumComparison { .. } => KaniFormFamily::Enum,
-        Op::QuantityConversion | Op::QuantityArithmetic { .. } | Op::QuantityComparison { .. } => {
-            KaniFormFamily::Quantity
-        }
+        Op::QuantityConversion
+        | Op::CarriedQuantityConversion { .. }
+        | Op::QuantityArithmetic { .. }
+        | Op::QuantityComparison { .. } => KaniFormFamily::Quantity,
     }
 }
 

@@ -46,6 +46,23 @@ pub(crate) fn quantity_conversion_target(
         .then(|| operation.member_declaration().ok().flatten().cloned())?
 }
 
+/// Read a carried target's admitted unit, carrier and placement mode.
+pub(crate) fn carried_target(
+    term: Option<&CheckedTerm>,
+) -> Option<(&CheckedNodeId, &CheckedNodeId, quire_exact::RoundingMode)> {
+    use super::checked_term::{aggregate_members, bound_members, literal, reference};
+    let [unit, carrier, rounding] =
+        bound_members(aggregate_members(term)?, ["unit", "carrier", "rounding"])?;
+    Some((
+        reference(unit)?,
+        reference(carrier)?,
+        quire_exact::RoundingMode::from_code(literal(
+            rounding,
+            quire_contract_model::LiteralKind::Text,
+        )?)?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     /// Trace: AD-004 L-8.
