@@ -64,6 +64,14 @@ pub(super) fn quantity_conversion_operation<Body: GraphBody, NodeBody>(
         ScalarForm::CarriedQuantity => {
             let target = conversion_target(graph, node)?;
             let (unit, carrier, rounding) = scalar_ir::carried_target(graph.term(&target))?;
+            let unit_node = graph.node(unit)?;
+            if (
+                unit_node.node_tag.as_ref(),
+                unit_node.semantic_form.as_ref(),
+            ) != ("scalar_type", "unit")
+            {
+                return None;
+            }
             let bound = graph.node(carrier)?;
             let members = aggregate_members(graph.term(carrier))?;
             let carrier = match (bound.node_tag.as_ref(), bound.semantic_form.as_ref()) {
@@ -613,6 +621,9 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         Family::TextComparison(operator) => Op::TextComparison { operator },
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
         Family::QuantityConversion => {
+            if quantity_conversion_target_form(graph, node) != Some(ScalarForm::CarriedQuantity) {
+                derivation.require_mode(RoundingMode::Exact)?;
+            }
             let operation = quantity_conversion_operation(graph, node)
                 .ok_or_else(|| derivation.operand_forms_not_derivable())?;
             let rounding = match &operation {

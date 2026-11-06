@@ -550,7 +550,12 @@ impl SourceBuilder {
                     // Conversion retains the placed value and loss; the paired type retains even a Rational carrier's identity.
                     output: OracleOutput::Value("(quantity_owner::Conversion, rt::CarriedQuantityType)"),
                     prelude: vec![format!("let carrier = {carrier};")],
-                    call: "Ok(quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Carried(carrier.clone()), meter).map_err(OracleStop::IllTyped)?.map(|conversion| (conversion, rt::CarriedQuantityType::new(unit.id(), carrier))))".to_owned(),
+                    call: "Ok(match quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Carried(carrier.clone()), meter).map_err(OracleStop::IllTyped)? {
+        rt::Outcome::Completed(conversion) => rt::Outcome::Completed((conversion, rt::CarriedQuantityType::new(unit.id(), carrier))),
+        rt::Outcome::Undefined(reason) => rt::Outcome::Undefined(reason),
+        rt::Outcome::Refused(reason) => rt::Outcome::Refused(reason),
+        rt::Outcome::Incomplete(reason) => rt::Outcome::Incomplete(reason),
+    })".to_owned(),
                 }
             }
             ExactScalarOperation::QuantityConversion => Body {

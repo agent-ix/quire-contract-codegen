@@ -116,6 +116,9 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             bounds: BoundView::complete(node),
             identity: QUANTITY_CONVERT_IDENTITY,
         };
+        if quantity_conversion_target_form(graph, &node.node) != Some(ScalarForm::CarriedQuantity) {
+            derivation.require_mode(RoundingMode::Exact)?;
+        }
         let actual = quantity_conversion_operation(graph, &node.node)
             .ok_or_else(|| derivation.operand_forms_not_derivable())?;
         let rounding = match &actual {
@@ -897,6 +900,13 @@ pub(super) fn check_parameters_from_view<Body: GraphBody, NodeBody>(
 ) -> Result<Vec<CheckedNodeId>, ItemCheckError> {
     let bounds = Bounds { graph, node };
     let checked = match operation {
+        ExactScalarOperation::CarriedQuantityConversion { .. } => {
+            let target = conversion_target(graph, bounds.node.root)
+                .ok_or(ExactScalarRefusal::InvalidInput)?;
+            let (_, carrier, _) = scalar_ir::carried_target(graph.term(&target))
+                .ok_or(ExactScalarRefusal::InvalidInput)?;
+            return Ok(vec![carrier.clone()]);
+        }
         ExactScalarOperation::IntegerArithmetic { domain, .. }
         | ExactScalarOperation::IntegerDivision { domain, .. }
         | ExactScalarOperation::IntegerModulo { domain } => {
@@ -938,8 +948,7 @@ pub(super) fn check_parameters_from_view<Body: GraphBody, NodeBody>(
         | ExactScalarOperation::EnumComparison { .. }
         | ExactScalarOperation::QuantityArithmetic { .. }
         | ExactScalarOperation::QuantityComparison { .. }
-        | ExactScalarOperation::QuantityConversion
-        | ExactScalarOperation::CarriedQuantityConversion { .. } => return Ok(Vec::new()),
+        | ExactScalarOperation::QuantityConversion => return Ok(Vec::new()),
     };
     Ok(vec![checked])
 }
@@ -1963,7 +1972,10 @@ pub(super) fn operation_identity(
         }
         ExactScalarOperation::QuantityConversion => "quantity.convert.exact".to_owned(),
         ExactScalarOperation::CarriedQuantityConversion { carrier, .. } => {
-            format!("quantity.convert.carried.{carrier:?}")
+            format!(
+                "quantity.convert.carried {}",
+                carrier_rounding(carrier).as_str()
+            )
         }
         ExactScalarOperation::QuantityArithmetic { operator } => {
             let name = match operator {
