@@ -628,6 +628,57 @@ fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
     );
 }
 
+/// The admitted compound forms are generated and then executed against the
+/// owning quantity runtime, including each admitted charge and its denial.
+#[trace("FR-014-AC-60", "FR-014-AC-61", "TC-024")]
+#[test]
+fn admitted_compound_conversion_oracles_agree_with_runtime() {
+    use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};
+
+    let (package, ids) =
+        super::exact_scalar_generation::package::compound_conversion_package().admit_resolved();
+    let codes = [9902, 9904];
+    let nodes =
+        codes.map(|code| ids.resolve(&super::exact_scalar_generation::package::code_id(code)));
+    let items = derive_exact_scalar_items(&package, &nodes)
+        .into_iter()
+        .map(|item| item.expect("admitted compound conversion derives"))
+        .collect::<Vec<_>>();
+    let oracles = generate_exact_scalar_oracles(&package, &items)
+        .expect("admitted compound conversions generate");
+    let aliases = nodes
+        .iter()
+        .zip(["compound_target", "compound_source"])
+        .map(|(node, alias)| {
+            let claim = oracles
+                .claim_map
+                .items
+                .iter()
+                .find(|claim| &claim.node_id == node)
+                .expect("requested conversion claim");
+            let quire_contract_codegen::ClaimDisposition::Generated(generated) = &claim.result
+            else {
+                panic!("compound conversion refused: {claim:?}")
+            };
+            (generated.symbol.clone(), alias.to_owned())
+        })
+        .collect::<Vec<_>>();
+    let names = names_file(
+        quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
+        &aliases,
+        "",
+    );
+    run_agreement_cases(
+        "compound-conversion-agreement",
+        oracles
+            .artifacts
+            .iter()
+            .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
+        &[("names.rs", names.as_str())],
+        "tests/exact_scalar_support/compound_conversion_agreement_cases.rs",
+    );
+}
+
 /// Keep the generator's function bytes and local helpers intact while making
 /// all cohort modules use the same stop type for one agreement test crate.
 fn shared_stop_source(source: &str, variants: &mut BTreeMap<String, String>) -> String {
