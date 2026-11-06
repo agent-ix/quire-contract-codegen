@@ -801,3 +801,64 @@ fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
         "tests/exact_scalar_support/boolean_agreement_cases.rs",
     );
 }
+
+/// Published carried-quantity vectors execute emitted Rust against their owning QSV API.
+#[trace(
+    "FR-014-AC-62",
+    "FR-014-AC-63",
+    "FR-014-AC-64",
+    "FR-014-AC-65",
+    "TC-024"
+)]
+#[test]
+fn carried_quantity_vectors_compile_and_agree_with_owner() {
+    use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};
+    let root =
+        PathBuf::from(std::env::var_os("QSPEC_DIR").expect("QSPEC_DIR points at published QSpec"));
+    let vectors: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("proposals/checked-package-v2/quantity-carrier-vectors.json"))
+            .expect("published carrier vectors"),
+    )
+    .expect("carrier JSON");
+    let targets = vectors["evaluation"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["target"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    for (index, target) in targets.into_iter().enumerate() {
+        let code = 42000 + u32::try_from(index).unwrap();
+        let (package, ids) = super::exact_scalar_generation::package::carried_quantity_package(
+            &vectors, target, code,
+        )
+        .admit_resolved();
+        let node = ids.resolve(&super::exact_scalar_generation::package::code_id(code));
+        let items = derive_exact_scalar_items(&package, &[node])
+            .into_iter()
+            .map(|item| item.expect("carried conversion derives"))
+            .collect::<Vec<_>>();
+        let oracles = generate_exact_scalar_oracles(&package, &items).expect("carried generation");
+        let quire_contract_codegen::ClaimDisposition::Generated(generated) =
+            &oracles.claim_map.items[0].result
+        else {
+            panic!(
+                "carried conversion refused: {:?}",
+                oracles.claim_map.items[0]
+            );
+        };
+        let names = names_file(
+            quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
+            &[(generated.symbol.clone(), "convert".to_owned())],
+            &format!("pub const TARGET: &str = {target:?};\n"),
+        );
+        run_agreement_cases(
+            &format!("carried-{target}"),
+            oracles
+                .artifacts
+                .iter()
+                .map(|a| (a.path.as_str(), a.contents.as_str())),
+            &[("names.rs", &names)],
+            "tests/exact_scalar_support/carried_quantity_agreement_cases.rs",
+        );
+    }
+}

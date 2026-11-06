@@ -267,9 +267,9 @@ rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
 `sub`, `mul` and `div`, `numeric_equal`, `total_order`, `bit_identical`,
 `to_float32` and `to_float64`; every `text` and `enum` comparison;
 `quantity` `add`, `sub`, `mul`, `div`, `pow` and every comparison; and
-`quire.op.quantity.convert`, the exact same-dimension conversion whose result is
-a quantity in the node's `type_argument` unit (the Behavior section and
-FR-014-AC-48 state it). Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
+`quire.op.quantity.convert`, whose `type_argument` retains either an exact
+unit target or a bounded carried quantity target with its placement mode
+(FR-014-AC-48 and FR-014-AC-62..65). Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
 are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
 `ieee.float32.sqrt`, `ieee.float64.sqrt`, `ieee.float32.fma`,
 `ieee.float64.fma`, `ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
@@ -418,6 +418,9 @@ otherwise.
   and consumed counters. A completed Decimal or Integer carrier shall not be
   coerced to a kernel `Quantity`; a Rational carrier retains its distinct
   target type even when its converted magnitude is exact (FR-014-AC-62..65).
+  Its completed result pairs QSV's unchanged `Conversion` with the kernel's
+  `CarriedQuantityType`, retaining the carrier identity even for an exact
+  Rational value; stopped outcomes retain no value or type pair.
   Source-to-CG agreement for the original TC-187 U16–U18/U29 packages requires
   Contract IR reader admission tracked by IR-1351; these CG criteria apply to
   reader-admitted packages and do not claim that upstream admission is complete.

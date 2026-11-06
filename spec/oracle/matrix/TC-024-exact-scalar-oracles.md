@@ -91,26 +91,33 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    `ScheduleRefusal::UnsupportedOperation`, never as a request-level error,
    accepting an earlier
    `Unsupported`, `NotExpression`, `UnsupportedOperandType` or argument refusal
-   where that check fires first (FR-021-AC-21), that a conversion node with a scalar or compound
-   `type_argument` is refused as `OperandFormsNotDerivable` and one with a
-   non-`exact` mode as `ModeNotDerivable`, each with no oracle, and the mode is
-   checked first, so a scalar `type_argument` with a non-`exact` mode is
-   `ModeNotDerivable` (FR-014-AC-50). The compound-unit target refusal
-   (`OperandFormsNotDerivable`, IR-831) runs on an admitted-package fixture,
-   because Contract IR FR-038-AC-248 and FR-038 admit a `quire.op.quantity.convert`
-   into a `compound_unit`. The scalar-target refusal and the `ModeNotDerivable`
-   case run only on hand-built nodes in module tests: FR-038-AC-248 refuses a
-   `quire.op.quantity.convert` to a non-quantity type upstream, and
-   FR-038-AC-213 admits only `exact` for a unit `type_argument`, so no admitted
-   package reaches either. Check also that the composite-equality generator refuses a conversion
-   root as `FormMismatch` and a conversion operand as an unsupported quantity,
-   each before any artifact.
-   The TC-187 quantity-to-quantity conversion vectors are agreement rows
-   (FR-014-AC-6); U07, U08, U16, U17, U18, U29 (scalar targets) and U25's
-   first step (compound target, IR-831) are refusal rows (FR-014-AC-50); check that every agreement row of
-   step 4 compares at least one vector. Derive nodes that are not applications, carry no identity, name an
-   identity outside the derivable set, or carry a law, mode, operand forms or
-   bound that select no parameter (FR-014-AC-18).
+   where that check fires first (FR-021-AC-21). An admitted compound target
+   derives and executes, including both steps of U25 (FR-014-AC-61). A plain
+   Decimal or Integer target at the private seam refuses
+   `OperandFormsNotDerivable`; a non-`exact` unit target refuses
+   `ModeNotDerivable`, checked before the scalar-target shape. These defensive
+   controls cannot enter through Contract IR's strict reader. Check that the
+   composite-equality generator refuses a conversion root as `FormMismatch`
+   and a conversion operand as an unsupported quantity before any artifact.
+   For admitted carried targets, load QSpec's
+   `proposals/checked-package-v2/quantity-carrier-vectors.json` by reference.
+   Build target nodes and conversions from its `nodes` and `evaluation`
+   records, then admit the package through Contract IR's public reader.
+   Derive and generate every CQ-E01 through CQ-E26 conversion. Assert its
+   exact structural target id, carrier bound, unit, scale interval and mode.
+   Compile the generated crate and compare each conversion against direct
+   QSV `convert_quantity` with `QuantityTarget::Carried` under the vector's
+   limits. Assert the vector's expected value, loss, refusal or incomplete
+   record, the target unit and retained `CarriedQuantityType`; compare all
+   ordered charges and counters and deny every admitted charge in turn.
+   Include an incompatible-unit control that stops before any charge.
+   At the private seam, a mismatched operation mode and malformed carrier
+   refuse derivation without changing a valid sibling (FR-014-AC-62..65).
+   This reader-admitted generated-to-QSV agreement does not claim the
+   original source-to-generated IR-842 integration cells have executed.
+   Derive nodes that are not applications, carry no identity, name an identity
+   outside the derivable set, or carry a law, mode, operand forms or bound
+   that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that
    Contract IR rejects each attempted text-operand `numeric.convert` node.
    None contributes a generated function, a derived descriptor or runtime

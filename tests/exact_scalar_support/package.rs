@@ -2425,6 +2425,9 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
         Op::EnumComparison { operator } => {
             (expr.operator, op(text_family_identity("enum", *operator)))
         }
+        Op::CarriedQuantityConversion { .. } => {
+            unreachable!("carried conversion uses its published carrier fixture")
+        }
         Op::QuantityConversion => (
             expr.operator,
             op_full(
@@ -5136,4 +5139,108 @@ pub fn bare_compound_quantity_parameter_package() -> PackageBuilder {
         &[],
     );
     builder.focused(&[code_id(9909)])
+}
+
+/// Admit one carried target directly from the published QSpec carrier nodes.
+pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> PackageBuilder {
+    fn import(
+        builder: &mut PackageBuilder,
+        nodes: &Value,
+        name: &str,
+        imported: &mut BTreeMap<String, String>,
+    ) -> String {
+        if let Some(key) = imported.get(name) {
+            return key.clone();
+        }
+        if name == "unit_m" {
+            return unit_type();
+        }
+        let key = key(40000 + u32::try_from(imported.len()).expect("bounded fixture nodes"));
+        imported.insert(name.to_owned(), key.clone());
+        let node = &nodes[name];
+        let mut body = node["body"].clone();
+        fn rewrite(
+            value: &mut Value,
+            builder: &mut PackageBuilder,
+            nodes: &Value,
+            imported: &mut BTreeMap<String, String>,
+        ) {
+            if let Some(name) = value.get("node").and_then(Value::as_str).map(str::to_owned) {
+                *value = node_ref(&import(builder, nodes, &name, imported));
+            } else {
+                match value {
+                    Value::Array(items) => {
+                        for item in items {
+                            rewrite(item, builder, nodes, imported);
+                        }
+                    }
+                    Value::Object(fields) => {
+                        for item in fields.values_mut() {
+                            rewrite(item, builder, nodes, imported);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        rewrite(&mut body, builder, nodes, imported);
+        let semantic_type = if let Some(base) = node.get("base").and_then(Value::as_str) {
+            import(builder, nodes, base, imported)
+        } else {
+            key.clone()
+        };
+        let dependencies = reference_targets(&body);
+        builder.node_with(
+            &key,
+            node["tag"].as_str().unwrap(),
+            node["form"].as_str().unwrap(),
+            &semantic_type,
+            body,
+            &dependencies,
+        );
+        // Derived carried types have structural identity rather than a declaration owner.
+        if node["form"] == "carried_quantity" {
+            let last = builder.value["semantic_graph"]["nodes"]
+                .as_array_mut()
+                .unwrap()
+                .last_mut()
+                .unwrap();
+            last.as_object_mut().unwrap().remove("declaration");
+            last.as_object_mut().unwrap().remove("owner");
+        }
+        key
+    }
+    let mut builder = PackageBuilder::default();
+    let mut imported = BTreeMap::new();
+    let rational = import(&mut builder, &vectors["nodes"], "rational", &mut imported);
+    let target_key = import(&mut builder, &vectors["nodes"], target, &mut imported);
+    let source = key(41000);
+    builder.node(
+        &source,
+        "value",
+        "literal",
+        &unit_type(),
+        json!({"term":"literal", "type":node_ref(&rational), "value_kind":"rational", "value":"1"}),
+    );
+    builder.application_code(
+        code,
+        "expression",
+        "conversion",
+        &target_key,
+        application(
+            "convert",
+            op_full(
+                "quire.op.quantity.convert",
+                vec![],
+                Some(mode_kv(
+                    "rounding",
+                    vectors["nodes"][target]["rounding"].as_str().unwrap(),
+                )),
+                Some(type_argument_member(&target_key)),
+            ),
+            &target_key,
+            vec![reference(&source)],
+        ),
+    );
+    builder
 }
