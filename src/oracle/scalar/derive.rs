@@ -34,15 +34,19 @@ pub(super) fn conversion_target<Body: GraphBody, NodeBody>(
     scalar_ir::quantity_conversion_target(graph.term(&node.node_id), QUANTITY_CONVERT_IDENTITY)
 }
 
-pub(super) fn quantity_conversion_target_is_unit<Body: GraphBody, NodeBody>(
+pub(super) fn quantity_conversion_target_form<Body: GraphBody, NodeBody>(
     graph: &Graph<'_, Body>,
     node: &CheckedSemanticNodeV2<NodeBody>,
-) -> bool {
+) -> Option<ScalarForm> {
     conversion_target(graph, node)
         .and_then(|id| graph.node(&id))
-        .is_some_and(|target| {
-            target.node_tag.as_ref() == "scalar_type" && target.semantic_form.as_ref() == "unit"
-        })
+        .and_then(
+            |target| match (target.node_tag.as_ref(), target.semantic_form.as_ref()) {
+                ("scalar_type", "unit") => Some(ScalarForm::Unit),
+                ("scalar_type", "compound_unit") => Some(ScalarForm::CompoundUnit),
+                _ => None,
+            },
+        )
 }
 
 /// An operation identity with the parameters that are not read from the node's bounds, laws,
@@ -559,7 +563,7 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
         Family::QuantityConversion => {
             derivation.require_mode(RoundingMode::Exact)?;
-            if !quantity_conversion_target_is_unit(graph, node) {
+            if quantity_conversion_target_form(graph, node).is_none() {
                 return Err(derivation.operand_forms_not_derivable());
             }
             Op::QuantityConversion

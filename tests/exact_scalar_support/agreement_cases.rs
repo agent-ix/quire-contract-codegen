@@ -869,7 +869,7 @@ fn completed(run: &QuantityArithmeticRun, row: &str) -> (Quantity, IdentifiedUni
 
 /// TC-187 U12: quantity multiplication, division and power under canonical compound units, with
 /// the `s` family the grid needs for a mixed-unit product.
-#[trace("FR-014-AC-6", "TC-024")]
+#[trace("FR-014-AC-6", "FR-014-AC-58", "TC-024")]
 #[test]
 fn tc_024_tc187_u12_compound_unit_products_agree() {
     let f = rt::fixture();

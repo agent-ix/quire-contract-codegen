@@ -4304,25 +4304,89 @@ fn caller_declared_quantity_conversion_is_confirmed() {
     }
 }
 
-#[trace("FR-014-AC-50", "TC-024")]
+#[trace("FR-014-AC-48", "FR-014-AC-61", "TC-024")]
 #[test]
-fn admitted_compound_conversion_target_refuses_without_changing_sibling() {
-    let (package, ids) = compound_conversion_package().admit_resolved();
-    let nodes = [ids.resolve(&code_id(9902)), ids.resolve(&code_id(1001))];
+fn admitted_compound_conversion_target_generates_without_changing_sibling() {
+    let (package, ids) = compound_quantity_package().admit_resolved();
+    let nodes = [
+        ids.resolve(&code_id(9902)),
+        ids.resolve(&code_id(9904)),
+        ids.resolve(&code_id(1001)),
+    ];
     let derived = derive_exact_scalar_items(&package, &nodes);
+    for (name, item) in ["compound target", "compound source"]
+        .into_iter()
+        .zip(&derived)
+    {
+        assert_eq!(
+            item.as_ref().expect(name).operation,
+            ExactScalarOperation::QuantityConversion
+        );
+    }
+    assert!(derived[2].is_ok(), "supported sibling derives");
+    let items = derived.into_iter().map(Result::unwrap).collect::<Vec<_>>();
+    let generated = generate_exact_scalar_oracles(&package, &items).expect("all generate");
+    assert_eq!(generated.claim_map.items.len(), 3);
+    for claim in &generated.claim_map.items {
+        assert!(
+            matches!(claim.result, ClaimDisposition::Generated(_)),
+            "{claim:?}"
+        );
+    }
+    let conversion_claim = generated
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == nodes[0])
+        .expect("compound conversion claim");
+    let ClaimDisposition::Generated(conversion) = &conversion_claim.result else {
+        panic!("compound conversion must generate")
+    };
     assert_eq!(
-        derived[0],
-        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
-            operation_identity: "quire.op.quantity.convert".to_owned(),
-        }))
+        conversion.quantity_conversion_target.as_ref(),
+        Some(&ids.resolve(&id(&key(9901))))
     );
-    assert!(derived[1].is_ok(), "supported sibling derives");
-    let generated = generate_exact_scalar_oracles(&package, &[derived[1].clone().unwrap()])
-        .expect("sibling generates");
+    let source_claim = generated
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == nodes[1])
+        .expect("compound source claim");
+    let ClaimDisposition::Generated(source) = &source_claim.result else {
+        panic!("compound source conversion must generate")
+    };
+    assert_eq!(
+        source.quantity_conversion_target.as_ref(),
+        Some(&ids.resolve(&id(&unit_type())))
+    );
+}
+
+/// A multiplication consuming a bare quantity parameter remains bounded by neither the unit
+/// declaration nor CG's compound-result acceptance. IR's `RequiresBound` must stop emission.
+#[trace("FR-014-AC-60", "TC-024")]
+#[test]
+fn admitted_quantity_multiply_with_bare_parameter_requires_bound_without_oracle() {
+    let (package, ids) = bare_compound_quantity_parameter_package().admit_resolved();
+    let expression = ids.resolve(&code_id(9909));
+    let expected_type = ids.resolve(&id(&key(9901)));
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: expression.clone(),
+            operation: ExactScalarOperation::QuantityArithmetic {
+                operator: quire_contract_codegen::QuantityOperator::Multiply,
+            },
+        }],
+    )
+    .expect("typed refusal is a generated claim map");
+    assert_eq!(oracles.claim_map.items.len(), 1);
     assert!(matches!(
-        generated.claim_map.items[0].result,
-        ClaimDisposition::Generated(_)
+        &oracles.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactScalarRefusal::RequiresBound { unbounded_type },
+        } if unbounded_type == &expected_type
     ));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&expression)));
 }
 
 #[trace("FR-014-AC-2", "FR-014-AC-50", "TC-024")]

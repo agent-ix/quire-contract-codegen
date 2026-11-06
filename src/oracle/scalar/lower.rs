@@ -4,7 +4,7 @@
 //! Lower and check scalar claims against admitted checked nodes.
 
 use super::derive::{
-    conversion_target, derive_operation_from_view, quantity_conversion_target_is_unit, Derivation,
+    conversion_target, derive_operation_from_view, quantity_conversion_target_form, Derivation,
 };
 use super::{
     BooleanOperator, BoundForm, DecimalOperator, EqualityOperandKind, ExactScalarOperation,
@@ -112,7 +112,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             identity: QUANTITY_CONVERT_IDENTITY,
         };
         derivation.require_mode(RoundingMode::Exact)?;
-        if !quantity_conversion_target_is_unit(graph, &node.node) {
+        if quantity_conversion_target_form(graph, &node.node).is_none() {
             return Err(derivation.operand_forms_not_derivable().into());
         }
     }
@@ -147,9 +147,11 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             expected_arguments: shape.operands.len(),
         })?;
     let result = scalar_type_form(graph, &node.semantic_type);
-    if result.as_deref() != Some(shape.result.wire()) {
+    let expected_result =
+        expected_result_form(graph, &node.node, operation, arguments, shape.result);
+    if result.as_deref() != Some(expected_result.wire()) {
         return Err(ExactScalarRefusal::ResultTypeMismatch {
-            expected: shape.result,
+            expected: expected_result,
             found: result,
         }
         .into());
@@ -293,7 +295,9 @@ pub(super) fn check_operand<Body: GraphBody>(
             });
         }
     };
-    if found.as_deref() == Some(expected.wire()) {
+    if found.as_deref() == Some(expected.wire())
+        || (expected == ScalarForm::Unit && found.as_deref() == Some("compound_unit"))
+    {
         Ok(())
     } else {
         Err(ExactScalarRefusal::OperandTypeMismatch {
@@ -320,6 +324,31 @@ pub(super) fn operand_form<Body: GraphBody>(
         CheckedTerm::Literal { .. } => literal_form(term),
         CheckedTerm::Reference { .. } => reference_form(graph, term),
         _ => None,
+    }
+}
+
+fn expected_result_form<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+    operation: &ExactScalarOperation,
+    arguments: &[CheckedTerm],
+    default: ScalarForm,
+) -> ScalarForm {
+    match operation {
+        ExactScalarOperation::QuantityConversion => {
+            quantity_conversion_target_form(graph, node).unwrap_or(default)
+        }
+        ExactScalarOperation::QuantityArithmetic {
+            operator: QuantityOperator::Add | QuantityOperator::Subtract,
+        } if arguments
+            .first()
+            .and_then(|term| operand_form(graph, term))
+            .as_deref()
+            == Some("compound_unit") =>
+        {
+            ScalarForm::CompoundUnit
+        }
+        _ => default,
     }
 }
 
@@ -1270,6 +1299,7 @@ impl ScalarForm {
             Self::Text => "text",
             Self::Enum => "enum",
             Self::Unit => "unit",
+            Self::CompoundUnit => "compound_unit",
         }
     }
 }
@@ -1407,11 +1437,13 @@ impl Shape {
                 Self::binary(&[F::Enum, F::Enum], F::Boolean)
             }
             ExactScalarOperation::QuantityArithmetic { operator } => match operator {
-                QuantityOperator::Power => Self::binary(&[F::Unit, F::Integer], F::Unit),
-                QuantityOperator::Add
-                | QuantityOperator::Subtract
-                | QuantityOperator::Multiply
-                | QuantityOperator::Divide => Self::binary(&[F::Unit, F::Unit], F::Unit),
+                QuantityOperator::Power => Self::binary(&[F::Unit, F::Integer], F::CompoundUnit),
+                QuantityOperator::Add | QuantityOperator::Subtract => {
+                    Self::binary(&[F::Unit, F::Unit], F::Unit)
+                }
+                QuantityOperator::Multiply | QuantityOperator::Divide => {
+                    Self::binary(&[F::Unit, F::Unit], F::CompoundUnit)
+                }
             },
             ExactScalarOperation::QuantityConversion => Self::conversion(&[F::Unit], F::Unit),
             ExactScalarOperation::QuantityComparison { .. } => {
@@ -2145,9 +2177,10 @@ fn contract_scalar_shape(
                 expected_arguments: shape.operands.len(),
             })?;
         let result = scalar_type_form(graph, &node.semantic_type);
-        if result.as_deref() != Some(shape.result.wire()) {
+        let expected_result = expected_result_form(graph, node, operation, arguments, shape.result);
+        if result.as_deref() != Some(expected_result.wire()) {
             return Err(ExactScalarRefusal::ResultTypeMismatch {
-                expected: shape.result,
+                expected: expected_result,
                 found: result,
             });
         }
