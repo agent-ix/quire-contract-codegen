@@ -97,3 +97,9 @@ No applicable AssuranceProfile exists under the repository spec tree. Review res
 Checked source 210c9fa6373f4c02356d7c5b6ede9013b7c1e7c9. No dependency findings require dispositions. The same acyclic owner/reader/CG/integration ordering remains applicable.
 
 Static disposition only. Post-fix lib/it Clippy, private trace test and generated q_dec helper trace compilation remain pending the build lock; no runtime PASS is claimed. QSV IR-1372 still blocks CQ-E13 normative completion under its unchanged two-work-unit limit. The historical equality-generator failure remains reproduced on untouched main; it is not introduced by this PR. No aggregate gate, Kani backend execution, or merge approval.
+
+## Confined runtime verification supplement
+
+The two original review defects are fixed with confined post-fix execution verified. lib+it Clippy completed successfully (`/tmp/ir1355-fix-clippy.log`); the private mismatched-carrier/mode test passed 1/1 (`/tmp/ir1355-fix-private.log`); the actual generated q_dec agreement helper compiled repeated TC-first trace attributes and passed 1/1 (`/tmp/ir1355-fix-generated-helper.log`). AC62–65 remain computed tagged with 3/2/2/2 binders and zero matching untracked symbols. Source fixes remain those of 210c9fa6; current clean pushed custody head is 7c576cee12b03891dee5238385037a67935c2cfc. Existing fixed dispositions remain current; no finding is reopened.
+
+Scoped review fixes are ready conditional on the QSV owner correction. Functional acceptance remains BLOCKED by IR-1372/CQ-E13; the prior 25/26 normative result and generated/direct agreement remain the qualification evidence. This q_dec rerun does not claim all 26 vectors were rerun after the trace change. The historical equality failure remains proven on untouched main. No final feature aggregate gate, Kani execution, or merge approval.
