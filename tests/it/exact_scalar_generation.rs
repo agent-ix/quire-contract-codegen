@@ -4308,18 +4308,25 @@ fn caller_declared_quantity_conversion_is_confirmed() {
 #[test]
 fn admitted_compound_conversion_target_generates_without_changing_sibling() {
     let (package, ids) = compound_conversion_package().admit_resolved();
-    let nodes = [ids.resolve(&code_id(9902)), ids.resolve(&code_id(1001))];
+    let nodes = [
+        ids.resolve(&code_id(9902)),
+        ids.resolve(&code_id(9904)),
+        ids.resolve(&code_id(1001)),
+    ];
     let derived = derive_exact_scalar_items(&package, &nodes);
-    let conversion = derived[0].clone().expect("compound target derives");
-    assert_eq!(
-        conversion.operation,
-        ExactScalarOperation::QuantityConversion
-    );
-    assert!(derived[1].is_ok(), "supported sibling derives");
-    let generated =
-        generate_exact_scalar_oracles(&package, &[conversion, derived[1].clone().unwrap()])
-            .expect("both generate");
-    assert_eq!(generated.claim_map.items.len(), 2);
+    for (name, item) in ["compound target", "compound source"]
+        .into_iter()
+        .zip(&derived)
+    {
+        assert_eq!(
+            item.as_ref().expect(name).operation,
+            ExactScalarOperation::QuantityConversion
+        );
+    }
+    assert!(derived[2].is_ok(), "supported sibling derives");
+    let items = derived.into_iter().map(Result::unwrap).collect::<Vec<_>>();
+    let generated = generate_exact_scalar_oracles(&package, &items).expect("all generate");
+    assert_eq!(generated.claim_map.items.len(), 3);
     for claim in &generated.claim_map.items {
         assert!(
             matches!(claim.result, ClaimDisposition::Generated(_)),
@@ -4338,6 +4345,19 @@ fn admitted_compound_conversion_target_generates_without_changing_sibling() {
     assert_eq!(
         conversion.quantity_conversion_target.as_ref(),
         Some(&ids.resolve(&id(&key(9901))))
+    );
+    let source_claim = generated
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == nodes[1])
+        .expect("compound source claim");
+    let ClaimDisposition::Generated(source) = &source_claim.result else {
+        panic!("compound source conversion must generate")
+    };
+    assert_eq!(
+        source.quantity_conversion_target.as_ref(),
+        Some(&ids.resolve(&id(&unit_type())))
     );
 }
 

@@ -5011,7 +5011,7 @@ mod fixture_identity_tests {
     }
 }
 
-/// A conversion to an admitted compound type, outside the oracle's supported target forms.
+/// Admitted conversions with a compound target and a compound source.
 pub fn compound_conversion_package() -> PackageBuilder {
     let mut builder = derivation_package();
     let compound = key(9901);
@@ -5044,6 +5044,34 @@ pub fn compound_conversion_package() -> PackageBuilder {
             ),
             &compound,
             vec![reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    let source = key(9903);
+    let rational_bound = builder.bound(&RAT);
+    builder.node_with(
+        &source,
+        "value",
+        "literal",
+        &compound,
+        literal("rational", "1"),
+        &[rational_bound],
+    );
+    builder.application_bounded(
+        9904,
+        "expression",
+        "conversion",
+        &unit_type(),
+        application(
+            "convert",
+            op_full(
+                "quire.op.quantity.convert",
+                vec![],
+                Some(mode_kv("rounding", "exact")),
+                Some(type_argument_member(&unit_type())),
+            ),
+            &unit_type(),
+            vec![reference(&source)],
         ),
         &[],
     );
