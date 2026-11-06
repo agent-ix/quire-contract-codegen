@@ -856,33 +856,42 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
             .iter()
             .find(|node| node.node_id == items[0].node_id)
             .unwrap();
-        let operation_body = serde_json::to_value(&operation_node.body).unwrap();
-        let target_id: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(operation_body["operation"]["member"]["declaration"].clone())
-                .unwrap();
+        let quire_contract_model::CheckedTerm::Application { operation, .. } = &operation_node.body
+        else {
+            panic!("conversion application")
+        };
+        let target_id = operation.member_declaration().unwrap().unwrap();
         assert_eq!(
             generated.quantity_conversion_target.as_ref(),
-            Some(&target_id)
+            Some(target_id)
         );
         let target_node = package
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id == target_id)
+            .find(|node| &node.node_id == target_id)
             .unwrap();
-        let target_body = serde_json::to_value(&target_node.body).unwrap();
-        let member_target = |name: &str| -> quire_contract_model::CheckedNodeId {
-            let member = target_body["members"]
-                .as_array()
-                .unwrap()
+        let quire_contract_model::CheckedTerm::Aggregate { members } = &target_node.body else {
+            panic!("carried target aggregate")
+        };
+        let member_target = |name: &str| -> &quire_contract_model::CheckedNodeId {
+            members
                 .iter()
-                .find(|member| member["name"] == name)
-                .unwrap();
-            serde_json::from_value(member["value"]["target"].clone()).unwrap()
+                .find_map(|member| match member {
+                    quire_contract_model::CheckedTerm::Binding {
+                        name: actual,
+                        value,
+                    } if actual.as_ref() == name => match value.as_ref() {
+                        quire_contract_model::CheckedTerm::Reference { target } => Some(target),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .expect("target member reference")
         };
         let carrier_id = member_target("carrier");
         assert!(
-            generated.checked_bounds.contains(&carrier_id),
+            generated.checked_bounds.contains(carrier_id),
             "checked carrier is the target's actual bounded node"
         );
         let quire_contract_codegen::ExactScalarOperation::CarriedQuantityConversion {

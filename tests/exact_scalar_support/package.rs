@@ -5252,11 +5252,18 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
         .iter()
         .map(|segment| {
             if let Some(name) = segment.get("node").and_then(Value::as_str) {
-                if name == "unit_m" {
+                let id = if name == "unit_m" {
                     node_ref(&unit_type())
                 } else {
                     node_ref(&imported[name])
-                }
+                };
+                let position = builder.value["semantic_graph"]["nodes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .position(|node| node["node_id"] == id)
+                    .unwrap();
+                json!({"node":position})
             } else {
                 segment.clone()
             }
