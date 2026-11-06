@@ -5112,7 +5112,7 @@ pub fn compound_quantity_package() -> PackageBuilder {
     builder
 }
 
-/// A quantity-typed parameter whose admitted type supplies no finite bound.
+/// A multiplication consuming a quantity-typed parameter whose admitted type supplies no bound.
 pub fn bare_compound_quantity_parameter_package() -> PackageBuilder {
     let mut builder = compound_quantity_package();
     builder.code(
@@ -5122,5 +5122,18 @@ pub fn bare_compound_quantity_parameter_package() -> PackageBuilder {
         &key(9901),
         parameter_body("q", 0),
     );
-    builder.focused(&[code_id(9908)])
+    builder.application_bounded(
+        9909,
+        "expression",
+        "binary",
+        &key(9901),
+        application(
+            "binary",
+            op("quire.op.quantity.mul"),
+            &key(9901),
+            vec![reference(&key(9908)), reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    builder.focused(&[code_id(9909)])
 }
