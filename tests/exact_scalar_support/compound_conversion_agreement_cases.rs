@@ -11,7 +11,7 @@ mod generated {
 
 use generated::{compound_source, compound_target, OracleStop};
 use ix_trace_rs::trace;
-use quire_exact::{IllTyped, Integer, Meter, Outcome, Quantity, Rational, ScalarLimits};
+use quire_exact::{IllTyped, Integer, Meter, Outcome, Quantity, Rational};
 use quire_semantic_value::quantity::{IdentifiedUnit, UnitQuantity};
 
 fn typed(
