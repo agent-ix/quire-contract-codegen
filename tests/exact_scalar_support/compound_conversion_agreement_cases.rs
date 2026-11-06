@@ -124,7 +124,7 @@ fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
 #[trace("FR-014-AC-60", "TC-024")]
 #[test]
 fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials() {
-    let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
+    let fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
     let target = compound_unit(&fixture, &[("kg", 1), ("m", 2), ("s", -2)]);
     let source = fixture.qi(1, "N_m");
     let source = fixture.resolve(&source);
@@ -174,14 +174,12 @@ fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials()
 #[trace("FR-014-AC-58", "TC-024")]
 #[test]
 fn inline_integer_exponent_u12_square_agrees_in_value_charges_counters_and_denials() {
-    use quire_semantic_value::quantity::{evaluate_quantity_unit, QuantityOperation};
-
-    let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
+    let fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
     let expected_unit = compound_unit(&fixture, &[("m", 2)]);
     let expected = Quantity::new(support::rt_side::ratio(4, 1), expected_unit.id());
     let base = fixture.qi(2, "m");
     let base = fixture.resolve(&base);
-    let exponent = Integer::from(2);
+    let exponent = Integer::from(2_i64);
     let bounds = support::rt_side::UNLIMITED;
     let generated = |meter: &mut Meter| {
         quantity_square(base, &exponent, meter).map_err(|stop| match stop {
@@ -207,7 +205,7 @@ fn inline_integer_exponent_u12_square_agrees_in_value_charges_counters_and_denia
 #[trace("FR-014-AC-59", "TC-024")]
 #[test]
 fn generated_compound_product_chains_into_another_multiply() {
-    use quire_semantic_value::quantity::{evaluate_quantity_unit, QuantityOperation, UnitScope};
+    use quire_semantic_value::quantity::UnitScope;
 
     let fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
     let (left, right, following) = (
