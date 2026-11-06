@@ -78,7 +78,7 @@ fn compound(
 #[test]
 fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
     let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
-    for (target_name, limits, expected) in [
+    for (target_name, bounds, expected) in [
         ("m2", support::rt_side::unit_tuple([3, 0, 0, 1, 3, 1]), Some(4)),
         ("cm2", support::rt_side::unit_tuple([17, 0, 1, 1, 6, 1]), Some(40000)),
         ("cm2", support::rt_side::unit_tuple([16, 0, 1, 1, 6, 1]), None),
@@ -87,12 +87,12 @@ fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
         let target = fixture.unit(target_name);
         let source = fixture.resolve(&source);
         agree2! {
-            limits: limits,
+            limits: bounds,
             setup: {},
             direct: |meter| direct(source, &target, meter),
             generated: |meter| typed(compound_source(source, &target, meter)),
         };
-        let actual = support::rt_side::metered(limits, |meter| {
+        let actual = support::rt_side::metered(bounds, |meter| {
             typed(compound_source(source, &target, meter))
         });
         match expected {
@@ -116,14 +116,14 @@ fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials()
     let (_, target) = compound(&mut fixture, 1, &[("kg", 1), ("m", 2), ("s", -2)]);
     let source = fixture.qi(1, "N_m");
     let source = fixture.resolve(&source);
-    let limits = support::rt_side::unit_tuple([1, 0, 0, 1, 3, 1]);
+    let bounds = support::rt_side::unit_tuple([1, 0, 0, 1, 3, 1]);
     agree2! {
-        limits: limits,
+        limits: bounds,
         setup: {},
         direct: |meter| direct(source, &target, meter),
         generated: |meter| typed(compound_target(source, &target, meter)),
     };
-    let actual = support::rt_side::metered(limits, |meter| {
+    let actual = support::rt_side::metered(bounds, |meter| {
         typed(compound_target(source, &target, meter))
     });
     assert_eq!(
