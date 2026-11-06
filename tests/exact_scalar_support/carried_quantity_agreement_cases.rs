@@ -80,13 +80,10 @@ fn project(
             Outcome::Undefined(reason) => Outcome::Undefined(reason),
         })
 }
-#[trace(
-    "FR-014-AC-62",
-    "FR-014-AC-63",
-    "FR-014-AC-64",
-    "FR-014-AC-65",
-    "TC-024"
-)]
+#[trace("TC-024", "FR-014-AC-62")]
+#[trace("TC-024", "FR-014-AC-63")]
+#[trace("TC-024", "FR-014-AC-64")]
+#[trace("TC-024", "FR-014-AC-65")]
 #[test]
 fn published_carried_values_losses_units_and_accounting_agree() {
     let root =

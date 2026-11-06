@@ -541,7 +541,7 @@ fn tc_024_the_refused_catalogue_identities_have_no_family() {
 }
 
 /// The private seam refuses a forged mode or carrier without changing a valid sibling.
-#[trace("FR-014-AC-62", "TC-024")]
+#[trace("TC-024", "FR-014-AC-62")]
 #[test]
 fn carried_conversion_private_mismatches_preserve_valid_sibling() {
     fn binding(name: &str, value: CheckedTerm) -> CheckedTerm {

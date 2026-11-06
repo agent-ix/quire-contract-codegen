@@ -803,13 +803,10 @@ fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
 }
 
 /// Published carried-quantity vectors execute emitted Rust against their owning QSV API.
-#[trace(
-    "FR-014-AC-62",
-    "FR-014-AC-63",
-    "FR-014-AC-64",
-    "FR-014-AC-65",
-    "TC-024"
-)]
+#[trace("TC-024", "FR-014-AC-62")]
+#[trace("TC-024", "FR-014-AC-63")]
+#[trace("TC-024", "FR-014-AC-64")]
+#[trace("TC-024", "FR-014-AC-65")]
 #[test]
 fn carried_quantity_vectors_compile_and_agree_with_owner() {
     use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};
