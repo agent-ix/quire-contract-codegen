@@ -801,3 +801,129 @@ fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
         "tests/exact_scalar_support/boolean_agreement_cases.rs",
     );
 }
+
+/// Published carried-quantity vectors execute emitted Rust against their owning QSV API.
+#[trace("TC-024", "FR-014-AC-62")]
+#[trace("TC-024", "FR-014-AC-63")]
+#[trace("TC-024", "FR-014-AC-64")]
+#[trace("TC-024", "FR-014-AC-65")]
+#[test]
+fn carried_quantity_vectors_compile_and_agree_with_owner() {
+    use quire_contract_codegen::{derive_exact_scalar_items, generate_exact_scalar_oracles};
+    let root =
+        PathBuf::from(std::env::var_os("QSPEC_DIR").expect("QSPEC_DIR points at published QSpec"));
+    let vectors: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("proposals/checked-package-v2/quantity-carrier-vectors.json"))
+            .expect("published carrier vectors"),
+    )
+    .expect("carrier JSON");
+    let targets = vectors["evaluation"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["target"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut failed = Vec::new();
+    for (index, target) in targets.into_iter().enumerate() {
+        let result = std::panic::catch_unwind(|| {
+            let code = 42000 + u32::try_from(index).unwrap();
+            let (package, ids) = super::exact_scalar_generation::package::carried_quantity_package(
+                &vectors, target, code,
+            )
+            .admit_resolved();
+            let node = ids.resolve(&super::exact_scalar_generation::package::code_id(code));
+            let items = derive_exact_scalar_items(&package, &[node])
+                .into_iter()
+                .map(|item| item.expect("carried conversion derives"))
+                .collect::<Vec<_>>();
+            let oracles =
+                generate_exact_scalar_oracles(&package, &items).expect("carried generation");
+            let quire_contract_codegen::ClaimDisposition::Generated(generated) =
+                &oracles.claim_map.items[0].result
+            else {
+                panic!(
+                    "carried conversion refused: {:?}",
+                    oracles.claim_map.items[0]
+                );
+            };
+            assert_eq!(
+                oracles.claim_map.items[0].operation.provenance,
+                quire_contract_codegen::OperationProvenance::IrConfirmed
+            );
+            let operation_node = package
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| node.node_id == items[0].node_id)
+                .unwrap();
+            let quire_contract_model::CheckedTerm::Application { operation, .. } =
+                &operation_node.body
+            else {
+                panic!("conversion application")
+            };
+            let target_id = operation.member_declaration().unwrap().unwrap();
+            assert_eq!(
+                generated.quantity_conversion_target.as_ref(),
+                Some(target_id)
+            );
+            let target_node = package
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| &node.node_id == target_id)
+                .unwrap();
+            let quire_contract_model::CheckedTerm::Aggregate { members } = &target_node.body else {
+                panic!("carried target aggregate")
+            };
+            let member_target = |name: &str| -> &quire_contract_model::CheckedNodeId {
+                members
+                    .iter()
+                    .find_map(|member| match member {
+                        quire_contract_model::CheckedTerm::Binding {
+                            name: actual,
+                            value,
+                        } if actual.as_ref() == name => match value.as_ref() {
+                            quire_contract_model::CheckedTerm::Reference { target } => Some(target),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                    .expect("target member reference")
+            };
+            let carrier_id = member_target("carrier");
+            assert!(
+                generated.checked_bounds.contains(carrier_id),
+                "checked carrier is the target's actual bounded node"
+            );
+            let quire_contract_codegen::ExactScalarOperation::CarriedQuantityConversion {
+                unit,
+                ..
+            } = &items[0].operation
+            else {
+                panic!("carried descriptor expected");
+            };
+            assert_eq!(unit, member_target("unit"));
+            let names = names_file(
+                quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
+                &[(generated.symbol.clone(), "convert".to_owned())],
+                &format!("pub const TARGET: &str = {target:?};\n"),
+            );
+            run_agreement_cases(
+                &format!("carried-{target}"),
+                oracles
+                    .artifacts
+                    .iter()
+                    .map(|a| (a.path.as_str(), a.contents.as_str())),
+                &[("names.rs", &names)],
+                "tests/exact_scalar_support/carried_quantity_agreement_cases.rs",
+            );
+        });
+        if result.is_err() {
+            failed.push(target);
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "carried targets with failed agreement: {failed:?}"
+    );
+}

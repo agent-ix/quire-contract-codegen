@@ -539,6 +539,25 @@ impl SourceBuilder {
             ExactScalarOperation::EnumComparison { operator } => {
                 comparison_body("&enum_owner::EnumValue", "enum_owner::compare_enum", *operator)?
             }
+            ExactScalarOperation::CarriedQuantityConversion { carrier, .. } => {
+                let carrier = match carrier {
+                    quire_exact::QuantityCarrier::Decimal(decimal) => format!("rt::QuantityCarrier::Decimal({})", self.decimal_type(decimal)?),
+                    quire_exact::QuantityCarrier::Integer { domain, rounding } => format!("rt::QuantityCarrier::Integer {{ domain: {}, rounding: {} }}", self.interval(domain), rounding_path(*rounding)?),
+                    quire_exact::QuantityCarrier::Rational(domain) => format!("rt::QuantityCarrier::Rational(rt::RationalDomain::new({}, {}).map_err(|_| OracleStop::InvalidConstant)?)", self.interval(domain.numerator()), self.interval(domain.denominator())),
+                };
+                Body {
+                    parameters: vec![("operand", "quantity_owner::UnitQuantity<'_>"), ("unit", "&quantity_owner::IdentifiedUnit")],
+                    // Conversion retains the placed value and loss; the paired type retains even a Rational carrier's identity.
+                    output: OracleOutput::Value("(quantity_owner::Conversion, rt::CarriedQuantityType)"),
+                    prelude: vec![format!("let carrier = {carrier};")],
+                    call: "Ok(match quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Carried(carrier.clone()), meter).map_err(OracleStop::IllTyped)? {
+        rt::Outcome::Completed(conversion) => rt::Outcome::Completed((conversion, rt::CarriedQuantityType::new(unit.id(), carrier))),
+        rt::Outcome::Undefined(reason) => rt::Outcome::Undefined(reason),
+        rt::Outcome::Refused(reason) => rt::Outcome::Refused(reason),
+        rt::Outcome::Incomplete(reason) => rt::Outcome::Incomplete(reason),
+    })".to_owned(),
+                }
+            }
             ExactScalarOperation::QuantityConversion => Body {
                 parameters: vec![("operand", "quantity_owner::UnitQuantity<'_>"), ("unit", "&quantity_owner::IdentifiedUnit")],
                 output: OracleOutput::Value("rt::Quantity"),

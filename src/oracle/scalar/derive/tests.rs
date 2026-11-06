@@ -144,6 +144,10 @@ fn every_operation() -> Vec<ExactScalarOperation> {
         all.push(Op::QuantityComparison { operator });
     }
     all.push(Op::QuantityConversion);
+    all.push(Op::CarriedQuantityConversion {
+        unit: node_id('b'),
+        carrier: quire_exact::QuantityCarrier::Decimal(decimal),
+    });
     for operator in [
         QuantityOperator::Add,
         QuantityOperator::Subtract,
@@ -159,7 +163,7 @@ fn every_operation() -> Vec<ExactScalarOperation> {
 /// The number of `ExactScalarOperation` variants: [`expected_family`]'s match names each, and
 /// adding one fails to compile there until it has an arm. `every_operation` must then carry a
 /// descriptor of it, which the coverage assertion below checks.
-const OPERATION_VARIANTS: usize = 17;
+const OPERATION_VARIANTS: usize = 18;
 
 /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
 /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
@@ -193,7 +197,7 @@ fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
         Op::TextAdmission { .. } => Family::NumericConvert,
         Op::TextComparison { operator } => Family::TextComparison(*operator),
         Op::EnumComparison { operator } => Family::EnumComparison(*operator),
-        Op::QuantityConversion => Family::QuantityConversion,
+        Op::QuantityConversion | Op::CarriedQuantityConversion { .. } => Family::QuantityConversion,
         Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
         Op::QuantityComparison { operator } => Family::QuantityComparison(*operator),
     })
@@ -534,4 +538,122 @@ fn tc_024_the_refused_catalogue_identities_have_no_family() {
     ] {
         assert_eq!(family_of_identity(identity), None, "{identity}");
     }
+}
+
+/// The private seam refuses a forged mode or carrier without changing a valid sibling.
+#[trace("TC-024", "FR-014-AC-62")]
+#[test]
+fn carried_conversion_private_mismatches_preserve_valid_sibling() {
+    fn binding(name: &str, value: CheckedTerm) -> CheckedTerm {
+        CheckedTerm::Binding {
+            name: name.into(),
+            value: Box::new(value),
+        }
+    }
+    fn literal(kind: LiteralKind, value: &str) -> CheckedTerm {
+        CheckedTerm::Literal {
+            type_id: node_id('1'),
+            value_kind: kind,
+            value: serde_json::json!(value),
+        }
+    }
+    let unit = v2_node('b', "scalar_type", "unit", 'b', None);
+    let integer_bound = |upper: &str| {
+        v2_node(
+            'c',
+            "bounded_domain",
+            "integer_range",
+            '1',
+            CheckedTerm::aggregate(vec![
+                binding("min", literal(LiteralKind::Integer, "-2")),
+                binding("max", literal(LiteralKind::Integer, upper)),
+            ]),
+        )
+    };
+    let target = v2_node(
+        'd',
+        "scalar_type",
+        "carried_quantity",
+        'd',
+        CheckedTerm::aggregate(vec![
+            binding(
+                "unit",
+                CheckedTerm::Reference {
+                    target: unit.node_id.clone(),
+                },
+            ),
+            binding(
+                "carrier",
+                CheckedTerm::Reference {
+                    target: node_id('c'),
+                },
+            ),
+            binding("rounding", literal(LiteralKind::Text, "nearest-even")),
+        ]),
+    );
+    let conversion = |digit: char, mode: &str| {
+        v2_node(
+            digit,
+            "expression",
+            "conversion",
+            'd',
+            CheckedTerm::Application {
+                operator: ApplicationOperator::Convert,
+                operation: CheckedApplicationOperation::from_test_fixture(
+                    CheckedApplicationOperationFixture {
+                        identity: Some(QUANTITY_CONVERT_IDENTITY.into()),
+                        mode: Some((OperationModeKind::Rounding, mode.into())),
+                        member_declaration: Some(target.node_id.clone()),
+                        ..Default::default()
+                    },
+                )
+                .expect("typed operation"),
+                result_type: target.node_id.clone(),
+                arguments: Vec::new(),
+            },
+        )
+    };
+    let good = conversion('e', "nearest-even");
+    let bad = conversion('f', "exact");
+    let bound = integer_bound("2");
+    let graph: Graph<'_> = [&unit, &bound, &target, &good, &bad]
+        .into_iter()
+        .map(|node| (&node.node_id, node))
+        .collect();
+    let record = |node: &FixtureNode| CompleteLoweringRecordV2::Lowered {
+        node: Box::new(lowered_node(node)),
+    };
+    let expected = ExactScalarOperation::CarriedQuantityConversion {
+        unit: unit.node_id.clone(),
+        carrier: quire_exact::QuantityCarrier::Integer {
+            domain: quire_exact::IntegerInterval::new((-2_i64).into(), 2_i64.into())
+                .expect("domain"),
+            rounding: RoundingMode::NearestEven,
+        },
+    };
+    assert_eq!(
+        derive_operation(&graph, &good.node_id, &record(&good)),
+        Ok(expected.clone())
+    );
+    assert_eq!(
+        derive_operation(&graph, &bad.node_id, &record(&bad)),
+        Err(no_claim(ClaimDerivationRefusal::ModeNotDerivable {
+            operation_identity: QUANTITY_CONVERT_IDENTITY.to_owned()
+        }))
+    );
+    assert_eq!(
+        derive_operation(&graph, &good.node_id, &record(&good)),
+        Ok(expected)
+    );
+    let malformed = integer_bound("-3");
+    let malformed_graph: Graph<'_> = [&unit, &malformed, &target, &good]
+        .into_iter()
+        .map(|node| (&node.node_id, node))
+        .collect();
+    assert_eq!(
+        derive_operation(&malformed_graph, &good.node_id, &record(&good)),
+        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: QUANTITY_CONVERT_IDENTITY.to_owned()
+        }))
+    );
 }
