@@ -908,3 +908,48 @@ fn wrong_form_and_wrong_base_bounds_keep_typed_defensive_refusals() {
         );
     }
 }
+
+/// A malformed result that reaches CG's private confirmation seam cannot be
+/// exported as a quantity oracle merely because its operator is multiplication.
+#[trace("FR-014-AC-60", "TC-024")]
+#[test]
+fn quantity_multiply_with_integer_result_refuses_before_emission() {
+    let integer = v2_node(
+        '1',
+        "scalar_type",
+        "integer",
+        '1',
+        CheckedTerm::aggregate(vec![]),
+    );
+    let body = CheckedTerm::Application {
+        operator: ApplicationOperator::Binary,
+        operation: serde_json::from_value(serde_json::json!({"identity":"quire.op.quantity.mul"}))
+            .expect("typed operation"),
+        result_type: node_id('1'),
+        arguments: vec![reference_to('2'), reference_to('3')],
+    };
+    let root = v2_node('4', "expression", "binary", '1', body);
+    let nodes = [integer, root.clone()];
+    let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+    let record = CompleteLoweringRecordV2::Lowered {
+        node: Box::new(CompleteContractNodeV2 {
+            node: root.metadata.clone(),
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: root.semantic_type.clone(),
+            dependencies: vec![],
+            bounds: vec![],
+            claims: vec![],
+        }),
+    };
+    let descriptor = ExactScalarOperation::QuantityArithmetic {
+        operator: QuantityOperator::Multiply,
+    };
+    assert!(matches!(
+        check_item(&graph, &root.node_id, &record, &descriptor),
+        Err(ItemCheckError::Refusal(ExactScalarRefusal::ResultTypeMismatch {
+            expected: ScalarForm::CompoundUnit,
+            found: Some(found),
+        })) if found == "integer"
+    ));
+}

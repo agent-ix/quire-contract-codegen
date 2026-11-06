@@ -4326,7 +4326,13 @@ fn admitted_compound_conversion_target_generates_without_changing_sibling() {
             "{claim:?}"
         );
     }
-    let ClaimDisposition::Generated(conversion) = &generated.claim_map.items[0].result else {
+    let conversion_claim = generated
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == nodes[0])
+        .expect("compound conversion claim");
+    let ClaimDisposition::Generated(conversion) = &conversion_claim.result else {
         panic!("compound conversion must generate")
     };
     assert_eq!(
