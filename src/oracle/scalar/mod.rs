@@ -385,6 +385,8 @@ pub enum ScalarForm {
     Enum,
     /// `unit`.
     Unit,
+    /// `compound_unit`.
+    CompoundUnit,
 }
 
 impl ScalarForm {
