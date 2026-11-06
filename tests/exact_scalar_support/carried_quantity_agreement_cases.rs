@@ -213,7 +213,7 @@ fn published_carried_values_losses_units_and_accounting_agree() {
                 assert_eq!(reason.cause(), expected["cause"].as_str(), "{id}");
             }
             Outcome::Incomplete(reason) => {
-                assert_eq!(expected["disposition"], "incomplete", "{id}");
+                assert_eq!(expected["disposition"], "incomplete", "{id}: {reason:?}");
                 assert_eq!(
                     reason.limit_kind.as_str(),
                     expected["limit_kind"].as_str().unwrap(),
