@@ -900,7 +900,7 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
         else {
             panic!("carried descriptor expected");
         };
-        assert_eq!(unit, &member_target("unit"));
+        assert_eq!(unit, member_target("unit"));
         let names = names_file(
             quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
             &[(generated.symbol.clone(), "convert".to_owned())],
