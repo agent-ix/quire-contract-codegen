@@ -833,7 +833,7 @@ impl PackageBuilder {
             self.node_with(
                 &digest,
                 "expression",
-                "reference",
+                "call",
                 ty,
                 reference(&literal),
                 &dependencies,
@@ -871,7 +871,7 @@ impl PackageBuilder {
             self.node_with(
                 &digest,
                 "expression",
-                "reference",
+                "call",
                 &unit_type(),
                 reference(&literal_key),
                 &dependencies,
