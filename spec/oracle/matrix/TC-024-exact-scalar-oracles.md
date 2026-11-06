@@ -20,7 +20,7 @@ Current carried-target qualification (FR-014-AC-62..65, IR-1355): the compiled
 reader-admitted fixture executes every CQ-E01 through CQ-E26 vector by reference.
 Generated and direct QSV values, loss, typed outcomes, admitted charges, consumed
 counters and every charge-denial run agree. Twenty-five published dispositions
-pass. CQ-E13 remains a failing qualification: QSpec's unchanged tuple
+pass. CQ-E13 remains blocked on QSV owner fix IR-1372, with a failing qualification: QSpec's unchanged tuple
 `L(2,0,0,1,2,1)` expects completed integer `2`, while direct QSV and the generated
 oracle both return `Incomplete` at `unit.result-retain` with `work_units` limit
 2, consumed 2 and next charge 1. The owner charges identity read and target-domain
