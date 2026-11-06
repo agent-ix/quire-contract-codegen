@@ -95,3 +95,15 @@ No applicable AssuranceProfile exists under the repository spec tree. Review res
 Plan completion: not assessed
 
 Reconciliation: quire matrix 0.36.2 (engine 0.50.2), static axis only; no execution evidence store read. Whole-repository output contains 623 tagged, 309 untagged, 12 tagged-by-ignored-test and 93 method-without-symbol rows, with pre-existing unrelated gaps outside this feature review. AC62–65 are absent, not covered. Coverage reports their wrapper test tags as untracked. Manual requirement-to-test check supplied for these four rows; no computed-matrix credit claimed.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fixed: the separating blank line is removed. Raw computed matrix recognizes AC62–65 as tagged with 3/2/2/2 test binders, and raw coverage reports zero untracked symbols for those four ids. |
+
+## Disposition round 1 verification
+
+Checked source 210c9fa6373f4c02356d7c5b6ede9013b7c1e7c9. Fixed: the separating blank line is removed. Raw computed matrix recognizes AC62–65 as tagged with 3/2/2/2 test binders, and raw coverage reports zero untracked symbols for those four ids. Original finding text and original review verdict above remain historical. Current disposition: **both requested fixes resolved statically; runtime qualification pending**.
+
+Static disposition only. Post-fix lib/it Clippy, private trace test and generated q_dec helper trace compilation remain pending the build lock; no runtime PASS is claimed. QSV IR-1372 still blocks CQ-E13 normative completion under its unchanged two-work-unit limit. The historical equality-generator failure remains reproduced on untouched main; it is not introduced by this PR. No aggregate gate, Kani backend execution, or merge approval.

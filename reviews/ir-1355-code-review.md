@@ -95,3 +95,15 @@ No applicable AssuranceProfile exists under the repository spec tree. Review res
 ## Trace policy authority
 
 The dispatching lead relayed the user's explicit new policy: `#[trace("TC","FR-AC")] ONLY`. It applies to newly added tests; existing tags outside this diff are not swept. This trace-policy finding is separate from the blank-line criterion-table defect reported by gap/base analysis.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fixed statically: all three newly added test sites use TC-024 first and one FR criterion per trace attribute; existing tests outside the diff were left alone. |
+
+## Disposition round 1 verification
+
+Checked source 210c9fa6373f4c02356d7c5b6ede9013b7c1e7c9. Fixed statically: all three newly added test sites use TC-024 first and one FR criterion per trace attribute; existing tests outside the diff were left alone. Original finding text and original review verdict above remain historical. Current disposition: **both requested fixes resolved statically; runtime qualification pending**.
+
+Static disposition only. Post-fix lib/it Clippy, private trace test and generated q_dec helper trace compilation remain pending the build lock; no runtime PASS is claimed. QSV IR-1372 still blocks CQ-E13 normative completion under its unchanged two-work-unit limit. The historical equality-generator failure remains reproduced on untouched main; it is not introduced by this PR. No aggregate gate, Kani backend execution, or merge approval.
