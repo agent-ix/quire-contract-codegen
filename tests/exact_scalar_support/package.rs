@@ -4737,7 +4737,7 @@ pub fn corpus_cohorts() -> Vec<(CheckedPackageV2, Vec<ExactScalarItem>)> {
     let mut requests = Vec::<Vec<ExactScalarItem>>::new();
     for item in items {
         let split = requests.last().is_none_or(|cohort| {
-            cohort.len() >= 8
+            cohort.len() >= 6
                 && cohort
                     .last()
                     .is_some_and(|last| last.node_id != item.node_id)
