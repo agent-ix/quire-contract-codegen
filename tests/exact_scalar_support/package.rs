@@ -5088,5 +5088,31 @@ pub fn compound_quantity_package() -> PackageBuilder {
         ),
         &[INT],
     );
+    builder.application_bounded(
+        9906,
+        "expression",
+        "binary",
+        &compound,
+        application(
+            "binary",
+            op("quire.op.quantity.mul"),
+            &compound,
+            vec![reference(&source), reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    builder.application_bounded(
+        9907,
+        "expression",
+        "binary",
+        &compound,
+        application(
+            "binary",
+            op("quire.op.quantity.mul"),
+            &compound,
+            vec![reference(&key(V_QUANTITY)), reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
     builder
 }

@@ -9,7 +9,9 @@ mod generated {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
-use generated::{compound_source, compound_target, quantity_square, OracleStop};
+use generated::{
+    compound_chain, compound_source, compound_target, quantity_product, quantity_square, OracleStop,
+};
 use ix_trace_rs::trace;
 use quire_exact::{IllTyped, Integer, Meter, Outcome, Quantity, Rational};
 use quire_semantic_value::quantity::{IdentifiedUnit, UnitQuantity};
@@ -45,11 +47,7 @@ fn direct(
     })
 }
 
-fn compound(
-    fixture: &mut support::rt_side::Fixture,
-    magnitude: i64,
-    terms: &[(&str, i64)],
-) -> (Quantity, IdentifiedUnit) {
+fn compound_unit(fixture: &support::rt_side::Fixture, terms: &[(&str, i64)]) -> IdentifiedUnit {
     use quire_semantic_value::quantity::{result_unit, UnitOperation};
 
     let metre = fixture.unit("m");
@@ -66,8 +64,22 @@ fn compound(
             unit = result_unit(operation, &unit, operand.unit()).expect("compound term");
         }
     }
-    let identified = IdentifiedUnit::new(unit.clone()).expect("compound identity");
-    assert_eq!(fixture.units.insert(unit).expect("retain compound"), identified.id());
+    IdentifiedUnit::new(unit).expect("compound identity")
+}
+
+fn record_compound_source(
+    fixture: &mut support::rt_side::Fixture,
+    magnitude: i64,
+    terms: &[(&str, i64)],
+) -> (Quantity, IdentifiedUnit) {
+    let identified = compound_unit(fixture, terms);
+    assert_eq!(
+        fixture
+            .units
+            .insert(identified.unit().clone())
+            .expect("retain compound"),
+        identified.id()
+    );
     (
         Quantity::new(Rational::from_integer(Integer::from(magnitude)), identified.id()),
         identified,
@@ -83,7 +95,7 @@ fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
         ("cm2", support::rt_side::unit_tuple([17, 0, 1, 1, 6, 1]), Some(40000)),
         ("cm2", support::rt_side::unit_tuple([16, 0, 1, 1, 6, 1]), None),
     ] {
-        let (source, _) = compound(&mut fixture, 4, &[("m", 2)]);
+        let (source, _) = record_compound_source(&mut fixture, 4, &[("m", 2)]);
         let target = fixture.unit(target_name);
         let source = fixture.resolve(&source);
         agree2! {
@@ -113,7 +125,7 @@ fn compound_source_u22_agrees_in_value_charges_counters_and_denials() {
 #[test]
 fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials() {
     let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
-    let (_, target) = compound(&mut fixture, 1, &[("kg", 1), ("m", 2), ("s", -2)]);
+    let target = compound_unit(&fixture, &[("kg", 1), ("m", 2), ("s", -2)]);
     let source = fixture.qi(1, "N_m");
     let source = fixture.resolve(&source);
     let bounds = support::rt_side::unit_tuple([1, 0, 0, 1, 3, 1]);
@@ -133,17 +145,40 @@ fn compound_target_u25_first_step_agrees_in_value_charges_counters_and_denials()
             target.id(),
         )))
     );
+    let first = actual.0.expect("first conversion is well typed").completed().unwrap();
+    let mut scope = support::rt_side::UnitScope::new(&fixture.units);
+    assert!(scope.resolve(&first).is_none(), "compound metadata is not in the source table");
+    scope.form(target);
+    let joule = fixture.unit("J");
+    let input = scope.resolve(&first).expect("caller retained the compound unit");
+    agree2! {
+        limits: bounds,
+        setup: {},
+        direct: |meter| direct(input, &joule, meter),
+        generated: |meter| typed(compound_source(input, &joule, meter)),
+    };
+    let second = support::rt_side::metered(bounds, |meter| {
+        typed(compound_source(input, &joule, meter))
+    });
+    assert_eq!(
+        second.0,
+        Ok(Outcome::Completed(Quantity::new(
+            support::rt_side::ratio(1, 1),
+            joule.id(),
+        )))
+    );
 }
 
 /// The exponent is an inline Integer literal in the admitted package. Its
 /// generated oracle must still agree with the owning runtime on the U12 square.
-#[trace("FR-014-AC-59", "TC-024")]
+#[trace("FR-014-AC-58", "TC-024")]
 #[test]
 fn inline_integer_exponent_u12_square_agrees_in_value_charges_counters_and_denials() {
     use quire_semantic_value::quantity::{evaluate_quantity_unit, QuantityOperation};
 
     let mut fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
-    let (expected, expected_unit) = compound(&mut fixture, 4, &[("m", 2)]);
+    let expected_unit = compound_unit(&fixture, &[("m", 2)]);
+    let expected = Quantity::new(support::rt_side::ratio(4, 1), expected_unit.id());
     let base = fixture.qi(2, "m");
     let base = fixture.resolve(&base);
     let exponent = Integer::from(2);
@@ -167,4 +202,61 @@ fn inline_integer_exponent_u12_square_agrees_in_value_charges_counters_and_denia
     };
     assert_eq!(value, expected);
     assert_eq!(unit, expected_unit);
+}
+
+#[trace("FR-014-AC-59", "TC-024")]
+#[test]
+fn generated_compound_product_chains_into_another_multiply() {
+    use quire_semantic_value::quantity::{evaluate_quantity_unit, QuantityOperation, UnitScope};
+
+    let fixture = support::rt_side::named_fixture(&support::GraphSpec::conversions());
+    let (left, right, following) = (
+        fixture.qi(2, "m"),
+        fixture.qi(3, "s"),
+        fixture.qi(2, "m"),
+    );
+    let left = fixture.resolve(&left);
+    let right = fixture.resolve(&right);
+    let bounds = support::rt_side::UNLIMITED;
+    let typed_quantity = |result: Result<_, OracleStop>| {
+        result.map_err(|stop| match stop {
+            OracleStop::Quantity(cause) => cause,
+            other => panic!("unexpected generated stop: {other:?}"),
+        })
+    };
+    agree2! {
+        limits: bounds,
+        setup: {},
+        direct: |meter| evaluate_quantity_unit(QuantityOperation::Multiply(left, right), meter),
+        generated: |meter| typed_quantity(quantity_product(left, right, meter)),
+    };
+    let first = support::rt_side::metered(bounds, |meter| {
+        typed_quantity(quantity_product(left, right, meter))
+    });
+    let (product, product_unit) = match first.0 {
+        Ok((Outcome::Completed(product), unit)) => (product, unit),
+        other => panic!("first generated product did not complete: {other:?}"),
+    };
+    assert_eq!(*product.magnitude(), support::rt_side::ratio(6, 1));
+    let mut scope = UnitScope::new(&fixture.units);
+    assert!(scope.resolve(&product).is_none(), "compound result needs its paired unit");
+    scope.form(product_unit);
+    let product = scope.resolve(&product).expect("retained compound result");
+    let following = scope.resolve(&following).expect("retained source unit");
+    agree2! {
+        limits: bounds,
+        setup: {},
+        direct: |meter| evaluate_quantity_unit(QuantityOperation::Multiply(product, following), meter),
+        generated: |meter| typed_quantity(compound_chain(product, following, meter)),
+    };
+    let second = support::rt_side::metered(bounds, |meter| {
+        typed_quantity(compound_chain(product, following, meter))
+    });
+    let (value, unit) = match second.0 {
+        Ok((Outcome::Completed(value), unit)) => (value, unit),
+        other => panic!("chained generated product did not complete: {other:?}"),
+    };
+    assert_eq!(*value.magnitude(), support::rt_side::ratio(12, 1));
+    assert_eq!(value.unit(), &unit.id());
+    assert_eq!(unit, compound_unit(&fixture, &[("m", 2), ("s", 1)]));
 }
