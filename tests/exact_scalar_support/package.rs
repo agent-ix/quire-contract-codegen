@@ -5184,11 +5184,15 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
             }
         }
         rewrite(&mut body, builder, nodes, imported);
-        let semantic_type = if let Some(base) = node.get("base").and_then(Value::as_str) {
-            import(builder, nodes, base, imported)
-        } else {
-            key.clone()
+        let base = match (node["tag"].as_str(), node["form"].as_str()) {
+            (Some("bounded_domain"), Some("integer_range")) => Some("integer"),
+            (Some("bounded_domain"), Some("rational_range")) => Some("rational"),
+            _ => node.get("base").and_then(Value::as_str),
         };
+        let semantic_type = base.map_or_else(
+            || key.clone(),
+            |base| import(builder, nodes, base, imported),
+        );
         let dependencies = reference_targets(&body);
         builder.node_with(
             &key,
