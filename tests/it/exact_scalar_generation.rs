@@ -4304,25 +4304,35 @@ fn caller_declared_quantity_conversion_is_confirmed() {
     }
 }
 
-#[trace("FR-014-AC-50", "TC-024")]
+#[trace("FR-014-AC-48", "FR-014-AC-61", "TC-024")]
 #[test]
-fn admitted_compound_conversion_target_refuses_without_changing_sibling() {
+fn admitted_compound_conversion_target_generates_without_changing_sibling() {
     let (package, ids) = compound_conversion_package().admit_resolved();
     let nodes = [ids.resolve(&code_id(9902)), ids.resolve(&code_id(1001))];
     let derived = derive_exact_scalar_items(&package, &nodes);
+    let conversion = derived[0].clone().expect("compound target derives");
     assert_eq!(
-        derived[0],
-        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
-            operation_identity: "quire.op.quantity.convert".to_owned(),
-        }))
+        conversion.operation,
+        ExactScalarOperation::QuantityConversion
     );
     assert!(derived[1].is_ok(), "supported sibling derives");
-    let generated = generate_exact_scalar_oracles(&package, &[derived[1].clone().unwrap()])
-        .expect("sibling generates");
-    assert!(matches!(
-        generated.claim_map.items[0].result,
-        ClaimDisposition::Generated(_)
-    ));
+    let generated =
+        generate_exact_scalar_oracles(&package, &[conversion, derived[1].clone().unwrap()])
+            .expect("both generate");
+    assert_eq!(generated.claim_map.items.len(), 2);
+    for claim in &generated.claim_map.items {
+        assert!(
+            matches!(claim.result, ClaimDisposition::Generated(_)),
+            "{claim:?}"
+        );
+    }
+    let ClaimDisposition::Generated(conversion) = &generated.claim_map.items[0].result else {
+        panic!("compound conversion must generate")
+    };
+    assert_eq!(
+        conversion.quantity_conversion_target.as_ref(),
+        Some(&ids.resolve(&id(&key(9901))))
+    );
 }
 
 #[trace("FR-014-AC-2", "FR-014-AC-50", "TC-024")]

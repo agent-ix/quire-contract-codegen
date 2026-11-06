@@ -336,7 +336,7 @@ fn quantity_conversion_confirmation_requires_identity_and_exact_mode() {
 #[trace("FR-014-AC-50", "TC-024")]
 #[test]
 fn quantity_conversion_rejects_scalar_targets_after_mode() {
-    for form in ["decimal", "integer", "compound_unit"] {
+    for form in ["decimal", "integer"] {
         let target = v2_node('b', "scalar_type", form, 'b', None);
         for mode in ["exact", "nearest-even", "toward-zero"] {
             let (id, node) =
@@ -368,6 +368,28 @@ fn quantity_conversion_rejects_scalar_targets_after_mode() {
             );
         }
     }
+}
+
+#[trace("FR-014-AC-61", "TC-024")]
+#[test]
+fn quantity_conversion_accepts_compound_target_after_exact_mode() {
+    let target = v2_node('b', "scalar_type", "compound_unit", 'b', None);
+    let (id, node) = application_node(fixture_application(CheckedApplicationOperationFixture {
+        identity: Some(QUANTITY_CONVERT_IDENTITY.into()),
+        mode: Some((OperationModeKind::Rounding, "exact".into())),
+        member_declaration: Some(target.node_id.clone()),
+        ..Default::default()
+    }));
+    let graph: Graph<'_> = [(&id, &node), (&target.node_id, &target)]
+        .into_iter()
+        .collect();
+    let record = CompleteLoweringRecordV2::Lowered {
+        node: Box::new(lowered_node(&node)),
+    };
+    assert_eq!(
+        derive_operation(&graph, &id, &record),
+        Ok(ExactScalarOperation::QuantityConversion)
+    );
 }
 
 /// A node with no `operation.identity` (which admission forbids), a node that is not an

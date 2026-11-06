@@ -1533,6 +1533,7 @@ pub const QUANTITY_CONVERT_AWAY: u32 = 2028;
 /// The quantity conversion nodes: each converts a quantity to its own unit type under the
 /// `exact` mode that unit type pins.
 pub const QUANTITY_CONVERSIONS: [u32; 3] = [1086, 1087, QUANTITY_CONVERT_AWAY];
+const T_DIMENSIONLESS_COMPOUND: u32 = 2991;
 /// An integer addition whose left operand is itself an application.
 pub const EXPRESSION_OPERAND: u32 = 2029;
 /// A quantity addition whose right operand is a literal.
@@ -1769,7 +1770,14 @@ pub fn corpus() -> Vec<Expression> {
             code,
             BINARY,
             operands,
-            "unit",
+            if matches!(
+                operator,
+                QuantityOperator::Multiply | QuantityOperator::Divide | QuantityOperator::Power
+            ) {
+                "compound_unit"
+            } else {
+                "unit"
+            },
             Op::QuantityArithmetic { operator },
             if operands == QTY_INT {
                 vec![INT]
@@ -2084,6 +2092,7 @@ fn result_type(form: &str) -> String {
         "float64" => key(T_FLOAT64),
         "text" => key(T_TEXT),
         "unit" => unit_type(),
+        "compound_unit" => key(T_DIMENSIONLESS_COMPOUND),
         other => panic!("no type node for {other}"),
     }
 }
@@ -2694,6 +2703,25 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             json!({"term": "aggregate", "members": [member("rounding", literal("text", rounding))]}),
         );
     }
+    let compound = key(T_DIMENSIONLESS_COMPOUND);
+    builder.node(
+        &compound,
+        "scalar_type",
+        "compound_unit",
+        &compound,
+        aggregate(),
+    );
+    let node = builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes")
+        .last_mut()
+        .expect("compound node");
+    node.as_object_mut()
+        .expect("compound object")
+        .remove("declaration");
+    node.as_object_mut()
+        .expect("compound object")
+        .remove("owner");
     for (code, ty, kind, value) in [
         (V_INTEGER, key(T_INTEGER), "integer", "3"),
         (V_RATIONAL, key(T_RATIONAL), "rational", "1/2"),

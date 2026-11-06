@@ -40,15 +40,13 @@ pub(super) fn quantity_conversion_target_form<Body: GraphBody, NodeBody>(
 ) -> Option<ScalarForm> {
     conversion_target(graph, node)
         .and_then(|id| graph.node(&id))
-        .and_then(|target| {
-            (target.node_tag.as_ref() == "scalar_type")
-                .then(|| match target.semantic_form.as_ref() {
-                    "unit" => Some(ScalarForm::Unit),
-                    "compound_unit" => Some(ScalarForm::CompoundUnit),
-                    _ => None,
-                })
-                .flatten()
-        })
+        .and_then(
+            |target| match (target.node_tag.as_ref(), target.semantic_form.as_ref()) {
+                ("scalar_type", "unit") => Some(ScalarForm::Unit),
+                ("scalar_type", "compound_unit") => Some(ScalarForm::CompoundUnit),
+                _ => None,
+            },
+        )
 }
 
 /// An operation identity with the parameters that are not read from the node's bounds, laws,
