@@ -807,9 +807,9 @@ impl PackageBuilder {
         let mut sorted_keys = bound_keys.to_vec();
         sorted_keys.sort();
         let preimage = match (tag, ty_override) {
-            (Some(tag), None) => json!(["dedicated-operand", form, sorted_keys, tag]),
-            (None, Some(ty)) => json!(["dedicated-operand", form, sorted_keys, ty]),
-            (None, None) => json!(["dedicated-operand", form, sorted_keys]),
+            (Some(tag), None) => json!(["dedicated-operand", form, &sorted_keys, tag]),
+            (None, Some(ty)) => json!(["dedicated-operand", form, &sorted_keys, ty]),
+            (None, None) => json!(["dedicated-operand", form, &sorted_keys]),
             (Some(_), Some(_)) => panic!("a dedicated operand has one selector"),
         };
         let digest = authored_key("operand_", &preimage);
@@ -826,7 +826,18 @@ impl PackageBuilder {
             let ty = ty_override.unwrap_or(&ty);
             let mut body = literal(kind, value);
             body["type"] = node_ref(ty);
-            self.node(&digest, "value", "literal", ty, body);
+            let literal = format!("{digest}_literal");
+            self.node(&literal, "value", "literal", ty, body);
+            let mut dependencies = sorted_keys;
+            dependencies.push(literal.clone());
+            self.node_with(
+                &digest,
+                "expression",
+                "reference",
+                ty,
+                reference(&literal),
+                &dependencies,
+            );
         }
         digest
     }
@@ -845,14 +856,25 @@ impl PackageBuilder {
     pub fn dedicated_unit_operand(&mut self, bound_keys: &[String]) -> String {
         let mut sorted_keys = bound_keys.to_vec();
         sorted_keys.sort();
-        let digest = authored_key("unit_operand_", &json!(sorted_keys));
+        let digest = authored_key("unit_operand_", &json!(&sorted_keys));
         if self.dedicated_operands.insert(digest.clone()) {
+            let literal_key = format!("{digest}_literal");
             self.node(
-                &digest,
+                &literal_key,
                 "value",
                 "literal",
                 &unit_type(),
                 literal("rational", "1"),
+            );
+            let mut dependencies = sorted_keys;
+            dependencies.push(literal_key.clone());
+            self.node_with(
+                &digest,
+                "expression",
+                "reference",
+                &unit_type(),
+                reference(&literal_key),
+                &dependencies,
             );
         }
         digest
