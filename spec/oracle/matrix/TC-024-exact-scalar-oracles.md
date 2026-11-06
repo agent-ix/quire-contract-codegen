@@ -17,16 +17,19 @@ every scalar family, refuse every non-generated item with a typed reason, are
 byte-deterministic, and agree with direct runtime execution. Agreement with the QSL value authority is outside CG's boundary and not claimed by CG (FR-014-AC-47); generated-oracle against QSL agreement is owned by quire-integration IR-842.
 
 Current carried-target qualification (FR-014-AC-62..65, IR-1355): the compiled
-reader-admitted fixture executes every CQ-E01 through CQ-E26 vector by reference.
-Generated and direct QSV values, loss, typed outcomes, admitted charges, consumed
-counters and every charge-denial run agree. Twenty-five published dispositions
-pass. CQ-E13 remains blocked on QSV owner fix IR-1372, with a failing qualification: QSpec's unchanged tuple
-`L(2,0,0,1,2,1)` expects completed integer `2`, while direct QSV and the generated
-oracle both return `Incomplete` at `unit.result-retain` with `work_units` limit
-2, consumed 2 and next charge 1. The owner charges identity read and target-domain
-before requesting that third work unit. No limit or expected disposition is
-changed to hide this owner-accounting discrepancy. Original source-to-generated
-IR-842 integration execution is not credited here.
+reader-admitted fixture executes every CQ-E01 through CQ-E26 vector by reference
+from QSpec `b09800f7`. All 26 published dispositions pass with QSV `a16416bf`
+(owner fix IR-1372, quire-semantic-value#97). Generated and direct QSV values,
+loss, typed outcomes, admitted charges, consumed counters and every charge-denial
+run agree. CQ-E13 completes with integer `2` at QSpec's unchanged
+`L(2,0,0,1,2,1)` tuple; no published limit or expected disposition was changed.
+The bounded lock refresh changes QSV alone and retains the compatible existing
+Exact `7e06eba7` selection. First-party dependency manifests continue to track
+`main` with compatible version constraints. This avoids the unrelated newer
+Exact refusal variant that the currently locked QSL diagnostic match does not
+handle. The reader-admitted fixture does not credit original source-to-generated
+IR-842 integration execution. Historical review snapshots retain their earlier
+CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run.
 
 ## Test Procedure
 
