@@ -6,15 +6,11 @@
 //! zero-padded keys, and the package identity is re-derived from the
 //! finished graph.
 //!
-//! Bounds are `bounded_domain` nodes keyed by the digest of their content and
-//! `foreign` (see `Bound::key`/`Bound::foreign`), and listed in the
-//! dependencies of each expression that uses them. Each expression's own
-//! `bounds` reaches every `Bound` it declares plus, transitively, every
-//! `Bound` those declare as `foreign` (a bound whose body embeds a literal of
-//! another requires-bound kind reaches that kind's own bound too) -- so an
-//! expression's declared bounds are a lower bound on what it reaches, not
-//! the exact set. Bound bodies use the encoding
-//! `quire_contract_codegen::exact_scalar` documents.
+//! Bounds are `bounded_domain` nodes keyed by their content and foreign
+//! references (see `Bound::key`/`Bound::foreign`). Applications reach them
+//! through dedicated value-shaped expression operands. Literal nodes have
+//! empty dependencies, as strict Contract IR admission requires. Bound bodies
+//! use the encoding `quire_contract_codegen::exact_scalar` documents.
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
@@ -746,9 +742,9 @@ impl PackageBuilder {
         self
     }
 
-    /// A `value`/`literal` node with `operand(form)`'s own content, at a
-    /// digest dedicated to `bound_keys` rather than `operand(form)`'s own
-    /// shared one.
+    /// A value-shaped expression operand pointing to a typed literal, at a
+    /// digest dedicated to `bound_keys` rather than `operand(form)`'s shared
+    /// one. Its dependencies carry the literal and the requested bounds.
     ///
     /// IR-280's own reachable-bound search (`CompleteLoweringRecordV2::
     /// RequiresBound`/`AmbiguousBound`) walks the *whole* transitive
@@ -763,8 +759,8 @@ impl PackageBuilder {
     /// expression (`AMBIGUOUS`, deliberately) should ever see more than one.
     /// A distinct corpus expression needing a distinct bound set (or set of
     /// bounds, for `AMBIGUOUS` itself) therefore gets its own operand node,
-    /// keyed by `(form, bound_keys)` so expressions sharing the identical
-    /// bound set still safely share one anchor, exactly as before.
+    /// keyed by `(form, bound_keys)`. Contract IR forbids dependencies on the
+    /// literal itself, so the referenced expression carries the bound edges.
     pub fn dedicated_operand(&mut self, form: &str, bound_keys: &[String]) -> String {
         self.dedicated_operand_impl(form, bound_keys, None, None)
     }
@@ -796,7 +792,8 @@ impl PackageBuilder {
     /// original untagged digest preimage exactly (a 3-element array), so
     /// every pre-existing call site keeps its original node id; only a
     /// caller that opts into `dedicated_operand_tagged` gets the salted,
-    /// 4-element preimage and thus a new, distinct digest.
+    /// 4-element preimage and thus a new, distinct digest. The expression
+    /// retains that digest; its literal child has a separate key.
     fn dedicated_operand_impl(
         &mut self,
         form: &str,
@@ -847,12 +844,9 @@ impl PackageBuilder {
     /// can name, because a unit operand is `V_QUANTITY`'s own shape (a
     /// `rational`-typed magnitude under [`unit_type`], not a scalar literal
     /// keyed by one of `T_INTEGER`/`T_RATIONAL`/etc.). This builds a node
-    /// dedicated to `bound_keys` with that same shape, including
-    /// `V_QUANTITY`'s own inherent `rational_range` bound (Contract IR's
-    /// lowering reaches `literal.type` regardless of the containing node's
-    /// declared type, so this needs one reachable the same way `V_QUANTITY`
-    /// itself does, in addition to `bound_keys`, which the caller wires on
-    /// separately).
+    /// dedicated to `bound_keys` with that same type shape. The quantity
+    /// literal has no dependencies; its value-shaped expression parent carries
+    /// the caller's bounds and keeps separate operations' closures isolated.
     pub fn dedicated_unit_operand(&mut self, bound_keys: &[String]) -> String {
         let mut sorted_keys = bound_keys.to_vec();
         sorted_keys.sort();
@@ -885,17 +879,11 @@ impl PackageBuilder {
     /// IR-280's FR-322 application-node dependency join requires this node's
     /// own `dependencies` to be *exactly* the unique, digest-ascending
     /// `reference` targets of its body -- `bounds` cannot be listed there
-    /// directly. Each bound is still registered
-    /// once (as [`Self::bounded`] does) and wired reachable, but as an extra
-    /// dependency of a node the join constraint does not cover: the body's
-    /// own first `reference` target, or, when every argument is a literal
-    /// (no `reference` term at all -- e.g. `TextAdmission`'s fixed literal
-    /// argument), the `value`/`literal` node of `semantic_type`'s own family
-    /// (e.g. `T_TEXT` -> `V_TEXT`, via [`value_for_type`]) -- never
-    /// `semantic_type` itself, a nominal `scalar_type` node IR-280 also
-    /// refuses an unrelated extra dependency on. Either way the anchor is a
-    /// non-application node, so it can carry an extra dependency IR-280
-    /// would refuse on this node itself.
+    /// directly. Each bound is still registered once (as [`Self::bounded`]
+    /// does) and wired through the body's first reference target. Dedicated
+    /// targets are value-shaped expressions, which may carry those edges.
+    /// A literal target keeps empty dependencies under strict IR admission;
+    /// its exact literal value needs no separate range edge.
     ///
     /// The reference argument this anchors on is expected to already be
     /// [`Self::dedicated_operand`]'s (or, when no bound can collide, the
@@ -2763,12 +2751,9 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         builder.code(code, "value", "literal", &ty, literal(kind, value));
     }
     // `V_QUANTITY`'s own magnitude literal is `rational`-typed even though
-    // the node's `semantic_type` is `unit_type()`; Contract IR's lowering
-    // reaches that `literal.type` edge and, with `require_bounds`, requires
-    // a `rational_range` bound somewhere in the same closure. Every corpus
-    // expression that references this node needs one reachable, so it is
-    // wired as `V_QUANTITY`'s own dependency rather than repeated per call
-    // site.
+    // the node's `semantic_type` is `unit_type()`. Its literal body and type
+    // are complete without a wire dependency; strict IR admission requires
+    // this node's dependency list to stay empty.
     builder.node(
         &key(V_QUANTITY),
         "value",
@@ -3310,27 +3295,11 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             Vec::new(),
         ),
     );
-    // IR-280's FR-322 application-node dependency join forbids `LITERAL_OPERAND`
-    // (an application node) from carrying any dependency beyond its own body's
-    // exact `reference` join, so `CLAIM`/`CLAIM_ALT` anchor instead on the one
-    // node that join already names: `LITERAL_OPERAND`'s own first argument.
-    // That is no longer the shared `V_INTEGER` (see `dedicated_operand`'s doc:
-    // `LITERAL_OPERAND` declares the `INT` bound, so the main corpus loop
-    // above already gave it a bound-dedicated operand instead, to keep other
-    // expressions' bounds from unioning onto `V_INTEGER`'s closure) -- so
-    // this recomputes that same dedicated node rather than naming `V_INTEGER`
-    // directly. It must not, however, be the *same* `dedicated_operand`
-    // digest the main corpus loop already gave `LITERAL_OPERAND`: that call
-    // is keyed only by `(form, bound_keys)`, and every other corpus
-    // expression that also carries the plain `INT` bound (integer add, mul,
-    // lt, le, ge, the three division profiles, and `quantity.pow` -- nine
-    // items) hashes to the identical digest, so `CLAIM`/`CLAIM_ALT` -- wired
-    // below as dependencies of this one anchor -- were reachable from all of
-    // them too, not just from `LITERAL_OPERAND`. `dedicated_operand_tagged`
-    // salts this specific anchor so it cannot collide with the shared one.
-    // Either way the anchor is a `value`/`literal` node the join constraint
-    // does not cover, so both claims stay reachable from `LITERAL_OPERAND`'s
-    // own closure: `LITERAL_OPERAND -> dedicated -> CLAIM`.
+    // The application reaches only the reference operands in its body. Its
+    // dedicated first operand is a value-shaped expression whose dependencies
+    // may carry these claims; the underlying literal's dependencies stay empty.
+    // Salt the operand key so unrelated operations with the same Integer bound
+    // cannot inherit either claim through a shared operand.
     let literal_operand_anchor = {
         let bound_key = builder.bound(&INT);
         builder.dedicated_operand_tagged("integer", &[bound_key], "literal-operand-claim-anchor")
