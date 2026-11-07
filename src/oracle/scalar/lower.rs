@@ -149,7 +149,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
-    if &*node.node.semantic_form != shape.form {
+    if !shape.accepts_form(&node.node.semantic_form) {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
@@ -173,7 +173,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         .into());
     }
     for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
-        check_operand(graph, position, argument, *expected)?;
+        shape.check_operand(graph, position, argument, *expected)?;
     }
     let checked_bounds = check_parameters(graph, node, operation)?;
     Ok((node, checked_bounds))
@@ -1356,6 +1356,8 @@ impl ScalarForm {
 /// The node shape a descriptor requires.
 pub(super) struct Shape {
     pub(super) form: &'static str,
+    alternate_form: Option<&'static str>,
+    carried_operand: bool,
     pub(super) body_operator: &'static str,
     pub(super) operands: &'static [ScalarForm],
     pub(super) result: ScalarForm,
@@ -1365,6 +1367,8 @@ impl Shape {
     fn binary(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
         Self {
             form: "binary",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "binary",
             operands,
             result,
@@ -1374,6 +1378,8 @@ impl Shape {
     fn unary(operand: &'static [ScalarForm; 1], result: ScalarForm) -> Self {
         Self {
             form: "unary",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "unary",
             operands: operand,
             result,
@@ -1383,34 +1389,54 @@ impl Shape {
     fn conversion(operand: &'static [ScalarForm; 1], result: ScalarForm) -> Self {
         Self {
             form: "conversion",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "convert",
             operands: operand,
             result,
         }
     }
 
-    /// The `body_operator: "call"` half is grounded in the catalog: the
-    /// operation-catalog's three IEEE-comparison identities
-    /// (`quire.op.ieee.numeric_equal`, `.total_order`, `.bit_identical`) are
-    /// all `call`-operator entries, and Contract IR's
-    /// `validate_operations` refuses any package whose `body.operator`
-    /// disagrees with its catalogued `operation.identity`'s own `operator`,
-    /// so a real, admitted IEEE comparison node's `body.operator` is always
-    /// `"call"`, never `"binary"`.
-    ///
-    /// The `form: "binary"` half is grounded only in this repo's own
-    /// fixtures, not in IR or the catalog: IR does not couple
-    /// `semantic_form` to `body.operator` -- `Expression::forms()` admits
-    /// `"call"` and `"binary"` as independent, unrelated values -- so a real
-    /// producer is free to emit `semantic_form: "call"` for an IEEE
-    /// comparison node, and this shape would then refuse it `FormMismatch`.
+    /// IEEE comparisons use the owner's call operator with either admitted expression form.
     fn binary_call(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
         Self {
             form: "binary",
+            alternate_form: Some("call"),
+            carried_operand: false,
             body_operator: "call",
             operands,
             result,
         }
+    }
+
+    fn quantity_conversion(result: ScalarForm) -> Self {
+        Self {
+            carried_operand: true,
+            ..Self::conversion(&[ScalarForm::Unit], result)
+        }
+    }
+
+    fn accepts_form(&self, form: &str) -> bool {
+        form == self.form || self.alternate_form == Some(form)
+    }
+
+    fn check_operand<Body: GraphBody>(
+        &self,
+        graph: &Graph<'_, Body>,
+        position: usize,
+        term: &CheckedTerm,
+        expected: ScalarForm,
+    ) -> Result<(), ExactScalarRefusal> {
+        let expected = if self.carried_operand
+            && expected == ScalarForm::Unit
+            && matches!(term, CheckedTerm::Reference { .. })
+            && reference_form(graph, term).as_deref() == Some(ScalarForm::CarriedQuantity.wire())
+        {
+            ScalarForm::CarriedQuantity
+        } else {
+            expected
+        };
+        check_operand(graph, position, term, expected)
     }
 
     pub(super) fn of(operation: &ExactScalarOperation) -> Result<Self, OracleGenerationError> {
@@ -1494,9 +1520,9 @@ impl Shape {
                     Self::binary(&[F::Unit, F::Unit], F::CompoundUnit)
                 }
             },
-            ExactScalarOperation::QuantityConversion => Self::conversion(&[F::Unit], F::Unit),
+            ExactScalarOperation::QuantityConversion => Self::quantity_conversion(F::Unit),
             ExactScalarOperation::CarriedQuantityConversion { .. } => {
-                Self::conversion(&[F::Unit], F::CarriedQuantity)
+                Self::quantity_conversion(F::CarriedQuantity)
             }
             ExactScalarOperation::QuantityComparison { .. } => {
                 Self::binary(&[F::Unit, F::Unit], F::Boolean)
@@ -2225,7 +2251,7 @@ fn contract_scalar_shape(
 ) -> Result<Result<(), ExactScalarRefusal>, OracleGenerationError> {
     let shape = Shape::of(operation)?;
     Ok((|| {
-        if &*node.semantic_form != shape.form {
+        if !shape.accepts_form(&node.semantic_form) {
             return Err(ExactScalarRefusal::FormMismatch {
                 expected: shape.form,
                 found: node.semantic_form.to_string(),
@@ -2246,7 +2272,7 @@ fn contract_scalar_shape(
             });
         }
         for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
-            check_operand(graph, position, argument, *expected)?;
+            shape.check_operand(graph, position, argument, *expected)?;
         }
         Ok(())
     })())
