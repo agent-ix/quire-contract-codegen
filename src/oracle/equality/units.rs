@@ -87,7 +87,7 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
             assert_eq!(resolved.quantity(), &quantity);
             assert_eq!(resolved.unit(), unit.quantity_unit());
             prepared
-                .check_type(&ValueType::Quantity(unit.id()))
+                .try_check_type(&ValueType::Quantity(unit.id()))
                 .expect("quantity remains a recognized type");
         }
         let preserved = attach_owner_units(prepared, None);
