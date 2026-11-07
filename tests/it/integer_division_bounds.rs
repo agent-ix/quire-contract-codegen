@@ -146,6 +146,42 @@ fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values
             "-1",
             "0",
         ),
+        (
+            "x: Int[-9, 9], y: Int[1, 4]",
+            "x div 3",
+            "-9",
+            "9",
+            "-7",
+            "3",
+            "-2",
+        ),
+        (
+            "x: Int[-9, 9], y: Int[1, 4]",
+            "x mod 3",
+            "0",
+            "2",
+            "-7",
+            "3",
+            "2",
+        ),
+        (
+            "x: Int[-9, 9], y: Int[0, 0]",
+            "x div y",
+            "-9",
+            "9",
+            "7",
+            "0",
+            "undefined",
+        ),
+        (
+            "x: Int[-9, 9], y: Int[0, 0]",
+            "x mod y",
+            "0",
+            "0",
+            "7",
+            "0",
+            "undefined",
+        ),
     ];
     for (index, (parameters, expression, lower, upper, left, right, expected)) in
         cases.iter().enumerate()
@@ -164,17 +200,47 @@ fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values
         let ClaimDisposition::Generated(claim) = &claim.result else {
             panic!("derived oracle refused: {claim:?}")
         };
-        // All reported checked bounds are actual operand typing nodes, never a synthetic result id.
-        assert!(!claim.checked_bounds.is_empty());
-        for id in &claim.checked_bounds {
-            let bound = package
+        let node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == claim.node_id)
+            .unwrap();
+        let quire_contract_model::CheckedTerm::Application { arguments, .. } = &node.body else {
+            panic!("original checked application");
+        };
+        let mut operand_bounds = Vec::new();
+        for argument in arguments {
+            let quire_contract_model::CheckedTerm::Reference { target } = argument else {
+                continue;
+            };
+            let operand = package
                 .graph()
                 .nodes
                 .iter()
-                .find(|node| &node.node_id == id)
+                .find(|node| &node.node_id == target)
                 .unwrap();
-            assert_eq!(bound.node_tag.as_ref(), "bounded_domain");
+            let typing = package
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| node.node_id == operand.semantic_type)
+                .unwrap();
+            if typing.node_tag.as_ref() == "bounded_domain"
+                && !operand_bounds.contains(&typing.node_id)
+            {
+                operand_bounds.push(typing.node_id.clone());
+            }
         }
+        assert_eq!(
+            claim.checked_bounds, operand_bounds,
+            "retain exactly the original operand bound ids"
+        );
+        let expected_outcome = if *expected == "undefined" {
+            "rt::Outcome::Undefined(rt::Undefined::DivisionByZero)".to_owned()
+        } else {
+            format!("rt::Outcome::Completed({expected:?}.parse::<rt::Integer>().unwrap())")
+        };
         writeln!(
             native,
             "mod generated_{index} {{ {} }}",
@@ -189,7 +255,7 @@ fn case_{index}() {{
     let left = {left:?}.parse().unwrap();
     let right = {right:?}.parse().unwrap();
     let outcome = generated_{index}::{symbol}(&left, &right, &mut meter()).expect("generated ABI");
-    assert_eq!(outcome, rt::Outcome::Completed({expected:?}.parse::<rt::Integer>().unwrap()));
+    assert_eq!(outcome, {expected_outcome});
     // The original runtime zero-divisor outcome is retained, not a derived-range refusal.
     let zero = rt::Integer::zero();
     assert_eq!(generated_{index}::{symbol}(&left, &zero, &mut meter()).unwrap(),
@@ -218,21 +284,44 @@ fn case_{index}() {{
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stdout}\n{stderr}");
     assert!(
-        stdout.contains("8 passed; 0 failed"),
-        "all eight generated cases execute: {stdout}"
+        stdout.contains(&format!("{} passed; 0 failed", cases.len())),
+        "all generated cases execute: {stdout}"
     );
 }
 
 #[trace("TC-024", "FR-014-AC-21")]
 #[test]
-fn unbounded_dividends_still_refuse_and_caller_domains_cannot_replace_inference() {
+fn unbounded_operands_still_refuse_and_caller_domains_cannot_replace_inference() {
     for expression in ["x div y", "x mod y"] {
-        let package = compiled("x: Integer, y: Int[1, 4]", "Integer", expression);
-        let node = body_id(&package, "subject");
-        assert!(matches!(
-            derive_exact_scalar_items(&package, &[node]).remove(0),
-            Err(ExactScalarRefusal::MissingBound { .. })
-        ));
+        for parameters in ["x: Integer, y: Int[1, 4]", "x: Int[-9, 9], y: Integer"] {
+            let package = compiled(parameters, "Integer", expression);
+            let node_id = body_id(&package, "subject");
+            assert!(
+                matches!(
+                    derive_exact_scalar_items(&package, std::slice::from_ref(&node_id)).remove(0),
+                    Err(ExactScalarRefusal::MissingBound { .. })
+                ),
+                "{parameters}: {expression}"
+            );
+            let domain = IntegerDomain::Bounded(interval("-100", "100"));
+            let operation = if expression.contains("div") {
+                ExactScalarOperation::IntegerDivision {
+                    profile: quire_exact::DivisionProfile::Truncating,
+                    domain,
+                }
+            } else {
+                ExactScalarOperation::IntegerModulo { domain }
+            };
+            let generated =
+                generate_exact_scalar_oracles(&package, &[ExactScalarItem { node_id, operation }])
+                    .unwrap();
+            assert!(matches!(
+                &generated.claim_map.items[0].result,
+                ClaimDisposition::Refused {
+                    refusal: ExactScalarRefusal::MissingBound { .. }
+                }
+            ));
+        }
 
         let package = compiled("x: Int[-9, 9], y: Int[1, 4]", "Integer", expression);
         let mut item = derived(&package);

@@ -1048,7 +1048,9 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
                 return Ok((domain, checked));
             }
             Err(
-                ExactScalarRefusal::MissingBound { .. } | ExactScalarRefusal::RequiresBound { .. },
+                ExactScalarRefusal::MissingBound { .. }
+                | ExactScalarRefusal::RequiresBound { .. }
+                | ExactScalarRefusal::AmbiguousBound { .. },
             ) if self
                 .graph
                 .node(&self.node.semantic_type)
@@ -1061,7 +1063,22 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
                     .node
                     .selected
                     .as_ref()
-                    .is_none_or(|selected| selected.conversion.is_none()) => {}
+                    .is_none_or(|selected| selected.conversion.is_none())
+                && self
+                    .node
+                    .bounds
+                    .iter()
+                    .filter_map(|id| self.graph.node(id))
+                    .filter(|bound| {
+                        bound.semantic_type == self.node.semantic_type
+                            && &*bound.semantic_form == BoundForm::IntegerRange.wire()
+                    })
+                    .all(|bound| {
+                        own_bounds(self.graph, self.graph.term(&self.node.root.node_id))
+                            .iter()
+                            .flatten()
+                            .any(|own| own.node_id == bound.node_id)
+                    }) => {}
             Err(error) => return Err(error),
         }
         let missing = || ExactScalarRefusal::MissingBound {
