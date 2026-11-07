@@ -47,6 +47,21 @@ fn admit(bytes: &[u8]) -> CheckedPackageV2 {
     }
 }
 
+fn bound_member<'a>(term: &'a CheckedTerm, expected: &str) -> &'a CheckedTerm {
+    let CheckedTerm::Aggregate { members } = term else {
+        panic!("owner-admitted bound aggregate");
+    };
+    members
+        .iter()
+        .find_map(|member| match member {
+            CheckedTerm::Binding { name, value } if name.as_ref() == expected => {
+                Some(value.as_ref())
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("owner-admitted {expected} member"))
+}
+
 fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles, String) {
     let nodes = package.graph().nodes.iter().filter(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some(identity))).collect::<Vec<_>>();
     let [node] = nodes.as_slice() else {
@@ -76,6 +91,46 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
             "carried_quantity",
             "U01 reaches the carried-source admission branch"
         );
+        let CheckedTerm::Reference { target: unit } = bound_member(&source_type.body, "unit")
+        else {
+            panic!("source retains its unit reference");
+        };
+        let unit = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &node.node_id == unit)
+            .unwrap();
+        assert_eq!(unit.semantic_form.as_ref(), "unit");
+        assert_eq!(
+            unit.declaration
+                .as_ref()
+                .unwrap()
+                .qualified_name
+                .last()
+                .map(AsRef::as_ref),
+            Some("cm")
+        );
+        assert!(
+            matches!(bound_member(&source_type.body, "rounding"), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Text, value, .. } if value.as_ref() == "exact")
+        );
+        let CheckedTerm::Reference { target: carrier } = bound_member(&source_type.body, "carrier")
+        else {
+            panic!("source retains its carrier reference");
+        };
+        let carrier = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &node.node_id == carrier)
+            .unwrap();
+        assert_eq!(carrier.semantic_form.as_ref(), "integer_range");
+        for (name, expected) in [("min", "0"), ("max", "1000")] {
+            assert!(
+                matches!(bound_member(&carrier.body, name), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Integer, value, .. } if value.as_ref() == expected),
+                "genuine source carrier {name} matches the owner-admitted native input"
+            );
+        }
     }
     let items = derive_exact_scalar_items(package, std::slice::from_ref(&node.node_id))
         .into_iter()
