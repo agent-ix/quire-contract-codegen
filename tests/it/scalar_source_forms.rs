@@ -52,6 +52,31 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
     let [node] = nodes.as_slice() else {
         panic!("one genuine {identity} application: {nodes:?}");
     };
+    if identity == "quire.op.quantity.convert" {
+        let CheckedTerm::Application { arguments, .. } = &node.body else {
+            panic!("conversion application");
+        };
+        let Some(CheckedTerm::Reference { target }) = arguments.first() else {
+            panic!("quantity source is an owner-emitted reference");
+        };
+        let source = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &node.node_id == target)
+            .unwrap();
+        let source_type = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == source.semantic_type)
+            .unwrap();
+        assert_eq!(
+            source_type.semantic_form.as_ref(),
+            "carried_quantity",
+            "U01 reaches the carried-source admission branch"
+        );
+    }
     let items = derive_exact_scalar_items(package, std::slice::from_ref(&node.node_id))
         .into_iter()
         .collect::<Result<Vec<_>, _>>()
@@ -154,6 +179,7 @@ fn run_native(label: &str, manifest: &str, source: &str, dependencies: &str) {
         .current_dir(&scratch.path)
         .output()
         .expect("compile and execute generated native scalar oracles");
+    drop(_build);
     assert!(
         output.status.success(),
         "native scalar execution failed:\n{}\n{}",
@@ -365,7 +391,7 @@ fn values_and_ledgers() {
     let unit = |name: &str| context.units().find(|unit| unit.qualified_name().last().map(|part| part.as_str()) == Some(name)).unwrap();
     let cm = unit("cm");
     let m = owner::IdentifiedUnit::new(unit("m").quantity_unit().clone()).unwrap();
-    let quantity = rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(250)), cm.id());
+    let quantity = rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(250_i64)), cm.id());
     let operand = context.unit_table().resolve(&quantity).unwrap();
     let limits = rt::ScalarLimits { integer_bits: 4096, decimal_digits: 4096, scale_expansion: 4096, text_input_bytes: 4096, text_scalars: 4096, normalized_scalars: 4096, unit_edges: 4096, value_occurrences: 4096, work_units: 4096, result_units: 4096 };
     for budget in [limits, rt::ScalarLimits { work_units: 0, ..limits }, rt::ScalarLimits { result_units: 0, ..limits }] {
@@ -375,7 +401,7 @@ fn values_and_ledgers() {
         let actual = ORACLE(operand, &m, &mut generated_meter).unwrap();
         match (actual, direct) {
             (rt::Outcome::Completed(actual), rt::Outcome::Completed(direct)) => {
-                let expected = rt::Rational::new(rt::Integer::from(5), rt::Integer::from(2)).unwrap();
+                let expected = rt::Rational::new(rt::Integer::from(5_i64), rt::Integer::from(2_i64)).unwrap();
                 assert_eq!(actual.magnitude(), &expected);
                 assert_eq!(actual.unit(), &m.id());
                 assert_eq!(direct.value(), &owner::ConvertedValue::Exact(expected));
@@ -399,28 +425,21 @@ fn values_and_ledgers() {
 #[test]
 fn ieee_call_extension_does_not_admit_integer_calls() {
     use crate::exact_scalar_generation::package::read_mutated_wire;
-    use quire_contract_codegen::ExactScalarRefusal;
     let bytes =
         emitted("function subject using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a = b }");
-    let package = admit(&bytes);
-    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.eq"))).unwrap();
-    let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node.node_id))
-        .pop()
-        .unwrap()
-        .unwrap();
     let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let changed = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
         .iter_mut()
-        .find(|candidate| candidate["node_id"] == serde_json::json!(node.node_id))
+        .find(|candidate| candidate["body"]["operation"]["identity"] == "quire.op.integer.eq")
         .unwrap();
     changed["semantic_form"] = "call".into();
-    let CheckedPackageV2ReadResult::Admitted(package) = read_mutated_wire(wire) else {
-        panic!("owner independently admits expression forms");
-    };
-    let output = generate_exact_scalar_oracles(&package, &[item]).unwrap();
     assert!(
-        matches!(&output.claim_map.items[0].result, ClaimDisposition::Refused { refusal: ExactScalarRefusal::FormMismatch { expected: "binary", found } } if found == "call")
+        matches!(
+            read_mutated_wire(wire),
+            CheckedPackageV2ReadResult::Refused(_)
+        ),
+        "integer call forms retain the owner's admission refusal"
     );
 }
