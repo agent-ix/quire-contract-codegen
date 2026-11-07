@@ -241,6 +241,11 @@ fn with_source_request<T>(
                 work_units: 1 << 30,
                 result_units: 1 << 30,
             },
+            qsl_replay::CallerLimits::default()
+                .spine
+                .package
+                .with_output_bytes(1 << 20)
+                .emit(),
         )
     };
     let request = RefinementQueryRequest::new(
