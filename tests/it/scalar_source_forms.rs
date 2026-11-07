@@ -121,7 +121,7 @@ fn genuine_ieee_equality_and_intrinsics_generate() {
 #[trace("TC-024", "FR-014-AC-66", "FR-014-AC-69")]
 #[test]
 fn genuine_carried_quantity_u01_conversion_generates() {
-    let package = compiled("dimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(a: Quantity<cm, Int[0, 1000]>): Quantity<m> pure { convert<Quantity<m>>(a) }");
+    let package = compiled("dimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(): Quantity<m> pure { convert<Quantity<m>>(250 cm) }");
     let (oracles, symbol) = generated(&package, "quire.op.quantity.convert");
     let manifest = &oracles
         .artifacts
@@ -356,7 +356,7 @@ use quire_exact as rt;
 use quire_semantic_value::quantity as owner;
 #[test]
 fn values_and_ledgers() {
-    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(a: Quantity<cm, Int[0, 1000]>): Quantity<m> pure { convert<Quantity<m>>(a) }";
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(): Quantity<m> pure { convert<Quantity<m>>(250 cm) }";
     let admitted = qsl_replay::compile_admitted(qsl_replay::CompileUnit {
         source: qsl_replay::SourceIdentity::new("test", "scalar-source-forms.native"),
         package_name: "scalar-source-forms".to_owned(), path: "scalar-source-forms.native", bytes: source.as_bytes(),
