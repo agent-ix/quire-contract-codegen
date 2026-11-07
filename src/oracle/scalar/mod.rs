@@ -140,7 +140,8 @@ pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 /// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item` can assert its own,
 /// independently-constructed lowering profile's tag list against this one without calling
 /// `scalar_profile` itself -- which would make that cross-check circular.
-pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 5] = [
+pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 6] = [
+    CheckedNodeTag::Model,
     CheckedNodeTag::ScalarType,
     CheckedNodeTag::BoundedDomain,
     CheckedNodeTag::Value,

@@ -421,7 +421,7 @@ fn tc_025_boolean_implication_with_lazy_right_calls_its_oracle_with_an_outcome()
         package::fixture_ids_for(&package).resolve(&code_id(package::DERIVE_BOOLEAN_SHORT_CIRCUIT));
     let (harness, _, _) = boolean_implies_scalar_from(package, node);
     assert!(harness.rust.contents.contains(&format!(
-        "{}(left, || rt::Outcome::Completed(right), &mut meter)",
+        "{}(left, |_| rt::Outcome::Completed(right), &mut meter)",
         harness.identity.oracle_symbol
     )));
 }

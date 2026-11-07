@@ -331,8 +331,11 @@ pub(super) fn application_arguments<'a>(
 
 fn type_form<Body: GraphBody>(graph: &Graph<'_, Body>, type_id: &CheckedNodeId) -> Option<String> {
     let node = graph.node(type_id)?;
-    (&*node.node_tag == CheckedNodeTag::ScalarType.as_wire())
-        .then(|| node.semantic_form.to_string())
+    match (node.node_tag.as_ref(), node.semantic_form.as_ref()) {
+        ("scalar_type", form) => Some(form.to_owned()),
+        ("model", "variant_type") => Some(ScalarForm::Enum.wire().to_owned()),
+        _ => None,
+    }
 }
 
 /// An operand is a literal classified by its value kind, or a reference

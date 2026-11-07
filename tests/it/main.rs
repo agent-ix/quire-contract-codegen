@@ -71,6 +71,7 @@ mod cover_last;
 mod exact_function_agreement;
 mod exact_function_generation;
 mod exact_scalar_agreement;
+mod model_enum_scalar;
 mod exact_scalar_generation;
 mod frame_claim_gap;
 mod generated_headers;

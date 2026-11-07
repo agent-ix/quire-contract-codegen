@@ -1066,6 +1066,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         // either list changing without the other now fails here, while the lowering profile below
         // still never calls `scalar_profile()`.
         let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+            quire_contract_model::CheckedNodeTag::Model,
             quire_contract_model::CheckedNodeTag::ScalarType,
             quire_contract_model::CheckedNodeTag::BoundedDomain,
             quire_contract_model::CheckedNodeTag::Value,
@@ -3311,6 +3312,8 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
     let source = contents(&oracles, "src/lib.rs");
     assert!(source.contains("rt::evaluate_boolean("));
     assert!(source.contains("scalar_owner::evaluate_boolean_short_circuit("));
+    assert!(source.contains("impl FnOnce(&mut rt::Meter) -> rt::Outcome<bool>"));
+    assert!(source.contains("let right = right(meter);"));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
 }
@@ -3424,7 +3427,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
     assert_eq!(probe_token(lazy_source, &lazy_regions[1]), "right");
     assert_eq!(
         lazy_source.lines().nth(lazy_line - 1).expect("line").trim(),
-        "right()",
+        "let right = right(meter);",
         "the probe must execute only when the lazy consequent is called"
     );
 
