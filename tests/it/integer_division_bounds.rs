@@ -78,6 +78,8 @@ fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values
 #[test]
 fn genuine_modulo_sources_execute_independently_of_the_division_selection_entry() {
     generated_values(true);
+    unbounded_and_mismatch(&["x mod y"]);
+    explicit_result_bounds(&["x mod y"]);
 }
 
 fn generated_values(modulo_only: bool) {
@@ -310,7 +312,11 @@ fn run_generated_native(native: &str, count: usize, label: &str) {
 #[trace("TC-024", "FR-014-AC-21")]
 #[test]
 fn unbounded_operands_still_refuse_and_caller_domains_cannot_replace_inference() {
-    for expression in ["x div y", "x mod y"] {
+    unbounded_and_mismatch(&["x div y", "x mod y"]);
+}
+
+fn unbounded_and_mismatch(expressions: &[&str]) {
+    for expression in expressions {
         for parameters in ["x: Integer, y: Int[1, 4]", "x: Int[-9, 9], y: Integer"] {
             let package = compiled(parameters, "Integer", expression);
             let node_id = body_id(&package, "subject");
@@ -364,7 +370,11 @@ fn unbounded_operands_still_refuse_and_caller_domains_cannot_replace_inference()
 #[trace("TC-024", "FR-014-AC-21")]
 #[test]
 fn explicit_result_narrowing_keeps_its_own_bound() {
-    for expression in ["x div y", "x mod y"] {
+    explicit_result_bounds(&["x div y", "x mod y"]);
+}
+
+fn explicit_result_bounds(expressions: &[&str]) {
+    for expression in expressions {
         let package = compiled("x: Int[-9, 9], y: Int[1, 4]", "Int[-100, 100]", expression);
         // The function body is a narrowing conversion; select its arithmetic child.
         let identity = if expression.contains("div") {
