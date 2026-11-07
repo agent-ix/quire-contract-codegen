@@ -402,8 +402,35 @@ fn values_and_ledgers() {
     let unit = |name: &str| context.units().find(|unit| unit.qualified_name().last().map(|part| part.as_str()) == Some(name)).unwrap();
     let cm = unit("cm");
     let m = owner::IdentifiedUnit::new(unit("m").quantity_unit().clone()).unwrap();
-    let quantity = rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(250_i64)), cm.id());
-    let operand = context.unit_table().resolve(&quantity).unwrap();
+    // The owner represents a carried input by its ValueType together with its Value::Quantity.
+    // Admission checks the carrier before the conversion API borrows the unit-resolved view.
+    let source_type = rt::ValueType::carried_quantity(rt::CarriedQuantityType::new(
+        cm.id(), rt::QuantityCarrier::Integer {
+            domain: rt::IntegerInterval::new(rt::Integer::from(0_i64), rt::Integer::from(1000_i64)).unwrap(),
+            rounding: rt::RoundingMode::Exact,
+        },
+    ));
+    let input = rt::Value::Quantity(rt::Quantity::new(
+        rt::Rational::from_integer(rt::Integer::from(250_i64)), cm.id(),
+    ));
+    let types = quire_semantic_value::declaration::TypeEnvironment::default();
+    assert!(types.admits(&source_type, &input).unwrap(), "owner admits the bounded carried source");
+    for invalid in [
+        rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(1001_i64)), cm.id()),
+        rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(250_i64)), m.id()),
+        rt::Quantity::new(rt::Rational::new(rt::Integer::from(1_i64), rt::Integer::from(2_i64)).unwrap(), cm.id()),
+    ] {
+        assert!(!types.admits(&source_type, &rt::Value::Quantity(invalid)).unwrap(), "owner rejects wrong carrier domain, unit and grid");
+    }
+    let rt::ValueType::CarriedQuantity(carried) = &source_type else { panic!("retained carried source type"); };
+    assert_eq!(carried.unit(), &cm.id());
+    let rt::QuantityCarrier::Integer { domain, rounding } = carried.carrier() else { panic!("retained integer source carrier"); };
+    assert_eq!(domain.lower(), &rt::Integer::from(0_i64));
+    assert_eq!(domain.upper(), &rt::Integer::from(1000_i64));
+    assert_eq!(*rounding, rt::RoundingMode::Exact);
+    let rt::Value::Quantity(quantity) = &input else { panic!("owner's admitted carried quantity representation"); };
+    let operand = context.unit_table().resolve(quantity).unwrap();
+    assert_eq!(operand.quantity().unit(), carried.unit());
     let limits = rt::ScalarLimits { integer_bits: 4096, decimal_digits: 4096, scale_expansion: 4096, text_input_bytes: 4096, text_scalars: 4096, normalized_scalars: 4096, unit_edges: 4096, value_occurrences: 4096, work_units: 4096, result_units: 4096 };
     for budget in [limits, rt::ScalarLimits { work_units: 0, ..limits }, rt::ScalarLimits { result_units: 0, ..limits }] {
         let mut direct_meter = rt::Meter::new(budget);
@@ -416,7 +443,7 @@ fn values_and_ledgers() {
                 assert_eq!(actual.magnitude(), &expected);
                 assert_eq!(actual.unit(), &m.id());
                 assert_eq!(direct.value(), &owner::ConvertedValue::Exact(expected));
-                assert_eq!(direct.source(), &quantity);
+                assert_eq!(direct.source(), quantity);
                 assert_eq!(direct.unit(), m.unit());
                 assert_eq!(budget, limits);
             }
