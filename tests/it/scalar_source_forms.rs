@@ -52,7 +52,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
     let [node] = nodes.as_slice() else {
         panic!("one genuine {identity} application: {nodes:?}");
     };
-    let items = derive_exact_scalar_items(package, &[node.node_id.clone()])
+    let items = derive_exact_scalar_items(package, std::slice::from_ref(&node.node_id))
         .into_iter()
         .collect::<Result<Vec<_>, _>>()
         .expect("derive genuine source operation");
@@ -300,7 +300,7 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
     let package = admit(&bytes);
     let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
     let sibling = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.total_order"))).unwrap();
-    let good = derive_exact_scalar_items(&package, &[sibling.node_id.clone()])
+    let good = derive_exact_scalar_items(&package, std::slice::from_ref(&sibling.node_id))
         .pop()
         .unwrap()
         .unwrap();
@@ -393,4 +393,33 @@ fn values_and_ledgers() {
 }
 "#;
     support.replace("ORACLE", &format!("crate::{symbol}"))
+}
+
+#[trace("TC-024", "FR-014-AC-68")]
+#[test]
+fn ieee_call_extension_does_not_admit_integer_calls() {
+    use crate::exact_scalar_generation::package::read_mutated_wire;
+    use quire_contract_codegen::ExactScalarRefusal;
+    let bytes = emitted("function subject using v(a: Integer, b: Integer): Boolean pure { a = b }");
+    let package = admit(&bytes);
+    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.eq"))).unwrap();
+    let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node.node_id))
+        .pop()
+        .unwrap()
+        .unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let changed = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|candidate| candidate["node_id"] == serde_json::json!(node.node_id))
+        .unwrap();
+    changed["semantic_form"] = "call".into();
+    let CheckedPackageV2ReadResult::Admitted(package) = read_mutated_wire(wire) else {
+        panic!("owner independently admits expression forms");
+    };
+    let output = generate_exact_scalar_oracles(&package, &[item]).unwrap();
+    assert!(
+        matches!(&output.claim_map.items[0].result, ClaimDisposition::Refused { refusal: ExactScalarRefusal::FormMismatch { expected: "binary", found } } if found == "call")
+    );
 }
