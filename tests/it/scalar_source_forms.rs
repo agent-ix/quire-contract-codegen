@@ -112,7 +112,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
             Some("cm")
         );
         assert!(
-            matches!(bound_member(&source_type.body, "rounding"), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Text, value, .. } if value.as_ref() == "exact")
+            matches!(bound_member(&source_type.body, "rounding"), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Text, value, .. } if value.as_str() == Some("exact"))
         );
         let CheckedTerm::Reference { target: carrier } = bound_member(&source_type.body, "carrier")
         else {
@@ -127,7 +127,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
         assert_eq!(carrier.semantic_form.as_ref(), "integer_range");
         for (name, expected) in [("min", "0"), ("max", "1000")] {
             assert!(
-                matches!(bound_member(&carrier.body, name), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Integer, value, .. } if value.as_ref() == expected),
+                matches!(bound_member(&carrier.body, name), CheckedTerm::Literal { value_kind: quire_contract_model::LiteralKind::Integer, value, .. } if value.as_str() == Some(expected)),
                 "genuine source carrier {name} matches the owner-admitted native input"
             );
         }
