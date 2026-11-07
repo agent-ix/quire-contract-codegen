@@ -7,7 +7,8 @@ use std::{fmt::Write as _, fs, process::Command};
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+    admit_integer_division, compile_package, compile_package_with_integer_division, CompileUnit,
+    DefinitionRole, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
 };
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, ClaimDisposition, ExactScalarItem,
@@ -16,27 +17,58 @@ use quire_contract_codegen::{
 use quire_contract_model::{
     CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
 };
-use quire_exact::{IntegerDomain, IntegerInterval};
+use quire_exact::{DivisionProfile, IntegerDomain, IntegerInterval};
 
 use crate::{exact_function_agreement::body_id, scratch_crate};
 
 fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV2 {
+    let profile = expression
+        .contains("div")
+        .then_some(DivisionProfile::Truncating);
+    compiled_with_profile(parameters, result, expression, profile)
+}
+
+fn compiled_with_profile(
+    parameters: &str,
+    result: &str,
+    expression: &str,
+    profile: Option<DivisionProfile>,
+) -> CheckedPackageV2 {
     let source = format!(
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n"
     );
-    let compiled = compile_package(
-        CompileUnit {
-            source: SourceIdentity::new("test", "integer-division-bounds"),
-            package_name: "integer-division-bounds".to_owned(),
-            path: "integer-division-bounds.native",
-            bytes: source.as_bytes(),
-        },
-        [],
-        &DependencyInput::default(),
-        StageLimits::default(),
-        ReplayLimits::default(),
-    )
-    .expect("QSL compiles genuine integer source");
+    let unit = CompileUnit {
+        source: SourceIdentity::new("test", "integer-division-bounds"),
+        package_name: "integer-division-bounds".to_owned(),
+        path: "integer-division-bounds.native",
+        bytes: source.as_bytes(),
+    };
+    let compiled = if let Some(profile) = profile {
+        let role = match profile {
+            DivisionProfile::Truncating => DefinitionRole::IntegerDivisionTruncating,
+            DivisionProfile::Floor => DefinitionRole::IntegerDivisionFloor,
+            DivisionProfile::Euclidean => DefinitionRole::IntegerDivisionEuclidean,
+        };
+        let selection = admit_integer_division(&[role.reference()], None)
+            .expect("owner admits one actual division definition");
+        compile_package_with_integer_division(
+            unit,
+            [],
+            &DependencyInput::default(),
+            &selection,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+    } else {
+        compile_package(
+            unit,
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+    }
+    .expect("QSL compiles genuine integer source under the supplied owner selection");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     match CheckedPackageV2::read(
@@ -197,17 +229,43 @@ fn generated_values(modulo_only: bool) {
     let selected = cases
         .iter()
         .filter(|case| !modulo_only || case.1.contains("mod"))
+        .flat_map(|case| {
+            if modulo_only {
+                vec![(case, None)]
+            } else {
+                DivisionProfile::ALL
+                    .into_iter()
+                    .map(|profile| (case, Some(profile)))
+                    .collect()
+            }
+        })
         .collect::<Vec<_>>();
-    for (index, (parameters, expression, lower, upper, left, right, expected)) in
+    for (index, ((parameters, expression, lower, upper, left, right, expected), profile)) in
         selected.iter().copied().enumerate()
     {
-        let package = compiled(parameters, "Integer", expression);
+        let package = compiled_with_profile(parameters, "Integer", expression, profile);
         let item = derived(&package);
         assert_eq!(
             domain(&item),
             &IntegerDomain::Bounded(interval(lower, upper)),
             "{expression}: {parameters}"
         );
+        if let ExactScalarOperation::IntegerDivision {
+            profile: actual, ..
+        } = &item.operation
+        {
+            assert_eq!(Some(*actual), profile, "derive the actual selected law");
+        }
+        let expected = match (profile, *expression, *left, *right) {
+            (
+                Some(DivisionProfile::Floor | DivisionProfile::Euclidean),
+                "x div y" | "x div 3",
+                "-7",
+                "3",
+            ) => "-3",
+            (Some(DivisionProfile::Floor), "x div y", "7", "-3") => "-3",
+            _ => *expected,
+        };
         let generated =
             generate_exact_scalar_oracles(&package, &[item]).expect("generate derived oracle");
         let claim = &generated.claim_map.items[0];
@@ -251,7 +309,7 @@ fn generated_values(modulo_only: bool) {
             claim.checked_bounds, operand_bounds,
             "retain exactly the original operand bound ids"
         );
-        let expected_outcome = if *expected == "undefined" {
+        let expected_outcome = if expected == "undefined" {
             "rt::Outcome::Undefined(rt::Undefined::DivisionByZero)".to_owned()
         } else {
             format!("rt::Outcome::Completed({expected:?}.parse::<rt::Integer>().unwrap())")
@@ -407,9 +465,9 @@ fn meter() -> rt::Meter {
 }
 "#;
 
-/// This is a reader-admitted CG fixture, not QSL source compilation. The public
-/// QSL facade currently has no division-law selection entry (source tests above
-/// remain red until that owner API lands).
+/// This is a reader-admitted CG fixture, separate from the genuine QSL producer
+/// cases above. It also admits explicit narrowing shapes that QSL's source
+/// range prover may reject before emission.
 fn reader_integer_operation(
     code: u32,
     profile: Option<quire_exact::DivisionProfile>,
