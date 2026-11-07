@@ -193,13 +193,21 @@ composition executes, not from these direct generated/runtime assertions.
     (FR-014-AC-27); call the narrowing check directly on raw conversion nodes
     with the narrow identity and one reference, two arguments, another identity,
     and a reference to another node (FR-014-AC-27).
-14. Generate and derive `x + n` narrowed to `Int[0, 29]`, where `n` is a
-    `literal`-form plain-Integer `value` node whose body is not a literal
-    (FR-014-AC-28).
+14. Generate and derive `x + n` narrowed to `Int[0, 29]`, where `n` is an
+    admitted plain-Integer `value`/`parameter` with an aggregate name/level
+    body, and assert `RequiresBound` naming Integer (FR-014-AC-28). A
+    `value`/`literal` with an aggregate body is malformed wire at the owner
+    reader and is not substituted for this parameter.
 15. Generate and derive `x + p` narrowed to `Int[0, 29]`, where `p` is a
     plain-Integer parameter (FR-014-AC-29).
-16. Generate and derive `q + q` narrowed to `Int[0, 29]`, where `q` is a node
-    like `n` that also reaches `[0, 29]` (FR-014-AC-30).
+16. Generate and derive `q + q` consumed by a narrowing conversion to
+    `Int[0, 29]`, where `q` is an admitted plain-Integer `value`/`parameter`
+    with an aggregate name/level body, no own bound and no artificial edge
+    to the result bound. Assert `RequiresBound` naming Integer and no
+    generated oracle through both entries: the result narrowing does not
+    bound the parameter occurrences. Preserve the same typed refusal when
+    Contract IR lowering rejects the unbounded parameter before CG's
+    parameter checks (FR-014-AC-30).
 17. Generate and derive `x + "a"` narrowed to `Int[0, 10]`, the text literal in
     a plain-Integer-typed `value` node (FR-014-AC-31).
 18. Generate and derive a sum narrowed by two conversions to `[10, 29]` and
