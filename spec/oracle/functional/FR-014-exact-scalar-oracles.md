@@ -173,6 +173,28 @@ exactly the names of its form, once each:
 A bare literal member, a missing or duplicate name and an unlisted name are each
 an unreadable bound.
 
+For `integer.div` and `integer.mod` with a plain Integer result and no narrowing
+consumer, absence of a result bound does not prevent generation when both
+operands have finite integer bounds (a canonical integer literal is a singleton
+bound). CG shall derive a result interval from those operands: let `A` be the
+largest absolute dividend endpoint and `B` the largest absolute divisor
+endpoint. Every admitted division profile uses `[-A, A]`; Euclidean modulo uses
+`[0, B - 1]` when `B > 0`. A zero-only divisor uses `[0, 0]` for the descriptor
+and keeps the runtime's `Undefined(DivisionByZero)` outcome. The result bound
+checks only the exposed result, not operand membership. Both operand bounds
+must be finite even though the formula needs only one operand's magnitude;
+an unbounded operand keeps `MissingBound`. Explicit result bounds, narrowing
+contexts, ambiguous bounds and unreadable bounds retain the existing rules and
+refusals; operand inference never replaces them. This exception is sound because
+a nonzero integer divisor has magnitude at least one and a Euclidean remainder
+is nonnegative and strictly below its divisor's magnitude. It removes the need
+for a producer to invent a result type bound from facts already admitted on the
+operands. Derivation and generation shall use the same interval and record only
+actual operand-bound nodes in `checked_bounds`, without fabricating a result
+bound node. A caller descriptor differing from this derived interval refuses as
+`DerivedBoundMismatch` naming the application; a descriptor differing from an
+explicit result bound continues to refuse as `BoundMismatch` naming that bound.
+
 When a checked integer literal used by a V2 clause comparison or arithmetic
 operand is wrapped in QSL's `quire.op.numeric.narrow` conversion, the generator
 shall recognize only the FR-093 `Coerce` shape: one reference to an integer
@@ -631,10 +653,10 @@ otherwise.
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
 | FR-014-AC-16 | A bound is read from `binding` members looked up by name in any order (`min`/`max`, `numerator_min` through `denominator_max`, `coefficient_min` through `rounding`, `rounding`, `min`/`max`/`text_profile`); a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-024) |
 | FR-014-AC-17 | A `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type, so `x + 1` over a parameter `x` of type `Int[0, 9]` generates, and a bounded text parameter is still a text operand. | Test (TC-024) |
-| FR-014-AC-18 | `derive_exact_scalar_items` over an admitted V2 package returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
+| FR-014-AC-18 | `derive_exact_scalar_items` over an admitted V2 package returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type, or for an unnarrowed Integer division/modulo result the sound interval derived from both finite operands as described above; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
 | FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
 | FR-014-AC-20 | An integer node over two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, each typed by its own `integer_range` `bounded_domain`, with its result typed by a third `integer_range` `[0, 29]`, generates an `ir_confirmed` oracle whose descriptor is compared with the result bound only; the claim's checked bounds are the result bound, then each operand's own bound; derivation returns the descriptor over `[0, 29]`. | Test (TC-024) |
-| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound; a sole reachable operand-owned bound is not a result bound and yields `MissingBound` unless a plain reference operand requires a bound under FR-014-AC-25. | Test (TC-024) |
+| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound; a sole reachable operand-owned bound is not a result bound and yields `MissingBound` unless a plain reference operand requires a bound under FR-014-AC-25. For an unnarrowed Integer `div` or `mod`, both finite operands instead derive `[-A, A]` or `[0, max(B - 1, 0)]` respectively, using the largest absolute dividend/divisor endpoints; missing operand bounds still refuse `MissingBound`. Explicit or narrowed result bounds remain authoritative. Generation uses the identical inferred interval; a disagreeing caller descriptor refuses `DerivedBoundMismatch` at the application, and checked provenance contains only real operand-bound ids. | Test (TC-024) |
 | FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
 | FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |

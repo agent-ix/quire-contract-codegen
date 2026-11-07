@@ -18,20 +18,31 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
 
 Current carried-target qualification (FR-014-AC-62..65, IR-1355): the compiled
 reader-admitted fixture executes every CQ-E01 through CQ-E26 vector by reference
-from QSpec `b09800f7`. All 26 published dispositions pass with QSV `a16416bf`
+from QSpec. All 26 published dispositions pass with QSV
 (owner fix IR-1372, quire-semantic-value#97). Generated and direct QSV values,
 loss, typed outcomes, admitted charges, consumed counters and every charge-denial
 run agree. CQ-E13 completes with integer `2` at QSpec's unchanged
 `L(2,0,0,1,2,1)` tuple; no published limit or expected disposition was changed.
-The bounded lock refresh changes QSV alone and retains the compatible existing
-Exact `7e06eba7` selection. First-party dependency manifests continue to track
-`main` with compatible version constraints. This avoids the unrelated newer
-Exact refusal variant that the currently locked QSL diagnostic match does not
-handle. The reader-admitted fixture does not credit original source-to-generated
+First-party dependency manifests track `main` with compatible version constraints. The reader-admitted fixture does not credit original source-to-generated
 IR-842 integration execution. Historical review snapshots retain their earlier
 CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run.
 
 ## Test Procedure
+
+For operand-derived integer division/modulo result bounds (FR-014-AC-18/21),
+compile genuine QSL functions with bounded positive and negative operands and
+an Integer result; strict-read their exact bytes, derive descriptors and execute
+the generated native functions. Assert the actual intervals, completed signed
+values, modulo's strict divisor-magnitude bound, zero-only endpoints, signed
+minimum magnitude and its quotient by minus one beyond the primitive maximum.
+Calling the generated ABI with a zero divisor retains the owner's typed
+undefined outcome. Assert original operand-bound ids and confirmed operation
+provenance. Unbounded operands still refuse `MissingBound`; a disagreeing
+caller descriptor refuses `DerivedBoundMismatch`; an explicit wider result
+narrowing continues to control the descriptor. This verifies the CG production
+seam; IR-842 integration rows advance only after their independent QSL-authority
+composition executes, not from these direct generated/runtime assertions.
+
 
 1. Build an admitted V2 package holding expression nodes for every scalar
    operator, division law, IEEE operator and comparison, text profile and

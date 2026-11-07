@@ -552,10 +552,24 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         },
         Family::IntegerDivision => Op::IntegerDivision {
             profile: derivation.division_profile()?,
-            domain: derivation.integer_domain()?,
+            domain: IntegerDomain::Bounded(
+                Bounds {
+                    graph,
+                    node: derivation.bounds.clone(),
+                }
+                .integer_division_bounds(false)?
+                .0,
+            ),
         },
         Family::IntegerModulo => Op::IntegerModulo {
-            domain: derivation.integer_domain()?,
+            domain: IntegerDomain::Bounded(
+                Bounds {
+                    graph,
+                    node: derivation.bounds.clone(),
+                }
+                .integer_division_bounds(true)?
+                .0,
+            ),
         },
         Family::RationalArithmetic(operator) => Op::RationalArithmetic {
             operator,

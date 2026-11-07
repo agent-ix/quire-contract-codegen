@@ -76,6 +76,7 @@ mod frame_claim_gap;
 mod generated_headers;
 mod harness_generation;
 mod inline_integer_equality;
+mod integer_division_bounds;
 mod kani_batching;
 mod kani_gate;
 mod kani_generation;
