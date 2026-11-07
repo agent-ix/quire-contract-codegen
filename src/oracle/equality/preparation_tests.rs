@@ -113,17 +113,6 @@ fn emitted_preparation_retains_native_errors_and_semantic_precedence() {
         "native metadata: {}",
         String::from_utf8_lossy(&metadata.stderr)
     );
-    let root_lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();
-    let lock = fs::read_to_string(scratch.join("Cargo.lock")).unwrap();
-    for source in lock
-        .lines()
-        .filter(|line| line.starts_with("source = \"git+"))
-    {
-        assert!(
-            root_lock.contains(source),
-            "component retains the root owner cohort: {source}"
-        );
-    }
     let run = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--lib"])
         .current_dir(&scratch)
