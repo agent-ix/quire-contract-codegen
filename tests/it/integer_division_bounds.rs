@@ -420,7 +420,7 @@ fn reader_division(
     right: Option<(i64, i64)>,
 ) -> (CheckedPackageV2, quire_contract_model::CheckedNodeId) {
     use crate::exact_scalar_generation::package as fixture;
-    let mut builder = fixture::corpus_package_for_codes(&[fixture::T_INTEGER]);
+    let mut builder = fixture::corpus_package_for_codes(&[fixture::T_INTEGER, fixture::T_TEXT]);
     let integer = fixture::key(fixture::T_INTEGER);
     let mut arguments = Vec::new();
     for (offset, name, bound) in [(0, "x", left), (1, "y", right)] {
