@@ -98,7 +98,8 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             }
         }
     }
-    let node = lowered(record)?;
+    let node = lowered(record)
+        .map_err(|refusal| division_operand_bound_refusal(graph, requested_node_id, refusal))?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
@@ -177,6 +178,51 @@ pub(super) fn check_item<'r, Body: GraphBody>(
     }
     let checked_bounds = check_parameters(graph, node, operation)?;
     Ok((node, checked_bounds))
+}
+
+/// An unnarrowed division/modulo needs finite operand facts to derive its
+/// otherwise missing result interval. Classify that absence consistently even
+/// when IR stops the lowering at an unbounded operand first.
+pub(super) fn division_operand_bound_refusal<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    node_id: &CheckedNodeId,
+    refusal: ExactScalarRefusal,
+) -> ExactScalarRefusal {
+    let ExactScalarRefusal::RequiresBound { .. } = &refusal else {
+        return refusal;
+    };
+    let Some(node) = graph.node(node_id) else {
+        return refusal;
+    };
+    if !graph.node(&node.semantic_type).is_some_and(|typing| {
+        &*typing.node_tag == CheckedNodeTag::ScalarType.as_wire()
+            && &*typing.semantic_form == "integer"
+    }) || !matches!(narrowing(graph, node_id), Narrowing::Unnarrowed)
+    {
+        return refusal;
+    }
+    let identity = scalar_ir::identity(graph.term(node_id));
+    let admitted_operation = match identity {
+        Some("quire.op.integer.mod") => true,
+        Some("quire.op.integer.div") => {
+            quire_exact::DivisionProfile::ALL
+                .into_iter()
+                .filter(|profile| {
+                    scalar_ir::has_law(graph.term(node_id), profile.definition_identity())
+                })
+                .count()
+                == 1
+        }
+        _ => false,
+    };
+    if admitted_operation {
+        ExactScalarRefusal::MissingBound {
+            bounded_type: node.semantic_type.clone(),
+            expected_form: BoundForm::IntegerRange,
+        }
+    } else {
+        refusal
+    }
 }
 
 pub(super) fn lowered(
