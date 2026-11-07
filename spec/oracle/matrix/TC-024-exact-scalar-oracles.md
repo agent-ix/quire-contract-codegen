@@ -470,3 +470,41 @@ construction route. Mathematical values, identities, tree structure, owner
 operations, domains, metering at every prefix, typed stops, evaluation order,
 laziness and full arbitrary-precision fallback remain as specified. The separate
 scalar-bound emitter and kernel canonical parsing are outside this change.
+
+## Genuine emitted carried operands and IEEE calls (IR-1401, planned)
+
+This extension verifies FR-014-AC-66 through FR-014-AC-69. It supplies native
+CG-to-owner agreement evidence; quire-integration IR-842 retains ownership of
+agreement with the QSL value authority.
+
+1. Through the public QSL facade, emit a carried-source quantity conversion
+   (TC-187 U01 by reference), `a = b` over IEEE operands, and all three
+   `quire::value::ieee::*` comparison intrinsics. Pass the emitted bytes unchanged
+   to Contract IR's strict reader. Select actual admitted node identities and
+   derive their descriptors; do not substitute hand-built packages for these
+   source-emission controls. Record the existing carried-operand type mismatch
+   and IEEE call-form mismatch as failing generation assertions on the preceding
+   lowerer, then require those same assertions to pass after implementation.
+2. Generate the native oracle crate and execute it with independently prepared
+   owner values. Assert the conversion's mathematical value, identified unit
+   and carried metadata where applicable. Assert true and false IEEE outcomes,
+   including positive/negative zero and NaN inputs chosen under the owner's
+   numeric-equality, total-order and bit-identity contract. Compare complete
+   owner outcomes, ordered admitted charges and consumed counters, including
+   a charge-denial case; retain the existing exact/carried target rounding,
+   domain, loss and typed-stop checks of AC-62 through AC-65.
+3. Exercise wrong arity, operand/result type, operation identity, law and mode,
+   unitless quantity literal, unsupported form and noncatalogued call controls
+   at the boundary their owner admits. Assert strict-reader refusals before CG
+   separately from admitted typed CG refusals and unchanged supported siblings.
+   Retain admitted binary-form IEEE fixtures with the catalogued call body.
+   Do not widen quantity operand acceptance to unrelated scalar families.
+4. Place genuine-source regression tests in a module of the existing `it`
+   integration binary. Bind runnable tests to the new criterion IDs and inspect
+   the computed matrix. Do not use spec-text presence assertions, copied owner
+   catalogs, semantic carrier mirrors or proof execution as native evidence.
+
+Expected result: both genuine producer forms generate and execute with the
+owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
+forms retain their prior refusal boundaries. Until those tests run, this
+section records planned qualification and grants no execution credit.
