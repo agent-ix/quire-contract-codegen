@@ -36,4 +36,6 @@ No tests or gates were run in this review; the owning lane reported its focused 
 
 ## Dispositions
 
-- FND-001: fixed in PR #755. A sole operand-owned integer bound first checks whether a plain reference operand requires its own bound; that `RequiresBound` refusal takes precedence, while a literal sibling still leaves `MissingBound` for the result.
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The sole operand-owned integer-bound arm now calls `integer_operand_bounds` and returns its `RequiresBound` refusal before `MissingBound`; the AC-25 `a + p` case remains explicit, while the literal case returns `MissingBound`. |

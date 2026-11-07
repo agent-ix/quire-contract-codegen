@@ -32,4 +32,6 @@ For `a + p` with scalar `Integer` result, `a` typed by `Int[0, 9]`, and `p` type
 
 ## Dispositions
 
-- FND-001: fixed in PR #755. FR-014-AC-21, FR-014-AC-25, and TC-024 now state that the plain reference's `RequiresBound` refusal takes precedence when the only reachable candidate is another operand's bound.
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-21 now excepts plain references governed by AC-25; AC-25 states `RequiresBound` precedence, and TC-024 steps 8 and 11 distinguish literal and plain-reference operands. |
