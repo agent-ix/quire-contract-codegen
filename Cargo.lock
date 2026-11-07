@@ -1513,7 +1513,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-runtime"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-runtime?branch=main#dbcdb40947634758c5d48aab4838b871f5c2c333"
+source = "git+https://github.com/agent-ix/quire-contract-runtime?branch=main#ee2fda4afe4bdf454660d35820122cf6b576d336"
 dependencies = [
  "proptest",
  "quire-exact",

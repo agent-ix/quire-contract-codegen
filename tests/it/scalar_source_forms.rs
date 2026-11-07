@@ -16,7 +16,7 @@ use quire_contract_model::{
     CheckedTerm,
 };
 
-fn compiled(declarations: &str) -> CheckedPackageV2 {
+fn emitted(declarations: &str) -> Vec<u8> {
     let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{declarations}\n");
     let emitted = compile_package(
         CompileUnit {
@@ -31,13 +31,17 @@ fn compiled(declarations: &str) -> CheckedPackageV2 {
         ReplayLimits::default(),
     )
     .expect("public QSL facade emits the authored source");
+    emitted.bytes().to_vec()
+}
+
+fn compiled(declarations: &str) -> CheckedPackageV2 {
+    admit(&emitted(declarations))
+}
+
+fn admit(bytes: &[u8]) -> CheckedPackageV2 {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    match CheckedPackageV2::read(
-        emitted.bytes(),
-        CheckedPackageReadLimits::bounded(),
-        &evidence,
-    ) {
+    match CheckedPackageV2::read(bytes, CheckedPackageReadLimits::bounded(), &evidence) {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("strict IR reader must admit unchanged genuine QSL bytes: {other:?}"),
     }
@@ -192,4 +196,92 @@ fn check(oracle: impl Fn(rt::IeeeValue, rt::IeeeValue, &mut rt::Meter) -> Result
 fn values_and_ledgers() {
 "#;
     format!("{support}{calls}\n}}\n}}\n")
+}
+
+#[trace("TC-024", "FR-014-AC-67", "FR-014-AC-68")]
+#[test]
+fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
+    use crate::exact_scalar_generation::package::read_mutated_wire;
+    use quire_contract_codegen::{
+        ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, ScalarForm,
+    };
+    use quire_exact::{IeeeComparison, IeeeWidth};
+    let bytes = emitted("function subject using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }");
+    let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    for form in ["binary", "unary", "conversion"] {
+        let mut wire = original.clone();
+        let node = wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
+            .unwrap();
+        node["semantic_form"] = form.into();
+        let id = serde_json::from_value(node["node_id"].clone()).unwrap();
+        let CheckedPackageV2ReadResult::Admitted(package) = read_mutated_wire(wire) else {
+            panic!("IR independently admits expression forms with catalogued call bodies");
+        };
+        let item = ExactScalarItem {
+            node_id: id,
+            operation: ExactScalarOperation::IeeeComparison {
+                comparison: IeeeComparison::NumericEqual,
+                width: IeeeWidth::Binary64,
+            },
+        };
+        let output = generate_exact_scalar_oracles(&package, &[item]).unwrap();
+        let [claim] = output.claim_map.items.as_slice() else {
+            panic!("one claim");
+        };
+        if form == "binary" {
+            assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
+            assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+        } else {
+            assert!(
+                matches!(&claim.result, ClaimDisposition::Refused { refusal: ExactScalarRefusal::FormMismatch { expected: "binary", found } } if found == form)
+            );
+        }
+    }
+    let package = admit(&bytes);
+    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
+    let good = derive_exact_scalar_items(&package, &[node.node_id.clone()])
+        .pop()
+        .unwrap()
+        .unwrap();
+    let wrong_width = ExactScalarItem {
+        node_id: node.node_id.clone(),
+        operation: ExactScalarOperation::IeeeComparison {
+            comparison: IeeeComparison::NumericEqual,
+            width: IeeeWidth::Binary32,
+        },
+    };
+    let output = generate_exact_scalar_oracles(&package, &[wrong_width, good]).unwrap();
+    assert!(
+        output.claim_map.items.iter().all(|claim| matches!(
+            claim.result,
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::DuplicateRequest
+            }
+        )),
+        "duplicate selection keeps its existing refusal"
+    );
+    let output = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: node.node_id.clone(),
+            operation: ExactScalarOperation::IeeeComparison {
+                comparison: IeeeComparison::NumericEqual,
+                width: IeeeWidth::Binary32,
+            },
+        }],
+    )
+    .unwrap();
+    assert!(matches!(
+        output.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactScalarRefusal::OperandTypeMismatch {
+                expected: ScalarForm::Float32,
+                ..
+            }
+        }
+    ));
 }
