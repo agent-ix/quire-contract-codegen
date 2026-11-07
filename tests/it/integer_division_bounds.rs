@@ -79,7 +79,7 @@ fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values
 fn genuine_modulo_sources_execute_independently_of_the_division_selection_entry() {
     generated_values(true);
     unbounded_and_mismatch(&["x mod y"]);
-    explicit_result_bounds(&["x mod y"]);
+    explicit_result_bounds();
 }
 
 fn generated_values(modulo_only: bool) {
@@ -370,30 +370,17 @@ fn unbounded_and_mismatch(expressions: &[&str]) {
 #[trace("TC-024", "FR-014-AC-21")]
 #[test]
 fn explicit_result_narrowing_keeps_its_own_bound() {
-    explicit_result_bounds(&["x div y", "x mod y"]);
+    explicit_result_bounds();
 }
 
-fn explicit_result_bounds(expressions: &[&str]) {
-    for expression in expressions {
-        let package = compiled("x: Int[-9, 9], y: Int[1, 4]", "Int[-100, 100]", expression);
-        // The function body is a narrowing conversion; select its arithmetic child.
-        let identity = if expression.contains("div") {
-            "quire.op.integer.div"
-        } else {
-            "quire.op.integer.mod"
-        };
-        let node = package
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| match &node.body {
-                quire_contract_model::CheckedTerm::Application { operation, .. } => {
-                    operation.identity() == Some(identity)
-                }
-                _ => false,
-            })
-            .unwrap();
-        let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node.node_id))
+fn explicit_result_bounds() {
+    for (code, profile) in [
+        (914_000, Some(quire_exact::DivisionProfile::Truncating)),
+        (914_010, None),
+    ] {
+        let (package, node_id) =
+            reader_integer_operation(code, profile, Some((-9, 9)), Some((1, 4)), true);
+        let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node_id))
             .remove(0)
             .unwrap();
         assert_eq!(
@@ -423,11 +410,12 @@ fn meter() -> rt::Meter {
 /// This is a reader-admitted CG fixture, not QSL source compilation. The public
 /// QSL facade currently has no division-law selection entry (source tests above
 /// remain red until that owner API lands).
-fn reader_division(
+fn reader_integer_operation(
     code: u32,
-    profile: quire_exact::DivisionProfile,
+    profile: Option<quire_exact::DivisionProfile>,
     left: Option<(i64, i64)>,
     right: Option<(i64, i64)>,
+    narrowed: bool,
 ) -> (CheckedPackageV2, quire_contract_model::CheckedNodeId) {
     use crate::exact_scalar_generation::package as fixture;
     let mut builder = fixture::corpus_package_for_codes(&[fixture::T_INTEGER, fixture::T_TEXT]);
@@ -447,8 +435,16 @@ fn reader_division(
         );
         arguments.push(fixture::reference(&fixture::key(code + offset)));
     }
-    let definition = fixture::integer_division_definition(profile);
-    builder.select_definition(definition.clone());
+    let (identity, laws) = if let Some(profile) = profile {
+        let definition = fixture::integer_division_definition(profile);
+        builder.select_definition(definition.clone());
+        (
+            "quire.op.integer.div",
+            vec![fixture::law("integer_division", definition)],
+        )
+    } else {
+        ("quire.op.integer.mod", Vec::new())
+    };
     builder.application_bounded(
         code + 2,
         "expression",
@@ -456,17 +452,16 @@ fn reader_division(
         &integer,
         fixture::application(
             "binary",
-            fixture::op_full(
-                "quire.op.integer.div",
-                vec![fixture::law("integer_division", definition)],
-                None,
-                None,
-            ),
+            fixture::op_full(identity, laws, None, None),
             &integer,
             arguments,
         ),
         &[],
     );
+    if narrowed {
+        let bound = builder.bound(&fixture::Bound::Integer(-100, 100));
+        builder.narrow(code + 3, &fixture::key(code + 2), &bound);
+    }
     let (read, _, ids) = builder.read_resolved();
     let CheckedPackageV2ReadResult::Admitted(package) = read else {
         panic!("IR admits canonical division fixture: {read:?}");
@@ -480,11 +475,12 @@ fn reader_admitted_division_laws_derive_from_both_operand_domains() {
     use quire_exact::DivisionProfile;
     let mut native = String::from(NATIVE_SUPPORT);
     for (index, profile) in DivisionProfile::ALL.into_iter().enumerate() {
-        let (package, node) = reader_division(
+        let (package, node) = reader_integer_operation(
             913_910 + 10 * u32::try_from(index).unwrap(),
-            profile,
+            Some(profile),
             Some((i64::MIN, i64::MAX)),
             Some((-3, 3)),
+            false,
         );
         let item = derive_exact_scalar_items(&package, &[node])
             .remove(0)
