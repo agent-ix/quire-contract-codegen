@@ -1158,6 +1158,16 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
                     .flatten()
                     .any(|operand| operand.node_id == bound.node_id)
                 {
+                    // A plain reference beside an owned bound is refused for its missing
+                    // operand bound before the result's missing bound (FR-014-AC-25).
+                    if form == BoundForm::IntegerRange {
+                        let operand_bounds = self.integer_operand_bounds();
+                        if let Err(refusal @ ExactScalarRefusal::RequiresBound { .. }) =
+                            operand_bounds
+                        {
+                            return Err(refusal);
+                        }
+                    }
                     Err(ExactScalarRefusal::MissingBound {
                         bounded_type: bounded_type.clone(),
                         expected_form: form,

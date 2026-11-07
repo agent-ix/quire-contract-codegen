@@ -2784,10 +2784,11 @@ fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
 /// one, or the result is typed by one, it is `RequiresBound` naming its type, in generation and in
 /// derivation. A literal operand is never refused, and a package whose operands own no bound and
 /// whose result is scalar-typed keeps the one-bound reading.
-#[trace("FR-014-AC-25", "TC-024")]
+#[trace("FR-014-AC-21", "FR-014-AC-25", "TC-024")]
 #[test]
 fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_bound() {
-    // The scalar-typed result's one reachable bound is `[0, 9]`, so its descriptor is over that.
+    // The scalar-typed `a + p` reaches only `a`'s `[0, 9]` bound; the plain reference
+    // must be refused before its missing result bound is reported.
     for (code, operation) in [
         (TWO_PARAMETER_UNBOUNDED_OPERAND, add_over(0, 29)),
         (TWO_PARAMETER_PLAIN_PAIR, add_over(0, 29)),
@@ -2810,8 +2811,8 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
         two_parameter_disposition(TWO_PARAMETER_LITERAL, add_over(0, 29)).1,
         ClaimDisposition::Generated(_)
     ));
-    // A bounded parameter beside a plain-typed reference to a `value` node whose body is a literal
-    // is a constant operand, not a plain-typed one (FR-014-AC-26), so it generates.
+    // This referenced `value` node's literal body is a constant, so it does not require an
+    // operand bound. The scalar result still has no bound other than the first operand's own.
     let (package, ids) = corpus_package_for_codes(&[BOUNDED_OPERAND]).admit_resolved();
     let bounded_operand = ids.resolve(&code_id(BOUNDED_OPERAND));
     let oracles = generate(
@@ -2821,10 +2822,18 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
             operation: integer_add(),
         }],
     );
-    assert!(matches!(
-        dispositions(&oracles).get(&bounded_operand),
-        Some(ClaimDisposition::Generated(_))
-    ));
+    let dispositions = dispositions(&oracles);
+    let Some(ClaimDisposition::Refused { refusal }) = dispositions.get(&bounded_operand) else {
+        panic!("the scalar result has no independent bound: {dispositions:?}")
+    };
+    assert_refusal_with_ids(
+        refusal,
+        &ExactScalarRefusal::MissingBound {
+            bounded_type: code_id(T_INTEGER),
+            expected_form: BoundForm::IntegerRange,
+        },
+        &ids,
+    );
 }
 
 fn qsl_admitted() -> &'static (CheckedPackageV2, FixtureIds) {
