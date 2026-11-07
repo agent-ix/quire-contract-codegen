@@ -215,7 +215,13 @@ fn genuine_carried_quantity_u01_conversion_generates() {
         .find(|artifact| artifact.path == "src/lib.rs")
         .unwrap()
         .contents;
-    let native = format!("{source}\n{}", native_quantity_checks(&symbol));
+    let native = format!(
+        "{source}\n{}",
+        native_quantity_checks(
+            &format!("crate::{symbol}(operand, &m, &mut generated_meter)"),
+            "assert_eq!(actual.magnitude(), &expected); assert_eq!(actual.unit(), &m.id());",
+        )
+    );
     run_native("quantity-source-forms", manifest, &native, "qsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n");
 }
 
@@ -440,7 +446,7 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
     );
 }
 
-fn native_quantity_checks(symbol: &str) -> String {
+fn native_quantity_checks(operation_call: &str, completed_assertions: &str) -> String {
     let support = r#"
 #[cfg(test)]
 mod native {
@@ -491,12 +497,11 @@ fn values_and_ledgers() {
         let mut direct_meter = rt::Meter::new(budget);
         let mut generated_meter = rt::Meter::new(budget);
         let direct = owner::convert_quantity(operand, m.unit(), &owner::QuantityTarget::Exact, &mut direct_meter).unwrap();
-        let actual = ORACLE(operand, &m, &mut generated_meter).unwrap();
+        let actual = OPERATION_CALL.unwrap();
         match (actual, direct) {
             (rt::Outcome::Completed(actual), rt::Outcome::Completed(direct)) => {
                 let expected = rt::Rational::new(rt::Integer::from(5_i64), rt::Integer::from(2_i64)).unwrap();
-                assert_eq!(actual.magnitude(), &expected);
-                assert_eq!(actual.unit(), &m.id());
+                ACTUAL_COMPLETED_ASSERTIONS
                 assert_eq!(direct.value(), &owner::ConvertedValue::Exact(expected));
                 assert_eq!(direct.source(), quantity);
                 assert_eq!(direct.unit(), m.unit());
@@ -511,7 +516,9 @@ fn values_and_ledgers() {
 }
 }
 "#;
-    support.replace("ORACLE", &format!("crate::{symbol}"))
+    support
+        .replace("OPERATION_CALL", operation_call)
+        .replace("ACTUAL_COMPLETED_ASSERTIONS", completed_assertions)
 }
 
 #[trace("TC-024", "FR-014-AC-68")]
@@ -573,4 +580,21 @@ fn same_shape_ieee_descriptor_mismatch_retains_caller_declared_generation() {
         claim.operation.identity,
         "ieee.bit_identical width=binary64"
     );
+}
+
+/// Component evidence only: compile and execute the actual quantity harness with the owner
+/// operation. This neither generates a CG oracle nor qualifies the reader-blocked source path.
+#[trace("TC-024")]
+#[test]
+fn carried_input_native_harness_component_executes_owner_admission_and_conversion() {
+    let manifest = format!(
+        "[package]\nname = \"carried-input-harness-component\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n[workspace]\n",
+        quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+        quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE,
+    );
+    let native = native_quantity_checks(
+        "owner::convert_quantity(operand, m.unit(), &owner::QuantityTarget::Exact, &mut generated_meter)",
+        "assert_eq!(actual, direct);",
+    );
+    run_native("carried-input-harness-component", &manifest, &native, "qsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n");
 }
