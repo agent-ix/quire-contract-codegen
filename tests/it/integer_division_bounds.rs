@@ -439,7 +439,7 @@ fn reader_division(
     }
     let definition = fixture::integer_division_definition(profile);
     builder.select_definition(definition.clone());
-    builder.application_code(
+    builder.application_bounded(
         code + 2,
         "expression",
         "binary",
@@ -455,6 +455,7 @@ fn reader_division(
             &integer,
             arguments,
         ),
+        &[],
     );
     let (read, _, ids) = builder.read_resolved();
     let CheckedPackageV2ReadResult::Admitted(package) = read else {
