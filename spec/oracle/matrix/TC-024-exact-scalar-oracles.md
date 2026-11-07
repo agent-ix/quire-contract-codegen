@@ -497,7 +497,11 @@ agreement with the QSL value authority.
    unitless quantity literal, unsupported form and noncatalogued call controls
    at the boundary their owner admits. Assert strict-reader refusals before CG
    separately from admitted typed CG refusals and unchanged supported siblings.
-   Retain admitted binary-form IEEE fixtures with the catalogued call body.
+   A same-lowering-shape descriptor identity, law or mode mismatch retains
+   FR-014-AC-12 and FR-038-AC-3: where the existing policy permits generation,
+   assert `CallerDeclared` provenance and no `ir_confirmed` claim instead of
+   introducing a new no-oracle policy. Retain admitted binary-form IEEE fixtures
+   with the catalogued call body.
    Do not widen quantity operand acceptance to unrelated scalar families.
 4. Place genuine-source regression tests in a module of the existing `it`
    integration binary. Bind runnable tests to the new criterion IDs and inspect
