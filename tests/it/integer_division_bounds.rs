@@ -71,6 +71,16 @@ fn domain(item: &ExactScalarItem) -> &IntegerDomain {
 #[trace("TC-024", "FR-014-AC-18")]
 #[test]
 fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values() {
+    generated_values(false);
+}
+
+#[trace("TC-024", "FR-014-AC-18")]
+#[test]
+fn genuine_modulo_sources_execute_independently_of_the_division_selection_entry() {
+    generated_values(true);
+}
+
+fn generated_values(modulo_only: bool) {
     let scratch = scratch_crate::TemporaryDirectory::new("integer-division-bounds");
     let mut native = String::from(NATIVE_SUPPORT);
     let cases = [
@@ -183,8 +193,12 @@ fn bounded_division_and_modulo_derive_sound_domains_and_execute_generated_values
             "undefined",
         ),
     ];
+    let selected = cases
+        .iter()
+        .filter(|case| !modulo_only || case.1.contains("mod"))
+        .collect::<Vec<_>>();
     for (index, (parameters, expression, lower, upper, left, right, expected)) in
-        cases.iter().enumerate()
+        selected.iter().copied().enumerate()
     {
         let package = compiled(parameters, "Integer", expression);
         let item = derived(&package);
@@ -284,7 +298,7 @@ fn case_{index}() {{
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stdout}\n{stderr}");
     assert!(
-        stdout.contains(&format!("{} passed; 0 failed", cases.len())),
+        stdout.contains(&format!("{} passed; 0 failed", selected.len())),
         "all generated cases execute: {stdout}"
     );
 }
@@ -391,3 +405,105 @@ fn meter() -> rt::Meter {
     })
 }
 "#;
+
+/// This is a reader-admitted CG fixture, not QSL source compilation. The public
+/// QSL facade currently has no division-law selection entry (source tests above
+/// remain red until that owner API lands).
+fn reader_division(
+    code: u32,
+    profile: quire_exact::DivisionProfile,
+    left: Option<(i64, i64)>,
+    right: Option<(i64, i64)>,
+) -> (CheckedPackageV2, quire_contract_model::CheckedNodeId) {
+    use crate::exact_scalar_generation::package as fixture;
+    let mut builder = fixture::corpus_package_for_codes(&[fixture::T_INTEGER]);
+    let integer = fixture::key(fixture::T_INTEGER);
+    let mut arguments = Vec::new();
+    for (offset, name, bound) in [(0, "x", left), (1, "y", right)] {
+        let typing = bound.map_or_else(
+            || integer.clone(),
+            |(lower, upper)| builder.bound(&fixture::Bound::Integer(lower, upper)),
+        );
+        builder.code(
+            code + offset,
+            "value",
+            "parameter",
+            &typing,
+            fixture::parameter_body(name, offset),
+        );
+        arguments.push(fixture::reference(&fixture::key(code + offset)));
+    }
+    let definition = fixture::integer_division_definition(profile);
+    builder.select_definition(definition.clone());
+    builder.application_code(
+        code + 2,
+        "expression",
+        "binary",
+        &integer,
+        fixture::application(
+            "binary",
+            fixture::op_full(
+                "quire.op.integer.div",
+                vec![fixture::law("integer_division", definition)],
+                None,
+                None,
+            ),
+            &integer,
+            arguments,
+        ),
+    );
+    let (read, _, ids) = builder.read_resolved();
+    let CheckedPackageV2ReadResult::Admitted(package) = read else {
+        panic!("IR admits canonical division fixture: {read:?}");
+    };
+    (*package, ids.resolve(&fixture::code_id(code + 2)))
+}
+
+#[trace("TC-024", "FR-014-AC-18")]
+#[test]
+fn reader_admitted_division_laws_derive_from_both_operand_domains() {
+    use quire_exact::{
+        divide, DivisionMember, DivisionProfile, Integer, Meter, Outcome, ScalarLimits,
+    };
+    for (index, profile) in DivisionProfile::ALL.into_iter().enumerate() {
+        let (package, node) = reader_division(
+            913_910 + 10 * u32::try_from(index).unwrap(),
+            profile,
+            Some((i64::MIN, i64::MAX)),
+            Some((-3, 3)),
+        );
+        let item = derive_exact_scalar_items(&package, &[node])
+            .remove(0)
+            .unwrap();
+        let expected_domain =
+            IntegerDomain::Bounded(interval("-9223372036854775808", "9223372036854775808"));
+        assert_eq!(
+            item.operation,
+            ExactScalarOperation::IntegerDivision {
+                profile,
+                domain: expected_domain.clone()
+            }
+        );
+        let generated = generate_exact_scalar_oracles(&package, &[item]).unwrap();
+        assert!(matches!(
+            &generated.claim_map.items[0].result,
+            ClaimDisposition::Generated(_)
+        ));
+        // All three actual owner laws complete on the same conservative derived domain.
+        for (left, right) in [(i64::MIN, -1), (-7, -3), (-7, 3), (7, -3), (7, 3)] {
+            let mut meter = Meter::new(ScalarLimits::unlimited());
+            let outcome = divide(
+                profile,
+                DivisionMember::Quotient,
+                &Integer::from(left),
+                &Integer::from(right),
+                &expected_domain,
+                &mut meter,
+            );
+            assert!(
+                matches!(outcome, Outcome::Completed(_)),
+                "{profile:?}, {left}, {right}: {outcome:?}"
+            );
+        }
+    }
+}
