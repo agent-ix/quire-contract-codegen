@@ -210,7 +210,11 @@ fn preparation_preserves_owner_errors_and_semantics() {
         private_fault.type_refusal = retained.unwrap();
         assert_eq!(private_fault.type_refusal, Some(expected));
         let mut meter = exact::Meter::new(LIMITS);
-        assert_eq!(oracle_component(&private_fault, &left, &right, &mut meter), exact::Outcome::Refused(exact::Refusal::CheckedInvariant { cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected { cause: expected.cause } }));
+        qsv_failing_allocator::arm(0);
+        let refused = oracle_component(&private_fault, &left, &right, &mut meter);
+        let repeated_walk = qsv_failing_allocator::disarm();
+        assert_eq!(repeated_walk, None, "oracle consumes the retained cause without repeating type traversal");
+        assert_eq!(refused, exact::Outcome::Refused(exact::Refusal::CheckedInvariant { cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected { cause: expected.cause } }));
         assert!(meter.admitted_charges().is_empty());
         private_fault.binding = "different";
         assert_eq!(oracle_component(&private_fault, &left, &right, &mut meter), exact::Outcome::Refused(exact::Refusal::CheckedInvariant { cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }));

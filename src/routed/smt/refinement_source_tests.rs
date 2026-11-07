@@ -244,7 +244,7 @@ fn with_source_request<T>(
             qsl_replay::CallerLimits::default()
                 .spine
                 .package
-                .with_output_bytes(1 << 20)
+                .with_output_bytes(16 * 1024 * 1024)
                 .emit(),
         )
     };
