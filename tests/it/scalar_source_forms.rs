@@ -231,6 +231,14 @@ fn check(oracle: impl Fn(rt::IeeeValue, rt::IeeeValue, &mut rt::Meter) -> Result
             } else { assert!(matches!(actual, rt::Outcome::Incomplete(_))); }
         }
     }
+    let other_width = if narrow { rt::IeeeValue::binary64(0) } else { rt::IeeeValue::binary32(0) };
+    let mut direct_meter = rt::Meter::new(LIMITS);
+    let mut generated_meter = rt::Meter::new(LIMITS);
+    assert!(rt::compare_ieee(comparison, value(bits[0]), other_width, &mut direct_meter).is_err());
+    assert!(oracle(value(bits[0]), other_width, &mut generated_meter).is_err());
+    assert_eq!(generated_meter.admitted_charges(), direct_meter.admitted_charges());
+    assert!(generated_meter.admitted_charges().is_empty());
+    for kind in rt::LimitKind::ALL { assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind)); }
 }
 #[test]
 fn values_and_ledgers() {
@@ -441,5 +449,43 @@ fn ieee_call_extension_does_not_admit_integer_calls() {
             CheckedPackageV2ReadResult::Refused(_)
         ),
         "integer call forms retain the owner's admission refusal"
+    );
+}
+
+#[trace("TC-024", "FR-014-AC-68", "FR-014-AC-12", "FR-038-AC-3")]
+#[test]
+fn same_shape_ieee_descriptor_mismatch_retains_caller_declared_generation() {
+    use quire_contract_codegen::{ExactScalarItem, ExactScalarOperation};
+    use quire_exact::{IeeeComparison, IeeeWidth};
+    let package = compiled("function subject using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }");
+    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
+    let output = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: node.node_id.clone(),
+            operation: ExactScalarOperation::IeeeComparison {
+                comparison: IeeeComparison::BitIdentical,
+                width: IeeeWidth::Binary64,
+            },
+        }],
+    )
+    .unwrap();
+    let [claim] = output.claim_map.items.as_slice() else {
+        panic!("one descriptor mismatch");
+    };
+    assert!(
+        matches!(claim.result, ClaimDisposition::Generated(_)),
+        "existing same-shape mismatch generation remains permitted"
+    );
+    assert!(
+        matches!(
+            claim.operation.provenance,
+            OperationProvenance::CallerDeclared { .. }
+        ),
+        "a descriptor mismatch cannot gain confirmed provenance"
+    );
+    assert_eq!(
+        claim.operation.identity,
+        "ieee.bit_identical width=binary64"
     );
 }
