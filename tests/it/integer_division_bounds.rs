@@ -276,7 +276,7 @@ fn explicit_result_narrowing_keeps_its_own_bound() {
                 _ => false,
             })
             .unwrap();
-        let item = derive_exact_scalar_items(&package, &[node.node_id.clone()])
+        let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node.node_id))
             .remove(0)
             .unwrap();
         assert_eq!(
