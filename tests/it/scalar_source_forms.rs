@@ -115,21 +115,35 @@ fn genuine_ieee_equality_and_intrinsics_generate() {
         }
     }
     native.push_str(&native_ieee_checks(&calls));
-    run_native("ieee-source-forms", &manifest, &native);
+    run_native("ieee-source-forms", &manifest, &native, "");
 }
 
 #[trace("TC-024", "FR-014-AC-66", "FR-014-AC-69")]
 #[test]
 fn genuine_carried_quantity_u01_conversion_generates() {
     let package = compiled("dimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(a: Quantity<cm, Int[0, 1000]>): Quantity<m> pure { convert<Quantity<m>>(a) }");
-    generated(&package, "quire.op.quantity.convert");
+    let (oracles, symbol) = generated(&package, "quire.op.quantity.convert");
+    let manifest = &oracles
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .unwrap()
+        .contents;
+    let source = &oracles
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .unwrap()
+        .contents;
+    let native = format!("{source}\n{}", native_quantity_checks(&symbol));
+    run_native("quantity-source-forms", manifest, &native, "qsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n");
 }
 
-fn run_native(label: &str, manifest: &str, source: &str) {
+fn run_native(label: &str, manifest: &str, source: &str, dependencies: &str) {
     use std::{fs, process::Command};
     let scratch = crate::scratch_crate::TemporaryDirectory::new(label);
     fs::create_dir_all(scratch.path.join("src")).unwrap();
-    let manifest = format!("{manifest}\n[dev-dependencies]\nquire-exact = {{ git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }}\n");
+    let manifest = format!("{manifest}\n[dev-dependencies]\nquire-exact = {{ git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }}\n{dependencies}");
     fs::write(scratch.path.join("Cargo.toml"), manifest).unwrap();
     fs::write(scratch.path.join("src/lib.rs"), source).unwrap();
     crate::scratch_crate::resolve_seeded_lock(&scratch.path);
@@ -241,21 +255,77 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
             );
         }
     }
+    for mutation in [
+        "operator", "arity", "operand", "result", "identity", "law", "mode",
+    ] {
+        let mut wire = original.clone();
+        let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
+        let boolean = nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
+            .unwrap()["node_id"]
+            .clone();
+        let position = nodes
+            .iter()
+            .position(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
+            .unwrap();
+        let node = &mut nodes[position];
+        match mutation {
+            "operator" => node["body"]["operator"] = "binary".into(),
+            "arity" => {
+                node["body"]["arguments"].as_array_mut().unwrap().pop();
+            }
+            "operand" => {
+                node["body"]["arguments"][0] = serde_json::json!({"term": "literal", "type_id": boolean, "value_kind": "boolean", "value": "true"})
+            }
+            "result" => {
+                node["body"]["result_type"] = node["body"]["arguments"][0]["target"].clone()
+            }
+            "identity" => node["body"]["operation"]["identity"] = "quire.op.integer.eq".into(),
+            "law" => node["body"]["operation"]["laws"] = serde_json::json!([]),
+            "mode" => {
+                node["body"]["operation"]["mode"] =
+                    serde_json::json!({"kind": "rounding", "value": "nearest-even"})
+            }
+            _ => unreachable!("fixed mutation cases"),
+        }
+        assert!(
+            matches!(
+                read_mutated_wire(wire),
+                CheckedPackageV2ReadResult::Refused(_)
+            ),
+            "strict reader retains {mutation} refusal"
+        );
+    }
     let package = admit(&bytes);
     let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
+    let sibling = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.total_order"))).unwrap();
+    let good = derive_exact_scalar_items(&package, &[sibling.node_id.clone()])
+        .pop()
+        .unwrap()
+        .unwrap();
     let output = generate_exact_scalar_oracles(
         &package,
-        &[ExactScalarItem {
-            node_id: node.node_id.clone(),
-            operation: ExactScalarOperation::IeeeComparison {
-                comparison: IeeeComparison::NumericEqual,
-                width: IeeeWidth::Binary32,
+        &[
+            ExactScalarItem {
+                node_id: node.node_id.clone(),
+                operation: ExactScalarOperation::IeeeComparison {
+                    comparison: IeeeComparison::NumericEqual,
+                    width: IeeeWidth::Binary32,
+                },
             },
-        }],
+            good,
+        ],
     )
     .unwrap();
     assert!(matches!(
-        output.claim_map.items[0].result,
+        output
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == node.node_id)
+            .unwrap()
+            .result,
         ClaimDisposition::Refused {
             refusal: ExactScalarRefusal::OperandTypeMismatch {
                 expected: ScalarForm::Float32,
@@ -263,4 +333,64 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
             }
         }
     ));
+    assert!(
+        matches!(
+            output
+                .claim_map
+                .items
+                .iter()
+                .find(|claim| claim.node_id == sibling.node_id)
+                .unwrap()
+                .result,
+            ClaimDisposition::Generated(_)
+        ),
+        "a refused selected shape leaves its supported sibling generated"
+    );
+}
+
+fn native_quantity_checks(symbol: &str) -> String {
+    let support = r#"
+#[cfg(test)]
+mod native {
+use quire_exact as rt;
+use quire_semantic_value::quantity as owner;
+#[test]
+fn values_and_ledgers() {
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction subject using v(a: Quantity<cm, Int[0, 1000]>): Quantity<m> pure { convert<Quantity<m>>(a) }";
+    let admitted = qsl_replay::compile_admitted(qsl_replay::CompileUnit {
+        source: qsl_replay::SourceIdentity::new("test", "scalar-source-forms.native"),
+        package_name: "scalar-source-forms".to_owned(), path: "scalar-source-forms.native", bytes: source.as_bytes(),
+    }, [], &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(), qsl_replay::ReplayLimits::default()).unwrap();
+    let context = admitted.context();
+    let unit = |name: &str| context.units().find(|unit| unit.qualified_name().last().map(|part| part.as_str()) == Some(name)).unwrap();
+    let cm = unit("cm");
+    let m = owner::IdentifiedUnit::new(unit("m").quantity_unit().clone()).unwrap();
+    let quantity = rt::Quantity::new(rt::Rational::from_integer(rt::Integer::from(250)), cm.id());
+    let operand = context.unit_table().resolve(&quantity).unwrap();
+    let limits = rt::ScalarLimits { integer_bits: 4096, decimal_digits: 4096, scale_expansion: 4096, text_input_bytes: 4096, text_scalars: 4096, normalized_scalars: 4096, unit_edges: 4096, value_occurrences: 4096, work_units: 4096, result_units: 4096 };
+    for budget in [limits, rt::ScalarLimits { work_units: 0, ..limits }, rt::ScalarLimits { result_units: 0, ..limits }] {
+        let mut direct_meter = rt::Meter::new(budget);
+        let mut generated_meter = rt::Meter::new(budget);
+        let direct = owner::convert_quantity(operand, m.unit(), &owner::QuantityTarget::Exact, &mut direct_meter).unwrap();
+        let actual = ORACLE(operand, &m, &mut generated_meter).unwrap();
+        match (actual, direct) {
+            (rt::Outcome::Completed(actual), rt::Outcome::Completed(direct)) => {
+                let expected = rt::Rational::new(rt::Integer::from(5), rt::Integer::from(2)).unwrap();
+                assert_eq!(actual.magnitude(), &expected);
+                assert_eq!(actual.unit(), &m.id());
+                assert_eq!(direct.value(), &owner::ConvertedValue::Exact(expected));
+                assert_eq!(direct.source(), &quantity);
+                assert_eq!(direct.unit(), m.unit());
+                assert_eq!(budget, limits);
+            }
+            (rt::Outcome::Incomplete(actual), rt::Outcome::Incomplete(direct)) => { assert_eq!(actual, direct); assert_ne!(budget, limits); }
+            other => panic!("generated and owner outcomes must agree: {other:?}"),
+        }
+        assert_eq!(generated_meter.admitted_charges(), direct_meter.admitted_charges());
+        for kind in rt::LimitKind::ALL { assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind)); }
+    }
+}
+}
+"#;
+    support.replace("ORACLE", &format!("crate::{symbol}"))
 }
