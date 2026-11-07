@@ -81,7 +81,6 @@ fn genuine_modulo_sources_execute_independently_of_the_division_selection_entry(
 }
 
 fn generated_values(modulo_only: bool) {
-    let scratch = scratch_crate::TemporaryDirectory::new("integer-division-bounds");
     let mut native = String::from(NATIVE_SUPPORT);
     let cases = [
         (
@@ -280,6 +279,11 @@ fn case_{index}() {{
         )
         .unwrap();
     }
+    run_generated_native(&native, selected.len(), "integer-division-bounds");
+}
+
+fn run_generated_native(native: &str, count: usize, label: &str) {
+    let scratch = scratch_crate::TemporaryDirectory::new(label);
     let manifest = format!("[package]\nname=\"integer-division-derived-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE} }}\n[workspace]\n");
     scratch_crate::write_manifest(&scratch.path, &manifest);
     fs::write(scratch.path.join("src/lib.rs"), native).unwrap();
@@ -298,7 +302,7 @@ fn case_{index}() {{
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stdout}\n{stderr}");
     assert!(
-        stdout.contains(&format!("{} passed; 0 failed", selected.len())),
+        stdout.contains(&format!("{} passed; 0 failed", count)),
         "all generated cases execute: {stdout}"
     );
 }
@@ -462,9 +466,8 @@ fn reader_division(
 #[trace("TC-024", "FR-014-AC-18")]
 #[test]
 fn reader_admitted_division_laws_derive_from_both_operand_domains() {
-    use quire_exact::{
-        divide, DivisionMember, DivisionProfile, Integer, Meter, Outcome, ScalarLimits,
-    };
+    use quire_exact::DivisionProfile;
+    let mut native = String::from(NATIVE_SUPPORT);
     for (index, profile) in DivisionProfile::ALL.into_iter().enumerate() {
         let (package, node) = reader_division(
             913_910 + 10 * u32::try_from(index).unwrap(),
@@ -481,29 +484,40 @@ fn reader_admitted_division_laws_derive_from_both_operand_domains() {
             item.operation,
             ExactScalarOperation::IntegerDivision {
                 profile,
-                domain: expected_domain.clone()
+                domain: expected_domain
             }
         );
         let generated = generate_exact_scalar_oracles(&package, &[item]).unwrap();
-        assert!(matches!(
-            &generated.claim_map.items[0].result,
-            ClaimDisposition::Generated(_)
-        ));
-        // All three actual owner laws complete on the same conservative derived domain.
-        for (left, right) in [(i64::MIN, -1), (-7, -3), (-7, 3), (7, -3), (7, 3)] {
-            let mut meter = Meter::new(ScalarLimits::unlimited());
-            let outcome = divide(
-                profile,
-                DivisionMember::Quotient,
-                &Integer::from(left),
-                &Integer::from(right),
-                &expected_domain,
-                &mut meter,
-            );
-            assert!(
-                matches!(outcome, Outcome::Completed(_)),
-                "{profile:?}, {left}, {right}: {outcome:?}"
-            );
-        }
+        let ClaimDisposition::Generated(claim) = &generated.claim_map.items[0].result else {
+            panic!("reader-admitted division did not generate");
+        };
+        writeln!(
+            native,
+            "mod generated_{index} {{ {} }}",
+            claim.oracle_source
+        )
+        .unwrap();
+        let (negative_by_positive, positive_by_negative, negative_by_negative) = match profile {
+            DivisionProfile::Truncating => ("-2", "-2", "2"),
+            DivisionProfile::Floor => ("-3", "-3", "2"),
+            DivisionProfile::Euclidean => ("-3", "-2", "3"),
+        };
+        writeln!(native, r#"
+#[test]
+fn case_{index}() {{
+    for (left, right, expected) in [
+        ("-9223372036854775808", "-1", "9223372036854775808"),
+        ("-7", "3", {negative_by_positive:?}),
+        ("7", "-3", {positive_by_negative:?}),
+        ("-7", "-3", {negative_by_negative:?}),
+    ] {{
+        assert_eq!(generated_{index}::{symbol}(&left.parse().unwrap(), &right.parse().unwrap(), &mut meter()).unwrap(),
+            rt::Outcome::Completed(expected.parse::<rt::Integer>().unwrap()));
+    }}
+    assert_eq!(generated_{index}::{symbol}(&rt::Integer::one(), &rt::Integer::zero(), &mut meter()).unwrap(),
+        rt::Outcome::Undefined(rt::Undefined::DivisionByZero));
+}}
+"#, symbol = claim.symbol).unwrap();
     }
+    run_generated_native(&native, 3, "reader-division-derived-bounds");
 }
