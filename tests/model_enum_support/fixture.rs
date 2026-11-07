@@ -51,8 +51,11 @@ pub fn colors(
     compiled: &qsl_replay::AdmittedCompilation,
     package: &CheckedPackageV2,
 ) -> BTreeMap<String, EnumValue> {
+    let term_data = package
+        .checked_term_data()
+        .expect("the admitted model enum package retains validated equality term data");
     let mut witnesses = BTreeMap::new();
-    for decision in &package.checked_term_data().equality_decisions {
+    for decision in &term_data.equality_decisions {
         for member in &decision.enum_members {
             assert!(!member.ordered, "model variants are unordered");
             match witnesses.insert(member.case.to_string(), member) {
