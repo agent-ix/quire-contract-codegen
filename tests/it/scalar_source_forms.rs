@@ -299,6 +299,11 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
             .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
             .unwrap()["node_id"]
             .clone();
+        let float = nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "float64")
+            .unwrap()["node_id"]
+            .clone();
         let position = nodes
             .iter()
             .position(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
@@ -312,9 +317,7 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
             "operand" => {
                 node["body"]["arguments"][0] = serde_json::json!({"term": "literal", "type_id": boolean, "value_kind": "boolean", "value": "true"})
             }
-            "result" => {
-                node["body"]["result_type"] = node["body"]["arguments"][0]["target"].clone()
-            }
+            "result" => node["body"]["result_type"] = float,
             "identity" => node["body"]["operation"]["identity"] = "quire.op.integer.eq".into(),
             "law" => node["body"]["operation"]["laws"] = serde_json::json!([]),
             "mode" => {
