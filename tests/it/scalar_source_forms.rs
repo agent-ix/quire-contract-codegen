@@ -400,7 +400,8 @@ fn values_and_ledgers() {
 fn ieee_call_extension_does_not_admit_integer_calls() {
     use crate::exact_scalar_generation::package::read_mutated_wire;
     use quire_contract_codegen::ExactScalarRefusal;
-    let bytes = emitted("function subject using v(a: Integer, b: Integer): Boolean pure { a = b }");
+    let bytes =
+        emitted("function subject using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a = b }");
     let package = admit(&bytes);
     let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.eq"))).unwrap();
     let item = derive_exact_scalar_items(&package, std::slice::from_ref(&node.node_id))
