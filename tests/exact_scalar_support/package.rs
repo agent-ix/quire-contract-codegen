@@ -3679,6 +3679,8 @@ pub const TWO_PARAMETER_PLAIN_SCALAR_RESULT: u32 = 2059;
 pub const BOUNDED_NEGATE: u32 = 2060;
 /// `e * f` over `Int[1, 9]` and `Int[100, 200]` with the result typed `[100, 1800]`.
 pub const BOUNDED_PRODUCT: u32 = 2061;
+/// `a + 1` has an Integer result and reaches only `a`'s own `[0, 9]` bound.
+pub const SINGLE_OPERAND_BOUND_ONLY: u32 = 2062;
 
 /// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
 /// two-parameter shapes of IR-298.
@@ -3767,6 +3769,11 @@ fn two_parameter_wire() -> PackageBuilder {
         (
             TWO_PARAMETER_NO_RESULT,
             vec![param(V_PARAM_A), param(V_PARAM_B)],
+            &integer_type,
+        ),
+        (
+            SINGLE_OPERAND_BOUND_ONLY,
+            vec![param(V_PARAM_A), literal("integer", "1")],
             &integer_type,
         ),
         (

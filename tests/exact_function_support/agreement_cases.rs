@@ -198,6 +198,14 @@ fn generated(
             ObjectClosure::default(),
             meter,
         ),
+        "multiply" => generated::oracle_multiply(
+            source,
+            package,
+            package,
+            arguments,
+            ObjectClosure::default(),
+            meter,
+        ),
         "eq" => generated::oracle_eq(
             source,
             package,
@@ -222,7 +230,13 @@ fn generated(
         .expect("generated body completes")
 }
 
-#[trace("TC-031", "FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35")]
+#[trace(
+    "TC-031",
+    "FR-014-AC-18",
+    "FR-021-AC-2",
+    "FR-021-AC-32",
+    "FR-021-AC-35"
+)]
 #[test]
 fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
     let package = package();
@@ -230,6 +244,7 @@ fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
         ("add", 3_u64, 4_u64),
         ("eq", 3_u64, 4_u64),
         ("nested", 3_u64, 4_u64),
+        ("multiply", 4_u64, 7_u64),
     ] {
         let arguments = vec![
             Value::Integer(Integer::from(left)),
@@ -262,6 +277,13 @@ fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
             actual.outcome,
             FamilyOutcome::Evaluated(Outcome::Completed(_))
         ));
+        if name == "multiply" {
+            assert!(matches!(
+                actual.outcome,
+                FamilyOutcome::Evaluated(Outcome::Completed(Value::Integer(ref value)))
+                    if value == &Integer::from(28_u64)
+            ));
+        }
     }
 }
 
@@ -281,9 +303,14 @@ fn stopped_result_expression_keeps_checked_body_location() {
         &actual.outcome,
         FamilyOutcome::Evaluated(Outcome::Incomplete(_))
     ));
-    assert_eq!(format!("{:?}", actual.outcome), format!("{:?}", expected.outcome));
+    assert_eq!(
+        format!("{:?}", actual.outcome),
+        format!("{:?}", expected.outcome)
+    );
     assert_eq!(actual.location, expected.location);
-    let location = actual.location.expect("stopped expression identifies its checked body");
+    let location = actual
+        .location
+        .expect("stopped expression identifies its checked body");
     assert!(matches!(
         location.origin,
         quire_semantic_value::location::Origin::Body { ref function, index: 0 }
@@ -292,9 +319,16 @@ fn stopped_result_expression_keeps_checked_body_location() {
     assert_eq!(location.depth(), 0);
     assert_eq!(location.last_index(), None);
     assert_eq!(actual.losses, expected.losses);
-    assert_eq!(generated_meter.admitted_charges(), direct_meter.admitted_charges());
+    assert_eq!(
+        generated_meter.admitted_charges(),
+        direct_meter.admitted_charges()
+    );
     for kind in LimitKind::ALL {
-        assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind), "{kind:?}");
+        assert_eq!(
+            generated_meter.consumed(kind),
+            direct_meter.consumed(kind),
+            "{kind:?}"
+        );
     }
 }
 

@@ -1018,8 +1018,8 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
     /// The result's role is named by the node itself. A result typed by a `bounded_domain` has
     /// that domain as its bound. A result typed by a scalar type has the bound of the narrowing
     /// conversion that consumes it (QSL's shape for a bounded context); failing one, the one
-    /// reachable bound of `form` over that type and, where several are reachable, the one that is
-    /// not an operand's own bound; a node whose bounds do not resolve that way is ambiguous.
+    /// reachable bound of `form` over that type that is not an operand's own bound; where several
+    /// are reachable, exactly one must be outside the operands' own bounds.
     pub(super) fn read<T>(
         &self,
         form: BoundForm,
@@ -1101,8 +1101,8 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
     /// `MissingBound`; two or more distinct bounds are `AmbiguousBound`, and so is a node that a
     /// narrowing conversion and any other node both consume, since the narrow's bound does not
     /// bound the other use. Otherwise it is the one
-    /// reachable bound of the form over that type, or, where several are reachable, the one that
-    /// is no operand's own.
+    /// reachable bound of the form over that type that is no operand's own; where several are
+    /// reachable, exactly one must be outside the operands' own bounds.
     fn scalar_result_bound(
         &self,
         form: BoundForm,
@@ -1151,7 +1151,31 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
             })
             .collect::<Vec<_>>();
         match candidates.as_slice() {
-            [bound] => Ok(bound),
+            [bound] => {
+                let own = own_bounds(self.graph, self.graph.term(&self.node.root.node_id));
+                if own
+                    .iter()
+                    .flatten()
+                    .any(|operand| operand.node_id == bound.node_id)
+                {
+                    // A plain reference beside an owned bound is refused for its missing
+                    // operand bound before the result's missing bound (FR-014-AC-25).
+                    if form == BoundForm::IntegerRange {
+                        let operand_bounds = self.integer_operand_bounds();
+                        if let Err(refusal @ ExactScalarRefusal::RequiresBound { .. }) =
+                            operand_bounds
+                        {
+                            return Err(refusal);
+                        }
+                    }
+                    Err(ExactScalarRefusal::MissingBound {
+                        bounded_type: bounded_type.clone(),
+                        expected_form: form,
+                    })
+                } else {
+                    Ok(bound)
+                }
+            }
             [] => Err(ExactScalarRefusal::MissingBound {
                 bounded_type: bounded_type.clone(),
                 expected_form: form,

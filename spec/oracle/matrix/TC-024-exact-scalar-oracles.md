@@ -159,7 +159,9 @@ CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run
    `[0, 9]` (FR-014-AC-20).
 8. Generate a node over the same two parameters with a scalar-typed result and
    one further bound attached (FR-014-AC-21), and with none, in generation and
-   derivation (FR-014-AC-22).
+   derivation (FR-014-AC-22). Also use a scalar-typed result that reaches only
+   one operand-owned bound; generation and derivation both refuse it as
+   `MissingBound` when the other operand is a literal (FR-014-AC-21).
 9. Generate an operand and a result each typed by a `text_bounds` bound over
    Integer (FR-014-AC-23).
 10. Generate and derive `a + wide` over `[0, 9]` and `[0, 50]` with result
@@ -167,7 +169,8 @@ CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run
     `[1, 9]` and `[100, 200]` with result `[100, 1800]` (FR-014-AC-24).
 11. Generate and derive `a + p`, `p + p` and `a + p` over a scalar result, where
     `p` is a `reference` typed by the plain Integer type, and `a + 1` with a
-    literal operand (FR-014-AC-25).
+    literal operand. For scalar-result `a + p` that reaches only `a`'s own bound,
+    assert `RequiresBound` takes precedence over `MissingBound` (FR-014-AC-25).
 12. In QSL's emitted shape (a literal as a reference to its own
     plain-Integer-typed `value` node, a parameter as a `parameter`-form `value`
     node, the declared bound on a narrowing `conversion` consuming the
