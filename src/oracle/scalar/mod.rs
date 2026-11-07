@@ -737,8 +737,9 @@ pub struct GeneratedScalarClaim {
     pub claims: Vec<CheckedNodeId>,
     /// Reachable bounding-domain keys.
     pub bounds: Vec<CheckedNodeId>,
-    /// Actual bound nodes checked for the descriptor, ascending. For inferred
-    /// division/modulo result intervals these are operand bounds, with no synthetic result node.
+    /// Actual bound nodes checked for the descriptor: an explicit result first,
+    /// then distinct operand bounds in argument order. Inferred division/modulo
+    /// intervals carry only operand bounds, with no synthetic result node.
     pub checked_bounds: Vec<CheckedNodeId>,
     /// Every reachable key.
     pub dependencies: Vec<CheckedNodeId>,
@@ -773,7 +774,7 @@ pub struct ExactScalarOracles {
     /// `Cargo.toml`, `src/lib.rs`, `source-maps/lib.json` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
     /// Typed claim map, identical to `claim-map.json`. Items ascend by node
-    /// id: digest domain, then digest; selected occurrence breaks equal-node ties.
+    /// id; selected occurrence breaks equal-node ties.
     /// `blocked` lists the upstream gaps every
     /// entry is subject to. A `Generated` disposition means one oracle
     /// function was emitted. The blockers this generator records are
