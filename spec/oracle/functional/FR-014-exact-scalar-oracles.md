@@ -139,8 +139,10 @@ expression in a bounded context this way: the arithmetic node's own type is the
 plain scalar type, and the declared bound types a `conversion` node whose body
 is a `convert` application with identity `quire.op.numeric.narrow` and exactly
 one argument, a `reference` to the node. Otherwise the result bound is the one
-reachable bound of the form over that type, and where several are reachable,
-the one that is not the own bound of an operand. The descriptor is compared with the result
+reachable bound of the form over that type that is not an operand's own.
+A sole reachable operand-owned bound leaves the result bound missing; where
+several are reachable, exactly one must be outside the operands' own bounds.
+The descriptor is compared with the result
 bound only; each operand's own bound is recorded after it and ranges that
 operand in a Kani harness, and need not lie inside the result bound. A
 `reference` operand typed by a plain scalar type owns no bound: where another
@@ -631,7 +633,7 @@ otherwise.
 | FR-014-AC-18 | `derive_exact_scalar_items` over an admitted V2 package returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
 | FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
 | FR-014-AC-20 | An integer node over two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, each typed by its own `integer_range` `bounded_domain`, with its result typed by a third `integer_range` `[0, 29]`, generates an `ir_confirmed` oracle whose descriptor is compared with the result bound only; the claim's checked bounds are the result bound, then each operand's own bound; derivation returns the descriptor over `[0, 29]`. | Test (TC-024) |
-| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound. | Test (TC-024) |
+| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound; a sole reachable operand-owned bound is not a result bound and yields `MissingBound`. | Test (TC-024) |
 | FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
 | FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |

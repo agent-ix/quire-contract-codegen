@@ -159,7 +159,9 @@ CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run
    `[0, 9]` (FR-014-AC-20).
 8. Generate a node over the same two parameters with a scalar-typed result and
    one further bound attached (FR-014-AC-21), and with none, in generation and
-   derivation (FR-014-AC-22).
+   derivation (FR-014-AC-22). Also use a scalar-typed result that reaches only
+   one operand-owned bound; generation and derivation both refuse it as
+   `MissingBound` (FR-014-AC-21).
 9. Generate an operand and a result each typed by a `text_bounds` bound over
    Integer (FR-014-AC-23).
 10. Generate and derive `a + wide` over `[0, 9]` and `[0, 50]` with result

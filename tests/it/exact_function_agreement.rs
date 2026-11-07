@@ -16,7 +16,9 @@ use quire_contract_model::{
     CheckedPackageV2ReadResult, CheckedTerm,
 };
 use quire_eval::FamilyOutcome;
-use quire_exact::{Integer, LimitKind, Meter, Outcome, ScalarLimits, Value};
+use quire_exact::{
+    Integer, IntegerArithmetic, IntegerInterval, LimitKind, Meter, Outcome, ScalarLimits, Value,
+};
 use quire_semantic_value::object_closure::ObjectClosure;
 
 #[allow(clippy::duplicate_mod)]
@@ -45,6 +47,8 @@ const SOURCE: &str = concat!(
     "function probe_repeated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { repeated(x, y) }\n",
     "function swapped using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { add(y, x) }\n",
     "function probe_swapped using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { swapped(x, y) }\n",
+    "function multiply using v(x: Int[-9, 9], y: Int[-9, 9]): Integer pure { x * y }\n",
+    "function probe_multiply using v(x: Int[-9, 9], y: Int[-9, 9]): Integer pure { multiply(x, y) }\n",
 );
 
 const LIBRARY_SOURCE: &str = concat!(
@@ -1004,6 +1008,13 @@ fn genuine_corpus_request(
                 callee: "add".to_owned(),
             },
         ),
+        declaration(
+            "multiply",
+            integer.clone(),
+            ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Multiply,
+            },
+        ),
     ];
     if let Some(body) = bad_nested {
         functions[2].body = body;
@@ -1012,6 +1023,7 @@ fn genuine_corpus_request(
         item(&package, "probe_add", "add"),
         item(&package, "probe_eq", "eq"),
         item(&package, "probe_nested", "nested"),
+        item(&package, "probe_multiply", "multiply"),
     ];
     if include_unknown {
         let mut unknown = items[0].clone();
@@ -1067,7 +1079,7 @@ fn genuine_corpus_request(
 
 #[trace("FR-021-AC-32", "FR-021-AC-35", "TC-031")]
 #[test]
-fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
+fn tc_031_genuine_qsl_source_generates_four_direct_function_claims() {
     let (package, generated) = genuine_corpus();
     let claims = generated
         .claim_map
@@ -1075,7 +1087,7 @@ fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
         .iter()
         .map(|claim| &claim.result)
         .collect::<Vec<_>>();
-    assert_eq!(claims.len(), 3);
+    assert_eq!(claims.len(), 4);
     assert!(
         claims
             .iter()
@@ -1120,7 +1132,7 @@ fn tc_031_genuine_qsl_source_generates_three_direct_function_claims() {
         .expect("generated source")
         .contents
         .as_str();
-    assert_eq!(source.matches("pub fn oracle_").count(), 3);
+    assert_eq!(source.matches("pub fn oracle_").count(), 4);
     assert!(source.contains("apply_checked_function("));
     assert!(source.contains("selected_nested_call_site("));
     assert!(!source.contains("quire_contract_runtime"));
@@ -1146,7 +1158,7 @@ fn meter() -> Meter {
 /// interpreter through an unregistered facade registry.
 #[trace("FR-021-AC-2", "FR-021-AC-35", "TC-031")]
 #[test]
-fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registration() {
+fn tc_031_independent_fr485_session_runs_all_four_functions_without_registration() {
     let package = admitted_source();
     let acquired = acquire_checked_closure(
         CompileUnit {
@@ -1167,6 +1179,7 @@ fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registrati
         ("add", Value::Integer(Integer::from(7_u64))),
         ("eq", Value::Boolean(false)),
         ("nested", Value::Integer(Integer::from(7_u64))),
+        ("multiply", Value::Integer(Integer::from(28_u64))),
     ] {
         let function = function_id(&package, name);
         let wire =
@@ -1177,9 +1190,11 @@ fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registrati
         let mut registry = handle.registry();
         let environment = ApplicationEnvironment::new(ObjectClosure::default());
         let mut meter = meter();
+        let left = if name == "multiply" { 4_u64 } else { 3_u64 };
+        let right = if name == "multiply" { 7_u64 } else { 4_u64 };
         let arguments = vec![
-            Value::Integer(Integer::from(3_u64)),
-            Value::Integer(Integer::from(4_u64)),
+            Value::Integer(Integer::from(left)),
+            Value::Integer(Integer::from(right)),
         ];
         let evaluation = registry
             .begin_call(&selection, arguments, &environment, &mut meter)
@@ -1207,6 +1222,25 @@ fn tc_031_independent_fr485_session_runs_all_three_body_forms_without_registrati
         );
         assert!(LimitKind::ALL.iter().any(|kind| meter.consumed(*kind) > 0));
     }
+}
+
+/// The exact native operation refuses 28 when the result domain is `[-9, 9]`.
+#[trace("FR-014-AC-18", "FR-014-AC-21", "TC-024")]
+#[test]
+fn bounded_multiply_result_refuses_the_value_28() {
+    let domain = IntegerInterval::new(Integer::from(-9_i64), Integer::from(9_i64))
+        .expect("valid bounded result interval");
+    let left = Integer::from(4_u64);
+    let right = Integer::from(7_u64);
+    let outcome = quire_exact::evaluate_integer_arithmetic(
+        IntegerArithmetic::Multiply(&left, &right),
+        Some(&domain),
+        &mut meter(),
+    );
+    assert!(matches!(
+        outcome,
+        Outcome::Refused(quire_exact::Refusal::IntegerOutOfDomain { .. })
+    ));
 }
 
 /// The static request origin is checked against

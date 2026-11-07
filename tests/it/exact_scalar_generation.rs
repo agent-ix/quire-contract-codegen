@@ -2685,6 +2685,26 @@ fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
     );
 }
 
+/// The only reachable bound belongs to an operand; it cannot become the result's domain.
+#[trace("FR-014-AC-18", "FR-014-AC-21", "TC-024")]
+#[test]
+fn tc_024_single_operand_bound_does_not_bound_a_scalar_result() {
+    let expected = ExactScalarRefusal::MissingBound {
+        bounded_type: code_id(T_INTEGER),
+        expected_form: BoundForm::IntegerRange,
+    };
+    assert_eq!(
+        two_parameter_refusal(SINGLE_OPERAND_BOUND_ONLY, add_over(0, 9)),
+        expected
+    );
+    assert_eq!(
+        two_parameter_derive(SINGLE_OPERAND_BOUND_ONLY)
+            .unwrap_err()
+            .actual,
+        expected
+    );
+}
+
 /// An operand, or the result, typed by a bound of another form is `MissingBound`.
 #[trace("FR-014-AC-23", "TC-024")]
 #[test]
