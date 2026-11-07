@@ -71,11 +71,13 @@ mod cover_last;
 mod exact_function_agreement;
 mod exact_function_generation;
 mod exact_scalar_agreement;
+mod model_enum_scalar;
 mod exact_scalar_generation;
 mod frame_claim_gap;
 mod generated_headers;
 mod harness_generation;
 mod inline_integer_equality;
+mod integer_division_bounds;
 mod kani_batching;
 mod kani_gate;
 mod kani_generation;
@@ -116,3 +118,5 @@ mod kani_collection_operation;
 mod constrained_method;
 
 mod native_driver_artifacts;
+
+mod scalar_source_forms;

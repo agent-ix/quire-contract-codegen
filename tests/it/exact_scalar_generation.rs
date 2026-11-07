@@ -1066,6 +1066,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         // either list changing without the other now fails here, while the lowering profile below
         // still never calls `scalar_profile()`.
         let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+            quire_contract_model::CheckedNodeTag::Model,
             quire_contract_model::CheckedNodeTag::ScalarType,
             quire_contract_model::CheckedNodeTag::BoundedDomain,
             quire_contract_model::CheckedNodeTag::Value,
@@ -1741,6 +1742,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::AmbiguousBound { .. } => "AmbiguousBound",
         ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
         ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",
+        ExactScalarRefusal::DerivedBoundMismatch { .. } => "DerivedBoundMismatch",
         ExactScalarRefusal::OperandUnsupported { .. } => "OperandUnsupported",
         ExactScalarRefusal::OperandRangeLimitExceeded { .. } => "OperandRangeLimitExceeded",
         ExactScalarRefusal::UnitlessLiteralOperand { .. } => "UnitlessLiteralOperand",
@@ -2995,11 +2997,12 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
     }
 }
 
-/// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
-/// whose body is not a literal, so `x + n` is `RequiresBound`.
+/// A plain-Integer parameter's aggregate name/level body is not a literal,
+/// so `x + n` is `RequiresBound`. Literal-form nodes with aggregate bodies do
+/// not enter CG: they are malformed wire at the owner reader.
 #[trace("FR-014-AC-28", "TC-024")]
 #[test]
-fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
+fn tc_024_ac28_an_unbounded_parameter_body_is_not_a_literal() {
     assert_qsl_refused(
         QSL_NOT_LITERAL_OPERAND,
         add_over(0, 29),
@@ -3309,6 +3312,8 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
     let source = contents(&oracles, "src/lib.rs");
     assert!(source.contains("rt::evaluate_boolean("));
     assert!(source.contains("scalar_owner::evaluate_boolean_short_circuit("));
+    assert!(source.contains("impl FnOnce(&mut rt::Meter) -> rt::Outcome<bool>"));
+    assert!(source.contains("let right = right(meter);"));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
 }
@@ -3422,7 +3427,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
     assert_eq!(probe_token(lazy_source, &lazy_regions[1]), "right");
     assert_eq!(
         lazy_source.lines().nth(lazy_line - 1).expect("line").trim(),
-        "right()",
+        "let right = right(meter);",
         "the probe must execute only when the lazy consequent is called"
     );
 

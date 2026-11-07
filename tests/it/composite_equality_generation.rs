@@ -2357,6 +2357,9 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             assert!(function
                 .body
                 .contains(".map_err(EnvironmentError::Declaration)?"));
+            assert!(function.body.contains(
+                "comparison_type_refusal(&environment, left_comparison, right_comparison)?"
+            ));
         }
         for function in fns
             .iter()
@@ -2367,8 +2370,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
                 "actual.as_str() !=",
                 "EXPECTED_PACKAGE_BYTES !=",
                 "GeneratedDescriptorReconstructionFailed",
-                "environment.check_type(left_comparison)",
-                "environment.check_type(right_comparison)",
+                "prepared.type_refusal",
                 "&prepared.enum_members",
                 "GeneratedTypeCheckRejected",
                 "GeneratedEqualityCheckRejected",
@@ -2391,6 +2393,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             "ContextPackageMismatch {",
             "Lookup(qsl_replay::AdmittedLookupRefusal),",
             "Declaration(sv::EnvironmentFailure),",
+            "TypeCheck(sv::TypeCheckError),",
             "Reconstruction(ReconstructionError),",
         ] {
             assert!(
