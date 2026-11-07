@@ -80,12 +80,11 @@ fn emitted_preparation_retains_native_errors_and_semantic_precedence() {
                 composites: Vec::new(),
                 left_source: "exact::ValueType::Boolean".to_owned(),
                 left_target: None,
-                right_source: "exact::ValueType::Boolean".to_owned(),
                 // Arm only after descriptor reconstruction, immediately before the real owner walk.
-                right_target: Some(
+                right_source:
                     "{ native_checks::arm_at_type_boundary(); exact::ValueType::Boolean }"
                         .to_owned(),
-                ),
+                right_target: None,
             },
         )
         .unwrap();
@@ -196,7 +195,7 @@ fn preparation_preserves_owner_errors_and_semantics() {
     let point = context.composites().find(|declaration| declaration.qualified_name().last().unwrap().as_str() == "Point").unwrap().key().clone();
     let other = context.composites().find(|declaration| declaration.qualified_name().last().unwrap().as_str() == "OtherPoint").unwrap().key().clone();
     let missing = exact::ValueType::Composite(point);
-    let wrong = sv::TypeEnvironment::new([sv::CompositeDeclaration::new(other, "OtherPoint", sv::CompositeShape::Record(vec![sv::FieldDeclaration::new("x", exact::ValueType::Boolean, sv::Presence::Required)]))], []).unwrap();
+    let wrong = sv::TypeEnvironment::new([sv::CompositeDeclaration::new(other, "OtherPoint", sv::CompositeShape::Record(vec![sv::FieldDeclaration::new("x", exact::ValueType::Boolean, exact::Presence::Required)]))], []).unwrap();
     for environment in [sv::TypeEnvironment::default(), wrong] {
         let Err(TypeCheckError::Refused(expected)) = environment.try_check_type(&missing) else { panic!("real owner missing-key cause"); };
         let mut private_fault = environment_component(Some(context)).unwrap();
