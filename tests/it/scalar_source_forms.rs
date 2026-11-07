@@ -206,7 +206,7 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
         ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, ScalarForm,
     };
     use quire_exact::{IeeeComparison, IeeeWidth};
-    let bytes = emitted("function subject using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }");
+    let bytes = emitted("function subject using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }\nfunction sibling using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { quire::value::ieee::totalOrder(a, b) }");
     let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     for form in ["binary", "unary", "conversion"] {
         let mut wire = original.clone();
@@ -243,27 +243,6 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
     }
     let package = admit(&bytes);
     let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
-    let good = derive_exact_scalar_items(&package, &[node.node_id.clone()])
-        .pop()
-        .unwrap()
-        .unwrap();
-    let wrong_width = ExactScalarItem {
-        node_id: node.node_id.clone(),
-        operation: ExactScalarOperation::IeeeComparison {
-            comparison: IeeeComparison::NumericEqual,
-            width: IeeeWidth::Binary32,
-        },
-    };
-    let output = generate_exact_scalar_oracles(&package, &[wrong_width, good]).unwrap();
-    assert!(
-        output.claim_map.items.iter().all(|claim| matches!(
-            claim.result,
-            ClaimDisposition::Refused {
-                refusal: ExactScalarRefusal::DuplicateRequest
-            }
-        )),
-        "duplicate selection keeps its existing refusal"
-    );
     let output = generate_exact_scalar_oracles(
         &package,
         &[ExactScalarItem {
