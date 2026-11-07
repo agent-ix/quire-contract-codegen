@@ -61,6 +61,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
         panic!("genuine source form must generate: {:?}", claim.result);
     };
     assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+    assert_eq!(claim.operation.identity, identity);
     assert_eq!(generated.node_id, node.node_id);
     let symbol = generated.symbol.clone();
     (oracles, symbol)
@@ -105,7 +106,7 @@ fn genuine_ieee_equality_and_intrinsics_generate() {
                 "quire.op.ieee.bit_identical" => "BitIdentical",
                 _ => unreachable!("test cases name only IEEE relations"),
             };
-            calls.push_str(&format!("check(|a, b, meter| case_{ordinal}::{symbol}(a, b, meter).map_err(|stop| format!(\"{{stop:?}}\")), rt::IeeeComparison::{comparison}, {});\n", width == "Float32"));
+            calls.push_str(&format!("check(|a, b, meter| crate::case_{ordinal}::{symbol}(a, b, meter).map_err(|stop| format!(\"{{stop:?}}\")), rt::IeeeComparison::{comparison}, {});\n", width == "Float32"));
             ordinal += 1;
         }
     }
@@ -179,7 +180,7 @@ fn check(oracle: impl Fn(rt::IeeeValue, rt::IeeeValue, &mut rt::Meter) -> Result
             let actual = oracle(value(bits[a]), value(bits[b]), &mut generated_meter).unwrap();
             assert_eq!(actual, direct);
             assert_eq!(generated_meter.admitted_charges(), direct_meter.admitted_charges());
-            for kind in rt::LimitKind::ALL { assert_eq!(generated_meter.consumed(*kind), direct_meter.consumed(*kind)); }
+            for kind in rt::LimitKind::ALL { assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind)); }
             if limits == LIMITS {
                 assert_eq!(actual, rt::Outcome::Completed(expected), "{comparison:?} ({a}, {b})");
                 assert!(!generated_meter.admitted_charges().is_empty());
