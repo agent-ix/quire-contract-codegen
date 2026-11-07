@@ -582,6 +582,11 @@ pub enum ExactScalarRefusal {
         /// Its form.
         form: BoundForm,
     },
+    /// The descriptor differs from the result interval derived from operand bounds.
+    DerivedBoundMismatch {
+        /// The application whose derived interval differs.
+        node_id: CheckedNodeId,
+    },
     /// An operand is a term other than a literal or a reference.
     OperandUnsupported {
         /// Zero-based argument position.
@@ -732,7 +737,9 @@ pub struct GeneratedScalarClaim {
     pub claims: Vec<CheckedNodeId>,
     /// Reachable bounding-domain keys.
     pub bounds: Vec<CheckedNodeId>,
-    /// The bounds the descriptor's parameters were checked equal to, ascending.
+    /// Actual bound nodes checked for the descriptor: an explicit result first,
+    /// then distinct operand bounds in argument order. Inferred division/modulo
+    /// intervals carry only operand bounds, with no synthetic result node.
     pub checked_bounds: Vec<CheckedNodeId>,
     /// Every reachable key.
     pub dependencies: Vec<CheckedNodeId>,
@@ -767,7 +774,7 @@ pub struct ExactScalarOracles {
     /// `Cargo.toml`, `src/lib.rs`, `source-maps/lib.json` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
     /// Typed claim map, identical to `claim-map.json`. Items ascend by node
-    /// id: digest domain, then digest; selected occurrence breaks equal-node ties.
+    /// id; selected occurrence breaks equal-node ties.
     /// `blocked` lists the upstream gaps every
     /// entry is subject to. A `Generated` disposition means one oracle
     /// function was emitted. The blockers this generator records are
@@ -808,7 +815,8 @@ impl ExactScalarPlan {
 ///
 /// Each descriptor is read from the node's `operation.identity`, `operation.laws`,
 /// `operation.mode`, its operand scalar forms and the one bound of the needed form on its result
-/// type (the selector [`generate_exact_scalar_oracles`] checks the descriptor against). A node
+/// type, or an interval derived from both finite integer operands for an unnarrowed division
+/// or modulo result (the same selector generation uses). A node
 /// that yields no descriptor is the [`ExactScalarRefusal`] `generate_exact_scalar_oracles` would
 /// give its lowering or bound (so FR-015 classifies it as before), or `NoDerivableClaim` carrying a
 /// [`ClaimDerivationRefusal`].

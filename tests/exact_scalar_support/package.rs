@@ -3874,9 +3874,8 @@ pub const QSL_PARAM_Y: u32 = 131;
 pub const QSL_PARAM_Z: u32 = 132;
 /// A parameter `p` typed by the plain Integer scalar type.
 pub const QSL_PARAM_PLAIN: u32 = 133;
-/// `q`: a `value` node of form `literal` whose body is not a literal, typed by the plain Integer
-/// scalar type and depending on the `Int[0, 29]` bound (the reader refuses an extra dependency on
-/// a `parameter`-form node, so `q` stands in for a parameter whose closure reaches a bound).
+/// `q`: an actual parameter typed by the plain Integer scalar type. Its
+/// aggregate parameter body has no artificial bound dependency.
 pub const QSL_PARAM_REACHING: u32 = 139;
 /// Parameters `u`, `v`, `w: Int[10, 20]`: an expression node's id is the digest of its content,
 /// so each further `x + y`-shaped node sums `x` with its own parameter to stay a distinct node.
@@ -3886,8 +3885,8 @@ pub const QSL_PARAM_W: u32 = 138;
 /// The `value` node QSL emits for the literal `1`: form `literal`, a `literal` body, typed by the
 /// plain Integer scalar type.
 pub const QSL_LITERAL_ONE: u32 = 134;
-/// A `value` node of form `literal` typed by the plain Integer scalar type whose body is not a
-/// literal: a reference to it is not a constant.
+/// An unbounded Integer parameter with an aggregate body: a reference to it
+/// is not a constant.
 pub const QSL_NOT_LITERAL: u32 = 135;
 /// `x + 1` (`function inc(x: Int[0, 9]): Int[0, 10] { x + 1 }`): the literal is a reference to
 /// [`QSL_LITERAL_ONE`] and the node's own result type is the plain Integer type.
@@ -3907,8 +3906,8 @@ pub const QSL_PLAIN_OPERAND: u32 = 2076;
 /// The narrowing conversion of [`QSL_PLAIN_OPERAND`].
 pub const QSL_PLAIN_OPERAND_NARROW: u32 = 2077;
 /// `q + q` narrowed to `Int[0, 29]`: no operand owns a bound, and the narrowing bounds the result.
-/// `q`'s node reaches `[0, 29]` so that IR's lowering finds a bound in the closure and it is CG's
-/// rule, not the lowering, that refuses the plain operands (see [`QSL_PARAM_REACHING`]).
+/// IR may refuse the unbounded parameter before CG inspects the narrowing;
+/// CG retains the typed `RequiresBound` refusal in either case.
 pub const QSL_PLAIN_PAIR: u32 = 2087;
 /// The narrowing conversion of [`QSL_PLAIN_PAIR`].
 pub const QSL_PLAIN_PAIR_NARROW: u32 = 2088;
@@ -4012,15 +4011,13 @@ fn qsl_shaped_wire() -> PackageBuilder {
             parameter_body(name, level),
         );
     }
-    let reached = builder.bound(&Bound::Integer(0, 29));
     builder.code(
         QSL_PARAM_REACHING,
         "value",
-        "literal",
+        "parameter",
         &integer_type,
         parameter_body("q", 0),
     );
-    builder.add_dependency(&key(QSL_PARAM_REACHING), &reached);
     builder.code(
         QSL_LITERAL_ONE,
         "value",
@@ -4031,7 +4028,7 @@ fn qsl_shaped_wire() -> PackageBuilder {
     builder.code(
         QSL_NOT_LITERAL,
         "value",
-        "literal",
+        "parameter",
         &integer_type,
         parameter_body("n", 1),
     );

@@ -1462,6 +1462,7 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
             | ExactScalarRefusal::SelectedDependencyUnsupported { .. }
             | ExactScalarRefusal::AmbiguousBound { .. }
             | ExactScalarRefusal::BoundMismatch { .. }
+            | ExactScalarRefusal::DerivedBoundMismatch { .. }
             | ExactScalarRefusal::OperandUnsupported { .. }
             | ExactScalarRefusal::OperandRangeLimitExceeded { .. }
             | ExactScalarRefusal::UnitlessLiteralOperand { .. }

@@ -1741,6 +1741,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::AmbiguousBound { .. } => "AmbiguousBound",
         ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
         ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",
+        ExactScalarRefusal::DerivedBoundMismatch { .. } => "DerivedBoundMismatch",
         ExactScalarRefusal::OperandUnsupported { .. } => "OperandUnsupported",
         ExactScalarRefusal::OperandRangeLimitExceeded { .. } => "OperandRangeLimitExceeded",
         ExactScalarRefusal::UnitlessLiteralOperand { .. } => "UnitlessLiteralOperand",
@@ -2995,11 +2996,12 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
     }
 }
 
-/// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
-/// whose body is not a literal, so `x + n` is `RequiresBound`.
+/// A plain-Integer parameter's aggregate name/level body is not a literal,
+/// so `x + n` is `RequiresBound`. Literal-form nodes with aggregate bodies do
+/// not enter CG: they are malformed wire at the owner reader.
 #[trace("FR-014-AC-28", "TC-024")]
 #[test]
-fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
+fn tc_024_ac28_an_unbounded_parameter_body_is_not_a_literal() {
     assert_qsl_refused(
         QSL_NOT_LITERAL_OPERAND,
         add_over(0, 29),

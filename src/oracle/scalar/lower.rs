@@ -98,7 +98,8 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             }
         }
     }
-    let node = lowered(record)?;
+    let node = lowered(record)
+        .map_err(|refusal| division_operand_bound_refusal(graph, requested_node_id, refusal))?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
@@ -177,6 +178,51 @@ pub(super) fn check_item<'r, Body: GraphBody>(
     }
     let checked_bounds = check_parameters(graph, node, operation)?;
     Ok((node, checked_bounds))
+}
+
+/// An unnarrowed division/modulo needs finite operand facts to derive its
+/// otherwise missing result interval. Classify that absence consistently even
+/// when IR stops the lowering at an unbounded operand first.
+pub(super) fn division_operand_bound_refusal<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    node_id: &CheckedNodeId,
+    refusal: ExactScalarRefusal,
+) -> ExactScalarRefusal {
+    let ExactScalarRefusal::RequiresBound { .. } = &refusal else {
+        return refusal;
+    };
+    let Some(node) = graph.node(node_id) else {
+        return refusal;
+    };
+    if !graph.node(&node.semantic_type).is_some_and(|typing| {
+        &*typing.node_tag == CheckedNodeTag::ScalarType.as_wire()
+            && &*typing.semantic_form == "integer"
+    }) || !matches!(narrowing(graph, node_id), Narrowing::Unnarrowed)
+    {
+        return refusal;
+    }
+    let identity = scalar_ir::identity(graph.term(node_id));
+    let admitted_operation = match identity {
+        Some("quire.op.integer.mod") => true,
+        Some("quire.op.integer.div") => {
+            quire_exact::DivisionProfile::ALL
+                .into_iter()
+                .filter(|profile| {
+                    scalar_ir::has_law(graph.term(node_id), profile.definition_identity())
+                })
+                .count()
+                == 1
+        }
+        _ => false,
+    };
+    if admitted_operation {
+        ExactScalarRefusal::MissingBound {
+            bounded_type: node.semantic_type.clone(),
+            expected_form: BoundForm::IntegerRange,
+        }
+    } else {
+        refusal
+    }
 }
 
 pub(super) fn lowered(
@@ -907,9 +953,27 @@ pub(super) fn check_parameters_from_view<Body: GraphBody, NodeBody>(
                 .ok_or(ExactScalarRefusal::InvalidInput)?;
             return Ok(vec![carrier.clone()]);
         }
-        ExactScalarOperation::IntegerArithmetic { domain, .. }
-        | ExactScalarOperation::IntegerDivision { domain, .. }
+        ExactScalarOperation::IntegerDivision { domain, .. }
         | ExactScalarOperation::IntegerModulo { domain } => {
+            let (actual, checked) = bounds.integer_division_bounds(matches!(
+                operation,
+                ExactScalarOperation::IntegerModulo { .. }
+            ))?;
+            if domain != &IntegerDomain::Bounded(actual) {
+                let refusal = match bounds.read(BoundForm::IntegerRange, read_integer_range) {
+                    Ok((bound, _)) => ExactScalarRefusal::BoundMismatch {
+                        bound,
+                        form: BoundForm::IntegerRange,
+                    },
+                    Err(_) => ExactScalarRefusal::DerivedBoundMismatch {
+                        node_id: bounds.node.root.node_id.clone(),
+                    },
+                };
+                return Err(refusal.into());
+            }
+            return Ok(checked);
+        }
+        ExactScalarOperation::IntegerArithmetic { domain, .. } => {
             let declared = match domain {
                 IntegerDomain::Bounded(interval) => Some(interval),
                 IntegerDomain::Mathematical => None,
@@ -1012,6 +1076,111 @@ pub(super) struct Bounds<'g, 'n, Body: GraphBody = Value, NodeBody = CheckedTerm
 }
 
 impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
+    /// Keep an explicit result bound authoritative. For a mathematical Integer
+    /// result, derive a sound bound from both finite operands without inventing
+    /// a result-bound node in the provenance.
+    pub(super) fn integer_division_bounds(
+        &self,
+        modulo: bool,
+    ) -> Result<(IntegerInterval, Vec<CheckedNodeId>), ExactScalarRefusal> {
+        match self.read(BoundForm::IntegerRange, read_integer_range) {
+            Ok((result, domain)) => {
+                let mut checked = vec![result];
+                for bound in self.integer_operand_bounds()? {
+                    if !checked.contains(&bound) {
+                        checked.push(bound);
+                    }
+                }
+                return Ok((domain, checked));
+            }
+            Err(
+                ExactScalarRefusal::MissingBound { .. }
+                | ExactScalarRefusal::RequiresBound { .. }
+                | ExactScalarRefusal::AmbiguousBound { .. },
+            ) if self
+                .graph
+                .node(&self.node.semantic_type)
+                .is_some_and(|node| {
+                    &*node.node_tag == CheckedNodeTag::ScalarType.as_wire()
+                        && &*node.semantic_form == "integer"
+                })
+                && matches!(self.narrowing(), Narrowing::Unnarrowed)
+                && self
+                    .node
+                    .selected
+                    .as_ref()
+                    .is_none_or(|selected| selected.conversion.is_none())
+                && self
+                    .node
+                    .bounds
+                    .iter()
+                    .filter_map(|id| self.graph.node(id))
+                    .filter(|bound| {
+                        bound.semantic_type == self.node.semantic_type
+                            && &*bound.semantic_form == BoundForm::IntegerRange.wire()
+                    })
+                    .all(|bound| {
+                        own_bounds(self.graph, self.graph.term(&self.node.root.node_id))
+                            .iter()
+                            .flatten()
+                            .any(|own| own.node_id == bound.node_id)
+                    }) => {}
+            Err(error) => return Err(error),
+        }
+        let missing = || ExactScalarRefusal::MissingBound {
+            bounded_type: self.node.semantic_type.clone(),
+            expected_form: BoundForm::IntegerRange,
+        };
+        let arguments = self
+            .graph
+            .arguments(&self.node.root.node_id)
+            .unwrap_or_default();
+        let [left, right] = arguments else {
+            return Err(ExactScalarRefusal::BodyMismatch {
+                expected_operator: "binary",
+                expected_arguments: 2,
+            });
+        };
+        let mut checked = Vec::new();
+        let mut interval = |argument| {
+            if let Some(bound) = operand_own_bound(self.graph, argument) {
+                if &*bound.semantic_form != BoundForm::IntegerRange.wire() {
+                    return Err(missing());
+                }
+                let range = aggregate_members(self.graph.term(&bound.node_id))
+                    .and_then(read_integer_range)
+                    .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
+                        bound: bound.node_id.clone(),
+                    })?;
+                if !checked.contains(&bound.node_id) {
+                    checked.push(bound.node_id.clone());
+                }
+                Ok(range)
+            } else if let Some(value) =
+                operand_literal(self.graph, argument).and_then(literal_integer)
+            {
+                Ok(IntegerInterval::spanning(value.clone(), value))
+            } else {
+                Err(missing())
+            }
+        };
+        let dividend = interval(left)?;
+        let divisor = interval(right)?;
+        let source = if modulo { divisor } else { dividend };
+        let magnitude = source.lower().abs().max(source.upper().abs());
+        let domain = if modulo {
+            let upper = if magnitude.is_zero() {
+                magnitude
+            } else {
+                magnitude.sub(&quire_exact::Integer::one())
+            };
+            IntegerInterval::spanning(quire_exact::Integer::zero(), upper)
+        } else {
+            IntegerInterval::spanning(magnitude.neg(), magnitude)
+        };
+        Ok((domain, checked))
+    }
+
     /// Read the result bound of `form`: the one selector both [`Self::equal`] and
     /// [`super::derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
     ///
