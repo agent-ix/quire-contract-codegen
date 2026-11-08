@@ -804,6 +804,8 @@ impl ReplayPackage {
     /// or counterexample evidence; corpus counterexamples must use
     /// [`replay_harness_counterexample`] and its `Witness` arm.
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn evaluate_boolean_function(
         &self,
         identity: &ReplayHarnessIdentity,
@@ -1067,6 +1069,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError> {
         let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
             .map_err(BoundedCorpusReplayError::Package)?;
@@ -1083,6 +1087,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn qsl_identity_rejects_case(
         &self,
         other: &Self,
@@ -1098,6 +1104,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn replay_rejects_other_case_package(
         &self,
         playback: &Playback<'_>,
@@ -1118,6 +1126,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn replay_rejects_wrong_harness(
         &self,
         playback: &Playback<'_>,
