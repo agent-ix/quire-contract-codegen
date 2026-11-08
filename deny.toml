@@ -93,6 +93,8 @@ allow-git = [
     "https://github.com/agent-ix/quire-rs",
     "https://github.com/agent-ix/quire-semantic-value",
     "https://github.com/agent-ix/quire-spec-language",
+    # Published QSpec qualification vectors used by the model-variant agreement dev dependency.
+    "https://github.com/agent-ix/quire-specification",
     "https://github.com/agent-ix/quire-verification-contracts",
     "https://github.com/agent-ix/quire-walk",
 ]
