@@ -44,6 +44,7 @@ fn operation_identity(body: &CheckedTerm) -> Option<&str> {
 pub(super) struct ReplayFixture {
     pub harness: KaniScalarObligationHarness,
     pub checked: CheckedPackageV2,
+    pub raw_package: qsl_replay::ReplayPackage,
     pub source: String,
     pub artifacts: Vec<quire_contract_codegen::Artifact>,
 }
@@ -207,6 +208,7 @@ pub(super) fn replay_fixture_with_extra(
     ReplayFixture {
         harness: (**harness).clone(),
         checked: *checked,
+        raw_package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
         source,
         artifacts: generated
             .oracle_artifacts

@@ -404,6 +404,8 @@ pub enum ReplayPackageError {
     CallSite(Box<CallSiteRefusal>),
     /// QSL could not spell an admitted parameter's structural witness entry name.
     WitnessEntryName(NodeWireError),
+    /// The producer package could not be retained as a complete raw replay document.
+    RawPackage(quire_canonical::ReadError),
 }
 
 impl fmt::Display for ReplayPackageError {
@@ -415,6 +417,7 @@ impl fmt::Display for ReplayPackageError {
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the call site was not located: {refusal}"),
             Self::WitnessEntryName(cause) => write!(f, "the witness entry name failed: {cause}"),
+            Self::RawPackage(cause) => cause.fmt(f),
         }
     }
 }
@@ -447,6 +450,7 @@ impl ReplayInputs {
     /// dependencies' sources.
     pub(crate) fn wire(
         &self,
+        package: qsl_replay::ReplayPackage,
         replay_target: RequestTargetWire,
         source: ReplaySource,
         obligation_identity: ObligationIdentity,
@@ -458,6 +462,7 @@ impl ReplayInputs {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
+                refinement_internals: None,
             })
             .collect();
         // One entry per source identity. QSL binds these bytes to the exact source lock.
@@ -476,9 +481,8 @@ impl ReplayInputs {
             });
         let byte_provision = sources.collect();
         ReplayRequestWire {
-            package_name: self.package_name.clone(),
+            package,
             profile_selections: Vec::new(),
-            sources: vec![self.source.wire()],
             dependencies,
             replay_target,
             source,
@@ -507,6 +511,7 @@ pub struct ReplayPackage {
     selected_dependencies: Vec<DependencyEntryWire>,
     selection: QualifiedName,
     site: CallSite<FunctionSite>,
+    raw_package: qsl_replay::ReplayPackage,
     /// Each parameter's name and witness entry name, in ascending node id order.
     parameters: Vec<(String, String)>,
     kani_binding: Option<KaniProofBinding>,
@@ -639,6 +644,7 @@ impl ReplayPackage {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
+                refinement_internals: None,
             })
             .collect();
         let mut ordered = site.site.parameters.iter().collect::<Vec<_>>();
@@ -651,8 +657,11 @@ impl ReplayPackage {
                 Ok((name.as_str().to_owned(), entry_name))
             })
             .collect::<Result<Vec<_>, ReplayPackageError>>()?;
+        let raw_package = qsl_replay::ReplayPackage::read(&site.package, u64::MAX)
+            .map_err(ReplayPackageError::RawPackage)?;
         Ok(Self {
             inputs,
+            raw_package,
             selected_dependencies,
             selection,
             site,
@@ -927,6 +936,7 @@ impl ReplayPackage {
             ));
         };
         Ok(self.inputs.wire(
+            self.raw_package.clone(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
             envelope.obligation_identity(),
@@ -937,6 +947,7 @@ impl ReplayPackage {
     #[cfg(test)]
     fn request_for_input_oracle(&self, obligation: ObligationIdentity) -> ReplayRequestWire {
         self.inputs.wire(
+            self.raw_package.clone(),
             RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
             ReplaySource::Input(Vec::new()),
             obligation,

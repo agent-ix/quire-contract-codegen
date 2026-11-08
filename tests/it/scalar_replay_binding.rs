@@ -23,6 +23,7 @@ pub(super) fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
     let source = source(fixture);
     OriginalScalarContext::new(
         fixture.checked.clone(),
+        fixture.raw_package.clone(),
         &source,
         ReplayInputs {
             decode_limits: WitnessDecodeLimits {

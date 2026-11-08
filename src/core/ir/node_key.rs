@@ -32,7 +32,7 @@ pub(crate) fn checked_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
                     match segment {
                         CheckedNodePathSegment::Name(name) => pending.push(Step::Text(name)),
                         CheckedNodePathSegment::Node(child) => pending.push(Step::Visit(child)),
-                        CheckedNodePathSegment::Index(_) => return None,
+                        CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => return None,
                     }
                 }
             }
@@ -74,6 +74,7 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
         Visit(&'a CheckedNodeId, bool),
         Text(&'a str),
         Index(u64),
+        Operand(u64),
         Finish {
             package: &'a str,
             ordinal: u64,
@@ -102,6 +103,9 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
                         quire_contract_model::CheckedNodePathSegment::Node(child) => {
                             pending.push(Step::Visit(child, false))
                         }
+                        quire_contract_model::CheckedNodePathSegment::Operand(slot) => {
+                            pending.push(Step::Operand(*slot))
+                        }
                         quire_contract_model::CheckedNodePathSegment::Index(index) => {
                             pending.push(Step::Index(*index))
                         }
@@ -110,6 +114,9 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
             }
             Step::Text(text) => rendered.push(format!(
                 "quire_contract_model::CheckedNodePathSegment::Name({text:?}.into())"
+            )),
+            Step::Operand(slot) => rendered.push(format!(
+                "quire_contract_model::CheckedNodePathSegment::Operand({slot})"
             )),
             Step::Index(index) => rendered.push(format!(
                 "quire_contract_model::CheckedNodePathSegment::Index({index})"

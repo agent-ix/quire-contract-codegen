@@ -546,7 +546,9 @@ pub(super) fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool
             | CheckedTerm::Frame { .. }
             | CheckedTerm::AbstractionRelation { .. }
             | CheckedTerm::Refinement { .. }
-            | CheckedTerm::NominalBody(_),
+            | CheckedTerm::NominalBody(_)
+            | CheckedTerm::ImplementationGuarantee { .. }
+            | CheckedTerm::ComponentComposition { .. },
         )
         | None => false,
     }

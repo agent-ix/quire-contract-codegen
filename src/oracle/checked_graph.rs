@@ -204,6 +204,8 @@ pub(crate) fn term_name(term: &CheckedTerm) -> &'static str {
         CheckedTerm::ExtensionForm { .. } => "extension_form",
         CheckedTerm::OperationAnchorBody(_) => "operation_anchor_body",
         CheckedTerm::NominalBody(_) => "nominal_body",
+        CheckedTerm::ImplementationGuarantee { .. } => "implementation_guarantee",
+        CheckedTerm::ComponentComposition { .. } => "component_composition",
     }
 }
 

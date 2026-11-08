@@ -71,6 +71,8 @@ pub enum CompositeBuildError {
     PackageRead(Box<CheckedPackageRefusal>),
     /// IR reached a checked-package read ceiling.
     PackageReadLimit(CheckedPackageIncomplete),
+    /// The owner operation catalog is unavailable, independently of package validity.
+    CatalogUnavailable(quire_contract_model::CatalogReadError),
     /// The original application has no complete admitted structural equality operand projection.
     Operands(Box<CheckedCompositeOperandError>),
     /// The requested equality operator differs from the original application's operator.
@@ -160,6 +162,7 @@ impl fmt::Display for CompositeBuildError {
                 "checked-package read reached ceiling {} after consuming {} units",
                 cause.limit, cause.consumed
             ),
+            Self::CatalogUnavailable(cause) => cause.fmt(f),
             Self::Operands(cause) => cause.fmt(f),
             Self::OperatorMismatch { requested, actual } => {
                 write!(
@@ -221,12 +224,13 @@ impl OriginalCompositeEqContext {
     #[allow(clippy::result_large_err)]
     pub fn new(
         original: CheckedPackageV2,
+        raw_package: qsl_replay::ReplayPackage,
         original_source: &LockedSource,
         inputs: ReplayInputs,
         function: &str,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, CompositeBuildError> {
-        OriginalReplayContext::new(original, original_source, inputs, function, read_limits)
+        OriginalReplayContext::new(original, raw_package, original_source, inputs, function, read_limits)
             .map(|context| Self { context })
     }
 
@@ -433,6 +437,7 @@ impl OriginalCompositeEqContext {
             ));
         };
         let mut wire = self.context.inputs.wire(
+            self.context.raw_package.clone(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
             envelope.obligation_identity().clone(),
@@ -662,6 +667,7 @@ mod tests {
 #[derive(Debug)]
 pub(crate) struct OriginalReplayContext {
     pub(crate) original: std::sync::Arc<CheckedPackageV2>,
+    pub(crate) raw_package: qsl_replay::ReplayPackage,
     pub(crate) inputs: std::sync::Arc<ReplayInputs>,
     pub(crate) dependencies: DependencyInput,
     pub(crate) selection: QualifiedName,
@@ -671,6 +677,7 @@ pub(crate) struct OriginalReplayContext {
 impl OriginalReplayContext {
     pub(crate) fn new(
         original: CheckedPackageV2,
+        raw_package: qsl_replay::ReplayPackage,
         original_source: &LockedSource,
         inputs: ReplayInputs,
         function: &str,
@@ -718,6 +725,7 @@ impl OriginalReplayContext {
             })
             .ok_or(CompositeBuildError::UnknownFunction)?;
         Ok(Self {
+            raw_package,
             original: std::sync::Arc::new(original),
             inputs: std::sync::Arc::new(inputs),
             dependencies,
@@ -752,6 +760,9 @@ impl OriginalReplayContext {
         let recompiled =
             match CheckedPackageV2::read(compiled.package().bytes(), self.read_limits, &evidence) {
                 CheckedPackageV2ReadResult::Admitted(package) => package,
+                CheckedPackageV2ReadResult::CatalogUnavailable(cause) => {
+                    return Err(CompositeBuildError::CatalogUnavailable(cause))
+                }
                 CheckedPackageV2ReadResult::Refused(cause) => {
                     return Err(CompositeBuildError::PackageRead(Box::new(cause)))
                 }

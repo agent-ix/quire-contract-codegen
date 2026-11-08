@@ -2173,6 +2173,7 @@ pub(crate) fn take_function_preflight_graph_lookup_work() -> Vec<usize> {
 pub(crate) enum FunctionPackageReadFailure {
     Refused(Box<CheckedPackageRefusal>),
     Incomplete(CheckedPackageIncomplete),
+    CatalogUnavailable(quire_contract_model::CatalogReadError),
 }
 
 /// Classify a function item using the request's shared admitted-graph view.
@@ -2315,6 +2316,9 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
                 &ContractDependencies::new(),
             ) {
                 ContractPackageReadResult::Admitted(package) => *package,
+                ContractPackageReadResult::CatalogUnavailable(cause) => {
+                    return Err(FunctionPackageReadFailure::CatalogUnavailable(cause))
+                }
                 ContractPackageReadResult::Refused(refusal) => {
                     return Err(FunctionPackageReadFailure::Refused(Box::new(refusal)))
                 }

@@ -36,9 +36,10 @@ fn limits() -> quire_exact::ScalarLimits {
         result_units: u64::MAX,
     }
 }
-fn context(package: &CheckedPackageV2) -> OriginalCompositeEqContext {
+fn context(package: &CheckedPackageV2, raw_package: qsl_replay::ReplayPackage) -> OriginalCompositeEqContext {
     OriginalCompositeEqContext::new(
         package.clone(),
+        raw_package,
         &source(),
         ReplayInputs {
             decode_limits: WitnessDecodeLimits {
@@ -60,11 +61,12 @@ fn context(package: &CheckedPackageV2) -> OriginalCompositeEqContext {
 }
 pub(super) fn binding(
     package: &CheckedPackageV2,
+    compiled: &qsl_replay::AdmittedCompilation,
     generated: &CompositeEqualityOracles,
     node: &CheckedNodeId,
     occurrence: &CheckedOccurrence,
 ) -> Result<OriginalCompositeArtifactBinding, CompositeBuildError> {
-    context(package).retain_generated_artifact(
+    context(package, qsl_replay::ReplayPackage::read(compiled.package().bytes(), u64::MAX).unwrap()).retain_generated_artifact(
         generated,
         node,
         occurrence,
@@ -235,7 +237,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         .filter(|entry| entry.role == CheckedOccurrenceRole::Expression);
     let occurrence = occurrences.next().unwrap().clone();
     assert!(occurrences.next().is_none());
-    let original = binding(&package, &generated, &node, &occurrence).unwrap();
+    let original = binding(&package, &compiled, &generated, &node, &occurrence).unwrap();
     let observed = observe(&package, &original, false);
     assert_eq!(observed.outcome, Outcome::Completed(true));
     let body = original.body().clone();
@@ -261,7 +263,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         qsl_replay::VerifiedShadowResult::Tested
     ));
     for member in 0..4 {
-        let held = binding(&package, &generated, &node, &occurrence).unwrap();
+        let held = binding(&package, &compiled, &generated, &node, &occurrence).unwrap();
         let mut changed = held.body().clone();
         let original_node = held.body().node.clone();
         match member {
@@ -316,7 +318,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
             "body member {member}"
         );
     }
-    let changed_bounds = binding(&package, &generated, &node, &occurrence).unwrap();
+    let changed_bounds = binding(&package, &compiled, &generated, &node, &occurrence).unwrap();
     let mut reordered_body = changed_bounds.body().clone();
     reordered_body.arguments.swap(0, 1);
     assert_eq!(
@@ -328,7 +330,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         Err(CompositeBuildError::RetainedBodyMismatch)
     ));
     for member in 0..6 {
-        let retained = binding(&package, &generated, &node, &occurrence).unwrap();
+        let retained = binding(&package, &compiled, &generated, &node, &occurrence).unwrap();
         let original = retained.body().clone();
         let mut changed = observed.clone();
         match member {
@@ -353,7 +355,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
             "independent native tie {member}"
         );
     }
-    let mutant_binding = binding(&package, &generated, &node, &occurrence).unwrap();
+    let mutant_binding = binding(&package, &compiled, &generated, &node, &occurrence).unwrap();
     let mutant = observe(&package, &mutant_binding, true);
     assert_eq!(
         mutant.outcome,
@@ -368,7 +370,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
     let mut stale = generated.clone();
     stale.artifacts[0].contents.push(' ');
     assert!(matches!(
-        binding(&package, &stale, &node, &occurrence),
+        binding(&package, &compiled, &stale, &node, &occurrence),
         Err(CompositeBuildError::GeneratedArtifactChanged)
     ));
     let mut changed_wire = wire;
