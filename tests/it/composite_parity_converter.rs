@@ -82,7 +82,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     let compiled = compile_package(
         qsl_replay::CompileUnit {
             source: SourceIdentity::new("test", "ir666"),
-            package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
+            package_name: "ir666".to_owned(),
             path: "ir666.native",
             bytes: source,
         },
