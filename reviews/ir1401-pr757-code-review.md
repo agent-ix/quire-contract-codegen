@@ -800,3 +800,221 @@ scope:
   excerpt: quire-specification = { package = "quire-specification-qualification",
     git = "https://github.com/agent-ix/quire-specification", branch = "main" }
 ```
+
+## Targeted review (round 8)
+
+Targeted frozen review of 3e0b07eae29610a1f8c3922640e9971157af586e...81b71455b65af47c0122e289ca92e3486bb771ab: all twelve changed files (+164/-38) inspected. No spec or requirement changes. No Cargo, aggregate run, branch/source edit, push or merge by reviewer. Original findings and all prior dispositions remain byte-for-byte prefixes of the updated artifact.
+
+The production writer correction fixes a real regression missed by the earlier review. Inspected the locked IR 43ef764 owner contract: graph() preserves node-held operand slots and operand_rows; resolved_graph() is the checked index-form inspection view. Only the two production complete-package encoding call sites use graph(); semantic node inspection continues using resolved_graph(). Sidecars retain document-held identities, and complete-byte owner/context guards are unchanged. The four actual own/imported/nested owner tests and mixed-equality test distinguish this bug from a test-only adaptation. Foreign equal slot bytes are interpreted only through their holder rows; no raw-slot global lookup is introduced.
+
+Fixture review checks that original producer bytes are admitted unchanged before intentional mutation. The common missing-row helper never rewrites existing rows, slots or document indices. Name-only cohort pruning asserts empty rows, keeps order and filters row/node pairs together. The opaque test uses public holder-aware document inspection only on a detached mutation draft, then authors rows by deterministic object-field and array traversal; foreign IDs are left alone. The forged-key control now retains original node order and asserts the intended exact package-locus refusal instead of triggering malformed indexing. Supported/unsupported sibling premises are explicitly asserted.
+
+Compiler-artifact selection verifies active rustc metadata instead of timestamps and still compiles/runs the actual generated interval guard. Test-only emit budgets are finite checked arithmetic (8 KiB per record plus 1 MiB), applied to both unchanged source compilers. They are not runtime defaults, CG limit changes, copied content allowances or a replacement tracking gate. The 50,000-record 512 KiB generation/runtime stack and source split/exact-byte boundaries and 65,536-record work-limit assertions remain present.
+
+Inspected original failure log /tmp/IR-1401-final-docs-tests-3e0b07eae.log and every individual log listed in /tmp/CG757-round8-report.json. The real cvc5 environmental case passes with the lead-provided official binary; no implementation change or fake solver is credited. Prior full gate failed 24 cases; focused receipts qualify those cases only, not a completed aggregate gate. Scoped lint receipt is outstanding and not inferred from an earlier head.
+
+## New findings (disposition pass 8)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | high | Complete-package encoding passes resolved_graph instead of the original slot graph with operand rows; the serialized bytes differ from genuine emission, rejecting own/imported function ownership and composite equality context binding. | src/oracle/function/owner_path.rs:272 |
+| FND-006 | medium | Name-only mutation fixtures omit required operand_rows, while cohort pruning does not retain one aligned row per retained node; intended body, enum, temporal and scalar assertions fail at malformed-wire admission instead. | tests/checked_package_support/rekey.rs:47 |
+| FND-007 | medium | Opaque-metadata draft mutations do not reauthor local operand rows after adding a node, so the genuine-narrowing control fails at missing operand_rows before testing opaque-consumer isolation. | src/oracle/scalar/lower/opaque_metadata_tests.rs:61 |
+| FND-008 | medium | The forged foreign-key control sorts graph nodes without remapping operand rows or index references, producing malformed wire before the intended cross-package identity refusal. | src/routed/contract_package_tests.rs:3606 |
+| FND-009 | medium | The unsupported-sibling fixture uses a now-supported current-state field, so it does not exercise the intended unsupported renderer branch. | tests/clause_admission_support/mod.rs:266 |
+| FND-010 | medium | Source-inspection guards retain obsolete graph accessor and canonical import spellings, failing after valid resolved-view and typed raw-package error adaptations. | src/kani/generate/role_parity_tests.rs:122 |
+| FND-011 | medium | The generated interval-guard native test selects the newest rlib by timestamp, which may be an incompatible MSRV compiler artifact and fails before executing the generated guard. | src/oracle/boolean_v1.rs:1499 |
+| FND-012 | medium | The unchanged 50,000/65,536-record source fixtures exceed the default producer emit.output_bytes budget before reaching small-stack generation or the CG work-limit boundary. | src/oracle/equality/mod.rs:3180 |
+
+## Dispositions (round 8)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | Restored package.graph() at both production encode_checked_package_v2 boundaries; four own/imported/nested function tests and mixed equality context execution pass. |
+| FND-006 | fixed | The shared helper supplies empty rows only when absent and all node paths are names; existing rows and indexed identities remain unchanged. Pruning checks all rows empty and filters rows with the same retained-node predicate. All affected exact fixture tests pass. |
+| FND-007 | fixed | Original published bytes are admitted unchanged first. Holder-aware public inspection creates a detached draft; the test-only writer then authors local rows in canonical field order and explicitly preserves foreign IDs. The intended opaque-control exact test passes. |
+| FND-008 | fixed | Removed sorting so original nodes, operand rows and document indices remain aligned. The exact control now retains InvalidSemanticGraph at the original local node package locus. |
+| FND-009 | fixed | Uses genuinely admitted unsupported modulo and explicitly checks second-sibling Unsupported versus Supported before checking the postcondition disposition; exact test passes. |
+| FND-010 | fixed | The lexical graph guard counts the resolved accessor once and canonical-boundary exclusion recognizes the exact allowed ReadError import. Architectural assertions and banned alternatives remain; both exact tests pass. |
+| FND-011 | fixed | Sorted candidates are accepted only after the active rustc loads their metadata; the same candidate compiles and executes the unchanged generated cause assertions. Exact test passes without cache deletion. |
+| FND-012 | fixed | The test-only fixture derives a finite checked output budget from record count and supplies it to outer compilation and generated-child independent recompilation. Source sizes, CG work/source boundaries, 512 KiB stacks and native equality assertions remain unchanged; 65,536-record boundary and final 50,000-record native exact receipts pass. |
+
+## Latest verdict (round 8)
+
+**PASS (targeted changed scope)** — all newly recorded gate defects fixed; no open review findings. Scoped lint and aggregate continuation remain outstanding.
+
+## Targeted examined scope (round 8)
+
+```yaml
+scope:
+- id: src/kani/generate/negotiate.rs
+  path: src/kani/generate/negotiate.rs
+  role: examined
+  excerpt: //! Separate bounded Kani obligations with per-item backend negotiation
+    (FR-015).
+- id: src/kani/generate/role_parity_tests.rs
+  path: src/kani/generate/role_parity_tests.rs
+  role: examined
+  excerpt: //! Crate-internal parity checks for state-frame role negotiation.
+- id: src/oracle/boolean_v1.rs
+  path: src/oracle/boolean_v1.rs
+  role: examined
+  excerpt: //! Deterministic, fail-closed lowering for Boolean clauses over Boolean
+    and integer values.
+- id: src/oracle/equality/mod.rs
+  path: src/oracle/equality/mod.rs
+  role: examined
+  excerpt: //! Exact composite/structural equality oracle generation from one admitted
+- id: src/oracle/function/owner_path.rs
+  path: src/oracle/function/owner_path.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: src/oracle/scalar/lower/opaque_metadata_tests.rs
+  path: src/oracle/scalar/lower/opaque_metadata_tests.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: src/replay/state_clause.rs
+  path: src/replay/state_clause.rs
+  role: examined
+  excerpt: '//! Native replay of a postcondition state-clause counterexample: a Kani
+    falsification of an'
+- id: src/routed/contract_package_tests.rs
+  path: src/routed/contract_package_tests.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: tests/checked_package_support/rekey.rs
+  path: tests/checked_package_support/rekey.rs
+  role: examined
+  excerpt: //! Reader admission for fixtures whose producers assign structural node
+    IDs.
+- id: tests/clause_admission_support/mod.rs
+  path: tests/clause_admission_support/mod.rs
+  role: examined
+  excerpt: //! Admission-only QSL fixtures for request-level clause callers.
+- id: tests/composite_equality_support/package.rs
+  path: tests/composite_equality_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for composite/structural equality
+- id: tests/exact_scalar_support/package.rs
+  path: tests/exact_scalar_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
+- id: FR-018-AC-25
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The per-item type-resolution counter charges one unit for each root type-node
+    entry or followed type-node reference or bounded-domain `semantic_type` edge,
+    including a repeated or memoized reference, across both operands and conversion
+    targets, independently of Contract IR lowering; with the default limit, an acyclic
+    chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted
+    { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack
+    exhaustion or generated symbols, while a sibling needing at most 65,536 entries
+    still generates. PLANNED (I'
+- id: FR-018-AC-28
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: With a caller-selected type-resolution work limit of at least 100,000 and
+    `cg.equality.source_bytes` raised to the measured flat source size, an admitted
+    acyclic type chain of 100,000 entries reconstructs and generates an oracle with
+    the same result as an equivalent shallow type on a 512 KiB stack; with the same
+    raised source-byte limit, the default type-resolution work limit refuses it at
+    entry 65,537, and a selected work limit one below its entry count refuses it at
+    the first denied entry. No depth setting or fixed depth refusal participates in
+    these runs. PLANNED (IR-511).
+- id: FR-018-AC-30
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The 100,000-entry acyclic closure renders as flat source without a type-depth-sized
+    constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge`
+    naming that limit when the source exceeds it, and under a caller limit equal to
+    its measured source bytes it emits a complete, compilable oracle within the publication
+    artifact and bundle byte limits. One byte less refuses before that byte is appended
+    and publishes no partial artifact. PLANNED (IR-511).
+- id: FR-018-AC-33
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: A genuine root-facade compilation of authentic retained source, original
+    dependencies and admitted request limits has equal compiled/context/original package
+    identities and exact full recompiled/original CheckedPackageV2 equality before
+    its context is exposed. An explicitly supplied different context package refuses
+    generation and emitted environment construction before classification or lookup,
+    including primitive-only requests, publishes no prepared value, and cannot evaluate
+    with a completed Boolean or meter charge.
+- id: FR-018-AC-42
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Generated oracle invocations under Some or valid context-free None preserve
+    private package/item/descriptor/index binding, both preparation-time owner type
+    checks, retained semantic-refusal handling, same-index check_equality and evaluate.
+    Private wrong-binding, present-context mismatch, missing nominal context and environment-only
+    faults refuse without charge. The native OriginalCompositeEqContext route retains
+    every mandatory authentic source/lock/package/whole-IR comparison and cannot use
+    None to bypass them. No scalar proof manifest/body acquires replay compilation.
+- id: FR-018-AC-25
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Reuse the Contract IR lowering counter for reconstruction, charge only
+    record declarations while skipping option and sequence edges, or recurse through
+    65,537 acyclic entries before checking the budget; a large item then completes
+    or overflows the stack instead of yielding the named per-item refusal.
+- id: FR-018-AC-28
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Keep a fixed 65,536-entry ceiling even after the caller raises the work
+    limit, or use recursive Rust calls for each nested type; the 100,000-entry case
+    refuses or exhausts the 512 KiB stack.
+- id: FR-018-AC-30
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Retain the fixed source ceiling, emit one nested constructor per type level,
+    or measure bytes only after publishing; the 100,000-entry case refuses despite
+    a sufficient caller byte limit, overflows a compiler stack, or leaks partial output.
+- id: FR-018-AC-33
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Compare the context against lowered ContractPackage identity instead of
+    original source package identity, skip full-package/source-lock authentication,
+    or expose the retained context before those checks.
+- id: FR-018-AC-42
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Drop private binding/context checks for None, allow a nominal recipe without
+    context, omit check_type, accept a caller index, or make native authentication
+    optional.
+- id: FR-021-AC-17
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: Each location record uses the request function binding and function-body
+    ordering for its origin; the runtime cross-check uses the FR-485 session's location
+    derived from the declaring checked graph's root call site, for own and imported
+    callables.
+- id: FR-021-AC-35
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: For a concrete FR-485 corpus request, the caller supplies all seven acquisition
+    inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure`
+    once for the generated run and receives `CheckedClosureCompilation` with emitted
+    package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct
+    a QSL checked closure from the V2 graph or emitted source. Acquisition failure
+    remains `AdmittedRefusal` and yields no handle.
+- id: FR-021-AC-36
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'CG selects the own or imported declaring package explicitly by its admitted
+    structural library name and compares its complete canonical V2 bytes, including
+    the typed term sidecar, with the bytes retained by the same QSL acquisition. Imported
+    bytes come from `CheckedClosureCompilation::owner_package_bytes`; own-unit bytes
+    come from `package()`. CG resolves the function identity in its owning V2 frame
+    through `ContractSourceKeyV1::from_v2_request(source, request)` and mechanically
+    represents that structural key as the Exact `NodeKey`; no rehash, cross-frame
+    index comparison, fabricated identity '
+- id: FR-021-AC-17
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: Take function origin from request ordinal or emitted source instead of
+    the binding, allowing claim and source to drift together.
+```
+
+## Final exact evidence receipt (round 8)
+
+Final exact 50,000-record receipt /tmp/CG757-round8-deep-acyclic.log now passes: 1 passed, 0 failed, 523 filtered, 368.17 seconds; runner /tmp/CG757-round8-results.tsv records exit 0. This runs the unchanged deep-generation and independently compiled native small-stack assertions; the 65,536-record work-limit exact log also passes. All 24 listed focused failure cases now have successful exact receipts. Scoped lint is still pending, and no aggregate gate clearance is claimed.
