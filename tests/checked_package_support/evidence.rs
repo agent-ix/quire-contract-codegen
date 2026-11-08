@@ -163,7 +163,10 @@ mod tests {
             package.resolved_graph().nodes.len(),
             wire["semantic_graph"]["nodes"].as_array().unwrap().len()
         );
-        assert_eq!(package.resolved_graph().nodes[34].node_tag.as_ref(), "extension");
+        assert_eq!(
+            package.resolved_graph().nodes[34].node_tag.as_ref(),
+            "extension"
+        );
         let quire_contract_model::CheckedTerm::ExtensionForm { definition, .. } =
             &package.resolved_graph().nodes[34].body
         else {

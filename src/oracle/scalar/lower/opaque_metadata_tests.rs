@@ -151,7 +151,11 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     }))
     .unwrap();
     narrow.node_id = key.clone();
-    assert!(original.resolved_graph().nodes.iter().all(|n| n.node_id != key));
+    assert!(original
+        .resolved_graph()
+        .nodes
+        .iter()
+        .all(|n| n.node_id != key));
     let mut narrow_wire = serde_json::to_value(&narrow).unwrap();
     narrow_wire["body"] = narrow_body;
     wire["semantic_graph"]["nodes"]
@@ -282,7 +286,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let semantic_key = rekey_application(&mut wire, &opaque_key);
     let semantic_bytes = encode_draft(&wire);
     let semantic = read(&semantic_bytes, &evidence, "TRUE_NARROW_SEMANTIC");
-    assert_eq!(semantic.resolved_graph().nodes.len(), baseline.resolved_graph().nodes.len());
+    assert_eq!(
+        semantic.resolved_graph().nodes.len(),
+        baseline.resolved_graph().nodes.len()
+    );
     let graph = Graph::from_checked(&semantic);
     assert!(references(graph.term(&key), &target.node_id));
     assert!(

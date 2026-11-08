@@ -1076,9 +1076,12 @@ mod tests {
             .iter()
             .skip(1)
             .map(|argument| {
-                crate::oracle::function::reference_node_id(argument, checked.resolved_graph().nodes.iter())
-                    .expect("call argument reference")
-                    .clone()
+                crate::oracle::function::reference_node_id(
+                    argument,
+                    checked.resolved_graph().nodes.iter(),
+                )
+                .expect("call argument reference")
+                .clone()
             })
             .collect()
     }
@@ -1189,7 +1192,10 @@ mod tests {
 
         let (shared, shared_ids) = source_bound_call_package().admit_resolved();
         let (different, different_ids) = ac11_classifier_package().admit_resolved();
-        assert_ne!(shared.resolved_graph().nodes, different.resolved_graph().nodes);
+        assert_ne!(
+            shared.resolved_graph().nodes,
+            different.resolved_graph().nodes
+        );
         assert_eq!(
             shared_ids.resolve(&code_id(SOURCE_CALL)),
             different_ids.resolve(&code_id(SOURCE_CALL)),
@@ -1214,7 +1220,8 @@ mod tests {
         let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
         // Cloned requests share the admitted instance; independently admitted packages with
         // overlapping identities remain separate.
-        let expected_visits = shared.resolved_graph().nodes.len() + different.resolved_graph().nodes.len();
+        let expected_visits =
+            shared.resolved_graph().nodes.len() + different.resolved_graph().nodes.len();
         let max_graph_nodes = shared
             .resolved_graph()
             .nodes
@@ -3436,11 +3443,10 @@ mod tests {
             CheckedPackageV2ReadResult::Admitted(package) => package,
             other => panic!("selected call must admit: {other:?}"),
         };
-        assert!(checked
-            .resolved_graph()
-            .nodes
-            .iter()
-            .any(|node| node.declaration.as_ref().is_some_and(|declaration| {
+        assert!(checked.resolved_graph().nodes.iter().any(|node| node
+            .declaration
+            .as_ref()
+            .is_some_and(|declaration| {
                 declaration.qualified_name.len() == 1
                     && declaration.qualified_name[0].as_ref() == "f"
             })));

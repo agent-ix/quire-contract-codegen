@@ -705,8 +705,14 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .checked_bounds
         .first()
         .expect("integer addition has one source-derived bound");
-    let graph = qsl_replay::WireGraph::new(package.resolved_graph().nodes.iter().map(|node| &node.node_id))
-        .expect("admitted graph has structural keys");
+    let graph = qsl_replay::WireGraph::new(
+        package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .map(|node| &node.node_id),
+    )
+    .expect("admitted graph has structural keys");
     let source_bound = ProofBound::new(
         DomainKey::Node {
             node: graph

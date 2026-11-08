@@ -690,8 +690,14 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
-    let graph = qsl_replay::WireGraph::new(scalar.resolved_graph().nodes.iter().map(|node| &node.node_id))
-        .expect("admitted graph has structural keys");
+    let graph = qsl_replay::WireGraph::new(
+        scalar
+            .resolved_graph()
+            .nodes
+            .iter()
+            .map(|node| &node.node_id),
+    )
+    .expect("admitted graph has structural keys");
     let node_key = graph
         .key(&node_1001)
         .expect("scalar fixture node belongs to graph");

@@ -223,7 +223,10 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
             clause, original_clause,
             "the structural clause key is preserved"
         );
-        assert_eq!(original.resolved_graph().nodes.len(), package.resolved_graph().nodes.len());
+        assert_eq!(
+            original.resolved_graph().nodes.len(),
+            package.resolved_graph().nodes.len()
+        );
         let changed_bodies = original
             .resolved_graph()
             .nodes
