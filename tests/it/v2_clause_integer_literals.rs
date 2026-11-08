@@ -253,23 +253,72 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
 // arithmetic claim. Its result type is an existing checked integer range.
 fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let (result, clause) = reader_variant("(self.balance + 1) > 1000", |wire| {
-        let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
-        let bound = nodes
+        let frame = qsl_replay::WireGraph::of_package_value(wire).expect("original holding rows");
+        let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
+        let bound_position = nodes
             .iter()
-            .find(|node| {
+            .position(|node| {
                 node["node_tag"] == "bounded_domain" && node["semantic_form"] == "integer_range"
             })
-            .expect("original declared range")["node_id"]
-            .clone();
-        let mut changed = 0;
-        for node in nodes {
-            if node["body"]["operation"]["identity"] == "quire.op.integer.add" {
-                node["semantic_type"] = bound.clone();
-                if coherent {
-                    node["body"]["result_type"] = bound.clone();
+            .expect("original declared range");
+        let bound = frame
+            .document_value_in_row(bound_position, &nodes[bound_position]["node_id"])
+            .unwrap();
+        let authored = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node["body"]["operation"]["identity"] == "quire.op.integer.add")
+            .map(|(position, node)| {
+                (
+                    position,
+                    frame.document_value_in_row(position, node).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let package_name = wire["name"].as_str().unwrap().to_owned();
+        fn slots(value: &mut Value, row: &mut Vec<Value>, package: &str) {
+            if value.get("package").and_then(Value::as_str) == Some(package) {
+                if let Some(path) = value.get_mut("path").and_then(Value::as_array_mut) {
+                    for segment in path {
+                        if let Some(index) = segment.get("node").and_then(Value::as_u64) {
+                            let target = json!(index);
+                            let slot = row
+                                .iter()
+                                .position(|entry| entry == &target)
+                                .unwrap_or_else(|| {
+                                    row.push(target);
+                                    row.len() - 1
+                                });
+                            *segment = json!({"operand":slot});
+                        }
+                    }
                 }
-                changed += 1;
             }
+            match value {
+                Value::Array(items) => {
+                    for item in items {
+                        slots(item, row, package);
+                    }
+                }
+                Value::Object(fields) => {
+                    for item in fields.values_mut() {
+                        slots(item, row, package);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut changed = 0;
+        for (position, mut node) in authored {
+            node["semantic_type"] = bound.clone();
+            if coherent {
+                node["body"]["result_type"] = bound.clone();
+            }
+            let mut row = Vec::new();
+            slots(&mut node, &mut row, &package_name);
+            wire["semantic_graph"]["nodes"][position] = node;
+            wire["semantic_graph"]["operand_rows"][position] = json!(row);
+            changed += 1;
         }
         assert_eq!(changed, 1, "one arithmetic result type control");
     });

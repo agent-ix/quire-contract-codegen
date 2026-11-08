@@ -2098,9 +2098,21 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
         json!({"term": "aggregate", "members": []}),
     );
     let bound_key = builder.bound(&bound);
-    builder.code(9_000, "value", "literal", &key(T_INTEGER), literal("integer", "3"));
-    builder.node_with(&key(V_INTEGER), "expression", "call", &key(T_INTEGER),
-        reference(&key(9_000)), &[key(9_000), bound_key.clone()]);
+    builder.code(
+        9_000,
+        "value",
+        "literal",
+        &key(T_INTEGER),
+        literal("integer", "3"),
+    );
+    builder.node_with(
+        &key(V_INTEGER),
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        reference(&key(9_000)),
+        &[key(9_000), bound_key.clone()],
+    );
     let codes = 10_000..10_205;
     for code in codes.clone() {
         builder.application_code_with(

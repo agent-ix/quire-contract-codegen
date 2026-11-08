@@ -1533,7 +1533,7 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let (package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested", "multiply"];
+    let ordered = [("add", 0), ("eq", 1), ("nested", 2), ("multiply", 14)];
     for claim in &oracles.claim_map.items {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("genuine source claim refused: {claim:?}");
@@ -1549,7 +1549,8 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         );
         let expected_index = ordered
             .iter()
-            .position(|name| *name == generated.function)
+            .find(|(name, _)| *name == generated.function)
+            .map(|(_, index)| *index)
             .expect("claim names a requested function");
         match &generated.function_origin {
             quire_contract_codegen::RecordedOrigin::Body { function, index } => {
@@ -2832,13 +2833,14 @@ fn tc_031_ac14_manifest_and_source_shape() {
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     let (_package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested", "multiply"];
+    let ordered = [("add", 0), ("eq", 1), ("nested", 2), ("multiply", 14)];
     assert_eq!(oracles.location_map.len(), ordered.len());
     for entry in &oracles.location_map {
         assert_eq!(entry.location.path, Vec::<usize>::new());
         let expected_index = ordered
             .iter()
-            .position(|name| *name == entry.function)
+            .find(|(name, _)| *name == entry.function)
+            .map(|(_, index)| *index)
             .unwrap_or_else(|| panic!("{} not a survivor", entry.function));
         match &entry.location.origin {
             quire_contract_codegen::RecordedOrigin::Body { function, index } => {
@@ -2847,7 +2849,7 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
             }
         }
         let expected_kind = match entry.function.as_str() {
-            "add" => CallPointKind::ScalarOperator,
+            "add" | "multiply" => CallPointKind::ScalarOperator,
             "eq" => CallPointKind::EqualityEvaluation,
             "nested" => CallPointKind::NestedCall,
             other => panic!("unexpected function {other}"),

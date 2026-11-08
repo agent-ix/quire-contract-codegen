@@ -1098,6 +1098,64 @@ impl PackageBuilder {
         self
     }
 
+    /// Author literal-operand controls with a separate result-narrow context.
+    /// A computed call wrapper is not a literal and must not be unwrapped by CG.
+    pub fn literal_operands_for(&mut self, codes: &[u32]) {
+        let literals = self.value["semantic_graph"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|node| node["node_tag"] == "value" && node["semantic_form"] == "literal")
+            .map(|node| node["node_id"].clone())
+            .collect::<Vec<_>>();
+        let children = self.value["semantic_graph"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|node| {
+                node["node_tag"] == "expression"
+                    && node["semantic_form"] == "call"
+                    && node["body"]["term"] == "reference"
+            })
+            .map(|node| (node["node_id"].clone(), node["body"]["target"].clone()))
+            .collect::<Vec<_>>();
+        for node in self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+        {
+            if !codes
+                .iter()
+                .any(|code| node["node_id"] == json!(code_id(*code)))
+            {
+                continue;
+            }
+            let arguments = node["body"]["arguments"]
+                .as_array_mut()
+                .expect("scalar application");
+            for argument in arguments.iter_mut() {
+                if let Some((_, literal)) = children
+                    .iter()
+                    .find(|(wrapper, _)| argument["target"] == *wrapper)
+                {
+                    assert!(
+                        literals.contains(literal),
+                        "the fixture explicitly selects a literal child"
+                    );
+                    argument["target"] = literal.clone();
+                }
+            }
+            let mut dependencies = arguments
+                .iter()
+                .filter_map(|argument| argument.get("target").cloned())
+                .collect::<Vec<_>>();
+            dependencies.sort_by_cached_key(|id| {
+                serde_json::from_value::<CheckedNodeId>(id.clone()).unwrap()
+            });
+            dependencies.dedup();
+            node["dependencies"] = json!(dependencies);
+        }
+    }
+
     /// The fixture's authored wire before ID and package-identity resolution.
     pub fn raw_wire(&self) -> &Value {
         &self.value

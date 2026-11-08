@@ -420,29 +420,37 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
             .expect("read authoritative QSpec fixture"),
     )
     .expect("QSpec fixture JSON");
+    let frame = qsl_replay::WireGraph::of_package_value(&wire).expect("QSpec wire context");
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let case_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        nodes
-            .iter()
-            .find(|node| node["semantic_form"] == "case")
-            .unwrap()["node_id"]
-            .clone(),
-    )
-    .unwrap();
-    let integer_type = nodes
+    let document_id = |position: usize| {
+        frame
+            .document_value_in_row(position, &nodes[position]["node_id"])
+            .expect("document-held identity from the original holding row")
+    };
+    let case_position = nodes
         .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .unwrap()["node_id"]
-        .clone();
+        .position(|node| node["semantic_form"] == "case")
+        .unwrap();
+    let case_id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(document_id(case_position)).unwrap();
+    let integer_position = nodes
+        .iter()
+        .position(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+        .unwrap();
+    let integer_type = document_id(integer_position);
     let integer_literals: Vec<serde_json::Value> = nodes
         .iter()
-        .filter(|node| {
+        .enumerate()
+        .filter(|(position, node)| {
             node["node_tag"] == "value"
                 && node["semantic_form"] == "literal"
-                && node["semantic_type"] == integer_type
+                && frame
+                    .document_value_in_row(*position, &node["semantic_type"])
+                    .unwrap()
+                    == integer_type
         })
         .take(2)
-        .map(|node| node["node_id"].clone())
+        .map(|(position, _)| document_id(position))
         .collect();
     assert_eq!(integer_literals.len(), 2);
 
@@ -467,7 +475,58 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
                 "arguments":integer_literals.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>(),
             }),
         );
-    let (admission, _, ids) = builder.read_resolved();
+    // Only the newly authored equality row needs document references lowered
+    // into its own canonical slots. The imported graph keeps its original bytes.
+    let mut extended = builder.wire();
+    fn slots(value: &mut serde_json::Value, row: &mut Vec<serde_json::Value>, package: &str) {
+        if value.get("package").and_then(serde_json::Value::as_str) == Some(package) {
+            if let Some(path) = value
+                .get_mut("path")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for segment in path {
+                    if let Some(index) = segment.get("node").and_then(serde_json::Value::as_u64) {
+                        let index = json!(index);
+                        let slot =
+                            row.iter()
+                                .position(|item| item == &index)
+                                .unwrap_or_else(|| {
+                                    row.push(index);
+                                    row.len() - 1
+                                });
+                        *segment = json!({"operand":slot});
+                    }
+                }
+            }
+        }
+        match value {
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    slots(item, row, package);
+                }
+            }
+            serde_json::Value::Object(fields) => {
+                for item in fields.values_mut() {
+                    slots(item, row, package);
+                }
+            }
+            _ => {}
+        }
+    }
+    let position = extended["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .len()
+        - 1;
+    let mut row = Vec::new();
+    let package_name = extended["name"].as_str().unwrap().to_owned();
+    slots(
+        &mut extended["semantic_graph"]["nodes"][position],
+        &mut row,
+        &package_name,
+    );
+    extended["semantic_graph"]["operand_rows"][position] = json!(row);
+    let (admission, _, ids) = PackageBuilder::from_wire(extended).read_resolved();
     let package = match admission {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("extended QSpec fixture should admit: {other:?}"),
