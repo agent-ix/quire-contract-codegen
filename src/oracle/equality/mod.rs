@@ -3177,6 +3177,13 @@ mod tests {
         );
     }
 
+    fn record_chain_output_bytes(records: u64) -> u64 {
+        // Each record emits bounded-width identity rows, source entries and field types.
+        // 8 KiB per one-field record plus 1 MiB of envelope data bounds this grammar.
+        records.checked_mul(8192).and_then(|bytes| bytes.checked_add(1 << 20))
+            .expect("finite fixture output bound")
+    }
+
     fn admitted_record_chain(
         records: usize,
         optional: bool,
@@ -3225,13 +3232,7 @@ mod tests {
             .checked_mul(8)
             .and_then(|n| n.checked_add(32))
             .expect("finite fixture syntax node bound");
-        // Each record emits bounded-width identity rows, source entries and field types.
-        // 8 KiB per one-field record, plus 1 MiB for fixed envelope data, bounds
-        // this fixture's writer while retaining the original deep/work-limit cases.
-        let output_bytes = count
-            .checked_mul(8192)
-            .and_then(|bytes| bytes.checked_add(1 << 20))
-            .expect("finite fixture output bound");
+        let output_bytes = record_chain_output_bytes(count);
         let stages = StageLimits::default()
             .with_named("emit.output_bytes", output_bytes)
             .and_then(|limits| limits.with_named("s1.input_bytes", source_bytes))
@@ -4199,7 +4200,8 @@ fn deep_matches_shallow() {
             let nodes = (__RECORDS___u64).checked_mul(8).and_then(|n| n.checked_add(32))
                 .expect("finite fixed-record grammar node allowance");
             qsl_replay::StageLimits::default()
-                .with_named("s1.input_bytes", bytes)
+                .with_named("emit.output_bytes", __OUTPUT_BYTES___u64)
+                .and_then(|limits| limits.with_named("s1.input_bytes", bytes))
                 .and_then(|limits| limits.with_named("s1.tokens", tokens))
                 .and_then(|limits| limits.with_named("s1.nodes", nodes))
                 .expect("public fixed-fixture intake settings")
@@ -4245,7 +4247,8 @@ fn deep_matches_shallow() {
 }
 }
 "#;
-        let test = test.replace("__RECORDS__", &RECORDS.to_string());
+        let test = test.replace("__RECORDS__", &RECORDS.to_string())
+            .replace("__OUTPUT_BYTES__", &record_chain_output_bytes(u64::try_from(RECORDS).unwrap()).to_string());
         std::fs::write(scratch.join("tests/deep.rs"), test).expect("deep agreement test");
         // Recompilation must use the same public owner cohort as generation. Cargo
         // adapts the scratch package entry while retaining those resolved dependencies.
