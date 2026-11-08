@@ -102,3 +102,631 @@ Frozen e1f8339098d4ee714849f2907e5ea21a09431932 removes the entire bespoke root/
 ## Latest verdict (round 4)
 
 **PASS** — code FND-001 and FND-002 are fixed. This is not whole-feature merge clearance; gap FND-001 remains open.
+
+## Final frozen review (round 5)
+
+Frozen head da4c8a9d7350503bae89ec8ba16083ee719403dc; full origin/main...HEAD diff, including consumer API migrations, inspected. Historical finding text and disposition history preserved. No applicable AssuranceProfile exists (spec/assurance contains architecture decisions, not profiles). Existing execution evidence was inspected; no Cargo, aggregate gate, workspace/stress build, Kani, branch edit, push or merge was performed by this reviewer. Focused report /tmp/CG757-focused-report.json and every listed log inspected; logs show exactly selected tests executed, not zero-test success. Broad Rust gates and cargo-deny were not rerun, per brief. Format and focused library/integration Clippy evidence passed. Plan completion: not assessed.
+
+Resolved graph identities are used for semantic lookup and resolved-key mapping; raw producer identity decoding uses WireGraph::with_operand_rows, never treating operand slots as global keys. Full package-qualified structural IDs remain the lookup keys, so equal local positions in foreign packages cannot alias. Name-only synthetic fixtures acquire empty operand rows only when every path segment is a name and no rows already exist; actual producer bytes pass unchanged in source qualification.
+
+Division derives [-A,A] from finite dividend bounds for all three admitted integer profiles; Euclidean remainder derives [0,B-1], with zero divisor retaining the runtime undefined outcome. Big integer arithmetic avoids machine-width overflow. Both operands must be finite; explicit result/narrowing bounds remain authoritative and mismatched descriptors retain typed refusal. Generation and derivation share the same selector and actual bound provenance.
+
+Generated And/Or/Implies use the caller meter, skip decided right closures, invoke a reached right once and pass its exact outcome to the owner for parent retention. The compiled tests independently sequence prefix/equality/retention and deny every admitted boundary; counters and ordered charges include the prefix, detecting a replacement meter. Refused propagation is also covered by the existing Boolean vectors. This is CG owner agreement, not QSL value-authority qualification (IR-842).
+
+Preparation directly moves Allocation/Capacity owner errors and retains semantic IllTyped privately, left before right, ahead of later equality charges. The real allocator test compiles emitted production code and distinguishes left/right denial, semantic precedence and healthy retry; Capacity transfer is inspected statically. Original raw ReplayPackage is retained from emission in scalar/composite/function/state/frame routes; source recompilation is authentication, not fabrication of a replacement raw package. Complete dependency refinement_internals participate in request equality. Inline mismatch errors add no Box allocation; retained owned expected/actual cloning still allocates as before, so no stronger allocation-free claim is made.
+
+The raw-package negative test changes Int[0,9] to Int[0,8], asserts genuinely different raw bytes, pairs those bytes with the original checked package and requires ContextMismatch before invocation. Existing whole-IR/source/lock and artifact-body controls remain. No copied upstream source/catalog or weakened CI gate found.
+## Latest verdict (round 5)
+
+**PASS** — no new defects; prior dispositions remain effective.
+
+## Final examined scope
+
+```yaml
+scope:
+- id: FR-014-AC-2
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: Integer (add, subtract, multiply, negate, truncating/floor/Euclidean division,
+    modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion,
+    text comparison, enum comparison (including equality and inequality over a selected
+    model-owned `model`/`variant_type`, using its original checked member identities),
+    quantity arithmetic/comparison and exact quantity conversion (FR-014-AC-48) descriptors
+    for admitted checked-package expression nodes each generate a function calling
+    the matching direct owner operator described above. Entry-point dispositions for
+    a `quire.op.quantity.co
+- id: FR-014-AC-3
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: A descriptor whose arity, result or operand scalar type disagrees with
+    the lowered node, a node that is not a lowered scalar expression, a node that
+    is unbounded, has an invalid or incomplete body, or exhausts lowering work, or
+    a node id requested more than once, is refused with a typed reason.
+- id: FR-014-AC-6
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'Executing generated oracles on the QSpec TC-185, TC-186, TC-192 and TC-193
+    vectors, and on these QSpec TC-187 vectors, yields outcomes, charges and consumed
+    counters equal to direct runtime execution: U02 (dimension normalization through
+    a product and a quotient, and a zero power), U03 (the dimension mismatch), U05
+    (arithmetic and a power on `degC` and `degF`, refused `ill_typed`), U09 (a base
+    dimension of the same declaration and shape as `L` under a different node key,
+    refused `ill_typed`), U12 (compound-unit products, quotients and powers, with
+    the `s` family), U13 and U21 (powers), U14 (th'
+- id: FR-014-AC-12
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: A descriptor naming a different catalogued operation than the node's own
+    is not confirmed, including where the two share one operand shape and one checked
+    bound; nor is a descriptor naming an operation the catalogue has no entry for.
+- id: FR-014-AC-18
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: '`derive_exact_scalar_items` over an admitted V2 package returns, per node
+    id in input order, the descriptor determined by the node''s `operation.identity`,
+    `operation.mode`, `operation.laws`, operand forms and the one bound of the needed
+    form on its result type, or for an unnarrowed Integer division/modulo result the
+    sound interval derived from both finite operands as described above; a node that
+    is not an application, has no identity, names an identity outside the derivable
+    set, has operand forms, a law or a mode that select no parameter, is refused with
+    the matching `ClaimDerivationRefusal` a'
+- id: FR-014-AC-21
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'A node whose result is typed by a scalar type and whose reachable bounds
+    are its operands'' own and exactly one other takes that other as its result bound;
+    a sole reachable operand-owned bound is not a result bound and yields `MissingBound`
+    unless a plain reference operand requires a bound under FR-014-AC-25. For an unnarrowed
+    Integer `div` or `mod`, both finite operands instead derive `[-A, A]` or `[0,
+    max(B - 1, 0)]` respectively, using the largest absolute dividend/divisor endpoints;
+    missing operand bounds still refuse `MissingBound`. Explicit or narrowed result
+    bounds remain authoritative. '
+- id: FR-014-AC-25
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'A `reference` operand to a plain scalar parameter or a non-literal `value`
+    node is refused as `RequiresBound` naming its type, in generation and in derivation,
+    where another operand owns a bound or the result is typed by one (`x + y`, `y
+    + y`, and `x + y` over a scalar-typed result); this refusal takes precedence over
+    FR-014-AC-21''s `MissingBound` when the only reachable result-bound candidate
+    is another operand''s own bound. A literal operand is never refused as `RequiresBound`.
+    An eligible application reference follows FR-014-AC-45 instead. The unnarrowed
+    division/modulo operand-derived case '
+- id: FR-014-AC-66
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: For a strict-reader-admitted `quire.op.quantity.convert`, CG accepts a
+    referenced `scalar_type`/`carried_quantity` source operand permitted by the owner
+    operation contract, including the genuine QSL-emitted TC-187 U01 form, and derives
+    and generates an `ir_confirmed` oracle. Source carrier, unit and rounding and
+    the admitted exact or carried target identity and domain remain intact; execution
+    uses the existing owner conversion contract without replacing a carried source
+    with an unbounded or exact carrier.
+- id: FR-014-AC-67
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: For strict-reader-admitted `quire.op.ieee.numeric_equal`, `quire.op.ieee.total_order`
+    and `quire.op.ieee.bit_identical` nodes, CG accepts the genuine QSL-emitted `expression`/`call`
+    semantic form with the catalogued `call` body operator, including numeric equality
+    emitted from `a = b` and each `quire::value::ieee::*` intrinsic. Existing reader-admitted
+    binary-semantic-form fixtures with that same catalogued call operator remain supported.
+    Derivation and generation retain operand order, float width, Boolean result, operation
+    identity, laws and mode, and dispatch the selected owner IEEE operatio
+- id: FR-014-AC-68
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'Acceptance of these carried operands and IEEE call forms preserves the
+    existing strict-reader and CG boundaries. Unadmitted operation/body pairings and
+    reader-invalid arity, types, identity, laws or mode remain reader refusals. Admitted
+    shapes, arity, operand/result types, unitless quantity literals and unsupported
+    semantic forms that CG previously refused retain typed refusal, no oracle and
+    supported-sibling isolation. A same-lowering-shape descriptor identity, law or
+    mode mismatch retains the existing FR-014-AC-12 and FR-038-AC-3 behavior: where
+    generation was permitted, its operation remain'
+- id: FR-014-AC-69
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: Qualification of AC-66 and AC-67 emits genuine QSL source through the public
+    facade, passes its unchanged emitted bytes through the strict Contract IR reader,
+    derives descriptors and generates, compiles and executes the resulting native
+    scalar oracles. Tests assert completed conversion values and units and IEEE true
+    and false values, including signed-zero and NaN cases that distinguish numeric
+    equality, total order and bit identity according to the owner contract. Generated
+    and direct owner executions agree in complete, refused or incomplete outcome,
+    ordered admitted charges and consumed count
+- id: FR-014-AC-70
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: Each generated lazy And, Or and Implies scalar oracle accepts its right
+    operand as a function of the caller's mutable exact Meter. A reached right operand
+    runs exactly once on that same meter after any admitted caller prefix and before
+    the single parent boolean result-retention charge. A left-decided result skips
+    the right operand and retains only the parent result. A right Refused or Incomplete
+    outcome propagates unchanged without parent result retention; parent-retention
+    denial preserves the complete owner Incomplete record. No replacement meter, charge
+    subtraction, replay or duplicate charg
+- id: FR-014-AC-71
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: A compiled generated crate exercises lazy And, Or and Implies with both
+    left values, actual metered owner Boolean equality on the right, and a nonempty
+    admitted caller-meter prefix. Compared with an independently sequenced owner reference,
+    it checks values or complete typed stops, ordered admitted charges and every consumed
+    counter at generous limits and every denied next-charge boundary, including right-evaluation
+    denial and parent-retention denial. Skipped right closures have zero invocations
+    and charges; reached closures have exactly one invocation. The controls fail for
+    the old no-meter ri
+- id: FR-018-AC-8
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: A declaration closure `TypeEnvironment::new` refuses is refused at generation
+    time carrying that `DeclarationCause`, including both recursion passes. The authentic
+    duplicate-field source control instead retains typed AdmittedRefusal::Package
+    with owning public CompileRefusal::code() equal to Code::AmbiguousDeclaration
+    and cause() equal to None for the Assembly refusal, produces no successful AdmittedContext
+    and is not passed to public CG generation. Private CG declaration-admission defenses
+    retain the exact DuplicateMember name/cause and unchanged healthy sibling separately,
+    without public-acc
+- id: FR-018-AC-42
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Generated oracle invocations under Some or valid context-free None preserve
+    private package/item/descriptor/index binding, both preparation-time owner type
+    checks, retained semantic-refusal handling, same-index check_equality and evaluate.
+    Private wrong-binding, present-context mismatch, missing nominal context and environment-only
+    faults refuse without charge. The native OriginalCompositeEqContext route retains
+    every mandatory authentic source/lock/package/whole-IR comparison and cannot use
+    None to bypass them. No scalar proof manifest/body acquires replay compilation.
+- id: FR-018-AC-48
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Emitted preparation uses the actual owner `try_check_type` boundary. A
+    real allocator denial during its type traversal returns `EnvironmentError::TypeCheck(TypeCheckError::Allocation(request))`
+    retaining the original native class, unit and amount; any owner Capacity result
+    retains its original request and variant. Error projection moves the owner error
+    without an allocating clone, produces no prepared wrapper and admits no equality-meter
+    charge. Generated code is compiled and executed for the real denial and healthy
+    retry; structural inspection verifies the direct move for Capacity where a rea
+- id: FR-018-AC-49
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Preparation checks comparison types in left-before-right order. An actual
+    left `Refused(IllTyped)` is retained unchanged and prevents the right traversal,
+    including a right type whose traversal would hit a real native allocator denial.
+    The later oracle returns the existing `GeneratedTypeCheckRejected` with that left
+    cause and zero equality charges. When the left succeeds, a right semantic refusal
+    retains its own cause; either native error stops preparation losslessly. Valid
+    prepared operands preserve native equality values, charge order and counters,
+    and private context/item guards retain prec
+- id: FR-018-AC-8
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Emit only `check_equality`, omitting the `check_type` calls; `check_equality`
+    consults the environment solely through `contains_ieee`, which returns `false`
+    for an absent composite key, so an empty environment completes with a Boolean
+    instead of refusing. Or emit `.expect(..)`, which panics instead; count a private
+    duplicate-member defense as public source-authenticated acceptance, or replace
+    its precise private cause with a generic context mismatch; invent a public Assembly
+    cause tag where CompileRefusal::cause() returns None.
+- id: FR-018-AC-42
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Drop private binding/context checks for None, allow a nominal recipe without
+    context, omit check_type, accept a caller index, or make native authentication
+    optional.
+- id: Cargo.lock
+  path: Cargo.lock
+  role: examined
+  excerpt: '# This file is automatically @generated by Cargo.'
+- id: Cargo.toml
+  path: Cargo.toml
+  role: examined
+  excerpt: '[package]'
+- id: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: '---'
+- id: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '---'
+- id: spec/oracle/matrix/TC-024-exact-scalar-oracles.md
+  path: spec/oracle/matrix/TC-024-exact-scalar-oracles.md
+  role: examined
+  excerpt: '---'
+- id: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: '---'
+- id: src/core/contract_package.rs
+  path: src/core/contract_package.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/core/ir/clause.rs
+  path: src/core/ir/clause.rs
+  role: examined
+  excerpt: //! Admitted checked-package state-clause body access.
+- id: src/core/ir/node_key.rs
+  path: src/core/ir/node_key.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/core/scalar_authority.rs
+  path: src/core/scalar_authority.rs
+  role: examined
+  excerpt: //! Original admitted positional scalar body retained by the scalar renderer
+    (FR-032).
+- id: src/evidence/v2_llvm.rs
+  path: src/evidence/v2_llvm.rs
+  role: examined
+  excerpt: //! Checked V2 clause population and bounded LLVM probe observations (FR-004-AC-16..24).
+- id: src/kani/generate/clause/v2.rs
+  path: src/kani/generate/clause/v2.rs
+  role: examined
+  excerpt: //! Bounded harnesses for admitted V2 scalar clauses (FR-015).
+- id: src/kani/generate/collection.rs
+  path: src/kani/generate/collection.rs
+  role: examined
+  excerpt: //! Source-bound collection domains derived from admitted V2 model-field
+    projections.
+- id: src/kani/generate/constrained.rs
+  path: src/kani/generate/constrained.rs
+  role: examined
+  excerpt: //! A constrained search method retains its boundary separately from its
+    safety obligation.
+- id: src/kani/generate/negotiate.rs
+  path: src/kani/generate/negotiate.rs
+  role: examined
+  excerpt: //! Separate bounded Kani obligations with per-item backend negotiation
+    (FR-015).
+- id: src/kani/generate/render.rs
+  path: src/kani/generate/render.rs
+  role: examined
+  excerpt: //! Pure ordered emission of validated harness descriptions (FR-015).
+- id: src/kani/generate/role_parity_tests.rs
+  path: src/kani/generate/role_parity_tests.rs
+  role: examined
+  excerpt: //! Crate-internal parity checks for state-frame role negotiation.
+- id: src/oracle/checked_graph.rs
+  path: src/oracle/checked_graph.rs
+  role: examined
+  excerpt: //! Borrowed checked terms and keyed nodes shared by oracle consumers.
+- id: src/oracle/checked_graph/tests.rs
+  path: src/oracle/checked_graph/tests.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/clause.rs
+  path: src/oracle/clause.rs
+  role: examined
+  excerpt: //! V2 state-clause condition oracles over admitted checked packages.
+- id: src/oracle/equality/mod.rs
+  path: src/oracle/equality/mod.rs
+  role: examined
+  excerpt: //! Exact composite/structural equality oracle generation from one admitted
+- id: src/oracle/equality/preparation_tests.rs
+  path: src/oracle/equality/preparation_tests.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/equality/union_tests.rs
+  path: src/oracle/equality/union_tests.rs
+  role: examined
+  excerpt: //! Host controls for the actual generator's admitted Union closure and
+    seals.
+- id: src/oracle/equality/units.rs
+  path: src/oracle/equality/units.rs
+  role: examined
+  excerpt: //! Attach the original admitted owner's unit metadata to a checked environment.
+- id: src/oracle/function/mod.rs
+  path: src/oracle/function/mod.rs
+  role: examined
+  excerpt: //! Exact complete-V1 function-application oracle generation from one admitted
+- id: src/oracle/function/owner_path.rs
+  path: src/oracle/function/owner_path.rs
+  role: examined
+  excerpt: '//! FR-021: apply a generated body through QSL''s retained checked closure.'
+- id: src/oracle/scalar/derive.rs
+  path: src/oracle/scalar/derive.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/scalar/lower.rs
+  path: src/oracle/scalar/lower.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/scalar/lower/opaque_metadata_tests.rs
+  path: src/oracle/scalar/lower/opaque_metadata_tests.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/scalar/lower/source_selection_tests.rs
+  path: src/oracle/scalar/lower/source_selection_tests.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/oracle/scalar/mod.rs
+  path: src/oracle/scalar/mod.rs
+  role: examined
+  excerpt: //! Exact complete-V1 scalar oracle generation from CheckedPackage V2 (FR-014).
+- id: src/oracle/scalar/render.rs
+  path: src/oracle/scalar/render.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/replay/composite_builder.rs
+  path: src/replay/composite_builder.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/replay/frame.rs
+  path: src/replay/frame.rs
+  role: examined
+  excerpt: '//! Native replay of a frame counterexample: a Kani falsification of an
+    operation''s frame is put'
+- id: src/replay/function.rs
+  path: src/replay/function.rs
+  role: examined
+  excerpt: '//! The replay adapter: a decoded Kani falsification goes to QSL''s layer-6
+    `replay` facade, and'
+- id: src/replay/scalar_builder.rs
+  path: src/replay/scalar_builder.rs
+  role: examined
+  excerpt: //! Checked scalar plans. Execution and the QSL facade call belong to the
+    driver.
+- id: src/replay/state_clause.rs
+  path: src/replay/state_clause.rs
+  role: examined
+  excerpt: '//! Native replay of a postcondition state-clause counterexample: a Kani
+    falsification of an'
+- id: src/routed/capability.rs
+  path: src/routed/capability.rs
+  role: examined
+  excerpt: '//! Capability settlement: the one point where a requested claim is settled.'
+- id: src/routed/contract_package_tests.rs
+  path: src/routed/contract_package_tests.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: src/routed/smt/refinement_source_tests.rs
+  path: src/routed/smt/refinement_source_tests.rs
+  role: examined
+  excerpt: //! Source-authored FR-315 query association for FR-045-AC-4.
+- id: src/strategy/v2_numeric.rs
+  path: src/strategy/v2_numeric.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/checked_package_support/base.rs
+  path: tests/checked_package_support/base.rs
+  role: examined
+  excerpt: // The base CheckedPackage V2 document the exact-scalar and composite-equality
+    package builders
+- id: tests/checked_package_support/evidence.rs
+  path: tests/checked_package_support/evidence.rs
+  role: examined
+  excerpt: //! Reader evidence held from published QSpec definition artifacts, independently
+    of wire claims.
+- id: tests/checked_package_support/rekey.rs
+  path: tests/checked_package_support/rekey.rs
+  role: examined
+  excerpt: //! Reader admission for fixtures whose producers assign structural node
+    IDs.
+- id: tests/clause_admission_support/mod.rs
+  path: tests/clause_admission_support/mod.rs
+  role: examined
+  excerpt: //! Admission-only QSL fixtures for request-level clause callers.
+- id: tests/composite_equality_support/cases/record.rs
+  path: tests/composite_equality_support/cases/record.rs
+  role: examined
+  excerpt: //! Original numeric domains and adverse vectors, with independently admitted
+    source identities.
+- id: tests/composite_equality_support/package.rs
+  path: tests/composite_equality_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for composite/structural equality
+- id: tests/exact_function_support/agreement_cases.rs
+  path: tests/exact_function_support/agreement_cases.rs
+  role: examined
+  excerpt: '//! Executed FR-021 corpus: generated bodies and independent FR-485 session
+    application.'
+- id: tests/exact_function_support/imported_cases.rs
+  path: tests/exact_function_support/imported_cases.rs
+  role: examined
+  excerpt: //! Executed imported-owner FR-021 parity through the FR-485 facade.
+- id: tests/exact_function_support/invariant_cases.rs
+  path: tests/exact_function_support/invariant_cases.rs
+  role: examined
+  excerpt: //! Execute the same emitted guards with genuine checked-owner inputs.
+- id: tests/exact_function_support/package.rs
+  path: tests/exact_function_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for function-application oracle
+- id: tests/exact_scalar_support/boolean_agreement_cases.rs
+  path: tests/exact_scalar_support/boolean_agreement_cases.rs
+  role: examined
+  excerpt: '//! FR-014-AC-37: admitted V2 Boolean and scalar equality oracles against
+    direct Runtime calls.'
+- id: tests/exact_scalar_support/package.rs
+  path: tests/exact_scalar_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
+- id: tests/it/admitted_composite_equality.rs
+  path: tests/it/admitted_composite_equality.rs
+  role: examined
+  excerpt: //! Authentic source-backed record/tuple generation and native owner agreement.
+- id: tests/it/admitted_enum_equality.rs
+  path: tests/it/admitted_enum_equality.rs
+  role: examined
+  excerpt: //! Native generated-ABI acceptance uses genuine source compilation, never
+    synthetic keys.
+- id: tests/it/capability_settlement.rs
+  path: tests/it/capability_settlement.rs
+  role: examined
+  excerpt: '//! FR-019 capability settlement: one `negotiate_*` arm over a closed
+    backend kind.'
+- id: tests/it/composite_artifact_binding.rs
+  path: tests/it/composite_artifact_binding.rs
+  role: examined
+  excerpt: //! FR-033-AC-18 native artifact authentication. Native Boolean execution
+    is not
+- id: tests/it/composite_equality_agreement.rs
+  path: tests/it/composite_equality_agreement.rs
+  role: examined
+  excerpt: //! FR-018-AC-2, AC-8 (the `check_type` guard half), AC-9 and AC-11 (the
+- id: tests/it/composite_equality_generation.rs
+  path: tests/it/composite_equality_generation.rs
+  role: examined
+  excerpt: '//! FR-018: composite/structural equality oracle generation over admitted'
+- id: tests/it/composite_original_eq.rs
+  path: tests/it/composite_original_eq.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/it/composite_parity_converter.rs
+  path: tests/it/composite_parity_converter.rs
+  role: examined
+  excerpt: '//! FR-033/FR-030: bind public QSL composite reports before reading their
+    terminal values.'
+- id: tests/it/composite_record_residuals.rs
+  path: tests/it/composite_record_residuals.rs
+  role: examined
+  excerpt: //! Native artifact publication boundaries; no backend-proof or shadow
+    credit.
+- id: tests/it/constrained_method.rs
+  path: tests/it/constrained_method.rs
+  role: examined
+  excerpt: //! Authentic QSL inputs exercise the single generation entry and dedicated
+    method execution.
+- id: tests/it/constrained_method/support.rs
+  path: tests/it/constrained_method/support.rs
+  role: examined
+  excerpt: //! Authentic QSL emission, public IR admission, then the constrained family.
+- id: tests/it/exact_function_agreement.rs
+  path: tests/it/exact_function_agreement.rs
+  role: examined
+  excerpt: //! FR-021 direct-function corpus from one QSL source and separate Contract
+    IR admission.
+- id: tests/it/exact_function_generation.rs
+  path: tests/it/exact_function_generation.rs
+  role: examined
+  excerpt: '//! FR-021: function-application oracle generation over admitted CheckedPackage'
+- id: tests/it/exact_scalar_agreement.rs
+  path: tests/it/exact_scalar_agreement.rs
+  role: examined
+  excerpt: '//! FR-014-AC-6: generated exact scalar oracles and direct Contract Runtime'
+- id: tests/it/exact_scalar_generation.rs
+  path: tests/it/exact_scalar_generation.rs
+  role: examined
+  excerpt: '//! FR-014: exact complete-V1 scalar oracle generation over admitted'
+- id: tests/it/inline_integer_equality.rs
+  path: tests/it/inline_integer_equality.rs
+  role: examined
+  excerpt: //! Authentic inline Integer operands for the composite equality generator.
+- id: tests/it/integer_division_bounds.rs
+  path: tests/it/integer_division_bounds.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/it/kani_collection_operation.rs
+  path: tests/it/kani_collection_operation.rs
+  role: examined
+  excerpt: //! Whole-object collection operation contexts from authentic QSL emission
+    and IR admission.
+- id: tests/it/kani_obligations.rs
+  path: tests/it/kani_obligations.rs
+  role: examined
+  excerpt: //! FR-015 separate bounded Kani obligations, FR-017 Kani execution, and
+    Contract IR FR-036
+- id: tests/it/kani_obligations_state_clause_replay.rs
+  path: tests/it/kani_obligations_state_clause_replay.rs
+  role: examined
+  excerpt: '//! FR-024 (IR-460): a postcondition state-clause counterexample is put
+    before QSL''s'
+- id: tests/it/kani_obligations_state_frame.rs
+  path: tests/it/kani_obligations_state_frame.rs
+  role: examined
+  excerpt: '//! FR-015 (IR-412): one `state_clause` postcondition over one integer
+    field becomes an'
+- id: tests/it/kani_obligations_symbolic_domains.rs
+  path: tests/it/kani_obligations_symbolic_domains.rs
+  role: examined
+  excerpt: //! Source-backed symbolic collection and graph obligation fixtures.
+- id: tests/it/main.rs
+  path: tests/it/main.rs
+  role: examined
+  excerpt: '//! IR-237: the integration test crate. Cargo builds a `tests/<name>/main.rs`
+    directory as one'
+- id: tests/it/model_enum_scalar.rs
+  path: tests/it/model_enum_scalar.rs
+  role: examined
+  excerpt: //! Exact scalar generation over the original QSpec model variant comparison
+    fixture.
+- id: tests/it/routed_generation.rs
+  path: tests/it/routed_generation.rs
+  role: examined
+  excerpt: '//! FR-022 routed generation: `generate_routed` runs the routed kind''s
+    generation arm keyed by the'
+- id: tests/it/scalar_literal_operands.rs
+  path: tests/it/scalar_literal_operands.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/it/scalar_playback.rs
+  path: tests/it/scalar_playback.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/it/scalar_replay_binding.rs
+  path: tests/it/scalar_replay_binding.rs
+  role: examined
+  excerpt: '//! Driver-owned native scalar controls: no Kani proof or backend falsification
+    credit.'
+- id: tests/it/scalar_replay_residuals.rs
+  path: tests/it/scalar_replay_residuals.rs
+  role: examined
+  excerpt: //! Native replay authority residuals; no backend proof or fabricated success
+    receipt.
+- id: tests/it/scalar_source_forms.rs
+  path: tests/it/scalar_source_forms.rs
+  role: examined
+  excerpt: // Copyright (C) 2026 Agent-IX
+- id: tests/it/skeleton_spine.rs
+  path: tests/it/skeleton_spine.rs
+  role: examined
+  excerpt: '//! FR-016: the surviving replay adapter and function-contract identity
+    behavior.'
+- id: tests/it/terminal_map.rs
+  path: tests/it/terminal_map.rs
+  role: examined
+  excerpt: '//! FR-029 and FR-030: the total maps from a Kani run outcome (FR-029)
+    and from a Contract IR'
+- id: tests/it/v2_clause_integer_literals.rs
+  path: tests/it/v2_clause_integer_literals.rs
+  role: examined
+  excerpt: //! Public generation controls for the general V2 clause integer-leaf policy.
+- id: tests/it/v2_integer_comparison_admission.rs
+  path: tests/it/v2_integer_comparison_admission.rs
+  role: examined
+  excerpt: //! Admitted source-to-comparison controls for the public V2 numeric admission.
+- id: tests/it/v2_llvm_coverage.rs
+  path: tests/it/v2_llvm_coverage.rs
+  role: examined
+  excerpt: //! V2 clause population and LLVM probe observations from admitted checked
+    packages.
+- id: tests/it/v2_numeric_strategy.rs
+  path: tests/it/v2_numeric_strategy.rs
+  role: examined
+  excerpt: //! Public selected-claim V2 numeric source, map, runner, and no-artifact
+    refusals.
+- id: tests/it/v2_point_renderer.rs
+  path: tests/it/v2_point_renderer.rs
+  role: examined
+  excerpt: //! Authored point-qualified V2 clause identities and exact generated verdict
+    points.
+- id: tests/it/v2_selected_claim_entry.rs
+  path: tests/it/v2_selected_claim_entry.rs
+  role: examined
+  excerpt: //! Public V2 strategy selection of an admitted state-clause claim.
+- id: tests/model_enum_support/agreement_cases.rs
+  path: tests/model_enum_support/agreement_cases.rs
+  role: examined
+  excerpt: //! Generated functions execute against original selected model member
+    identities.
+- id: tests/model_enum_support/fixture.rs
+  path: tests/model_enum_support/fixture.rs
+  role: examined
+  excerpt: //! Genuine model enum values reconstructed from native-admitted equality
+    witnesses.
+- id: tests/state_frame_support/native_twin.rs
+  path: tests/state_frame_support/native_twin.rs
+  role: examined
+  excerpt: '//! The QSL twin of the state-frame fixture: the `test/bank` domain package,
+    the native unit'
+```
