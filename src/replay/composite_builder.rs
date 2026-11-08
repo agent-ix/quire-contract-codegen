@@ -760,6 +760,9 @@ impl OriginalReplayContext {
             self.inputs.replay_limits,
         )
         .map_err(recompile_failure)?;
+        if compiled.package().bytes() != self.raw_package.bytes() {
+            return Err(CompositeBuildError::ContextMismatch);
+        }
         let mut evidence = CheckedPackageEvidence::new();
         for feature in &self.original.lock().required_features {
             evidence.support_feature(feature.as_ref());
