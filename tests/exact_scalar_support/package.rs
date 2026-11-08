@@ -1156,6 +1156,7 @@ fn evidence() -> CheckedPackageEvidence {
 /// Read a deliberate mutation of an already admitted wire under its refreshed package identity.
 pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     rekey::refresh_identity(&mut wire);
+    rekey::author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
 }
@@ -1221,6 +1222,15 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
         authored_body_ids(&node["body"], &nodes, &mut pending);
     }
     let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
+    if let Some(rows) = wire["semantic_graph"].get_mut("operand_rows") {
+        let original = rows.as_array().expect("authored operand rows");
+        assert_eq!(original.len(), nodes.len(), "one original row per fixture node");
+        assert!(original.iter().all(|row| row.as_array().is_some_and(Vec::is_empty)),
+            "name-only fixture pruning does not remap indexed operands");
+        *rows = Value::Array(original.iter().zip(&nodes)
+            .filter(|(_, node)| keep(&node["node_id"]))
+            .map(|(row, _)| row.clone()).collect());
+    }
     wire["semantic_graph"]["nodes"] = Value::Array(
         nodes
             .into_iter()
@@ -1247,6 +1257,7 @@ pub fn read_application_mutated_wire(
 ) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let candidate = provisional.clone();
     rekey::refresh_identity(&mut wire);
+    rekey::author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     (
         CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()),

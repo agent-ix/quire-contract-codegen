@@ -1614,6 +1614,13 @@ mod tests {
                 })
                 .expect("admitted request");
                 let disposition = &outcome.records()[post_index].disposition;
+                let second_index = order.iter().position(|index| *index == 2).unwrap();
+                let second_disposition = &outcome.records()[second_index].disposition;
+                assert_eq!(
+                    matches!(second_disposition, ObligationDisposition::Unsupported { .. }),
+                    unsupported_second,
+                    "the selected second sibling must exercise the intended renderer arm: {second_disposition:?}"
+                );
                 if unsupported_second {
                     assert!(
                         matches!(

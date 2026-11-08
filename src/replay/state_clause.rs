@@ -31,7 +31,7 @@ use qsl_replay::{
     ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample, StateClauseReplayResult,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
-use quire_canonical::{Encode, FixedShape};
+use quire_canonical::{Encode, FixedShape, ReadError};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
 use quire_semantic_value::catalog::Category;
 use serde::{Deserialize, Serialize};
@@ -240,7 +240,7 @@ impl fmt::Display for StateClauseHarnessMember {
 #[derive(Debug)]
 pub enum StateClauseReplayError {
     /// The original emitted package could not be retained for replay.
-    RawPackage(quire_canonical::ReadError),
+    RawPackage(ReadError),
     /// The supplied harness is not an operation-contract postcondition harness.
     NotPostconditionHarness,
     /// The harness and the selected replay inputs name different obligations or field order.
@@ -1311,7 +1311,7 @@ mod tests {
             .split("#[cfg(test)]")
             .next()
             .expect("the source has a production part")
-            .replace("use quire_canonical::{Encode, FixedShape};", "");
+            .replace("use quire_canonical::{Encode, FixedShape, ReadError};", "");
         for banned in [
             "quire_canonical",
             "sha2::",

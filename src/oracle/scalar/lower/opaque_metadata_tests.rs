@@ -59,7 +59,41 @@ fn rekey_application(wire: &mut Value, old: &CheckedNodeId) -> CheckedNodeId {
 }
 
 fn encode_draft(wire: &Value) -> Vec<u8> {
-    canonical::content_bytes(wire).unwrap()
+    let mut authored = wire.clone();
+    let package = authored["name"].as_str().unwrap().to_owned();
+    let mut rows = Vec::new();
+    for node in authored["semantic_graph"]["nodes"].as_array_mut().unwrap() {
+        let mut row = Vec::<u64>::new();
+        let mut pending = vec![node];
+        while let Some(value) = pending.pop() {
+            let is_id = value.as_object().is_some_and(|members| members.len() == 3
+                && members.contains_key("package") && members.contains_key("path")
+                && members.contains_key("ordinal"));
+            if is_id {
+                if value["package"].as_str() != Some(package.as_str()) { continue; }
+                for segment in value["path"].as_array_mut().unwrap() {
+                    if let Some(index) = segment.get("index").and_then(Value::as_u64) {
+                        let slot = match row.iter().position(|value| *value == index) {
+                            Some(slot) => slot,
+                            None => { row.push(index); row.len() - 1 }
+                        };
+                        *segment = json!({"operand": u64::try_from(slot).unwrap()});
+                    }
+                    assert!(segment.is_string() || segment.get("operand").is_some(),
+                        "the authored draft contains document-index references only");
+                }
+                continue;
+            }
+            match value {
+                Value::Object(members) => pending.extend(members.values_mut()),
+                Value::Array(values) => pending.extend(values.iter_mut()),
+                _ => {}
+            }
+        }
+        rows.push(row);
+    }
+    authored["semantic_graph"]["operand_rows"] = json!(rows);
+    canonical::content_bytes(&authored).unwrap()
 }
 
 fn read(bytes: &[u8], evidence: &CheckedPackageEvidence, label: &str) -> CheckedPackageV2 {
@@ -91,6 +125,12 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     );
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
+    // Extend a detached inspection draft, then explicitly author its new local
+    // operand rows at encode_draft. Unchanged published bytes were admitted above.
+    let frame = qsl_replay::WireGraph::of_package_value(&wire).unwrap();
+    for (holder, node) in wire["semantic_graph"]["nodes"].as_array_mut().unwrap().iter_mut().enumerate() {
+        *node = frame.document_value_in_row(holder, node).unwrap();
+    }
     let target = original.resolved_graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.mul"))).unwrap();
     let bound = original

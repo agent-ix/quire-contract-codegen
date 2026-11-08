@@ -264,7 +264,7 @@ impl Twin {
             "post DepositBound using v on Bank::Account::deposit { other < 1000 }",
         );
         let second = if unsupported_second {
-            "self.balance >= 0"
+            "other mod 2 >= 0"
         } else {
             "other >= 0"
         };

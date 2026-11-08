@@ -44,6 +44,19 @@ pub fn resolve_wire(
     limits: CheckedPackageReadLimits,
 ) -> ResolvedWire {
     let mut wire = raw.clone();
+    author_name_only_operand_rows(&mut wire);
+    let bytes = serde_json::to_vec(&wire).expect("fixture wire serializes");
+    let outcome = CheckedPackageV2::read(&bytes, limits, evidence);
+    ResolvedWire {
+        wire,
+        outcome,
+        ids: FixtureIds,
+    }
+}
+
+/// Supply the required empty rows for this producer's name-only fixture graph.
+/// Existing rows, slot identities and document-index identities are never rewritten.
+pub fn author_name_only_operand_rows(wire: &mut Value) {
     if let Some(graph) = wire
         .get_mut("semantic_graph")
         .and_then(Value::as_object_mut)
@@ -60,12 +73,5 @@ pub fn resolve_wire(
                 }
             }
         }
-    }
-    let bytes = serde_json::to_vec(&wire).expect("fixture wire serializes");
-    let outcome = CheckedPackageV2::read(&bytes, limits, evidence);
-    ResolvedWire {
-        wire,
-        outcome,
-        ids: FixtureIds,
     }
 }

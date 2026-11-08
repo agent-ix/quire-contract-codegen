@@ -799,7 +799,7 @@ pub fn generate_composite_equality_oracles(
             let bytes = encode_checked_package_v2(
                 original.name(),
                 original.lock(),
-                original.resolved_graph(),
+                original.graph(),
                 CheckedPackageSourceCorrespondenceRef {
                     source_map: original.source_map(),
                     refinement_step_rows: original.refinement_step_rows(),
@@ -3225,8 +3225,15 @@ mod tests {
             .checked_mul(8)
             .and_then(|n| n.checked_add(32))
             .expect("finite fixture syntax node bound");
+        // Each record emits bounded-width identity rows, source entries and field types.
+        // 8 KiB per one-field record, plus 1 MiB for fixed envelope data, bounds
+        // this fixture's writer while retaining the original deep/work-limit cases.
+        let output_bytes = count.checked_mul(8192)
+            .and_then(|bytes| bytes.checked_add(1 << 20))
+            .expect("finite fixture output bound");
         let stages = StageLimits::default()
-            .with_named("s1.input_bytes", source_bytes)
+            .with_named("emit.output_bytes", output_bytes)
+            .and_then(|limits| limits.with_named("s1.input_bytes", source_bytes))
             .and_then(|limits| limits.with_named("s1.tokens", token_bound))
             .and_then(|limits| limits.with_named("s1.nodes", syntax_nodes))
             .expect("the public compiler recognizes its fixture intake settings");
@@ -3968,7 +3975,7 @@ mod tests {
         let original_bytes = encode_checked_package_v2(
             original.name(),
             original.lock(),
-            original.resolved_graph(),
+            original.graph(),
             CheckedPackageSourceCorrespondenceRef {
                 source_map: original.source_map(),
                 refinement_step_rows: original.refinement_step_rows(),

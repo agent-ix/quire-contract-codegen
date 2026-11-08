@@ -3614,19 +3614,8 @@ mod tests {
             &serde_json::to_value(&local).expect("local key"),
             &serde_json::to_value(&target).expect("selected target key"),
         );
-        for pointer in ["/semantic_graph/nodes", "/source_map"] {
-            collision
-                .pointer_mut(pointer)
-                .and_then(serde_json::Value::as_array_mut)
-                .expect("checked wire array")
-                .sort_by(|left, right| {
-                    let left: CheckedNodeId =
-                        serde_json::from_value(left["node_id"].clone()).expect("left key");
-                    let right: CheckedNodeId =
-                        serde_json::from_value(right["node_id"].clone()).expect("right key");
-                    left.cmp(&right)
-                });
-        }
+        let local_position = checked.resolved_graph().nodes.iter()
+            .position(|node| node.node_id == local).expect("local original position");
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))
                 .expect("checked wire canonicalizes");
@@ -3645,7 +3634,7 @@ mod tests {
         assert_eq!(refusal.cause, None);
         assert_eq!(
             refusal.loci[0].path.as_ref().map(|path| path.as_str()),
-            Some("/semantic_graph/nodes/11/node_id/package")
+            Some(format!("/semantic_graph/nodes/{local_position}/node_id/package").as_str())
         );
     }
 }

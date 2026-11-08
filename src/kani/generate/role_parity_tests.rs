@@ -125,7 +125,7 @@ fn clause_planning_and_reading_share_one_graph_walk() {
     let reader = include_str!("../../core/ir/clause.rs");
     let source = format!("{}{}", include_str!("../../oracle/clause.rs"), reader);
     assert_eq!(
-        source.matches(concat!(".gra", "ph()")).count(),
+        source.matches(concat!(".resolved_", "graph()")).count(),
         1,
         "clause planning and reading must build one reusable graph view"
     );

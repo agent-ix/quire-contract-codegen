@@ -1007,6 +1007,7 @@ fn evidence() -> CheckedPackageEvidence {
 /// Read a deliberate mutation under its refreshed package identity.
 pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     rekey::refresh_identity(&mut wire);
+    rekey::author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     CheckedPackageV2::read(
         &bytes,

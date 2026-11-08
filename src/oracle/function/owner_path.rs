@@ -272,7 +272,7 @@ fn package_bytes(package: &CheckedPackageV2) -> Result<Vec<u8>, CheckedFunctionE
     encode_checked_package_v2(
         package.name(),
         package.lock(),
-        package.resolved_graph(),
+        package.graph(),
         CheckedPackageSourceCorrespondenceRef {
             source_map: package.source_map(),
             refinement_step_rows: package.refinement_step_rows(),
