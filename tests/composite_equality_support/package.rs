@@ -694,7 +694,13 @@ impl PackageBuilder {
                 });
             }
         }
+        let original_count = nodes.len();
         nodes.push(node);
+        if let Some(rows) = self.value["semantic_graph"].get_mut("operand_rows") {
+            let rows = rows.as_array_mut().expect("authored operand rows");
+            assert_eq!(rows.len(), original_count, "one row per existing producer node");
+            rows.push(json!([]));
+        }
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({

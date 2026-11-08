@@ -1466,7 +1466,7 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     let (_, baseline) = super::exact_function_agreement::genuine_corpus();
     let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_unknown();
-    assert_eq!(oracles.claim_map.items.len(), 4);
+    assert_eq!(oracles.claim_map.items.len(), baseline.claim_map.items.len() + 1);
     for expected in &baseline.claim_map.items {
         let actual = oracles
             .claim_map
@@ -1530,7 +1530,7 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let (package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested"];
+    let ordered = ["add", "eq", "nested", "multiply"];
     for claim in &oracles.claim_map.items {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("genuine source claim refused: {claim:?}");
@@ -2660,7 +2660,7 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
     let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 3, "genuine corpus");
+    assert_eq!(lib.matches("pub fn oracle_").count(), 4, "genuine corpus");
     for forbidden in [".unwrap(", ".expect("] {
         assert!(!lib.contains(forbidden), "main corpus emits {forbidden}");
     }
@@ -2685,7 +2685,7 @@ fn tc_031_ac20_closed_kernel_outcomes_are_exhaustive() {
         "Outcome::Refused(value) => Outcome::Refused(value)",
         "Outcome::Incomplete(value) => Outcome::Incomplete(value)",
     ] {
-        assert_eq!(lib.matches(arm).count(), 2, "{arm} in scalar and equality");
+        assert_eq!(lib.matches(arm).count(), 3, "{arm} in scalar and equality");
     }
     assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Integer(value))"));
     assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Boolean(value))"));
@@ -2733,8 +2733,8 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
             .iter()
             .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
             .count(),
-        3,
-        "all three QSL-authored call items generate"
+        4,
+        "all four QSL-authored call items generate"
     );
     let subjects = first
         .claim_map
@@ -2829,7 +2829,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     let (_package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested"];
+    let ordered = ["add", "eq", "nested", "multiply"];
     assert_eq!(oracles.location_map.len(), ordered.len());
     for entry in &oracles.location_map {
         assert_eq!(entry.location.path, Vec::<usize>::new());

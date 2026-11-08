@@ -654,7 +654,13 @@ impl PackageBuilder {
                 "kind": "model", "identity": FIXTURE_MODEL, "node": FIXTURE_RELATIONSHIP,
             });
         }
+        let original_count = nodes.len();
         nodes.push(node);
+        if let Some(rows) = self.value["semantic_graph"].get_mut("operand_rows") {
+            let rows = rows.as_array_mut().expect("authored operand rows");
+            assert_eq!(rows.len(), original_count, "one row per existing producer node");
+            rows.push(json!([]));
+        }
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
@@ -3444,9 +3450,9 @@ pub fn bounded_increment_package() -> PackageBuilder {
     builder.code(
         V_PARAM_X,
         "value",
-        "literal",
+        "parameter",
         &bound_key,
-        literal("integer", "3"),
+        parameter_body("x", 0),
     );
     builder.application_bounded(
         BOUNDED_INCREMENT,
@@ -3472,9 +3478,9 @@ pub fn bounded_decrement_package() -> PackageBuilder {
     builder.code(
         V_PARAM_X,
         "value",
-        "literal",
+        "parameter",
         &bound_key,
-        literal("integer", "3"),
+        parameter_body("x", 0),
     );
     builder.application_bounded(
         BOUNDED_DECREMENT,
@@ -3767,7 +3773,7 @@ fn two_parameter_wire() -> PackageBuilder {
         (V_PARAM_C, &c),
         (V_PARAM_D, &d),
     ] {
-        builder.code(code, "value", "literal", bound, literal("integer", "3"));
+        builder.code(code, "value", "parameter", bound, parameter_body(&format!("p{code}"), 0));
     }
     builder.code(
         V_PARAM_WRONG_FORM,

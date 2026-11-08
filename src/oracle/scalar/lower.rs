@@ -98,6 +98,15 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             }
         }
     }
+    if let Some(node) = graph.node(requested_node_id) {
+        if node.node_tag.as_ref() == "model" && node.semantic_form.as_ref() != "variant_type" {
+            return Err(ExactScalarRefusal::BlockedOnUpstream {
+                unsupported_node_id: requested_node_id.clone(),
+                node_tag: "model",
+                issue: UpstreamBlocker::QuireSpecLanguage120,
+            }.into());
+        }
+    }
     let node = lowered(record)
         .map_err(|refusal| division_operand_bound_refusal(graph, requested_node_id, refusal))?;
     if node.node_tag != CheckedNodeTag::Expression {

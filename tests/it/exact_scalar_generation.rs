@@ -1457,8 +1457,8 @@ fn minimal_integer_builder() -> PackageBuilder {
     builder
 }
 
-/// A binary Integer application whose first referenced value holds a wide
-/// aggregate body. The reader can type both arguments as Integer, and lowering
+/// A binary Integer application whose first referenced expression holds a wide
+/// reference aggregate. The reader validates its explicit dependency, and lowering
 /// visits the aggregate's terms and successor edges through that reference.
 fn work_exhausted_builder(references: usize) -> PackageBuilder {
     let body = json!({
@@ -1468,7 +1468,7 @@ fn work_exhausted_builder(references: usize) -> PackageBuilder {
             .collect::<Vec<_>>(),
     });
     let mut builder = minimal_integer_builder();
-    builder.code(3003, "value", "literal", &key(T_INTEGER), body);
+    builder.node_with(&key(3003), "expression", "call", &key(T_INTEGER), body, &[key(V_INTEGER)]);
     builder.application_code_with(
         3001,
         "expression",

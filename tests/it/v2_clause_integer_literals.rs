@@ -98,7 +98,7 @@ fn reader_variant(
         "contract_version": "quire.checked-package/v2",
         "name": package.name(),
         "lock": package.lock(),
-        "semantic_graph": package.resolved_graph(),
+        "semantic_graph": package.graph(),
         "source_map": package.source_map(),
         "capability_report": package.capability_report(),
         "diagnostics": package.diagnostics(),

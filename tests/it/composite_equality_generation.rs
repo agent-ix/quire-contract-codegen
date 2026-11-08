@@ -1432,7 +1432,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
         panic!("duplicate source must retain its owning Package refusal");
     };
     assert_eq!(refusal.code(), qsl_replay::Code::AmbiguousDeclaration);
-    assert_eq!(refusal.cause(), None);
+    assert_eq!(refusal.cause(), Some("ambiguous-name"));
 }
 
 #[trace("FR-018-AC-10", "TC-029")]
@@ -1932,8 +1932,8 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
         .iter()
         .position(|node| node["semantic_form"] == "integer_range")
         .expect("genuine Int bound");
-    let id: quire_contract_model::CheckedNodeId =
-        serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
+    let original = super::admitted_enum_equality::checked(&compiled, &[]);
+    let id = original.resolved_graph().nodes[position].node_id.clone();
     nodes[position]["semantic_form"] = json!("text_bounds");
     let result = read_mutated_wire(wire);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
@@ -2009,6 +2009,7 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
             .expect("nodes");
         let position = nodes.len();
         nodes.push(bad);
+        wire["semantic_graph"]["operand_rows"].as_array_mut().expect("original rows").push(json!([]));
         let node_id = code_id(bound);
         let result = read_mutated_wire(wire);
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {

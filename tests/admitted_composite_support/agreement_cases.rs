@@ -160,7 +160,7 @@ fn genuine_nested_composites_match_outcomes_charges_counters_and_each_denial() {
     for (name,constructor,oracle,operator) in cases {
         let prepared = constructor(Some(compiled.context())).expect("actual emitted preparation");
         let shape = ValueType::Composite(declaration(compiled.context(),name).key().clone());
-        environment.check_type(&shape).expect("independent type check");
+        environment.try_check_type(&shape).expect("independent type check");
         let wire_node = declaration(compiled.context(),name).node();
         assert_eq!(wire_node, declaration(compiled.context(),name).key());
         let checked = environment.check_equality(operator, EqualityOperand::typed(shape.clone()), EqualityOperand::typed(shape), &index).expect("independent equality check");
