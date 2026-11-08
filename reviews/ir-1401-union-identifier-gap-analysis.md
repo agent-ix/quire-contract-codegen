@@ -11,7 +11,7 @@ review_set: subset
 
 ## Summary
 
-Frozen head 749ecb00cf3212fe2baca443247c7a3adc11dc07; base 95356b5b6d9e5df6832403d1e369cb50de5ea803. Ticket: IR-1401. Only the three-file +106/-1 patch is reviewed. No applicable AssuranceProfile exists. No branch, dependency, integration, or CI changes. 
+Frozen head 749ecb00cf3212fe2baca443247c7a3adc11dc07; base 95356b5b6d9e5df6832403d1e369cb50de5ea803. Ticket: IR-1401. Only the three-file +106/-1 patch is reviewed. No applicable AssuranceProfile exists. No branch, dependency, integration, or CI changes.
 
 ## Verdict
 
