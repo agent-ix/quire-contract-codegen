@@ -67,6 +67,7 @@ fn touches_kani(path: &str) -> bool {
         "tests/it/scratch_crate.rs",
         "tests/exact_scalar_support/package.rs",
         "tests/checked_package_support/base.rs",
+        "tests/checked_package_support/draft_rows.rs",
         "tests/checked_package_support/rekey.rs",
         "tests/checked_package_support/temporal.rs",
         "Cargo.toml",
