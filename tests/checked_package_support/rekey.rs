@@ -44,11 +44,17 @@ pub fn resolve_wire(
     limits: CheckedPackageReadLimits,
 ) -> ResolvedWire {
     let mut wire = raw.clone();
-    if let Some(graph) = wire.get_mut("semantic_graph").and_then(Value::as_object_mut) {
+    if let Some(graph) = wire
+        .get_mut("semantic_graph")
+        .and_then(Value::as_object_mut)
+    {
         if !graph.contains_key("operand_rows") {
             if let Some(nodes) = graph.get("nodes").and_then(Value::as_array) {
-                if nodes.iter().all(|node| node["node_id"]["path"].as_array()
-                    .is_some_and(|path| path.iter().all(Value::is_string))) {
+                if nodes.iter().all(|node| {
+                    node["node_id"]["path"]
+                        .as_array()
+                        .is_some_and(|path| path.iter().all(Value::is_string))
+                }) {
                     let rows = vec![Vec::<u64>::new(); nodes.len()];
                     graph.insert("operand_rows".to_owned(), serde_json::json!(rows));
                 }
