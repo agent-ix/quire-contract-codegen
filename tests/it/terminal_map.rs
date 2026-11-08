@@ -753,6 +753,7 @@ fn repeated_identity_refusal() -> ReplayPackageError {
         bytes: b"a source".to_vec(),
     };
     let dependency = |source: &str| DependencyLock {
+                refinement_internals: None,
         identity: "test/units".to_owned(),
         source: locked(source),
     };

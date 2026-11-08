@@ -336,6 +336,8 @@ pub struct DependencyLock {
     pub identity: String,
     /// The dependency's lock source.
     pub source: LockedSource,
+    /// Original optional internal-step rows from this dependency lock.
+    pub refinement_internals: Option<Vec<quire_contract_model::CheckedRefinementInternal>>,
 }
 
 /// Everything about the proving run a replay request repeats.
@@ -462,7 +464,7 @@ impl ReplayInputs {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
-                refinement_internals: None,
+                refinement_internals: dependency.refinement_internals.clone(),
             })
             .collect();
         // One entry per source identity. QSL binds these bytes to the exact source lock.
@@ -644,7 +646,7 @@ impl ReplayPackage {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
-                refinement_internals: None,
+                refinement_internals: dependency.refinement_internals.clone(),
             })
             .collect();
         let mut ordered = site.site.parameters.iter().collect::<Vec<_>>();
@@ -1157,6 +1159,7 @@ fn compile_corpus_qsl_package(
                 bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
             },
             dependencies: vec![DependencyLock {
+                refinement_internals: None,
                 identity: DEPENDENCY_NAME.to_owned(),
                 source: dependency_source,
             }],
@@ -1254,7 +1257,7 @@ impl<'a> From<&'a ReplayPackageError> for ReplaySettlement<'a> {
             ReplayPackageError::InvalidFunction { .. } => Self::CgDefect,
             ReplayPackageError::Dependencies(cause) => cause.into(),
             ReplayPackageError::CallSite(refusal) => refusal.as_ref().into(),
-            ReplayPackageError::WitnessEntryName(_) => Self::CgDefect,
+            ReplayPackageError::WitnessEntryName(_) | ReplayPackageError::RawPackage(_) => Self::CgDefect,
         }
     }
 }

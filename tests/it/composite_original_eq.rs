@@ -735,6 +735,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let package = checked(SOURCE);
     let mut retained = inputs(SOURCE);
     retained.dependencies.push(DependencyLock {
+                refinement_internals: None,
         identity: "test/extra".to_owned(),
         source: retained.source.clone(),
     });
@@ -1195,12 +1196,13 @@ fn original_imported_context_refuses_before_invocation() {
         ) {
             CheckedPackageV2ReadResult::Admitted(package) => OriginalPackage {
                 checked: *package,
-                raw: qsl_replay::ReplayPackage::read(bytes, u64::MAX).unwrap(),
+                raw: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
             },
             other => panic!("genuine library admits: {other:?}"),
         };
         (
             DependencyLock {
+                refinement_internals: None,
                 identity: "test/eq-library".to_owned(),
                 source,
             },

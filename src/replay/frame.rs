@@ -305,6 +305,8 @@ impl fmt::Display for PreStateFault {
 /// Why a frame replay produced no result.
 #[derive(Debug)]
 pub enum FrameReplayError {
+    /// The original emitted package could not be retained for replay.
+    RawPackage(quire_canonical::ReadError),
     /// The selected frame target does not bind to the admitted CG item and located QSL site.
     SelectedTarget(SelectedTargetMember),
     /// The lock's dependency selections are not admitted.
@@ -365,6 +367,7 @@ pub enum FrameReplayError {
 impl fmt::Display for FrameReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::RawPackage(cause) => cause.fmt(f),
             Self::SelectedTarget(member) => write!(f, "selected frame target: {member}"),
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the operation was not located: {refusal}"),
@@ -426,7 +429,8 @@ impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
             FrameReplayError::SelectedTarget(_) => Self::CgDefect,
             FrameReplayError::Dependencies(cause) => cause.into(),
             FrameReplayError::CallSite(refusal) => refusal.as_ref().into(),
-            FrameReplayError::Name(_)
+            FrameReplayError::RawPackage(_)
+            | FrameReplayError::Name(_)
             | FrameReplayError::Transcript(_)
             | FrameReplayError::Envelope(_)
             | FrameReplayError::NotAFrame
@@ -766,6 +770,8 @@ impl FrameReplay {
         let keys = crate::core::ir::node_key::producer_node_keys(&located.package);
         let located_identity: LocatedPackageIdentity = serde_json::from_slice(&located.package)
             .map_err(|_| FrameReplayError::SelectedTarget(SelectedTargetMember::Package))?;
+        let raw_package = qsl_replay::ReplayPackage::read(&located.package, u64::MAX)
+            .map_err(FrameReplayError::RawPackage)?;
         let site = located.site;
         let selected_target = selected_target.ok_or(FrameReplayError::SelectedTarget(
             SelectedTargetMember::Missing,
@@ -814,6 +820,7 @@ impl FrameReplay {
             .collect::<Vec<_>>();
         let request = |source: ReplaySource| {
             run.wire(
+                raw_package.clone(),
                 RequestTargetWire::frame_operation(selected_target.operation.clone()),
                 source,
                 obligation.clone(),

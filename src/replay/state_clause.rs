@@ -239,6 +239,8 @@ impl fmt::Display for StateClauseHarnessMember {
 /// Why a state-clause replay produced no result.
 #[derive(Debug)]
 pub enum StateClauseReplayError {
+    /// The original emitted package could not be retained for replay.
+    RawPackage(quire_canonical::ReadError),
     /// The supplied harness is not an operation-contract postcondition harness.
     NotPostconditionHarness,
     /// The harness and the selected replay inputs name different obligations or field order.
@@ -315,6 +317,7 @@ pub enum StateClauseReplayError {
 impl fmt::Display for StateClauseReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::RawPackage(cause) => cause.fmt(f),
             Self::NotPostconditionHarness => f.write_str("the harness is not a postcondition"),
             Self::HarnessMismatch { member } => write!(f, "the harness's {member} differs"),
             Self::PlaybackAlreadySupplied => f.write_str("playback values were already supplied"),
@@ -379,7 +382,8 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::ClauseSelectionMismatch => Self::CgDefect,
             StateClauseReplayError::Dependencies(cause) => cause.into(),
             StateClauseReplayError::CallSite(refusal) => refusal.as_ref().into(),
-            StateClauseReplayError::Name(_)
+            StateClauseReplayError::RawPackage(_)
+            | StateClauseReplayError::Name(_)
             | StateClauseReplayError::Transcript(_)
             | StateClauseReplayError::Envelope(_)
             | StateClauseReplayError::Document(_)
@@ -601,6 +605,8 @@ impl StateClauseReplay {
             &clause,
         )
         .map_err(StateClauseReplayError::CallSite)?;
+        let raw_package = qsl_replay::ReplayPackage::read(&located.package, u64::MAX)
+            .map_err(StateClauseReplayError::RawPackage)?;
         let site = located.site;
         if package
             .structural_key(clause_node)
@@ -678,6 +684,7 @@ impl StateClauseReplay {
             .collect::<Vec<_>>();
         ensure_unique_documents(&documents)?;
         let wire = run.wire(
+                raw_package.clone(),
             RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
             obligation_identity.clone(),
