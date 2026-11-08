@@ -177,6 +177,8 @@ impl From<MalformedTranscript> for SpineReplayError {
 ///
 /// [`SpineReplayError`] when a value has no parameter, the transcript is not admitted, or the
 /// executor refuses the request.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_falsification(
     harness: &str,
     check_text: &str,
@@ -224,6 +226,8 @@ pub(crate) fn render_witness(
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
 type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, SpineReplayError>;
 
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 fn replay_falsification_through(
     harness: &str,
     check_text: &str,
@@ -678,6 +682,8 @@ impl ReplayPackage {
     /// # Errors
     ///
     /// Returns a dependency selection mismatch at the first missing, extra, reordered, or unequal entry.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn check_dependency_selection(
         &self,
         request: &ReplayRequestWire,
@@ -708,6 +714,8 @@ impl ReplayPackage {
     ///
     /// [`SpineReplayError::DependencySelectionMismatch`] before dispatch, or
     /// [`SpineReplayError::Refused`] if the executor refuses the admitted request.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn replay_request_through(
         &self,
         request: ReplayRequestWire,
@@ -1039,6 +1047,8 @@ impl BoundedCorpusCase {
     /// The package is compiled from the generated unit and imported dependency source each time;
     /// the harness identity is then tied to QSL's selected function site. The replay checks the
     /// parsed source length and value count against `limits` before native execution.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn replay_counterexample(
         &self,
         playback: &Playback<'_>,
@@ -1324,6 +1334,8 @@ impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
 ///
 /// [`SpineReplayError`] when the adapter cannot build an admitted request or QSL refuses it;
 /// those are not verdicts on the evidence.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_counterexample(
     identity: &KaniObligationIdentity,
     playback: &Playback<'_>,
@@ -1341,6 +1353,8 @@ pub fn replay_counterexample(
 /// # Errors
 ///
 /// [`SpineReplayError`] when the playback cannot be decoded or QSL refuses the replay request.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn replay_harness_counterexample(
     identity: &ReplayHarnessIdentity,
     playback: &Playback<'_>,
@@ -1353,6 +1367,8 @@ pub(crate) fn replay_harness_counterexample(
 
 /// [`replay_harness_counterexample`] with an injected executor, for recording the exact typed
 /// request QSL receives in focused tests.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn replay_harness_counterexample_through(
     identity: &ReplayHarnessIdentity,
     playback: &Playback<'_>,
@@ -1429,6 +1445,8 @@ pub(crate) fn replay_harness_counterexample_through(
 /// # Errors
 ///
 /// As [`replay_counterexample`].
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_counterexample_through(
     identity: &KaniObligationIdentity,
     playback: &Playback<'_>,
