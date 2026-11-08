@@ -104,7 +104,8 @@ pub(super) fn check_item<'r, Body: GraphBody>(
                 unsupported_node_id: requested_node_id.clone(),
                 node_tag: "model",
                 issue: UpstreamBlocker::QuireSpecLanguage120,
-            }.into());
+            }
+            .into());
         }
     }
     let node = lowered(record)

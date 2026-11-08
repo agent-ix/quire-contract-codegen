@@ -1468,7 +1468,14 @@ fn work_exhausted_builder(references: usize) -> PackageBuilder {
             .collect::<Vec<_>>(),
     });
     let mut builder = minimal_integer_builder();
-    builder.node_with(&key(3003), "expression", "call", &key(T_INTEGER), body, &[key(V_INTEGER)]);
+    builder.node_with(
+        &key(3003),
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        body,
+        &[key(V_INTEGER)],
+    );
     builder.application_code_with(
         3001,
         "expression",
@@ -2307,7 +2314,7 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     assert!(matches!(
         dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
         Some(ClaimDisposition::Generated(_))
-    ));
+    ), "bounded increment claims: {:?}", oracles.claim_map.items);
 }
 
 fn add_over(low: i64, high: i64) -> ExactScalarOperation {

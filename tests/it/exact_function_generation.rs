@@ -1466,7 +1466,10 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     let (_, baseline) = super::exact_function_agreement::genuine_corpus();
     let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_unknown();
-    assert_eq!(oracles.claim_map.items.len(), baseline.claim_map.items.len() + 1);
+    assert_eq!(
+        oracles.claim_map.items.len(),
+        baseline.claim_map.items.len() + 1
+    );
     for expected in &baseline.claim_map.items {
         let actual = oracles
             .claim_map

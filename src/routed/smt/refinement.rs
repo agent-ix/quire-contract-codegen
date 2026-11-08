@@ -288,7 +288,9 @@ fn serialize_verified_fields<Item, Subjects>(
                 bytes.extend_from_slice(&row.to_le_bytes());
             }
         }
-        let (Some(query), Some(proof)) = (record.query_bytes.as_deref(), record.proof_bytes.as_deref()) else {
+        let (Some(query), Some(proof)) =
+            (record.query_bytes.as_deref(), record.proof_bytes.as_deref())
+        else {
             return Err(RefinementHandoffError::MissingField);
         };
         for field in [query, proof] {

@@ -658,7 +658,11 @@ impl PackageBuilder {
         nodes.push(node);
         if let Some(rows) = self.value["semantic_graph"].get_mut("operand_rows") {
             let rows = rows.as_array_mut().expect("authored operand rows");
-            assert_eq!(rows.len(), original_count, "one row per existing producer node");
+            assert_eq!(
+                rows.len(),
+                original_count,
+                "one row per existing producer node"
+            );
             rows.push(json!([]));
         }
         let map = self.value["source_map"].as_array_mut().expect("source map");
@@ -3773,7 +3777,13 @@ fn two_parameter_wire() -> PackageBuilder {
         (V_PARAM_C, &c),
         (V_PARAM_D, &d),
     ] {
-        builder.code(code, "value", "parameter", bound, parameter_body(&format!("p{code}"), 0));
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            bound,
+            parameter_body(&format!("p{code}"), 0),
+        );
     }
     builder.code(
         V_PARAM_WRONG_FORM,

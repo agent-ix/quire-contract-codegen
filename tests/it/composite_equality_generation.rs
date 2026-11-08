@@ -2009,7 +2009,10 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
             .expect("nodes");
         let position = nodes.len();
         nodes.push(bad);
-        wire["semantic_graph"]["operand_rows"].as_array_mut().expect("original rows").push(json!([]));
+        wire["semantic_graph"]["operand_rows"]
+            .as_array_mut()
+            .expect("original rows")
+            .push(json!([]));
         let node_id = code_id(bound);
         let result = read_mutated_wire(wire);
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {
