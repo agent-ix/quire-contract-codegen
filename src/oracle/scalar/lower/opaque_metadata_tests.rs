@@ -95,8 +95,8 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
                 continue;
             }
             match value {
-                Value::Object(members) => pending.extend(members.values_mut()),
-                Value::Array(values) => pending.extend(values.iter_mut()),
+                Value::Object(members) => pending.extend(members.values_mut().rev()),
+                Value::Array(values) => pending.extend(values.iter_mut().rev()),
                 _ => {}
             }
         }
