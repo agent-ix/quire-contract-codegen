@@ -36,18 +36,42 @@ pub(super) fn refresh_identity(wire: &mut Value) {
     assert!(wire["lock"].is_object(), "fixture package needs a lock");
 }
 
-/// Submit the producer's wire unchanged so the reader is the admission authority.
+/// Author empty operand rows for name-only fixture nodes, then let the reader admit the wire.
+/// Existing operand rows and all producer identities remain unchanged.
 pub fn resolve_wire(
     raw: &Value,
     evidence: &CheckedPackageEvidence,
     limits: CheckedPackageReadLimits,
 ) -> ResolvedWire {
-    let wire = raw.clone();
+    let mut wire = raw.clone();
+    author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("fixture wire serializes");
     let outcome = CheckedPackageV2::read(&bytes, limits, evidence);
     ResolvedWire {
         wire,
         outcome,
         ids: FixtureIds,
+    }
+}
+
+/// Supply the required empty rows for this producer's name-only fixture graph.
+/// Existing rows, slot identities and document-index identities are never rewritten.
+pub fn author_name_only_operand_rows(wire: &mut Value) {
+    if let Some(graph) = wire
+        .get_mut("semantic_graph")
+        .and_then(Value::as_object_mut)
+    {
+        if !graph.contains_key("operand_rows") {
+            if let Some(nodes) = graph.get("nodes").and_then(Value::as_array) {
+                if nodes.iter().all(|node| {
+                    node["node_id"]["path"]
+                        .as_array()
+                        .is_some_and(|path| path.iter().all(Value::is_string))
+                }) {
+                    let rows = vec![Vec::<u64>::new(); nodes.len()];
+                    graph.insert("operand_rows".to_owned(), serde_json::json!(rows));
+                }
+            }
+        }
     }
 }

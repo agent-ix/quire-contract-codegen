@@ -77,7 +77,7 @@ impl ScalarReplayBody {
         result_range: quire_contract_model::CheckedScalarOperandRange,
     ) -> Result<Self, ScalarAuthorityError> {
         let node_record = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|entry| &entry.node_id == node)

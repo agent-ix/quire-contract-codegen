@@ -41,7 +41,7 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
     let graph = Graph::from_checked(package);
     let root = declaration(context, "Wrap");
     let id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -237,7 +237,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let healthy = closure(&package, &context);
     let shape = declaration(&context, "Shape");
     let original = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -292,7 +292,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let mut wrong_kind = original.clone();
     let marker = context.enums().next().expect("genuine enum");
     wrong_kind.node_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

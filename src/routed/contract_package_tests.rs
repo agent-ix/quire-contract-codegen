@@ -251,7 +251,7 @@ mod tests {
             other => panic!("imported integer program must admit: {other:?}"),
         };
         let function = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -278,7 +278,7 @@ mod tests {
             })
             .expect("body binding references a node");
         let call = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -527,7 +527,7 @@ mod tests {
     ) {
         let source = admitted_source(SOURCE);
         let function = source
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1076,9 +1076,12 @@ mod tests {
             .iter()
             .skip(1)
             .map(|argument| {
-                crate::oracle::function::reference_node_id(argument, checked.graph().nodes.iter())
-                    .expect("call argument reference")
-                    .clone()
+                crate::oracle::function::reference_node_id(
+                    argument,
+                    checked.resolved_graph().nodes.iter(),
+                )
+                .expect("call argument reference")
+                .clone()
             })
             .collect()
     }
@@ -1189,7 +1192,10 @@ mod tests {
 
         let (shared, shared_ids) = source_bound_call_package().admit_resolved();
         let (different, different_ids) = ac11_classifier_package().admit_resolved();
-        assert_ne!(shared.graph().nodes, different.graph().nodes);
+        assert_ne!(
+            shared.resolved_graph().nodes,
+            different.resolved_graph().nodes
+        );
         assert_eq!(
             shared_ids.resolve(&code_id(SOURCE_CALL)),
             different_ids.resolve(&code_id(SOURCE_CALL)),
@@ -1214,12 +1220,13 @@ mod tests {
         let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
         // Cloned requests share the admitted instance; independently admitted packages with
         // overlapping identities remain separate.
-        let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
+        let expected_visits =
+            shared.resolved_graph().nodes.len() + different.resolved_graph().nodes.len();
         let max_graph_nodes = shared
-            .graph()
+            .resolved_graph()
             .nodes
             .len()
-            .max(different.graph().nodes.len());
+            .max(different.resolved_graph().nodes.len());
         let first = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
             extent: Some(ExtentClassification {
@@ -1322,11 +1329,11 @@ mod tests {
         let (other, other_ids) = ac11_classifier_package().admit_resolved();
         let checked = std::sync::Arc::new(checked);
         let other = std::sync::Arc::new(other);
-        let node_count = checked.graph().nodes.len() + other.graph().nodes.len();
+        let node_count = checked.resolved_graph().nodes.len() + other.resolved_graph().nodes.len();
         let call = ids.resolve(&code_id(SOURCE_CALL));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
-        assert_ne!(checked.graph().nodes, other.graph().nodes);
+        assert_ne!(checked.resolved_graph().nodes, other.resolved_graph().nodes);
         assert_eq!(
             call, other_call,
             "distinct packages share a checked node id"
@@ -1404,7 +1411,7 @@ mod tests {
 
     fn source_function_body(checked: &CheckedPackageV2, name: &str) -> CheckedNodeId {
         let function = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1421,7 +1428,7 @@ mod tests {
             .expect("checked function body");
         let body =
             crate::oracle::function::binding_value(term, "body").expect("function body binding");
-        crate::oracle::function::reference_node_id(body, checked.graph().nodes.iter())
+        crate::oracle::function::reference_node_id(body, checked.resolved_graph().nodes.iter())
             .expect("function body reference")
             .clone()
     }
@@ -1511,7 +1518,7 @@ mod tests {
     fn admitted_qsl_positions_keep_repeated_keys_and_absent_sibling_sources() {
         let source = admitted_source(SOURCE);
         let function = source
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1738,7 +1745,7 @@ mod tests {
         for (source_text, operation) in variants {
             let source = admitted_source(source_text);
             let expression = source
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| {
@@ -1791,7 +1798,7 @@ mod tests {
             let source = SOURCE.replace("a = a", &format!("a {symbol} a"));
             let checked = admitted_source(&source);
             let expression = checked
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| application_identity(node) == Some(operation))
@@ -1935,7 +1942,7 @@ mod tests {
 
         let checked = admitted_source(&SOURCE.replace("a = a", "a < 5"));
         let expression = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.lt"))
@@ -2022,7 +2029,7 @@ mod tests {
              function f using v(x: Int[0, 9]): Boolean pure { g(x + 1) and h(x + 1) }\n",
         );
         let adds = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| application_identity(node) == Some("quire.op.integer.add"))
@@ -2046,7 +2053,7 @@ mod tests {
         };
         assert_ne!(first.ordinal, second.ordinal);
         let mut conversions = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -2055,7 +2062,7 @@ mod tests {
             })
             .map(|node| {
                 let bound = checked
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|bound| bound.node_id == node.semantic_type)
@@ -2318,7 +2325,7 @@ mod tests {
         } = &mut foreign_conversion[0]
         {
             conversion.node_id = foreign_checked
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| &*node.node_tag == "expression")
@@ -2565,7 +2572,7 @@ mod tests {
         let source = SOURCE.replace("Boolean pure { a = a }", "Int[0, 18] pure { a + a }");
         let checked = admitted_source(&source);
         let expression = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.add"))
@@ -2573,7 +2580,7 @@ mod tests {
             .node_id
             .clone();
         let conversions = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -2659,7 +2666,7 @@ mod tests {
         );
         let checked = admitted_source(&source);
         let expression = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.add"))
@@ -2667,7 +2674,7 @@ mod tests {
             .node_id
             .clone();
         let conversions = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -2832,7 +2839,7 @@ mod tests {
                 "conversion is represented in its V1 frame"
             );
             let target = source
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| &node.node_id == conversion)
@@ -2870,7 +2877,7 @@ mod tests {
     fn admitted_failed_accounting_refuses_without_an_oracle() {
         let checked = admitted_source(SOURCE);
         let expression = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.eq"))
@@ -2933,7 +2940,7 @@ mod tests {
             function caller using v(a: Integer, b: Integer): Integer pure { add(a, b) }\n";
         let checked = admitted_source(source);
         let addition = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.add"))
@@ -2941,7 +2948,7 @@ mod tests {
             .node_id
             .clone();
         let call = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -2951,7 +2958,7 @@ mod tests {
             .node_id
             .clone();
         let integer = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3115,7 +3122,7 @@ mod tests {
         assert_eq!(genuine.context().package_name().as_str(), checked.name());
 
         let integer = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3126,7 +3133,7 @@ mod tests {
             .clone();
         let addition = source_function_body(&checked, "add");
         let unbounded = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3134,7 +3141,7 @@ mod tests {
                     && argument_target(node, 1)
                         .and_then(|target| {
                             checked
-                                .graph()
+                                .resolved_graph()
                                 .nodes
                                 .iter()
                                 .find(|operand| &operand.node_id == target)
@@ -3146,7 +3153,7 @@ mod tests {
             .node_id
             .clone();
         let call = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3156,7 +3163,7 @@ mod tests {
             .node_id
             .clone();
         let equality = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some("quire.op.integer.eq"))
@@ -3370,7 +3377,7 @@ mod tests {
             other => panic!("library source must admit: {other:?}"),
         };
         let target = library
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3383,7 +3390,7 @@ mod tests {
             .node_id
             .clone();
         let second_target = library
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3436,16 +3443,15 @@ mod tests {
             CheckedPackageV2ReadResult::Admitted(package) => package,
             other => panic!("selected call must admit: {other:?}"),
         };
-        assert!(checked
-            .graph()
-            .nodes
-            .iter()
-            .any(|node| node.declaration.as_ref().is_some_and(|declaration| {
+        assert!(checked.resolved_graph().nodes.iter().any(|node| node
+            .declaration
+            .as_ref()
+            .is_some_and(|declaration| {
                 declaration.qualified_name.len() == 1
                     && declaration.qualified_name[0].as_ref() == "f"
             })));
         let call = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3588,7 +3594,7 @@ mod tests {
         // different keys. Rebinding the local key in canonical checked wire
         // must be refused by Contract IR before the forged pair can reach CG.
         let local = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3608,19 +3614,12 @@ mod tests {
             &serde_json::to_value(&local).expect("local key"),
             &serde_json::to_value(&target).expect("selected target key"),
         );
-        for pointer in ["/semantic_graph/nodes", "/source_map"] {
-            collision
-                .pointer_mut(pointer)
-                .and_then(serde_json::Value::as_array_mut)
-                .expect("checked wire array")
-                .sort_by(|left, right| {
-                    let left: CheckedNodeId =
-                        serde_json::from_value(left["node_id"].clone()).expect("left key");
-                    let right: CheckedNodeId =
-                        serde_json::from_value(right["node_id"].clone()).expect("right key");
-                    left.cmp(&right)
-                });
-        }
+        let local_position = checked
+            .resolved_graph()
+            .nodes
+            .iter()
+            .position(|node| node.node_id == local)
+            .expect("local original position");
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))
                 .expect("checked wire canonicalizes");
@@ -3639,7 +3638,7 @@ mod tests {
         assert_eq!(refusal.cause, None);
         assert_eq!(
             refusal.loci[0].path.as_ref().map(|path| path.as_str()),
-            Some("/semantic_graph/nodes/11/node_id/package")
+            Some(format!("/semantic_graph/nodes/{local_position}/node_id/package").as_str())
         );
     }
 }

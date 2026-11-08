@@ -20,6 +20,10 @@ mod generated {
         let mut prepared = environment_e_record_equal(Some(super::support::context()))
             .expect("original prepared capability");
         prepared.environment = environment;
+        let left_type = match &prepared.left_target { Some(target) => target, None => &prepared.left_source };
+        let right_type = match &prepared.right_target { Some(target) => target, None => &prepared.right_source };
+        prepared.type_refusal = comparison_type_refusal(&prepared.environment, left_type, right_type)
+            .expect("private semantic environment fault reaches no native stop");
         oracle_e_record_equal(&prepared, left, right, meter)
     }
 
@@ -143,10 +147,10 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
         )
         .unwrap(),
     ] {
-        let expected = empty
-            .check_type(&rt_side::composite_type(R_POINT))
-            .expect_err("the actual Point key is absent")
-            .cause;
+        let quire_semantic_value::declaration::TypeCheckError::Refused(expected) = empty
+            .try_check_type(&rt_side::composite_type(R_POINT))
+            .expect_err("the actual Point key is absent") else { panic!("semantic missing-key refusal"); };
+        let expected = expected.cause;
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let outcome = generated::record_with_replaced_environment(empty, &left, &right, &mut meter);
         assert_eq!(

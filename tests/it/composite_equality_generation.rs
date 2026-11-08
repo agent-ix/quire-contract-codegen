@@ -7,6 +7,10 @@
 //! `check_type` guard, AC-9's denial injection, AC-11's complementary
 //! outcomes) are covered by `tests/composite_equality_agreement.rs`.
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use ix_trace_rs::trace;
 use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
@@ -207,7 +211,7 @@ fn generate_with_context(
             .flatten()
         })
         .collect::<BTreeSet<_>>();
-    let graph = &package.checked.graph().nodes;
+    let graph = &package.checked.resolved_graph().nodes;
     let selected_groups = graph
         .iter()
         .filter(|node| selected_types.contains(&node.node_id))
@@ -420,29 +424,37 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
             .expect("read authoritative QSpec fixture"),
     )
     .expect("QSpec fixture JSON");
+    let frame = qsl_replay::WireGraph::of_package_value(&wire).expect("QSpec wire context");
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let case_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        nodes
-            .iter()
-            .find(|node| node["semantic_form"] == "case")
-            .unwrap()["node_id"]
-            .clone(),
-    )
-    .unwrap();
-    let integer_type = nodes
+    let document_id = |position: usize| {
+        frame
+            .document_value_in_row(position, &nodes[position]["node_id"])
+            .expect("document-held identity from the original holding row")
+    };
+    let case_position = nodes
         .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .unwrap()["node_id"]
-        .clone();
+        .position(|node| node["semantic_form"] == "case")
+        .unwrap();
+    let case_id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(document_id(case_position)).unwrap();
+    let integer_position = nodes
+        .iter()
+        .position(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+        .unwrap();
+    let integer_type = document_id(integer_position);
     let integer_literals: Vec<serde_json::Value> = nodes
         .iter()
-        .filter(|node| {
+        .enumerate()
+        .filter(|(position, node)| {
             node["node_tag"] == "value"
                 && node["semantic_form"] == "literal"
-                && node["semantic_type"] == integer_type
+                && frame
+                    .document_value_in_row(*position, &node["semantic_type"])
+                    .unwrap()
+                    == integer_type
         })
         .take(2)
-        .map(|node| node["node_id"].clone())
+        .map(|(position, _)| document_id(position))
         .collect();
     assert_eq!(integer_literals.len(), 2);
 
@@ -467,7 +479,23 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
                 "arguments":integer_literals.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>(),
             }),
         );
-    let (admission, _, ids) = builder.read_resolved();
+    // Only the newly authored equality row needs document references lowered
+    // into its own canonical slots. The imported graph keeps its original bytes.
+    let mut extended = builder.wire();
+    let position = extended["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .len()
+        - 1;
+    let mut row = Vec::new();
+    let package_name = extended["name"].as_str().unwrap().to_owned();
+    draft_rows::author_row(
+        &package_name,
+        &mut extended["semantic_graph"]["nodes"][position],
+        &mut row,
+    );
+    extended["semantic_graph"]["operand_rows"][position] = json!(row);
+    let (admission, _, ids) = PackageBuilder::from_wire(extended).read_resolved();
     let package = match admission {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("extended QSpec fixture should admit: {other:?}"),
@@ -682,7 +710,7 @@ fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
         assert_eq!(term["term"], "reference");
         serde_json::from_value(term["target"].clone()).expect("reader-admitted wire reference")
     }
-    let nodes = &package.graph().nodes;
+    let nodes = &package.resolved_graph().nodes;
     let lookup = |id: &CheckedNodeId| {
         nodes
             .iter()
@@ -901,7 +929,7 @@ fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
     let mut bad = super::admitted_enum_equality::direct_source_item(&package, "holder_same");
     let original = bad.left.source_type.clone();
     let boolean = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "boolean")
@@ -996,7 +1024,7 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
     let package = admit(corpus_package());
     let sequence = package.ids.resolve(&code_id(SEQ_INT));
     let bound = package.ids.resolve(&code_id(CB_INT));
-    let graph = &package.checked.graph().nodes;
+    let graph = &package.checked.resolved_graph().nodes;
     let sequence_node = graph.iter().find(|node| node.node_id == sequence).unwrap();
     let bound_node = graph.iter().find(|node| node.node_id == bound).unwrap();
     assert_eq!(sequence_node.semantic_form.as_ref(), "sequence");
@@ -1432,7 +1460,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
         panic!("duplicate source must retain its owning Package refusal");
     };
     assert_eq!(refusal.code(), qsl_replay::Code::AmbiguousDeclaration);
-    assert_eq!(refusal.cause(), None);
+    assert_eq!(refusal.cause(), Some("ambiguous-name"));
 }
 
 #[trace("FR-018-AC-10", "TC-029")]
@@ -1748,7 +1776,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             .iter()
             .map(|actual| {
                 package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|node| {
@@ -1932,8 +1960,8 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
         .iter()
         .position(|node| node["semantic_form"] == "integer_range")
         .expect("genuine Int bound");
-    let id: quire_contract_model::CheckedNodeId =
-        serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
+    let original = super::admitted_enum_equality::checked(&compiled, &[]);
+    let id = original.resolved_graph().nodes[position].node_id.clone();
     nodes[position]["semantic_form"] = json!("text_bounds");
     let result = read_mutated_wire(wire);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
@@ -2009,6 +2037,10 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
             .expect("nodes");
         let position = nodes.len();
         nodes.push(bad);
+        wire["semantic_graph"]["operand_rows"]
+            .as_array_mut()
+            .expect("original rows")
+            .push(json!([]));
         let node_id = code_id(bound);
         let result = read_mutated_wire(wire);
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {
@@ -2357,6 +2389,9 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             assert!(function
                 .body
                 .contains(".map_err(EnvironmentError::Declaration)?"));
+            assert!(function.body.contains(
+                "comparison_type_refusal(&environment, left_comparison, right_comparison)?"
+            ));
         }
         for function in fns
             .iter()
@@ -2367,8 +2402,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
                 "actual.as_str() !=",
                 "EXPECTED_PACKAGE_BYTES !=",
                 "GeneratedDescriptorReconstructionFailed",
-                "environment.check_type(left_comparison)",
-                "environment.check_type(right_comparison)",
+                "prepared.type_refusal",
                 "&prepared.enum_members",
                 "GeneratedTypeCheckRejected",
                 "GeneratedEqualityCheckRejected",
@@ -2391,6 +2425,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             "ContextPackageMismatch {",
             "Lookup(qsl_replay::AdmittedLookupRefusal),",
             "Declaration(sv::EnvironmentFailure),",
+            "TypeCheck(sv::TypeCheckError),",
             "Reconstruction(ReconstructionError),",
         ] {
             assert!(

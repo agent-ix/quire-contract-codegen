@@ -306,7 +306,7 @@ fn collection_identity(
 ) -> quire_contract_codegen::CollectionObligationIdentity {
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -320,7 +320,7 @@ fn collection_identity(
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some(operation))
@@ -381,7 +381,7 @@ fn collection_harness_with_ceilings(
 ) -> KaniCollectionObligationHarness {
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -395,7 +395,7 @@ fn collection_harness_with_ceilings(
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some(operation))
@@ -445,7 +445,7 @@ fn collection_item_outcome(
 ) -> KaniObligationOutcome {
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -459,7 +459,7 @@ fn collection_item_outcome(
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some(operation))
@@ -690,9 +690,8 @@ fn replay_collection_function(
     .expect("QSL writes the environment through its authoritative builder");
 
     let request = ReplayRequestWire {
-        package_name: "ir268-symbolic".to_owned(),
+        package: qsl_replay::ReplayPackage::read(&site.package, u64::MAX).unwrap(),
         profile_selections: Vec::new(),
-        sources: vec![("agent-ix".to_owned(), "ir268-symbolic.native".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(selection, site.site.declaration.clone()),
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {
@@ -842,7 +841,7 @@ fn admit_emitted(
         }
     };
     let object_fields: Vec<_> = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter_map(|node| {
@@ -883,7 +882,7 @@ fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
     .expect("admitted clause");
     let clause = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1046,14 +1045,14 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     assert!(!fixture.package.name().is_empty());
     let forall = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .expect("QSL lowered the source forall to its catalogued operation");
     let exists = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.exists"))
@@ -1061,14 +1060,14 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     let collection_id = argument_target(forall, 0).expect("forall collection operand identity");
     let collection_node = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == collection_id)
         .expect("the collection operand resolves in the admitted graph");
     let type_node = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == collection_node.semantic_type)
@@ -1077,7 +1076,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         argument_target(exists, 0).expect("exists collection operand identity");
     let exists_collection = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == exists_collection_id)
@@ -1115,7 +1114,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     let receiver_id = argument_target(collection_node, 0).expect("projection receiver identity");
     let receiver = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == receiver_id)
@@ -1123,7 +1122,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     let parameter_id = argument_target(receiver, 0).expect("deref receiver parameter identity");
     let parameter = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == parameter_id)
@@ -1140,7 +1139,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     assert_eq!(type_node.semantic_form.as_ref(), "collection_bounds");
     let sequence_type = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == type_node.semantic_type)
@@ -1154,7 +1153,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     assert_eq!(bound("max"), Some(3));
     let function = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1169,7 +1168,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     };
     let body_node = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == target)
@@ -1241,7 +1240,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     let fixture = emitted();
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1259,7 +1258,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     ] {
         let quantifier = fixture
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| application_identity(node) == Some(operation))
@@ -1583,7 +1582,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
     );
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1597,7 +1596,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
@@ -1886,7 +1885,7 @@ fn precondition_collection_outcome(
 ) -> KaniObligationOutcome {
     let clause = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2294,7 +2293,7 @@ fn precondition_collection_source_is_admitted() {
     assert_eq!(
         fixture
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| fixture
@@ -2308,7 +2307,7 @@ fn precondition_collection_source_is_admitted() {
     );
     let clause = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2355,7 +2354,7 @@ fn precondition_collection_source_is_admitted() {
 
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
@@ -3169,7 +3168,7 @@ fn assert_ordered_set_capacity_refusal(
     ));
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3183,7 +3182,7 @@ fn assert_ordered_set_capacity_refusal(
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
@@ -3236,7 +3235,7 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
     );
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3250,7 +3249,7 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
@@ -3296,7 +3295,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
     let fixture = emitted();
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3310,7 +3309,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
@@ -3412,7 +3411,7 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
     ));
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3426,14 +3425,14 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap();
     let projected_type = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.record.project"))
@@ -3585,7 +3584,7 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
     ));
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3599,28 +3598,28 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap();
     let projection = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.record.project"))
         .unwrap();
     let collection_type = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == projection.semantic_type)
         .unwrap();
     let sequence_type = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == collection_type.semantic_type)
@@ -3717,7 +3716,7 @@ fn bounded_sequences_of_string_uuid_and_timestamp_require_element_bounds() {
         };
         let element_type = fixture
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -3955,7 +3954,7 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
     let fixture = emitted();
     let function_id = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3969,7 +3968,7 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
         .clone();
     let quantifier = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.forall"))

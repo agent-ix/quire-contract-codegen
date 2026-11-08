@@ -59,7 +59,7 @@ fn each_integer_operator_and_literal_keep_the_public_reader_body_and_real_route(
         let body = fixture.harness.scalar_replay_body().unwrap();
         assert_eq!(body.operation_identity, operation);
         assert_eq!(body.operands.len(), values.len());
-        let original_node = fixture.checked.graph().nodes.iter().find(|node| matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation: entry, .. } if entry.identity() == Some(operation))).expect("independent admitted application");
+        let original_node = fixture.checked.resolved_graph().nodes.iter().find(|node| matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation: entry, .. } if entry.identity() == Some(operation))).expect("independent admitted application");
         assert_eq!(body.node, original_node.node_id);
         assert!(original_node.occurrences.contains(&body.occurrence));
         let independent = fixture

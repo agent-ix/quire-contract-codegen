@@ -725,7 +725,7 @@ fn render_step(
                         BooleanOperator::Implies => "!left",
                         BooleanOperator::Not => return Err(V2ClauseRefusal::Render),
                     };
-                    format!("let left = {};\n    let right = if {decided} {{ false }} else {{ {} }};\n    let outcome = scalar_{index}(left, || rt::Outcome::Completed(right), meter).map_err(ClauseStop::Oracle)?;", arg(0)?, arg(1)?)
+                    format!("let left = {};\n    let right = if {decided} {{ false }} else {{ {} }};\n    let outcome = scalar_{index}(left, |_| rt::Outcome::Completed(right), meter).map_err(ClauseStop::Oracle)?;", arg(0)?, arg(1)?)
                 }
                 ExactScalarOperation::IntegerArithmetic {
                     operator: crate::oracle::operator_catalog::IntegerOperator::Negate,

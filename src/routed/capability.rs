@@ -86,7 +86,7 @@ mod scalar_cache_tests {
             }
             assert_eq!(
                 crate::oracle::scalar::derive::take_scalar_derive_graph_visits(),
-                package.graph().nodes.len(),
+                package.resolved_graph().nodes.len(),
                 "both exact targets must share one scalar graph walk"
             );
         }
@@ -976,6 +976,14 @@ impl KaniForm {
                         admitted,
                     ) {
                         Ok(supported) => supported,
+                        Err(crate::oracle::function::FunctionPackageReadFailure::CatalogUnavailable(cause)) => {
+                            return Ok(KaniFormPreflightOutcome::EnvelopeRefusal(
+                                EnvelopeRefusal::ContractPackageCatalogUnavailable {
+                                    path: cause.path().to_owned(),
+                                    message: cause.to_string(),
+                                },
+                            ));
+                        }
                         Err(crate::oracle::function::FunctionPackageReadFailure::Refused(
                             refusal,
                         )) => {
@@ -1079,6 +1087,13 @@ pub struct BackendProviderEnvelope {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "code", content = "cause")]
 pub enum EnvelopeRefusal {
+    /// The owner operation catalog could not be read; this is not a package defect.
+    ContractPackageCatalogUnavailable {
+        /// The catalog member that failed.
+        path: String,
+        /// The owner diagnostic.
+        message: String,
+    },
     /// The contract version or capability vocabulary is invalid.
     ///
     /// A foreign vocabulary makes every label in the carrier unreadable.

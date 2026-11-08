@@ -65,7 +65,7 @@ fn published_package(fixture: &str) -> CheckedPackageV2 {
 
 fn roots(source: &CheckedPackageV2) -> Vec<CheckedNodeId> {
     source
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .map(|node| node.node_id.clone())
@@ -113,7 +113,7 @@ fn source_framed_value(
 fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
     let graph = CheckedGraph::new(package);
     let source_by_key = source
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter_map(|node| {
@@ -123,7 +123,7 @@ fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
         })
         .collect::<std::collections::BTreeMap<_, _>>();
     let mut keys = std::collections::BTreeMap::new();
-    for node in &source.graph().nodes {
+    for node in &source.resolved_graph().nodes {
         let key = quire_contract_model::ContractSourceKeyV1::from_v2_request(source, &node.node_id)
             .expect("source request");
         if let quire_contract_model::ContractRootViewV1::Lowered(view) = package
@@ -159,7 +159,7 @@ fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
         let key = &node.node_id;
         // The source search is independent of both lowered-package accessors.
         let original = source
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|original| Some(&original.node_id) == keys.get(key))
@@ -215,9 +215,9 @@ fn published_source_associations_survive_lowering() {
         let source = published_package(fixture);
         let mut visited = 0;
         let source_graph = CheckedGraph::from_checked_with_node_visit(&source, || visited += 1);
-        assert_eq!(visited, source.graph().nodes.len());
-        assert_eq!(source_graph.len(), source.graph().nodes.len());
-        for node in &source.graph().nodes {
+        assert_eq!(visited, source.resolved_graph().nodes.len());
+        assert_eq!(source_graph.len(), source.resolved_graph().nodes.len());
+        for node in &source.resolved_graph().nodes {
             assert!(ptr::eq(
                 source_graph.node(&node.node_id).expect("source node"),
                 node
@@ -300,13 +300,13 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
         let graph_a = CheckedGraph::new(package_a);
         let graph_b = CheckedGraph::new(package_b);
         let foreign = source_b
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
                 graph_b.node(&node.node_id).is_some()
                     && !source_a
-                        .graph()
+                        .resolved_graph()
                         .nodes
                         .iter()
                         .any(|a| a.node_id == node.node_id)
@@ -323,7 +323,7 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
     }
 
     let value = source_a
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -348,7 +348,7 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
         assert_associations(&source_a, package);
         let graph = CheckedGraph::new(package);
         let absent = source_a
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

@@ -386,7 +386,7 @@ fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
         panic!("original fixture must admit: {admitted:?}");
     };
     let expected_body = &original
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == prior)
@@ -406,7 +406,7 @@ fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
         panic!("valid changed body should admit under its structural key: {result:?}");
     };
     let changed_node = changed
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == prior)
@@ -1066,6 +1066,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         // either list changing without the other now fails here, while the lowering profile below
         // still never calls `scalar_profile()`.
         let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+            quire_contract_model::CheckedNodeTag::Model,
             quire_contract_model::CheckedNodeTag::ScalarType,
             quire_contract_model::CheckedNodeTag::BoundedDomain,
             quire_contract_model::CheckedNodeTag::Value,
@@ -1456,8 +1457,8 @@ fn minimal_integer_builder() -> PackageBuilder {
     builder
 }
 
-/// A binary Integer application whose first referenced value holds a wide
-/// aggregate body. The reader can type both arguments as Integer, and lowering
+/// A binary Integer application whose first referenced expression holds a wide
+/// reference aggregate. The reader validates its explicit dependency, and lowering
 /// visits the aggregate's terms and successor edges through that reference.
 fn work_exhausted_builder(references: usize) -> PackageBuilder {
     let body = json!({
@@ -1467,7 +1468,14 @@ fn work_exhausted_builder(references: usize) -> PackageBuilder {
             .collect::<Vec<_>>(),
     });
     let mut builder = minimal_integer_builder();
-    builder.code(3003, "value", "literal", &key(T_INTEGER), body);
+    builder.node_with(
+        &key(3003),
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        body,
+        &[key(V_INTEGER)],
+    );
     builder.application_code_with(
         3001,
         "expression",
@@ -1741,6 +1749,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::AmbiguousBound { .. } => "AmbiguousBound",
         ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
         ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",
+        ExactScalarRefusal::DerivedBoundMismatch { .. } => "DerivedBoundMismatch",
         ExactScalarRefusal::OperandUnsupported { .. } => "OperandUnsupported",
         ExactScalarRefusal::OperandRangeLimitExceeded { .. } => "OperandRangeLimitExceeded",
         ExactScalarRefusal::UnitlessLiteralOperand { .. } => "UnitlessLiteralOperand",
@@ -1959,7 +1968,21 @@ fn tc_024_anonymous_integer_range_generates_one_addition() {
             "value": value,
         })
     };
-    builder.code(OPERAND, "value", "literal", &integer, typed_literal("3"));
+    builder.code(
+        OPERAND + 2,
+        "value",
+        "literal",
+        &integer,
+        typed_literal("3"),
+    );
+    builder.node_with(
+        &key(OPERAND),
+        "expression",
+        "call",
+        &integer,
+        reference(&key(OPERAND + 2)),
+        &[key(OPERAND + 2)],
+    );
     builder.application_bounded(
         ADD,
         "expression",
@@ -2009,7 +2032,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let anonymous = ids.resolve(&id(&key(T_INTEGER)));
     let int5 = ids.resolve(&id(&INT5.key()));
     let range = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == int5)
@@ -2019,7 +2042,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let rounded = ids.resolve(&code_id(1053));
     let result_type = ids.resolve(&code_id(T_DECIMAL_AWAY));
     let conversion = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == rounded)
@@ -2076,11 +2099,19 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     );
     let bound_key = builder.bound(&bound);
     builder.code(
-        V_INTEGER,
+        9_000,
         "value",
         "literal",
-        &bound_key,
+        &key(T_INTEGER),
         literal("integer", "3"),
+    );
+    builder.node_with(
+        &key(V_INTEGER),
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        reference(&key(9_000)),
+        &[key(9_000), bound_key.clone()],
     );
     let codes = 10_000..10_205;
     for code in codes.clone() {
@@ -2302,10 +2333,14 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
             operation: integer_add_0_9(),
         }],
     );
-    assert!(matches!(
-        dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
-        Some(ClaimDisposition::Generated(_))
-    ));
+    assert!(
+        matches!(
+            dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
+            Some(ClaimDisposition::Generated(_))
+        ),
+        "bounded increment claims: {:?}",
+        oracles.claim_map.items
+    );
 }
 
 fn add_over(low: i64, high: i64) -> ExactScalarOperation {
@@ -2322,7 +2357,7 @@ fn add_over(low: i64, high: i64) -> ExactScalarOperation {
 fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2371,7 +2406,7 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
 fn tc_024_admitted_protocol_node_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "obligation")
@@ -2409,7 +2444,7 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
     assert!(
         reached == &requested_id
             || package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .any(|node| &node.node_id == reached),
@@ -2446,7 +2481,7 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
 fn tc_024_ac44_direct_control_case_is_unsupported() {
     let package = qspec_package("positive-union-nodes.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2502,7 +2537,7 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
     };
     let package = qspec_package("positive-union-nodes.json");
     let case = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2995,11 +3030,12 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
     }
 }
 
-/// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
-/// whose body is not a literal, so `x + n` is `RequiresBound`.
+/// A plain-Integer parameter's aggregate name/level body is not a literal,
+/// so `x + n` is `RequiresBound`. Literal-form nodes with aggregate bodies do
+/// not enter CG: they are malformed wire at the owner reader.
 #[trace("FR-014-AC-28", "TC-024")]
 #[test]
-fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
+fn tc_024_ac28_an_unbounded_parameter_body_is_not_a_literal() {
     assert_qsl_refused(
         QSL_NOT_LITERAL_OPERAND,
         add_over(0, 29),
@@ -3309,6 +3345,8 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
     let source = contents(&oracles, "src/lib.rs");
     assert!(source.contains("rt::evaluate_boolean("));
     assert!(source.contains("scalar_owner::evaluate_boolean_short_circuit("));
+    assert!(source.contains("impl FnOnce(&mut rt::Meter) -> rt::Outcome<bool>"));
+    assert!(source.contains("let right = right(meter);"));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
 }
@@ -3422,7 +3460,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
     assert_eq!(probe_token(lazy_source, &lazy_regions[1]), "right");
     assert_eq!(
         lazy_source.lines().nth(lazy_line - 1).expect("line").trim(),
-        "right()",
+        "let right = right(meter);",
         "the probe must execute only when the lazy consequent is called"
     );
 
@@ -3888,7 +3926,7 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         };
         assert!(generated.checked_bounds.is_empty());
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == claim.node_id)
@@ -4056,7 +4094,14 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     };
     let (package, ids) = derivation_package().admit_resolved();
     let node = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
-    let integer = ids.resolve(&code_id(T_INTEGER));
+    let integer = package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|candidate| candidate.node_id == node)
+        .expect("requested conversion")
+        .semantic_type
+        .clone();
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,

@@ -97,7 +97,7 @@ fn focused_golden_items(package: &CheckedPackageV2) -> Vec<ExactScalarItem> {
         .filter(|item| {
             item.node_id == code_id(MISSING)
                 || package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .any(|node| node.node_id == item.node_id)
@@ -218,6 +218,7 @@ fn scalar_package_with_occurrences(
         builder.admit();
         let unsatisfiable = builder.bound(&Bound::Integer(5, -5));
         builder.narrow(49_301, &key(UNSATISFIABLE), &unsatisfiable);
+        builder.literal_operands_for(&[UNSATISFIABLE]);
         builder.expression_occurrences();
     }
     let (package, ids) = builder.admit_resolved();
@@ -421,7 +422,7 @@ fn tc_025_boolean_implication_with_lazy_right_calls_its_oracle_with_an_outcome()
         package::fixture_ids_for(&package).resolve(&code_id(package::DERIVE_BOOLEAN_SHORT_CIRCUIT));
     let (harness, _, _) = boolean_implies_scalar_from(package, node);
     assert!(harness.rust.contents.contains(&format!(
-        "{}(left, || rt::Outcome::Completed(right), &mut meter)",
+        "{}(left, |_| rt::Outcome::Completed(right), &mut meter)",
         harness.identity.oracle_symbol
     )));
 }
@@ -614,8 +615,8 @@ fn scalar_records(
 fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     // A V2 claim's domain is read from its IR bound, inclusive at both ends. Node 1001 is
     // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness --
-    // not a typed refusal. Both its operands are references to the corpus's `value` node whose
-    // body is the literal `3`, so each is a constant and ranged at its own value (IR-302); the
+    // not a typed refusal. Both operands reference computed call wrappers with the admitted `[-1000, 1000]`
+    // domain. Their referenced literal children do not turn those calls into constants; the
     // per-operand bounded ranges are TC-033's.
     let (scalar, claim_map, ids) = scalar_package();
     let node_1001 = ids.resolve(&code_id(1001));
@@ -655,7 +656,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
             .iter()
             .map(|argument| (argument.minimum, argument.maximum))
             .collect::<Vec<_>>(),
-        [(3, 3), (3, 3)]
+        [(-1000, 1000), (-1000, 1000)]
     );
 }
 
@@ -690,8 +691,14 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
-    let graph = qsl_replay::WireGraph::new(scalar.graph().nodes.iter().map(|node| &node.node_id))
-        .expect("admitted graph has structural keys");
+    let graph = qsl_replay::WireGraph::new(
+        scalar
+            .resolved_graph()
+            .nodes
+            .iter()
+            .map(|node| &node.node_id),
+    )
+    .expect("admitted graph has structural keys");
     let node_key = graph
         .key(&node_1001)
         .expect("scalar fixture node belongs to graph");
@@ -763,10 +770,10 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     );
     // The assumption is scoped by the same ranges
     // `tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity` checks via
-    // `identity.arguments` above (each operand a literal `3`, pinned at its value): this is the
+    // `identity.arguments` above (each computed operand has its admitted integer range): this is the
     // corresponding source-level check.
-    assert!(source.contains("kani::assume(left >= 3_i64 && left <= 3_i64);"));
-    assert!(source.contains("kani::assume(right >= 3_i64 && right <= 3_i64);"));
+    assert!(source.contains("kani::assume(left >= -1000_i64 && left <= 1000_i64);"));
+    assert!(source.contains("kani::assume(right >= -1000_i64 && right <= 1000_i64);"));
 }
 
 /// Each of the four rendered integer operations states its own native `i128` expression, written
@@ -1184,7 +1191,7 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
 /// produced. `ClaimMap`/`ExactScalarClaim` are fully `pub`, so a hand-assembled claim
 /// map can name a `node_id` that has an entry in `claim_map.items` (so it does not hit the
 /// pre-existing "no entry in the claim map" `UnknownNode` ground at all) but no entry in
-/// `package.graph()` at all.
+/// `package.resolved_graph()` at all.
 ///
 /// `code_id(MISSING)` -- this fixture module's own dedicated guaranteed-absent-from-the-graph
 /// sentinel -- is deliberately *not* reused here: `golden_items()` already chains

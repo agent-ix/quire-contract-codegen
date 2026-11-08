@@ -23,6 +23,7 @@ pub(super) fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
     let source = source(fixture);
     OriginalScalarContext::new(
         fixture.checked.clone(),
+        fixture.raw_package.clone(),
         &source,
         ReplayInputs {
             decode_limits: WitnessDecodeLimits {
@@ -190,7 +191,7 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
         "x + x",
     );
     let body = fixture.harness.scalar_replay_body().unwrap();
-    let admitted = fixture.checked.graph().nodes.iter().find(|node| matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.add"))).unwrap();
+    let admitted = fixture.checked.resolved_graph().nodes.iter().find(|node| matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.integer.add"))).unwrap();
     assert_eq!(
         body.node, admitted.node_id,
         "CG retains the actual admitted application"

@@ -177,6 +177,8 @@ impl From<MalformedTranscript> for SpineReplayError {
 ///
 /// [`SpineReplayError`] when a value has no parameter, the transcript is not admitted, or the
 /// executor refuses the request.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_falsification(
     harness: &str,
     check_text: &str,
@@ -224,6 +226,8 @@ pub(crate) fn render_witness(
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
 type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, SpineReplayError>;
 
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 fn replay_falsification_through(
     harness: &str,
     check_text: &str,
@@ -336,6 +340,8 @@ pub struct DependencyLock {
     pub identity: String,
     /// The dependency's lock source.
     pub source: LockedSource,
+    /// Original optional internal-step rows from this dependency lock.
+    pub refinement_internals: Option<Vec<quire_contract_model::CheckedRefinementInternal>>,
 }
 
 /// Everything about the proving run a replay request repeats.
@@ -404,6 +410,8 @@ pub enum ReplayPackageError {
     CallSite(Box<CallSiteRefusal>),
     /// QSL could not spell an admitted parameter's structural witness entry name.
     WitnessEntryName(NodeWireError),
+    /// The producer package could not be retained as a complete raw replay document.
+    RawPackage(quire_canonical::ReadError),
 }
 
 impl fmt::Display for ReplayPackageError {
@@ -415,6 +423,7 @@ impl fmt::Display for ReplayPackageError {
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the call site was not located: {refusal}"),
             Self::WitnessEntryName(cause) => write!(f, "the witness entry name failed: {cause}"),
+            Self::RawPackage(cause) => cause.fmt(f),
         }
     }
 }
@@ -447,6 +456,7 @@ impl ReplayInputs {
     /// dependencies' sources.
     pub(crate) fn wire(
         &self,
+        package: qsl_replay::ReplayPackage,
         replay_target: RequestTargetWire,
         source: ReplaySource,
         obligation_identity: ObligationIdentity,
@@ -458,6 +468,7 @@ impl ReplayInputs {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
+                refinement_internals: dependency.refinement_internals.clone(),
             })
             .collect();
         // One entry per source identity. QSL binds these bytes to the exact source lock.
@@ -476,9 +487,8 @@ impl ReplayInputs {
             });
         let byte_provision = sources.collect();
         ReplayRequestWire {
-            package_name: self.package_name.clone(),
+            package,
             profile_selections: Vec::new(),
-            sources: vec![self.source.wire()],
             dependencies,
             replay_target,
             source,
@@ -507,6 +517,7 @@ pub struct ReplayPackage {
     selected_dependencies: Vec<DependencyEntryWire>,
     selection: QualifiedName,
     site: CallSite<FunctionSite>,
+    raw_package: qsl_replay::ReplayPackage,
     /// Each parameter's name and witness entry name, in ascending node id order.
     parameters: Vec<(String, String)>,
     kani_binding: Option<KaniProofBinding>,
@@ -639,6 +650,7 @@ impl ReplayPackage {
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
                 sources: vec![dependency.source.wire()],
+                refinement_internals: dependency.refinement_internals.clone(),
             })
             .collect();
         let mut ordered = site.site.parameters.iter().collect::<Vec<_>>();
@@ -651,8 +663,11 @@ impl ReplayPackage {
                 Ok((name.as_str().to_owned(), entry_name))
             })
             .collect::<Result<Vec<_>, ReplayPackageError>>()?;
+        let raw_package = qsl_replay::ReplayPackage::read(&site.package, u64::MAX)
+            .map_err(ReplayPackageError::RawPackage)?;
         Ok(Self {
             inputs,
+            raw_package,
             selected_dependencies,
             selection,
             site,
@@ -667,6 +682,8 @@ impl ReplayPackage {
     /// # Errors
     ///
     /// Returns a dependency selection mismatch at the first missing, extra, reordered, or unequal entry.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn check_dependency_selection(
         &self,
         request: &ReplayRequestWire,
@@ -697,6 +714,8 @@ impl ReplayPackage {
     ///
     /// [`SpineReplayError::DependencySelectionMismatch`] before dispatch, or
     /// [`SpineReplayError::Refused`] if the executor refuses the admitted request.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn replay_request_through(
         &self,
         request: ReplayRequestWire,
@@ -785,6 +804,8 @@ impl ReplayPackage {
     /// or counterexample evidence; corpus counterexamples must use
     /// [`replay_harness_counterexample`] and its `Witness` arm.
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn evaluate_boolean_function(
         &self,
         identity: &ReplayHarnessIdentity,
@@ -927,6 +948,7 @@ impl ReplayPackage {
             ));
         };
         Ok(self.inputs.wire(
+            self.raw_package.clone(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
             envelope.obligation_identity(),
@@ -937,6 +959,7 @@ impl ReplayPackage {
     #[cfg(test)]
     fn request_for_input_oracle(&self, obligation: ObligationIdentity) -> ReplayRequestWire {
         self.inputs.wire(
+            self.raw_package.clone(),
             RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
             ReplaySource::Input(Vec::new()),
             obligation,
@@ -1026,6 +1049,8 @@ impl BoundedCorpusCase {
     /// The package is compiled from the generated unit and imported dependency source each time;
     /// the harness identity is then tied to QSL's selected function site. The replay checks the
     /// parsed source length and value count against `limits` before native execution.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub fn replay_counterexample(
         &self,
         playback: &Playback<'_>,
@@ -1044,6 +1069,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError> {
         let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
             .map_err(BoundedCorpusReplayError::Package)?;
@@ -1060,6 +1087,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn qsl_identity_rejects_case(
         &self,
         other: &Self,
@@ -1075,6 +1104,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn replay_rejects_other_case_package(
         &self,
         playback: &Playback<'_>,
@@ -1095,6 +1126,8 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn replay_rejects_wrong_harness(
         &self,
         playback: &Playback<'_>,
@@ -1146,6 +1179,7 @@ fn compile_corpus_qsl_package(
                 bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
             },
             dependencies: vec![DependencyLock {
+                refinement_internals: None,
                 identity: DEPENDENCY_NAME.to_owned(),
                 source: dependency_source,
             }],
@@ -1243,7 +1277,9 @@ impl<'a> From<&'a ReplayPackageError> for ReplaySettlement<'a> {
             ReplayPackageError::InvalidFunction { .. } => Self::CgDefect,
             ReplayPackageError::Dependencies(cause) => cause.into(),
             ReplayPackageError::CallSite(refusal) => refusal.as_ref().into(),
-            ReplayPackageError::WitnessEntryName(_) => Self::CgDefect,
+            ReplayPackageError::WitnessEntryName(_) | ReplayPackageError::RawPackage(_) => {
+                Self::CgDefect
+            }
         }
     }
 }
@@ -1308,6 +1344,8 @@ impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
 ///
 /// [`SpineReplayError`] when the adapter cannot build an admitted request or QSL refuses it;
 /// those are not verdicts on the evidence.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_counterexample(
     identity: &KaniObligationIdentity,
     playback: &Playback<'_>,
@@ -1325,6 +1363,8 @@ pub fn replay_counterexample(
 /// # Errors
 ///
 /// [`SpineReplayError`] when the playback cannot be decoded or QSL refuses the replay request.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn replay_harness_counterexample(
     identity: &ReplayHarnessIdentity,
     playback: &Playback<'_>,
@@ -1337,6 +1377,8 @@ pub(crate) fn replay_harness_counterexample(
 
 /// [`replay_harness_counterexample`] with an injected executor, for recording the exact typed
 /// request QSL receives in focused tests.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn replay_harness_counterexample_through(
     identity: &ReplayHarnessIdentity,
     playback: &Playback<'_>,
@@ -1413,6 +1455,8 @@ pub(crate) fn replay_harness_counterexample_through(
 /// # Errors
 ///
 /// As [`replay_counterexample`].
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
 pub fn replay_counterexample_through(
     identity: &KaniObligationIdentity,
     playback: &Playback<'_>,

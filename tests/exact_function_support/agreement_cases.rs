@@ -102,7 +102,7 @@ fn unrelated_package() -> CheckedPackageV2 {
 
 fn function(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

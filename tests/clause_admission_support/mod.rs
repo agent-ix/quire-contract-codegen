@@ -264,7 +264,7 @@ impl Twin {
             "post DepositBound using v on Bank::Account::deposit { other < 1000 }",
         );
         let second = if unsupported_second {
-            "self.balance >= 0"
+            "other mod 2 >= 0"
         } else {
             "other >= 0"
         };
@@ -413,7 +413,7 @@ impl Twin {
             other => panic!("QSL emitted package is admitted: {other:?}"),
         };
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

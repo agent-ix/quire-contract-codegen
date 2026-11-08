@@ -18,20 +18,31 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
 
 Current carried-target qualification (FR-014-AC-62..65, IR-1355): the compiled
 reader-admitted fixture executes every CQ-E01 through CQ-E26 vector by reference
-from QSpec `b09800f7`. All 26 published dispositions pass with QSV `a16416bf`
+from QSpec. All 26 published dispositions pass with QSV
 (owner fix IR-1372, quire-semantic-value#97). Generated and direct QSV values,
 loss, typed outcomes, admitted charges, consumed counters and every charge-denial
 run agree. CQ-E13 completes with integer `2` at QSpec's unchanged
 `L(2,0,0,1,2,1)` tuple; no published limit or expected disposition was changed.
-The bounded lock refresh changes QSV alone and retains the compatible existing
-Exact `7e06eba7` selection. First-party dependency manifests continue to track
-`main` with compatible version constraints. This avoids the unrelated newer
-Exact refusal variant that the currently locked QSL diagnostic match does not
-handle. The reader-admitted fixture does not credit original source-to-generated
+First-party dependency manifests track `main` with compatible version constraints. The reader-admitted fixture does not credit original source-to-generated
 IR-842 integration execution. Historical review snapshots retain their earlier
 CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run.
 
 ## Test Procedure
+
+For operand-derived integer division/modulo result bounds (FR-014-AC-18/21),
+compile genuine QSL functions with bounded positive and negative operands and
+an Integer result; strict-read their exact bytes, derive descriptors and execute
+the generated native functions. Assert the actual intervals, completed signed
+values, modulo's strict divisor-magnitude bound, zero-only endpoints, signed
+minimum magnitude and its quotient by minus one beyond the primitive maximum.
+Calling the generated ABI with a zero divisor retains the owner's typed
+undefined outcome. Assert original operand-bound ids and confirmed operation
+provenance. Unbounded operands still refuse `MissingBound`; a disagreeing
+caller descriptor refuses `DerivedBoundMismatch`; an explicit wider result
+narrowing continues to control the descriptor. This verifies the CG production
+seam; IR-842 integration rows advance only after their independent QSL-authority
+composition executes, not from these direct generated/runtime assertions.
+
 
 1. Build an admitted V2 package holding expression nodes for every scalar
    operator, division law, IEEE operator and comparison, text profile and
@@ -182,13 +193,21 @@ CQ-E13 blocker evidence; this qualification records the subsequent owner-fix run
     (FR-014-AC-27); call the narrowing check directly on raw conversion nodes
     with the narrow identity and one reference, two arguments, another identity,
     and a reference to another node (FR-014-AC-27).
-14. Generate and derive `x + n` narrowed to `Int[0, 29]`, where `n` is a
-    `literal`-form plain-Integer `value` node whose body is not a literal
-    (FR-014-AC-28).
+14. Generate and derive `x + n` narrowed to `Int[0, 29]`, where `n` is an
+    admitted plain-Integer `value`/`parameter` with an aggregate name/level
+    body, and assert `RequiresBound` naming Integer (FR-014-AC-28). A
+    `value`/`literal` with an aggregate body is malformed wire at the owner
+    reader and is not substituted for this parameter.
 15. Generate and derive `x + p` narrowed to `Int[0, 29]`, where `p` is a
     plain-Integer parameter (FR-014-AC-29).
-16. Generate and derive `q + q` narrowed to `Int[0, 29]`, where `q` is a node
-    like `n` that also reaches `[0, 29]` (FR-014-AC-30).
+16. Generate and derive `q + q` consumed by a narrowing conversion to
+    `Int[0, 29]`, where `q` is an admitted plain-Integer `value`/`parameter`
+    with an aggregate name/level body, no own bound and no artificial edge
+    to the result bound. Assert `RequiresBound` naming Integer and no
+    generated oracle through both entries: the result narrowing does not
+    bound the parameter occurrences. Preserve the same typed refusal when
+    Contract IR lowering rejects the unbounded parameter before CG's
+    parameter checks (FR-014-AC-30).
 17. Generate and derive `x + "a"` narrowed to `Int[0, 10]`, the text literal in
     a plain-Integer-typed `value` node (FR-014-AC-31).
 18. Generate and derive a sum narrowed by two conversions to `[10, 29]` and
@@ -470,3 +489,45 @@ construction route. Mathematical values, identities, tree structure, owner
 operations, domains, metering at every prefix, typed stops, evaluation order,
 laziness and full arbitrary-precision fallback remain as specified. The separate
 scalar-bound emitter and kernel canonical parsing are outside this change.
+
+## Genuine emitted carried operands and IEEE calls (IR-1401, planned)
+
+This extension verifies FR-014-AC-66 through FR-014-AC-69. It supplies native
+CG-to-owner agreement evidence; quire-integration IR-842 retains ownership of
+agreement with the QSL value authority.
+
+1. Through the public QSL facade, emit a carried-source quantity conversion
+   (TC-187 U01 by reference), `a = b` over IEEE operands, and all three
+   `quire::value::ieee::*` comparison intrinsics. Pass the emitted bytes unchanged
+   to Contract IR's strict reader. Select actual admitted node identities and
+   derive their descriptors; do not substitute hand-built packages for these
+   source-emission controls. Record the existing carried-operand type mismatch
+   and IEEE call-form mismatch as failing generation assertions on the preceding
+   lowerer, then require those same assertions to pass after implementation.
+2. Generate the native oracle crate and execute it with independently prepared
+   owner values. Assert the conversion's mathematical value, identified unit
+   and carried metadata where applicable. Assert true and false IEEE outcomes,
+   including positive/negative zero and NaN inputs chosen under the owner's
+   numeric-equality, total-order and bit-identity contract. Compare complete
+   owner outcomes, ordered admitted charges and consumed counters, including
+   a charge-denial case; retain the existing exact/carried target rounding,
+   domain, loss and typed-stop checks of AC-62 through AC-65.
+3. Exercise wrong arity, operand/result type, operation identity, law and mode,
+   unitless quantity literal, unsupported form and noncatalogued call controls
+   at the boundary their owner admits. Assert strict-reader refusals before CG
+   separately from admitted typed CG refusals and unchanged supported siblings.
+   A same-lowering-shape descriptor identity, law or mode mismatch retains
+   FR-014-AC-12 and FR-038-AC-3: where the existing policy permits generation,
+   assert `CallerDeclared` provenance and no `ir_confirmed` claim instead of
+   introducing a new no-oracle policy. Retain admitted binary-form IEEE fixtures
+   with the catalogued call body.
+   Do not widen quantity operand acceptance to unrelated scalar families.
+4. Place genuine-source regression tests in a module of the existing `it`
+   integration binary. Bind runnable tests to the new criterion IDs and inspect
+   the computed matrix. Do not use spec-text presence assertions, copied owner
+   catalogs, semantic carrier mirrors or proof execution as native evidence.
+
+Expected result: both genuine producer forms generate and execute with the
+owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
+forms retain their prior refusal boundaries. Until those tests run, this
+section records planned qualification and grants no execution credit.

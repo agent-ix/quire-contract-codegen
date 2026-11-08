@@ -3,7 +3,10 @@
 
 //! Derive scalar operation descriptors from admitted checked nodes.
 
-use super::lower::{lowered, operand_form, scalar_profile, scalar_type_form, BoundView, Bounds};
+use super::lower::{
+    division_operand_bound_refusal, lowered, operand_form, scalar_profile, scalar_type_form,
+    BoundView, Bounds,
+};
 use super::{
     BooleanOperator, BoundForm, ClaimDerivationRefusal, DecimalOperator, EqualityOperandKind,
     ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, IeeeArithmeticOperator,
@@ -502,7 +505,8 @@ pub(super) fn derive_operation<Body: GraphBody>(
     let node = graph
         .node(node_id)
         .ok_or(ExactScalarRefusal::InvalidInput)?;
-    let lowered = lowered(record)?;
+    let lowered = lowered(record)
+        .map_err(|refusal| division_operand_bound_refusal(graph, node_id, refusal))?;
     derive_operation_from_view(graph, node, BoundView::complete(lowered))
 }
 
@@ -552,10 +556,24 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         },
         Family::IntegerDivision => Op::IntegerDivision {
             profile: derivation.division_profile()?,
-            domain: derivation.integer_domain()?,
+            domain: IntegerDomain::Bounded(
+                Bounds {
+                    graph,
+                    node: derivation.bounds.clone(),
+                }
+                .integer_division_bounds(false)?
+                .0,
+            ),
         },
         Family::IntegerModulo => Op::IntegerModulo {
-            domain: derivation.integer_domain()?,
+            domain: IntegerDomain::Bounded(
+                Bounds {
+                    graph,
+                    node: derivation.bounds.clone(),
+                }
+                .integer_division_bounds(true)?
+                .0,
+            ),
         },
         Family::RationalArithmetic(operator) => Op::RationalArithmetic {
             operator,

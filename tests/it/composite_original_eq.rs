@@ -40,7 +40,7 @@ fn structural_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
             CheckedNodePathSegment::Node(child) => {
                 Some(PathSegment::Node(structural_node_key(child)?))
             }
-            CheckedNodePathSegment::Index(_) => None,
+            CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => None,
         })
         .collect::<Option<Vec<_>>>()?;
     NodeKey::new(id.package.to_string(), path, id.ordinal).ok()
@@ -99,7 +99,30 @@ fn inputs(source: &str) -> ReplayInputs {
     }
 }
 
-fn checked(source: &str) -> CheckedPackageV2 {
+#[derive(Clone)]
+struct OriginalPackage {
+    checked: CheckedPackageV2,
+    raw: qsl_replay::ReplayPackage,
+}
+impl std::ops::Deref for OriginalPackage {
+    type Target = CheckedPackageV2;
+    fn deref(&self) -> &Self::Target {
+        &self.checked
+    }
+}
+impl OriginalPackage {
+    fn into_context(
+        self,
+        source: &LockedSource,
+        inputs: ReplayInputs,
+        function: &str,
+        limits: CheckedPackageReadLimits,
+    ) -> Result<OriginalCompositeEqContext, CompositeBuildError> {
+        OriginalCompositeEqContext::new(self.checked, self.raw, source, inputs, function, limits)
+    }
+}
+
+fn checked(source: &str) -> OriginalPackage {
     checked_with_dependencies(source, &DependencyInput::default(), &evidence())
 }
 
@@ -113,7 +136,7 @@ fn checked_with_dependencies(
     source: &str,
     dependencies: &DependencyInput,
     evidence: &CheckedPackageEvidence,
-) -> CheckedPackageV2 {
+) -> OriginalPackage {
     read_checked(compiled(source, dependencies).bytes(), evidence)
 }
 
@@ -133,9 +156,12 @@ fn compiled(source: &str, dependencies: &DependencyInput) -> qsl_replay::Compile
     .expect("fixture compiles through public QSL facade")
 }
 
-fn read_checked(bytes: &[u8], evidence: &CheckedPackageEvidence) -> CheckedPackageV2 {
+fn read_checked(bytes: &[u8], evidence: &CheckedPackageEvidence) -> OriginalPackage {
     match CheckedPackageV2::read(bytes, CheckedPackageReadLimits::bounded(), evidence) {
-        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        CheckedPackageV2ReadResult::Admitted(package) => OriginalPackage {
+            checked: *package,
+            raw: qsl_replay::ReplayPackage::read(bytes, u64::MAX).unwrap(),
+        },
         other => panic!("QSL fixture must admit in IR: {other:?}"),
     }
 }
@@ -144,7 +170,7 @@ fn read_checked(bytes: &[u8], evidence: &CheckedPackageEvidence) -> CheckedPacka
 fn checked_with_extra_source(
     source: &str,
     extra: &quire_contract_model::CheckedSourceRef,
-) -> CheckedPackageV2 {
+) -> OriginalPackage {
     let compiled = compiled(source, &DependencyInput::default());
     let mut wire: serde_json::Value = serde_json::from_slice(compiled.bytes()).unwrap();
     wire["lock"]["sources"]
@@ -155,15 +181,15 @@ fn checked_with_extra_source(
     read_checked(&bytes, &evidence())
 }
 
-fn context(package: CheckedPackageV2, function: &str) -> OriginalCompositeEqContext {
-    OriginalCompositeEqContext::new(
-        package,
-        &inputs(SOURCE).source,
-        inputs(SOURCE),
-        function,
-        CheckedPackageReadLimits::bounded(),
-    )
-    .unwrap()
+fn context(package: OriginalPackage, function: &str) -> OriginalCompositeEqContext {
+    package
+        .into_context(
+            &inputs(SOURCE).source,
+            inputs(SOURCE),
+            function,
+            CheckedPackageReadLimits::bounded(),
+        )
+        .unwrap()
 }
 
 // Existing FR-033 controls use the claim producer before invoking the new packet-only request
@@ -210,7 +236,7 @@ fn application_with_operator(
     operator: &str,
 ) -> (CheckedNodeId, CheckedOccurrence) {
     let declaration = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -226,7 +252,7 @@ fn application_with_operator(
         .flat_map(|entry| &entry.regions)
         .collect::<Vec<_>>();
     let application = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -654,8 +680,7 @@ fn wrong_source_refuses_before_invocation() {
     let mut wrong_source = inputs(SOURCE);
     wrong_source.source.bytes.push(b'\n');
     assert!(matches!(
-        OriginalCompositeEqContext::new(
-            original,
+        original.into_context(
             &inputs(SOURCE).source,
             wrong_source,
             "f",
@@ -666,8 +691,7 @@ fn wrong_source_refuses_before_invocation() {
     let mut wrong_revision = inputs(SOURCE);
     wrong_revision.source.identity.push_str("-changed");
     assert!(matches!(
-        OriginalCompositeEqContext::new(
-            checked(SOURCE),
+        checked(SOURCE).into_context(
             &inputs(SOURCE).source,
             wrong_revision,
             "f",
@@ -678,8 +702,7 @@ fn wrong_source_refuses_before_invocation() {
     let changed_source = SOURCE.replace("Int[0, 9]", "Int[0, 8]");
     let another_package = checked(&changed_source);
     assert!(matches!(
-        OriginalCompositeEqContext::new(
-            another_package,
+        another_package.into_context(
             &inputs(&changed_source).source,
             inputs(SOURCE),
             "f",
@@ -705,6 +728,27 @@ fn different_semantic_package_refuses_before_invocation() {
     ));
 }
 
+/// A caller cannot pair the original admitted graph with another emission's raw document.
+#[trace("FR-033-AC-1", "TC-048")]
+#[test]
+fn another_raw_emission_refuses_before_invocation() {
+    let mut original = checked(SOURCE);
+    let (node, occurrence) = application(&original, "f");
+    let substituted = checked(&SOURCE.replace("Int[0, 9]", "Int[0, 8]"));
+    assert_ne!(
+        original.raw, substituted.raw,
+        "the changed domain changes emitted bytes"
+    );
+    original.raw = substituted.raw;
+    let result =
+        context(original, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000);
+    assert!(
+        matches!(&result, Err(CompositeBuildError::ContextMismatch)),
+        "another raw emission must refuse at context binding: {:?}",
+        result.err()
+    );
+}
+
 /// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
 #[trace("FR-033-AC-1", "TC-048")]
 #[test]
@@ -712,12 +756,12 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let package = checked(SOURCE);
     let mut retained = inputs(SOURCE);
     retained.dependencies.push(DependencyLock {
+        refinement_internals: None,
         identity: "test/extra".to_owned(),
         source: retained.source.clone(),
     });
     assert!(matches!(
-        OriginalCompositeEqContext::new(
-            package,
+        package.into_context(
             &inputs(SOURCE).source,
             retained,
             "f",
@@ -924,7 +968,7 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
 fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     let package = checked(REPEATED_SOURCE);
     let application = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -937,14 +981,14 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     let second = application.occurrences[1].clone();
     assert_ne!(first, second);
     assert_ne!(second.ordinal, 0);
-    let context = OriginalCompositeEqContext::new(
-        package,
-        &inputs(REPEATED_SOURCE).source,
-        inputs(REPEATED_SOURCE),
-        "repeated",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("the repeated source selects one checked function");
+    let context = package
+        .into_context(
+            &inputs(REPEATED_SOURCE).source,
+            inputs(REPEATED_SOURCE),
+            "repeated",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .expect("the repeated source selects one checked function");
     let first_packet = context
         .parity_packet(&node, &first, EqualityOperator::Equal, &[], 100_000)
         .expect("the first checked occurrence produces a packet");
@@ -1106,14 +1150,14 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     let (node, occurrence) = application(&package, "f");
     let mut retained = inputs(SOURCE);
     retained.stage_limits.insert("s1.input_bytes".to_owned(), 1);
-    let context = OriginalCompositeEqContext::new(
-        package,
-        &inputs(SOURCE).source,
-        retained,
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .unwrap();
+    let context = package
+        .into_context(
+            &inputs(SOURCE).source,
+            retained,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .unwrap();
     assert!(
         matches!(context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::StageLimit(_))))
     );
@@ -1171,11 +1215,15 @@ fn original_imported_context_refuses_before_invocation() {
             CheckedPackageReadLimits::bounded(),
             &evidence(),
         ) {
-            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            CheckedPackageV2ReadResult::Admitted(package) => OriginalPackage {
+                checked: *package,
+                raw: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
+            },
             other => panic!("genuine library admits: {other:?}"),
         };
         (
             DependencyLock {
+                refinement_internals: None,
                 identity: "test/eq-library".to_owned(),
                 source,
             },
@@ -1192,14 +1240,13 @@ fn original_imported_context_refuses_before_invocation() {
     .unwrap();
     let mut retained_evidence = evidence();
     retained_evidence
-        .insert_dependency_package(original_library.identity.clone(), original_admitted)
+        .insert_dependency_package(original_library.identity.clone(), original_admitted.checked)
         .expect("retain original equality library");
     let package = checked_with_dependencies(&source, &dependencies, &retained_evidence);
     let mut retained = inputs(&source);
     retained.dependencies.push(original_library);
     assert!(matches!(
-        OriginalCompositeEqContext::new(
-            package,
+        package.into_context(
             &inputs(&source).source,
             retained,
             "f",
@@ -1233,14 +1280,9 @@ fn original_request_preserves_the_owning_reader_limit() {
     let (node, occurrence) = application(&package, "f");
     let mut read_limits = CheckedPackageReadLimits::bounded();
     read_limits.bytes = 1;
-    let original = OriginalCompositeEqContext::new(
-        package,
-        &inputs(SOURCE).source,
-        inputs(SOURCE),
-        "f",
-        read_limits,
-    )
-    .expect("retaining already-admitted inputs does not re-read them");
+    let original = package
+        .into_context(&inputs(SOURCE).source, inputs(SOURCE), "f", read_limits)
+        .expect("retaining already-admitted inputs does not re-read them");
     assert!(matches!(
         original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::PackageReadLimit(_))
@@ -1257,14 +1299,14 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
     retained
         .stage_limits
         .insert("s1.input_bytes".to_owned(), u64::MAX);
-    let original = OriginalCompositeEqContext::new(
-        package,
-        &inputs(SOURCE).source,
-        retained,
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("retain authentic source before request-stage validation");
+    let original = package
+        .into_context(
+            &inputs(SOURCE).source,
+            retained,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .expect("retain authentic source before request-stage validation");
     assert!(
         matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::Recompile(cause))
@@ -1287,19 +1329,19 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
         let mut expected_across_request_counts = None;
         for requests in [2, 4, 8] {
             let package = checked(&source);
-            let graph_nodes = package.graph().nodes.len();
+            let graph_nodes = package.resolved_graph().nodes.len();
             let original_package_name = package.name().to_owned();
             let (equal_node, equal_occurrence) = application(&package, "f");
             let (not_equal_node, not_equal_occurrence) =
                 application_with_operator(&package, "n", "quire.op.structural.ne");
-            let retained = OriginalCompositeEqContext::new(
-                package,
-                &inputs(&source).source,
-                inputs(&source),
-                "f",
-                CheckedPackageReadLimits::bounded(),
-            )
-            .expect("authentic source supplies one retained context");
+            let retained = package
+                .into_context(
+                    &inputs(&source).source,
+                    inputs(&source),
+                    "f",
+                    CheckedPackageReadLimits::bounded(),
+                )
+                .expect("authentic source supplies one retained context");
             let mut expected_in_context = None;
             for _ in 0..requests {
                 let equal = retained

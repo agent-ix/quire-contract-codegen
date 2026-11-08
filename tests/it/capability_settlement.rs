@@ -291,7 +291,7 @@ fn oversized_admitted_function_read_stops_the_envelope() {
     };
     let (package, ids) = oversized_source_bound_call_package();
     let body_id = &package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
@@ -374,7 +374,7 @@ fn genuine_function_backend_refusals_stay_item_level() {
     let body_id = function_body_target(
         &too_large_to_render
             .0
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == too_large_to_render.1.resolve(&code_id(SOURCE_FUNCTION)))
@@ -498,7 +498,7 @@ fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> Ka
         .iter()
         .find(|entry| entry.node_id == node_id && entry.role == CheckedOccurrenceRole::Expression);
     let conversion = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -594,7 +594,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
             other => panic!("IR admits QSL add: {other:?}"),
         };
         let node_id = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| checked_operation_identity(&node.body) == Some(operation_identity))
@@ -605,7 +605,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
     }
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| checked_operation_identity(&node.body) == Some(operation_identity))
@@ -618,7 +618,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
 fn outside_form() -> KaniForm {
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.node_tag == "model")
@@ -682,7 +682,7 @@ fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
 fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| checked_operation_identity(&node.body) == Some("quire.op.integer.add"))
@@ -705,8 +705,14 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .checked_bounds
         .first()
         .expect("integer addition has one source-derived bound");
-    let graph = qsl_replay::WireGraph::new(package.graph().nodes.iter().map(|node| &node.node_id))
-        .expect("admitted graph has structural keys");
+    let graph = qsl_replay::WireGraph::new(
+        package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .map(|node| &node.node_id),
+    )
+    .expect("admitted graph has structural keys");
     let source_bound = ProofBound::new(
         DomainKey::Node {
             node: graph
@@ -2058,7 +2064,7 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
 
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| checked_operation_identity(&node.body) == Some("quire.op.integer.div"))
@@ -2503,7 +2509,7 @@ fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
     ] {
         let expected_operation = fixture
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == fixture.clause)
@@ -2565,7 +2571,7 @@ fn kani_routed_preflight_requires_selected_result_occurrences() {
 
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_ids = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| &*node.node_tag == "expression")
@@ -2724,7 +2730,7 @@ fn kani_boolean_operator_selector_requires_selected_result() {
 fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let value = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.node_tag == "value")
@@ -2752,7 +2758,7 @@ fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
     let state = crate::kani_obligations_state_frame::ir295_healthy_fixture();
     let expected_operation = state
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == state.clause)

@@ -271,15 +271,15 @@ impl SourceBuilder {
                     BooleanOperator::Implies => (binary("bool"), "Implies(left, right)"),
                 };
                 let (parameters, call) = if *right_may_stop {
-                    let kind = match operator {
-                        BooleanOperator::And => "And",
-                        BooleanOperator::Or => "Or",
-                        BooleanOperator::Implies => "Implies",
+                    let (kind, decided, result) = match operator {
+                        BooleanOperator::And => ("And", "!left", false),
+                        BooleanOperator::Or => ("Or", "left", true),
+                        BooleanOperator::Implies => ("Implies", "!left", true),
                         BooleanOperator::Not => return Err(OracleGenerationError::unknown_variant("BooleanOperator")),
                     };
                     (
-                        vec![("left", "bool"), ("right", "impl FnOnce() -> rt::Outcome<bool>")],
-                        format!("Ok(scalar_owner::evaluate_boolean_short_circuit(scalar_owner::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
+                        vec![("left", "bool"), ("right", "impl FnOnce(&mut rt::Meter) -> rt::Outcome<bool>")],
+                        format!("if {decided} {{\n        return Ok(match rt::retain_boolean({result}, meter) {{\n            Ok(value) => rt::Outcome::Completed(value),\n            Err(incomplete) => rt::Outcome::Incomplete(incomplete),\n        }});\n    }}\n    let right = right(meter);\n    Ok(scalar_owner::evaluate_boolean_short_circuit(scalar_owner::ShortCircuitConnective::{kind}, left, || right, meter))"),
                     )
                 } else {
                     (parameters, format!("Ok(rt::evaluate_boolean(rt::BooleanConnective::{connective}, meter))"))
@@ -869,7 +869,7 @@ pub(super) fn scalar_coverage_regions<'a>(
                 .take_while(|(_, line)| !line.starts_with('}'))
                 .find(|(_, line)| {
                     if *right_may_stop {
-                        line.trim() == "right()"
+                        line.trim() == "let right = right(meter);"
                     } else {
                         line.contains("rt::evaluate_boolean")
                             && line.contains("Implies")

@@ -31,7 +31,7 @@ fn genuine_inline_integer_literals_generate_and_wrong_descriptor_refuses() {
     .expect("genuine QSL source compiles");
     let package = checked(&compiled, &[]);
     let expression = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -55,7 +55,7 @@ fn genuine_inline_integer_literals_generate_and_wrong_descriptor_refuses() {
         panic!("the checked source retains both inline literals: {arguments:?}")
     };
     assert_eq!(left, right);
-    assert!(package.graph().nodes.iter().any(|node| {
+    assert!(package.resolved_graph().nodes.iter().any(|node| {
         node.node_id == *left
             && node.node_tag.as_ref() == CheckedNodeTag::ScalarType.as_wire()
             && node.semantic_form.as_ref() == "integer"

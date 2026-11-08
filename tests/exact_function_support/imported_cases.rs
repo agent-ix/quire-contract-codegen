@@ -62,7 +62,7 @@ fn admitted(bytes: &[u8], library: Option<&CheckedPackageV2>) -> CheckedPackageV
 
 fn function_id(package: &CheckedPackageV2) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

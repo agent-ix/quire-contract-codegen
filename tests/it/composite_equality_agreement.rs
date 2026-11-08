@@ -184,7 +184,7 @@ pub(super) fn original_item(
     use quire_contract_model::{ApplicationOperator, CheckedTerm};
     let node_id = super::admitted_enum_equality::application(package, "f");
     let expression = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == node_id)
@@ -205,7 +205,7 @@ pub(super) fn original_item(
                 "original conversion path is acyclic"
             );
             let node = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == target)

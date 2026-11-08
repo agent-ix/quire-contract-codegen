@@ -21,6 +21,10 @@ use std::{fs, path::PathBuf};
 #[path = "../../../../tests/checked_package_support/evidence.rs"]
 mod checked_package_evidence;
 
+#[allow(clippy::duplicate_mod)] // shared test draft writer mounted in each test module
+#[path = "../../../../tests/checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 // Exact full-key substitution in an authored draft; no IDs are fabricated.
 fn replace_key(value: &mut Value, old: &Value, new: &Value) {
     if value == old {
@@ -59,7 +63,16 @@ fn rekey_application(wire: &mut Value, old: &CheckedNodeId) -> CheckedNodeId {
 }
 
 fn encode_draft(wire: &Value) -> Vec<u8> {
-    canonical::content_bytes(wire).unwrap()
+    let mut authored = wire.clone();
+    let package = authored["name"].as_str().unwrap().to_owned();
+    let mut rows = Vec::new();
+    for node in authored["semantic_graph"]["nodes"].as_array_mut().unwrap() {
+        let mut row = Vec::new();
+        draft_rows::author_row(&package, node, &mut row);
+        rows.push(row);
+    }
+    authored["semantic_graph"]["operand_rows"] = json!(rows);
+    canonical::content_bytes(&authored).unwrap()
 }
 
 fn read(bytes: &[u8], evidence: &CheckedPackageEvidence, label: &str) -> CheckedPackageV2 {
@@ -91,10 +104,21 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     );
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
-    let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
+    // Extend a detached inspection draft, then explicitly author its new local
+    // operand rows at encode_draft. Unchanged published bytes were admitted above.
+    let frame = qsl_replay::WireGraph::of_package_value(&wire).unwrap();
+    for (holder, node) in wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .enumerate()
+    {
+        *node = frame.document_value_in_row(holder, node).unwrap();
+    }
+    let target = original.resolved_graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.mul"))).unwrap();
     let bound = original
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|n| {
@@ -151,7 +175,11 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     }))
     .unwrap();
     narrow.node_id = key.clone();
-    assert!(original.graph().nodes.iter().all(|n| n.node_id != key));
+    assert!(original
+        .resolved_graph()
+        .nodes
+        .iter()
+        .all(|n| n.node_id != key));
     let mut narrow_wire = serde_json::to_value(&narrow).unwrap();
     narrow_wire["body"] = narrow_body;
     wire["semantic_graph"]["nodes"]
@@ -174,7 +202,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     }
     let baseline_bytes = encode_draft(&wire);
     let baseline = read(&baseline_bytes, &evidence, "TRUE_NARROW_BASELINE");
-    let opaque_node = baseline.graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
+    let opaque_node = baseline.resolved_graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.add"))).unwrap();
     let CheckedTerm::Application { operation, .. } = &opaque_node.body else {
         panic!("admitted opaque node is an application");
@@ -213,8 +241,8 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         "metadata is not a semantic child"
     );
     assert_eq!(
-        baseline.graph().nodes.len(),
-        original.graph().nodes.len() + 1
+        baseline.resolved_graph().nodes.len(),
+        original.resolved_graph().nodes.len() + 1
     );
     {
         let (package, add_key) = (&baseline, &opaque_node.node_id);
@@ -282,7 +310,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let semantic_key = rekey_application(&mut wire, &opaque_key);
     let semantic_bytes = encode_draft(&wire);
     let semantic = read(&semantic_bytes, &evidence, "TRUE_NARROW_SEMANTIC");
-    assert_eq!(semantic.graph().nodes.len(), baseline.graph().nodes.len());
+    assert_eq!(
+        semantic.resolved_graph().nodes.len(),
+        baseline.resolved_graph().nodes.len()
+    );
     let graph = Graph::from_checked(&semantic);
     assert!(references(graph.term(&key), &target.node_id));
     assert!(

@@ -1210,7 +1210,7 @@ impl Twin {
                 assert_eq!(matches.len(), 1, "one QSL claim at {name}'s source region");
                 let clause = &matches[0].node_id;
                 let node = package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|node| &node.node_id == clause)
@@ -1235,7 +1235,24 @@ impl Twin {
             .find(|ty| ty["identity"] == range_type("audit"))
             .expect("audit value type");
         audit["scalar"] = json!("string");
-        audit["constraints"] = json!([]);
+        audit["constraints"] = json!([
+            {"keyword":"minLength", "operands":{"value":0}, "appliesTo":range_type("audit")},
+            {"keyword":"maxLength", "operands":{"value":8}, "appliesTo":range_type("audit")},
+            {"keyword":"format", "operands":{"name":"text-profile:nfc"}, "appliesTo":range_type("audit")},
+        ]);
+        for constraint in audit["constraints"]
+            .as_array_mut()
+            .expect("text constraints")
+        {
+            let keyword = constraint["keyword"].as_str().expect("keyword");
+            constraint["identity"] =
+                json!(format!("{}/constraints/{keyword}", range_type("audit")));
+            constraint["diagnosticCode"] = json!(format!(
+                "text.{}",
+                constraint["keyword"].as_str().expect("keyword")
+            ));
+            constraint["origin"] = generated(&range_type("audit"));
+        }
         self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
     }
 
@@ -1326,7 +1343,7 @@ impl Twin {
             other => panic!("QSL's emitted package is admitted: {other:?}"),
         };
         let clause_node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

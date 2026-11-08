@@ -25,9 +25,7 @@ use quire_contract_model::{
 
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
-use crate::kani_obligations::{
-    admitted_scalar_claims, package, routed_scalar_package, scalar_package,
-};
+use crate::kani_obligations::{package, routed_scalar_package, scalar_package};
 
 fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
     match body {
@@ -171,7 +169,7 @@ fn admitted_routing_input_with_limits<'a>(
         let application = checked.source_map().iter().find(|source| {
             source.node_id == node_id && source.role == CheckedOccurrenceRole::Expression
         });
-        let conversion = checked.graph().nodes.iter().find(|node| {
+        let conversion = checked.resolved_graph().nodes.iter().find(|node| {
             operation_identity(&node.body) == Some("quire.op.numeric.narrow")
                 && application_arguments(&node.body)
                     .and_then(|arguments| arguments.first())
@@ -293,6 +291,7 @@ fn build_fixture() -> Fixture {
             &target,
         );
     }
+    builder.literal_operands_for(&selected_codes);
     builder.expression_occurrences();
     let (package, ids) = builder.admit_resolved();
     let items = package::golden_items()
@@ -639,7 +638,15 @@ fn routed_scalar_identity_records_both_required_ceilings() {
             context,
         )
         .unwrap();
-        kani_parts(&generated.items[0].output).1.unwrap().clone()
+        kani_parts(&generated.items[0].output)
+            .1
+            .cloned()
+            .unwrap_or_else(|| {
+                panic!(
+                    "routed scalar has no harness: {:?}",
+                    generated.items[0].output
+                )
+            })
     };
     let baseline = generate(&context);
     context.kani.as_mut().unwrap().ceilings.memory_bytes =
@@ -669,12 +676,17 @@ fn fr015(
     claim_map: &quire_contract_codegen::ClaimMap<quire_contract_codegen::ExactScalarClaim>,
     nodes: &[&CheckedNodeId],
 ) -> (Vec<ObligationRecord>, Vec<KaniScalarObligationHarness>) {
-    let admitted = admitted_scalar_claims(&fixture.package, claim_map);
+    let routed = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| route(index, node))
+        .collect::<Vec<_>>();
+    let admitted = admitted_routing_input(&fixture.package, &routed);
     let items = nodes
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
             source: &fixture.package,
-            package: &admitted,
+            package: &admitted.package,
             claim_map,
             node_id,
             claim_index: claim_map
@@ -682,7 +694,17 @@ fn fr015(
                 .iter()
                 .position(|claim| &claim.node_id == *node_id)
                 .expect("selected claim"),
-            result_selection: &ContractDriverResultSelection::NotApplicable,
+            result_selection: admitted
+                .positions
+                .iter()
+                .find_map(|position| match position {
+                    ContractRequestPosition::DriverItem {
+                        node_id: selected,
+                        result_selection,
+                    } if selected == *node_id => Some(result_selection),
+                    _ => None,
+                })
+                .expect("same selected application/conversion context as the routed request"),
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
@@ -1743,7 +1765,7 @@ fn work_qsl_package() -> CheckedPackageV2 {
 
 fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
     let declaration = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1767,7 +1789,7 @@ fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> Check
         .unwrap_or_else(|| panic!("QSL function {function} has a body binding"))
         .clone();
     let body_node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == body_id)
@@ -1890,7 +1912,7 @@ fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
             "{function} exact inferred endpoints"
         );
         let outer = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == harness.identity.node_id)
@@ -2009,7 +2031,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
     // graph nodes. Its balanced shape stays below the independent depth/endpoint ceilings.
     let work_node = qsl_function_application(&package, "work_nested");
     let graph = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .map(|node| (&node.node_id, node))
@@ -2252,6 +2274,7 @@ fn derived() -> Derived {
             &result,
         );
     }
+    builder.literal_operands_for(&selected);
     builder.expression_occurrences();
     let (package, ids) = builder.admit_resolved();
     let generated = fixture
@@ -2498,7 +2521,7 @@ fn tc_033_unauthenticated_view_refusal_uses_lowest_request_index() {
         .expect("genuine quantity conversion");
     let division = &derived
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| operation_identity(&node.body) == Some("quire.op.integer.div"))

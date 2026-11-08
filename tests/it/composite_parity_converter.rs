@@ -101,7 +101,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     ) else {
         panic!("read package")
     };
-    let nodes = &package.graph().nodes;
+    let nodes = &package.resolved_graph().nodes;
     let graph = qsl_replay::WireGraph::new(nodes.iter().map(|node| &node.node_id))
         .expect("admitted graph has structural keys");
     let named = |name: &str| {
@@ -210,9 +210,8 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     };
     let obligation = parity_obligation(&preimage).expect("the public preimage encodes");
     let wire = ReplayRequestWire {
-        package_name: "ir666".to_owned(),
+        package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
         profile_selections: Vec::new(),
-        sources: vec![("test".to_owned(), "ir666".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(
             qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),

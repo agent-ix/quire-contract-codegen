@@ -493,7 +493,7 @@ pub fn source_bound_call_package_with_name_segments(
     let (ordinary, ids) = builder.admit_resolved();
     let function_id = ids.resolve(&code_id(SOURCE_FUNCTION));
     let function_name = ordinary
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == function_id)

@@ -32,7 +32,9 @@ pub(crate) fn checked_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
                     match segment {
                         CheckedNodePathSegment::Name(name) => pending.push(Step::Text(name)),
                         CheckedNodePathSegment::Node(child) => pending.push(Step::Visit(child)),
-                        CheckedNodePathSegment::Index(_) => return None,
+                        CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => {
+                            return None
+                        }
                     }
                 }
             }
@@ -65,7 +67,10 @@ pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> 
         .iter()
         .map(|node| serde_json::from_value::<CheckedNodeId>(node.get("node_id")?.clone()).ok())
         .collect::<Option<Vec<_>>>()?;
-    qsl_replay::WireGraph::new(ids.iter()).ok()
+    let rows: Vec<Vec<u64>> =
+        serde_json::from_value(document.get("semantic_graph")?.get("operand_rows")?.clone())
+            .ok()?;
+    qsl_replay::WireGraph::with_operand_rows(&ids, &rows).ok()
 }
 
 /// Emit a typed IR identity without recursion or a digest adaptation.
@@ -74,6 +79,7 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
         Visit(&'a CheckedNodeId, bool),
         Text(&'a str),
         Index(u64),
+        Operand(u64),
         Finish {
             package: &'a str,
             ordinal: u64,
@@ -102,6 +108,9 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
                         quire_contract_model::CheckedNodePathSegment::Node(child) => {
                             pending.push(Step::Visit(child, false))
                         }
+                        quire_contract_model::CheckedNodePathSegment::Operand(slot) => {
+                            pending.push(Step::Operand(*slot))
+                        }
                         quire_contract_model::CheckedNodePathSegment::Index(index) => {
                             pending.push(Step::Index(*index))
                         }
@@ -110,6 +119,9 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
             }
             Step::Text(text) => rendered.push(format!(
                 "quire_contract_model::CheckedNodePathSegment::Name({text:?}.into())"
+            )),
+            Step::Operand(slot) => rendered.push(format!(
+                "quire_contract_model::CheckedNodePathSegment::Operand({slot})"
             )),
             Step::Index(index) => rendered.push(format!(
                 "quire_contract_model::CheckedNodePathSegment::Index({index})"

@@ -53,9 +53,10 @@ the enum-only owner facade does not excuse dropping it.
    dependency provision. Retain `AdmittedRefusal::Package` and its real
    `CompileRefusal` payload and available locus. Through the root facade's
    public accessors assert `code() == Code::AmbiguousDeclaration` and
-   `cause() == None` for this Assembly refusal. Do not infer or synthesize an
-   `ambiguous-name` public cause from the internal assembly diagnosis, add a
-   dependency on QSL assembly internals, or require a new QSL API. The precise
+   `cause() == Some("ambiguous-name")` for this Assembly refusal, retaining the
+   actual native cause now exposed by the published QSL facade. Do not erase or
+   synthesize the cause from an internal assembly diagnosis, add a dependency
+   on QSL assembly internals, or require a new QSL API. The precise
    duplicate name/cause remains asserted in the separate private
    declaration-defense control below.
    No successful `AdmittedContext` or CG artifact is produced; do not attempt
@@ -117,16 +118,16 @@ the enum-only owner facade does not excuse dropping it.
    applied — every counter equal to those of the same run stopped immediately
    before that point, not to the counters at entry.
 6. Call each generated oracle whose operand types reach a declaration key with
-   a genuine prepared wrapper whose environment is privately replaced by the
-   test fixture (no public raw wrapper/index constructor): an
+   a genuine preparation recipe whose environment is privately replaced before
+   its owner type checks (no public raw wrapper/index constructor): an
    empty environment, and one omitting a key its operand types reach, and one
-   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedTypeCheckRejected { cause } })`, where `cause` is the original `IllTypedCause` returned by `check_type`, no panic, and no charge
-   admitted on the `Meter`. Assert that this is the emitted `check_type` calls
-   deciding it, by confirming the same environments pass `check_equality`: that
+   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedTypeCheckRejected { cause } })`, where `cause` is the original `IllTypedCause` retained from owner `Refused(IllTyped)`, no panic, and no charge
+   admitted on the `Meter`. Assert that the emitted preparation's `try_check_type` calls
+   and retained semantic-refusal state decide it, by confirming the same environments pass `check_equality`: that
    call uses the same genuine enum index and consults the environment through `contains_ieee`, which returns
    `false` for a composite key the environment does not hold, and
    `CheckedEquality::evaluate` takes no environment at all — so without
-   `check_type` these vectors complete with a Boolean.
+   the owner type checks these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
    `EqualityOperator`; confirm both generate under distinct readable symbols,
    each built from its own operator's stem, that both are
@@ -462,8 +463,8 @@ For wrappers prepared with None and Some, retain expected package/item/
 descriptor binding and the complete index privately. Exercise wrong binding,
 present-context mismatch, missing context in a nominal recipe, and private
 environment-only faults; assert invariant refusal before any meter charge.
-Then execute both check_type guards, same-index check_equality and evaluate
-on the valid path. No raw caller index or public unchecked wrapper is added.
+Execute the left-before-right preparation type checks and retained semantic
+refusal handling, then same-index check_equality and evaluate on the valid path. No raw caller index or public unchecked wrapper is added.
 These controls change neither the merged AC-14 bound-intake split nor the
 original TC025/TC027 domains, harnesses or proof obligations.
 
@@ -602,7 +603,8 @@ request's and `CheckedEquality::schedule()`; all three executions agree on every
 vector's outcome, charges and counters; every injected denial yields
 `Incomplete` at its point without applying that charge; a foreign environment
 refuses as `CheckedInvariant` without panicking and without charging, decided by
-the emitted `check_type` calls; the two operators generate under distinct
+the emitted preparation type checks and retained original semantic cause;
+the two operators generate under distinct
 symbols with complementary results and one `caller_declared`
 mark; and the generated crate
 compiles with `publish = false` and no charge or pair-count literal.
@@ -631,3 +633,31 @@ for the shapes they cover: for a record, tuple or option over Boolean and bounde
 the pair count is asserted, against a count the test makes from the values by QSpec FR-149's
 occurrence-pair rule and not from the runtime, because the shadow of FR-015-AC-69 models exactly
 that count and the refinement obligation of FR-028-AC-15 compares the oracle with it.
+
+
+### Fallible generated comparison-type preparation (IR-1400)
+
+This extension verifies FR-018-AC-48 and FR-018-AC-49. It changes the emitted
+preparation error boundary without changing the original semantic refusal
+reported by the oracle.
+
+1. Generate and compile a genuine admitted equality item. At the emitted
+   preparation's actual QSV type traversal, deny a real allocator reservation
+   with the owner allocator test tool. Assert `EnvironmentError::TypeCheck`
+   retains `Allocation` and the actual request class/unit/amount unchanged;
+   no prepared wrapper or equality-meter charge is published. Release denial
+   and retry successfully. Verify by source inspection that Capacity uses the
+   same direct owner-error move; do not fabricate a reachable sizing overflow.
+2. Use private preparation faults for an empty, missing-key and wrong-key
+   environment. Assert the owner semantic `IllTyped` is retained, and oracle
+   execution returns the original `GeneratedTypeCheckRejected` cause without
+   charging. Retain all existing package/context/item guards.
+3. Make the left comparison type semantically invalid while the right traversal
+   would incur the allocator denial. Assert the left owner refusal wins and the
+   right traversal is not attempted. With an eligible left, check right semantic
+   refusal and native-failure handling separately. Healthy generated equality
+   still agrees in completed value, ordered admitted charges and counters.
+4. Keep the prepared state private and bind these tests to the actual new ACs.
+   Native component execution may validate the emitted boundary independently
+   while genuine IR admission is blocked, but it grants no genuine-source or
+   full acceptance credit until the original owner path executes.

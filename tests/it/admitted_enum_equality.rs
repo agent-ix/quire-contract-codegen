@@ -66,7 +66,7 @@ pub(super) fn checked(
 
 pub(super) fn application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
     let declaration = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -82,7 +82,7 @@ pub(super) fn application(package: &CheckedPackageV2, function: &str) -> Checked
         .flat_map(|entry| &entry.regions)
         .collect::<Vec<_>>();
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -139,7 +139,7 @@ fn enum_items(
             })
             .expect("real declared enum");
         let type_id = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -392,7 +392,7 @@ function integer_same using v(a: Integer,b: Integer): Boolean pure { a = b }\n";
 fn integer_item(package: &CheckedPackageV2) -> (CompositeEqualityItem, CheckedNodeId) {
     let scalar = |form: &str| {
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -562,7 +562,7 @@ pub(super) fn direct_source_item(
 ) -> CompositeEqualityItem {
     let node_id = application(package, function);
     let expression = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == node_id)
@@ -576,7 +576,7 @@ pub(super) fn direct_source_item(
             panic!("actual IR reference ID, never a reconstructed semantic key");
         };
         let parameter = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &node.node_id == target)
@@ -617,7 +617,7 @@ fn authentic_text_option_and_primitive_sequence_generate_with_real_bounds() {
         let package = checked(&compiled, &[]);
         let item = direct_source_item(&package, "f");
         let bounds = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -666,7 +666,7 @@ pub(super) fn authentic_text_oracles() -> CompositeEqualityOracles {
     let package = checked(&compiled, &[]);
     let item = direct_source_item(&package, "f");
     let bounds = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| {
@@ -749,7 +749,7 @@ fn genuine_asymmetric_integer_equality() -> (
     let compiled = fixture::compile("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Int[0, 9],b: Integer): Boolean pure { convert<Integer>(a) = b }\n");
     let package = checked(&compiled, &[]);
     let source = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "integer_range")
@@ -757,7 +757,7 @@ fn genuine_asymmetric_integer_equality() -> (
         .node_id
         .clone();
     let integer = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "integer")
@@ -765,7 +765,7 @@ fn genuine_asymmetric_integer_equality() -> (
         .node_id
         .clone();
     let conversions = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| node.semantic_form.as_ref() == "conversion")
@@ -783,7 +783,7 @@ fn genuine_asymmetric_integer_equality() -> (
     let body = serde_json::to_value(&conversion.body).expect("checked conversion body");
     assert_eq!(body["operation"]["identity"], "quire.op.numeric.convert");
     let parameters = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| node.semantic_form.as_ref() == "parameter" && node.semantic_type == source)
@@ -796,7 +796,7 @@ fn genuine_asymmetric_integer_equality() -> (
     );
     let equality = application(&package, "f");
     let equality_node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == equality)

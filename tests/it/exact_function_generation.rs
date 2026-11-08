@@ -801,7 +801,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
     let (package, ids) = builder.admit_with_resolved(limits);
     eprintln!(
         "IR-496 AC7 phase=admission-complete admitted_v2_nodes={}",
-        package.graph().nodes.len()
+        package.resolved_graph().nodes.len()
     );
     let resolved_code_id = |code| ids.resolve(&code_id(code));
     let parameter = |code| FunctionScheduleParameter {
@@ -1466,7 +1466,10 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     let (_, baseline) = super::exact_function_agreement::genuine_corpus();
     let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_unknown();
-    assert_eq!(oracles.claim_map.items.len(), 4);
+    assert_eq!(
+        oracles.claim_map.items.len(),
+        baseline.claim_map.items.len() + 1
+    );
     for expected in &baseline.claim_map.items {
         let actual = oracles
             .claim_map
@@ -1530,7 +1533,7 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let (package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested"];
+    let ordered = [("add", 0), ("eq", 1), ("nested", 2), ("multiply", 14)];
     for claim in &oracles.claim_map.items {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("genuine source claim refused: {claim:?}");
@@ -1546,7 +1549,8 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         );
         let expected_index = ordered
             .iter()
-            .position(|name| *name == generated.function)
+            .find(|(name, _)| *name == generated.function)
+            .map(|(_, index)| *index)
             .expect("claim names a requested function");
         match &generated.function_origin {
             quire_contract_codegen::RecordedOrigin::Body { function, index } => {
@@ -1782,7 +1786,7 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     let (package, combined, healthy_only, case_id, area_call_id, healthy_call_id) =
         super::exact_function_agreement::genuine_case_and_healthy();
     let case = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == case_id)
@@ -1850,7 +1854,7 @@ fn tc_031_ac33_genuine_temporal_roots_leave_a_callable_sibling() {
         let (package, combined, healthy_only, temporal_id, healthy_call_id) =
             super::exact_function_agreement::genuine_temporal_and_healthy(form);
         let temporal = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == temporal_id)
@@ -2660,7 +2664,7 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
     let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 3, "genuine corpus");
+    assert_eq!(lib.matches("pub fn oracle_").count(), 4, "genuine corpus");
     for forbidden in [".unwrap(", ".expect("] {
         assert!(!lib.contains(forbidden), "main corpus emits {forbidden}");
     }
@@ -2685,7 +2689,7 @@ fn tc_031_ac20_closed_kernel_outcomes_are_exhaustive() {
         "Outcome::Refused(value) => Outcome::Refused(value)",
         "Outcome::Incomplete(value) => Outcome::Incomplete(value)",
     ] {
-        assert_eq!(lib.matches(arm).count(), 2, "{arm} in scalar and equality");
+        assert_eq!(lib.matches(arm).count(), 3, "{arm} in scalar and equality");
     }
     assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Integer(value))"));
     assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Boolean(value))"));
@@ -2733,8 +2737,8 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
             .iter()
             .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
             .count(),
-        3,
-        "all three QSL-authored call items generate"
+        4,
+        "all four QSL-authored call items generate"
     );
     let subjects = first
         .claim_map
@@ -2829,13 +2833,14 @@ fn tc_031_ac14_manifest_and_source_shape() {
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     let (_package, oracles) = super::exact_function_agreement::genuine_corpus();
-    let ordered = ["add", "eq", "nested"];
+    let ordered = [("add", 0), ("eq", 1), ("nested", 2), ("multiply", 14)];
     assert_eq!(oracles.location_map.len(), ordered.len());
     for entry in &oracles.location_map {
         assert_eq!(entry.location.path, Vec::<usize>::new());
         let expected_index = ordered
             .iter()
-            .position(|name| *name == entry.function)
+            .find(|(name, _)| *name == entry.function)
+            .map(|(_, index)| *index)
             .unwrap_or_else(|| panic!("{} not a survivor", entry.function));
         match &entry.location.origin {
             quire_contract_codegen::RecordedOrigin::Body { function, index } => {
@@ -2844,7 +2849,7 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
             }
         }
         let expected_kind = match entry.function.as_str() {
-            "add" => CallPointKind::ScalarOperator,
+            "add" | "multiply" => CallPointKind::ScalarOperator,
             "eq" => CallPointKind::EqualityEvaluation,
             "nested" => CallPointKind::NestedCall,
             other => panic!("unexpected function {other}"),
@@ -2880,8 +2885,10 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
             syn::visit::visit_expr_assign(self, expression);
         }
         fn visit_expr_field(&mut self, expression: &'ast syn::ExprField) {
-            let static_self =
-                matches!(&*expression.base, syn::Expr::Path(path) if path.path.is_ident("self"));
+            let static_self = matches!(&*expression.base, syn::Expr::Path(path) if path.path.is_ident("self"))
+                || matches!(&*expression.base, syn::Expr::Field(field)
+                    if matches!(&field.member, syn::Member::Unnamed(index) if index.index == 0)
+                    && matches!(&*field.base, syn::Expr::Path(path) if path.path.is_ident("self")));
             if !static_self {
                 if let syn::Member::Named(name) = &expression.member {
                     if name == "location" || name == "losses" {
@@ -2898,8 +2905,8 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     assert!(reads.0.is_empty(), "invocation field reads: {:?}", reads.0);
     assert_eq!(
         lib.matches("evaluation.location =").count(),
-        2,
-        "only the two statically known result/declaration boundary annotations"
+        1,
+        "the shared prepared boundary adds its statically known declaration location"
     );
     assert!(
         lib.contains("Result<Result<eval::Evaluation, eval::CallFailure>, CheckedFunctionError>")

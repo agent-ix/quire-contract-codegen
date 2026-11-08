@@ -418,10 +418,15 @@ pub fn checked_function_declarations(
     }
     let mut declarations = Vec::new();
     let mut keys = std::collections::BTreeSet::new();
-    for node in declaring_package.graph().nodes.iter().filter(|node| {
-        node.node_tag.as_ref() == "composite_type"
-            && matches!(node.semantic_form.as_ref(), "record" | "tuple" | "union")
-    }) {
+    for node in declaring_package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.node_tag.as_ref() == "composite_type"
+                && matches!(node.semantic_form.as_ref(), "record" | "tuple" | "union")
+        })
+    {
         // The facade takes wire node identities. Union ValueType identities
         // instead carry kernel handles; retain the owner's explicit mapping.
         let node_key = checked_function_key(declaring_package, &node.node_id)?;
@@ -598,7 +603,7 @@ mod tests {
         };
         let function = |name: &str| {
             package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| {
@@ -674,7 +679,7 @@ mod tests {
         };
         let library = Arc::new(*library);
         let function = library
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -920,7 +925,7 @@ mod tests {
         .expect("QSL retains the imported closure");
         let handle = &acquired;
         let caller = unit
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -932,7 +937,7 @@ mod tests {
             .node_id
             .clone();
         let call = unit
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -988,7 +993,7 @@ mod tests {
         ));
 
         let outer = library
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1000,7 +1005,7 @@ mod tests {
             .node_id
             .clone();
         let imported_call = library
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1034,7 +1039,7 @@ mod tests {
         ] {
             let function = |package: &CheckedPackageV2, name: &str| {
                 package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|node| {
@@ -1049,7 +1054,7 @@ mod tests {
             let caller = function(caller_package, caller_name);
             let callee = function(&library, callee_name);
             let call = caller_package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| {

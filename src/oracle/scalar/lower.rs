@@ -98,7 +98,18 @@ pub(super) fn check_item<'r, Body: GraphBody>(
             }
         }
     }
-    let node = lowered(record)?;
+    if let Some(node) = graph.node(requested_node_id) {
+        if node.node_tag.as_ref() == "model" && node.semantic_form.as_ref() != "variant_type" {
+            return Err(ExactScalarRefusal::BlockedOnUpstream {
+                unsupported_node_id: requested_node_id.clone(),
+                node_tag: "model",
+                issue: UpstreamBlocker::QuireSpecLanguage120,
+            }
+            .into());
+        }
+    }
+    let node = lowered(record)
+        .map_err(|refusal| division_operand_bound_refusal(graph, requested_node_id, refusal))?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
@@ -149,7 +160,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
-    if &*node.node.semantic_form != shape.form {
+    if !shape.accepts_form(&node.node.semantic_form) {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
@@ -173,10 +184,55 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         .into());
     }
     for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
-        check_operand(graph, position, argument, *expected)?;
+        shape.check_operand(graph, position, argument, *expected)?;
     }
     let checked_bounds = check_parameters(graph, node, operation)?;
     Ok((node, checked_bounds))
+}
+
+/// An unnarrowed division/modulo needs finite operand facts to derive its
+/// otherwise missing result interval. Classify that absence consistently even
+/// when IR stops the lowering at an unbounded operand first.
+pub(super) fn division_operand_bound_refusal<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    node_id: &CheckedNodeId,
+    refusal: ExactScalarRefusal,
+) -> ExactScalarRefusal {
+    let ExactScalarRefusal::RequiresBound { .. } = &refusal else {
+        return refusal;
+    };
+    let Some(node) = graph.node(node_id) else {
+        return refusal;
+    };
+    if !graph.node(&node.semantic_type).is_some_and(|typing| {
+        &*typing.node_tag == CheckedNodeTag::ScalarType.as_wire()
+            && &*typing.semantic_form == "integer"
+    }) || !matches!(narrowing(graph, node_id), Narrowing::Unnarrowed)
+    {
+        return refusal;
+    }
+    let identity = scalar_ir::identity(graph.term(node_id));
+    let admitted_operation = match identity {
+        Some("quire.op.integer.mod") => true,
+        Some("quire.op.integer.div") => {
+            quire_exact::DivisionProfile::ALL
+                .into_iter()
+                .filter(|profile| {
+                    scalar_ir::has_law(graph.term(node_id), profile.definition_identity())
+                })
+                .count()
+                == 1
+        }
+        _ => false,
+    };
+    if admitted_operation {
+        ExactScalarRefusal::MissingBound {
+            bounded_type: node.semantic_type.clone(),
+            expected_form: BoundForm::IntegerRange,
+        }
+    } else {
+        refusal
+    }
 }
 
 pub(super) fn lowered(
@@ -285,8 +341,11 @@ pub(super) fn application_arguments<'a>(
 
 fn type_form<Body: GraphBody>(graph: &Graph<'_, Body>, type_id: &CheckedNodeId) -> Option<String> {
     let node = graph.node(type_id)?;
-    (&*node.node_tag == CheckedNodeTag::ScalarType.as_wire())
-        .then(|| node.semantic_form.to_string())
+    match (node.node_tag.as_ref(), node.semantic_form.as_ref()) {
+        ("scalar_type", form) => Some(form.to_owned()),
+        ("model", "variant_type") => Some(ScalarForm::Enum.wire().to_owned()),
+        _ => None,
+    }
 }
 
 /// An operand is a literal classified by its value kind, or a reference
@@ -497,7 +556,9 @@ pub(super) fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool
             | CheckedTerm::Frame { .. }
             | CheckedTerm::AbstractionRelation { .. }
             | CheckedTerm::Refinement { .. }
-            | CheckedTerm::NominalBody(_),
+            | CheckedTerm::NominalBody(_)
+            | CheckedTerm::ImplementationGuarantee { .. }
+            | CheckedTerm::ComponentComposition { .. },
         )
         | None => false,
     }
@@ -907,9 +968,27 @@ pub(super) fn check_parameters_from_view<Body: GraphBody, NodeBody>(
                 .ok_or(ExactScalarRefusal::InvalidInput)?;
             return Ok(vec![carrier.clone()]);
         }
-        ExactScalarOperation::IntegerArithmetic { domain, .. }
-        | ExactScalarOperation::IntegerDivision { domain, .. }
+        ExactScalarOperation::IntegerDivision { domain, .. }
         | ExactScalarOperation::IntegerModulo { domain } => {
+            let (actual, checked) = bounds.integer_division_bounds(matches!(
+                operation,
+                ExactScalarOperation::IntegerModulo { .. }
+            ))?;
+            if domain != &IntegerDomain::Bounded(actual) {
+                let refusal = match bounds.read(BoundForm::IntegerRange, read_integer_range) {
+                    Ok((bound, _)) => ExactScalarRefusal::BoundMismatch {
+                        bound,
+                        form: BoundForm::IntegerRange,
+                    },
+                    Err(_) => ExactScalarRefusal::DerivedBoundMismatch {
+                        node_id: bounds.node.root.node_id.clone(),
+                    },
+                };
+                return Err(refusal.into());
+            }
+            return Ok(checked);
+        }
+        ExactScalarOperation::IntegerArithmetic { domain, .. } => {
             let declared = match domain {
                 IntegerDomain::Bounded(interval) => Some(interval),
                 IntegerDomain::Mathematical => None,
@@ -1012,6 +1091,111 @@ pub(super) struct Bounds<'g, 'n, Body: GraphBody = Value, NodeBody = CheckedTerm
 }
 
 impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
+    /// Keep an explicit result bound authoritative. For a mathematical Integer
+    /// result, derive a sound bound from both finite operands without inventing
+    /// a result-bound node in the provenance.
+    pub(super) fn integer_division_bounds(
+        &self,
+        modulo: bool,
+    ) -> Result<(IntegerInterval, Vec<CheckedNodeId>), ExactScalarRefusal> {
+        match self.read(BoundForm::IntegerRange, read_integer_range) {
+            Ok((result, domain)) => {
+                let mut checked = vec![result];
+                for bound in self.integer_operand_bounds()? {
+                    if !checked.contains(&bound) {
+                        checked.push(bound);
+                    }
+                }
+                return Ok((domain, checked));
+            }
+            Err(
+                ExactScalarRefusal::MissingBound { .. }
+                | ExactScalarRefusal::RequiresBound { .. }
+                | ExactScalarRefusal::AmbiguousBound { .. },
+            ) if self
+                .graph
+                .node(&self.node.semantic_type)
+                .is_some_and(|node| {
+                    &*node.node_tag == CheckedNodeTag::ScalarType.as_wire()
+                        && &*node.semantic_form == "integer"
+                })
+                && matches!(self.narrowing(), Narrowing::Unnarrowed)
+                && self
+                    .node
+                    .selected
+                    .as_ref()
+                    .is_none_or(|selected| selected.conversion.is_none())
+                && self
+                    .node
+                    .bounds
+                    .iter()
+                    .filter_map(|id| self.graph.node(id))
+                    .filter(|bound| {
+                        bound.semantic_type == self.node.semantic_type
+                            && &*bound.semantic_form == BoundForm::IntegerRange.wire()
+                    })
+                    .all(|bound| {
+                        own_bounds(self.graph, self.graph.term(&self.node.root.node_id))
+                            .iter()
+                            .flatten()
+                            .any(|own| own.node_id == bound.node_id)
+                    }) => {}
+            Err(error) => return Err(error),
+        }
+        let missing = || ExactScalarRefusal::MissingBound {
+            bounded_type: self.node.semantic_type.clone(),
+            expected_form: BoundForm::IntegerRange,
+        };
+        let arguments = self
+            .graph
+            .arguments(&self.node.root.node_id)
+            .unwrap_or_default();
+        let [left, right] = arguments else {
+            return Err(ExactScalarRefusal::BodyMismatch {
+                expected_operator: "binary",
+                expected_arguments: 2,
+            });
+        };
+        let mut checked = Vec::new();
+        let mut interval = |argument| {
+            if let Some(bound) = operand_own_bound(self.graph, argument) {
+                if &*bound.semantic_form != BoundForm::IntegerRange.wire() {
+                    return Err(missing());
+                }
+                let range = aggregate_members(self.graph.term(&bound.node_id))
+                    .and_then(read_integer_range)
+                    .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
+                        bound: bound.node_id.clone(),
+                    })?;
+                if !checked.contains(&bound.node_id) {
+                    checked.push(bound.node_id.clone());
+                }
+                Ok(range)
+            } else if let Some(value) =
+                operand_literal(self.graph, argument).and_then(literal_integer)
+            {
+                Ok(IntegerInterval::spanning(value.clone(), value))
+            } else {
+                Err(missing())
+            }
+        };
+        let dividend = interval(left)?;
+        let divisor = interval(right)?;
+        let source = if modulo { divisor } else { dividend };
+        let magnitude = source.lower().abs().max(source.upper().abs());
+        let domain = if modulo {
+            let upper = if magnitude.is_zero() {
+                magnitude
+            } else {
+                magnitude.sub(&quire_exact::Integer::one())
+            };
+            IntegerInterval::spanning(quire_exact::Integer::zero(), upper)
+        } else {
+            IntegerInterval::spanning(magnitude.neg(), magnitude)
+        };
+        Ok((domain, checked))
+    }
+
     /// Read the result bound of `form`: the one selector both [`Self::equal`] and
     /// [`super::derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
     ///
@@ -1356,6 +1540,8 @@ impl ScalarForm {
 /// The node shape a descriptor requires.
 pub(super) struct Shape {
     pub(super) form: &'static str,
+    alternate_form: Option<&'static str>,
+    carried_operand: bool,
     pub(super) body_operator: &'static str,
     pub(super) operands: &'static [ScalarForm],
     pub(super) result: ScalarForm,
@@ -1365,6 +1551,8 @@ impl Shape {
     fn binary(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
         Self {
             form: "binary",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "binary",
             operands,
             result,
@@ -1374,6 +1562,8 @@ impl Shape {
     fn unary(operand: &'static [ScalarForm; 1], result: ScalarForm) -> Self {
         Self {
             form: "unary",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "unary",
             operands: operand,
             result,
@@ -1383,34 +1573,54 @@ impl Shape {
     fn conversion(operand: &'static [ScalarForm; 1], result: ScalarForm) -> Self {
         Self {
             form: "conversion",
+            alternate_form: None,
+            carried_operand: false,
             body_operator: "convert",
             operands: operand,
             result,
         }
     }
 
-    /// The `body_operator: "call"` half is grounded in the catalog: the
-    /// operation-catalog's three IEEE-comparison identities
-    /// (`quire.op.ieee.numeric_equal`, `.total_order`, `.bit_identical`) are
-    /// all `call`-operator entries, and Contract IR's
-    /// `validate_operations` refuses any package whose `body.operator`
-    /// disagrees with its catalogued `operation.identity`'s own `operator`,
-    /// so a real, admitted IEEE comparison node's `body.operator` is always
-    /// `"call"`, never `"binary"`.
-    ///
-    /// The `form: "binary"` half is grounded only in this repo's own
-    /// fixtures, not in IR or the catalog: IR does not couple
-    /// `semantic_form` to `body.operator` -- `Expression::forms()` admits
-    /// `"call"` and `"binary"` as independent, unrelated values -- so a real
-    /// producer is free to emit `semantic_form: "call"` for an IEEE
-    /// comparison node, and this shape would then refuse it `FormMismatch`.
+    /// IEEE comparisons use the owner's call operator with either admitted expression form.
     fn binary_call(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
         Self {
             form: "binary",
+            alternate_form: Some("call"),
+            carried_operand: false,
             body_operator: "call",
             operands,
             result,
         }
+    }
+
+    fn quantity_conversion(result: ScalarForm) -> Self {
+        Self {
+            carried_operand: true,
+            ..Self::conversion(&[ScalarForm::Unit], result)
+        }
+    }
+
+    fn accepts_form(&self, form: &str) -> bool {
+        form == self.form || self.alternate_form == Some(form)
+    }
+
+    fn check_operand<Body: GraphBody>(
+        &self,
+        graph: &Graph<'_, Body>,
+        position: usize,
+        term: &CheckedTerm,
+        expected: ScalarForm,
+    ) -> Result<(), ExactScalarRefusal> {
+        let expected = if self.carried_operand
+            && expected == ScalarForm::Unit
+            && matches!(term, CheckedTerm::Reference { .. })
+            && reference_form(graph, term).as_deref() == Some(ScalarForm::CarriedQuantity.wire())
+        {
+            ScalarForm::CarriedQuantity
+        } else {
+            expected
+        };
+        check_operand(graph, position, term, expected)
     }
 
     pub(super) fn of(operation: &ExactScalarOperation) -> Result<Self, OracleGenerationError> {
@@ -1494,9 +1704,9 @@ impl Shape {
                     Self::binary(&[F::Unit, F::Unit], F::CompoundUnit)
                 }
             },
-            ExactScalarOperation::QuantityConversion => Self::conversion(&[F::Unit], F::Unit),
+            ExactScalarOperation::QuantityConversion => Self::quantity_conversion(F::Unit),
             ExactScalarOperation::CarriedQuantityConversion { .. } => {
-                Self::conversion(&[F::Unit], F::CarriedQuantity)
+                Self::quantity_conversion(F::CarriedQuantity)
             }
             ExactScalarOperation::QuantityComparison { .. } => {
                 Self::binary(&[F::Unit, F::Unit], F::Boolean)
@@ -2225,7 +2435,7 @@ fn contract_scalar_shape(
 ) -> Result<Result<(), ExactScalarRefusal>, OracleGenerationError> {
     let shape = Shape::of(operation)?;
     Ok((|| {
-        if &*node.semantic_form != shape.form {
+        if !shape.accepts_form(&node.semantic_form) {
             return Err(ExactScalarRefusal::FormMismatch {
                 expected: shape.form,
                 found: node.semantic_form.to_string(),
@@ -2246,7 +2456,7 @@ fn contract_scalar_shape(
             });
         }
         for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
-            check_operand(graph, position, argument, *expected)?;
+            shape.check_operand(graph, position, argument, *expected)?;
         }
         Ok(())
     })())

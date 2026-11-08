@@ -76,6 +76,7 @@ mod frame_claim_gap;
 mod generated_headers;
 mod harness_generation;
 mod inline_integer_equality;
+mod integer_division_bounds;
 mod kani_batching;
 mod kani_gate;
 mod kani_generation;
@@ -85,6 +86,7 @@ mod kani_obligations_state_frame;
 mod kani_obligations_symbolic_domains;
 mod kani_stdout_capture;
 mod layout;
+mod model_enum_scalar;
 mod native_v2_helper_playback;
 mod no_generation_panics;
 mod oracle_arithmetic;
@@ -116,3 +118,5 @@ mod kani_collection_operation;
 mod constrained_method;
 
 mod native_driver_artifacts;
+
+mod scalar_source_forms;

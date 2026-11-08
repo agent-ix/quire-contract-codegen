@@ -1496,7 +1496,11 @@ mod checked_invariant_tests {
             .parent()
             .expect("dependency directory")
             .to_owned();
-        let library = fs::read_dir(&dependencies)
+        let directory = dependencies.join(format!("cg-interval-guard-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let probe_source = directory.join("metadata_probe.rs");
+        fs::write(&probe_source, "extern crate quire_exact;\n").unwrap();
+        let mut candidates = fs::read_dir(&dependencies)
             .unwrap()
             .map(|entry| entry.unwrap().path())
             .filter(|path| {
@@ -1506,10 +1510,28 @@ mod checked_invariant_tests {
                         .extension()
                         .is_some_and(|extension| extension == "rlib")
             })
-            .max_by_key(|path| fs::metadata(path).unwrap().modified().unwrap())
-            .expect("current exact dependency");
-        let directory = dependencies.join(format!("cg-interval-guard-{}", std::process::id()));
-        fs::create_dir_all(&directory).unwrap();
+            .collect::<Vec<_>>();
+        candidates.sort();
+        // Ask the active compiler to load crate metadata. An MSRV check can
+        // leave a newer timestamp on an incompatible compiler's rlib.
+        let library = candidates
+            .into_iter()
+            .find(|library| {
+                Command::new("rustc")
+                    .args(["--edition=2021", "--crate-type", "lib", "--emit=metadata"])
+                    .arg("--extern")
+                    .arg(format!("quire_exact={}", library.display()))
+                    .arg("-L")
+                    .arg(format!("dependency={}", dependencies.display()))
+                    .arg("-o")
+                    .arg(directory.join("metadata_probe.rmeta"))
+                    .arg(&probe_source)
+                    .output()
+                    .expect("load exact compiler metadata")
+                    .status
+                    .success()
+            })
+            .expect("an exact dependency with metadata accepted by the active compiler");
         let helpers = native_helper_lines(Helpers {
             bound: true,
             equality: false,

@@ -229,7 +229,7 @@ fn render_statements(
                     .map(|arg| match arg {
                         Argument::Value(name) => name.to_owned(),
                         Argument::BooleanOutcomeClosure(name) => {
-                            format!("|| rt::Outcome::Completed({name})")
+                            format!("|_| rt::Outcome::Completed({name})")
                         }
                         Argument::Borrow(name) => format!("&{name}"),
                         Argument::BorrowMut(name) => format!("&mut {name}"),

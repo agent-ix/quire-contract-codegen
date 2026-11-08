@@ -80,7 +80,12 @@ impl<'a> ClauseGraphView<'a> {
     pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
         let mut index = ClauseNodeIndex::new();
         let mut kinds = BTreeMap::new();
-        for (node, kind) in package.graph().nodes.iter().zip(package.node_kinds()) {
+        for (node, kind) in package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .zip(package.node_kinds())
+        {
             index.insert(node);
             kinds.entry(&node.node_id).or_insert(*kind);
         }

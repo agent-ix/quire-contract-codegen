@@ -14,6 +14,10 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
@@ -198,7 +202,8 @@ fn fixture_label(id: &CheckedNodeId) -> String {
             quire_contract_model::CheckedNodePathSegment::Node(_) => {
                 panic!("fixture node has a nested path: {id:?}")
             }
-            quire_contract_model::CheckedNodePathSegment::Index(_) => {
+            quire_contract_model::CheckedNodePathSegment::Index(_)
+            | quire_contract_model::CheckedNodePathSegment::Operand(_) => {
                 panic!("fixture node has an indexed path: {id:?}")
             }
         })
@@ -653,7 +658,17 @@ impl PackageBuilder {
                 "kind": "model", "identity": FIXTURE_MODEL, "node": FIXTURE_RELATIONSHIP,
             });
         }
+        let original_count = nodes.len();
         nodes.push(node);
+        if let Some(rows) = self.value["semantic_graph"].get_mut("operand_rows") {
+            let rows = rows.as_array_mut().expect("authored operand rows");
+            assert_eq!(
+                rows.len(),
+                original_count,
+                "one row per existing producer node"
+            );
+            rows.push(json!([]));
+        }
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
@@ -1087,6 +1102,64 @@ impl PackageBuilder {
         self
     }
 
+    /// Author literal-operand controls with a separate result-narrow context.
+    /// A computed call wrapper is not a literal and must not be unwrapped by CG.
+    pub fn literal_operands_for(&mut self, codes: &[u32]) {
+        let literals = self.value["semantic_graph"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|node| node["node_tag"] == "value" && node["semantic_form"] == "literal")
+            .map(|node| node["node_id"].clone())
+            .collect::<Vec<_>>();
+        let children = self.value["semantic_graph"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|node| {
+                node["node_tag"] == "expression"
+                    && node["semantic_form"] == "call"
+                    && node["body"]["term"] == "reference"
+            })
+            .map(|node| (node["node_id"].clone(), node["body"]["target"].clone()))
+            .collect::<Vec<_>>();
+        for node in self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+        {
+            if !codes
+                .iter()
+                .any(|code| node["node_id"] == json!(code_id(*code)))
+            {
+                continue;
+            }
+            let arguments = node["body"]["arguments"]
+                .as_array_mut()
+                .expect("scalar application");
+            for argument in arguments.iter_mut() {
+                if let Some((_, literal)) = children
+                    .iter()
+                    .find(|(wrapper, _)| argument["target"] == *wrapper)
+                {
+                    assert!(
+                        literals.contains(literal),
+                        "the fixture explicitly selects a literal child"
+                    );
+                    argument["target"] = literal.clone();
+                }
+            }
+            let mut dependencies = arguments
+                .iter()
+                .filter_map(|argument| argument.get("target").cloned())
+                .collect::<Vec<_>>();
+            dependencies.sort_by_cached_key(|id| {
+                serde_json::from_value::<CheckedNodeId>(id.clone()).unwrap()
+            });
+            dependencies.dedup();
+            node["dependencies"] = json!(dependencies);
+        }
+    }
+
     /// The fixture's authored wire before ID and package-identity resolution.
     pub fn raw_wire(&self) -> &Value {
         &self.value
@@ -1155,6 +1228,7 @@ fn evidence() -> CheckedPackageEvidence {
 /// Read a deliberate mutation of an already admitted wire under its refreshed package identity.
 pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     rekey::refresh_identity(&mut wire);
+    rekey::author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
 }
@@ -1220,6 +1294,28 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
         authored_body_ids(&node["body"], &nodes, &mut pending);
     }
     let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
+    if let Some(rows) = wire["semantic_graph"].get_mut("operand_rows") {
+        let original = rows.as_array().expect("authored operand rows");
+        assert_eq!(
+            original.len(),
+            nodes.len(),
+            "one original row per fixture node"
+        );
+        assert!(
+            original
+                .iter()
+                .all(|row| row.as_array().is_some_and(Vec::is_empty)),
+            "name-only fixture pruning does not remap indexed operands"
+        );
+        *rows = Value::Array(
+            original
+                .iter()
+                .zip(&nodes)
+                .filter(|(_, node)| keep(&node["node_id"]))
+                .map(|(row, _)| row.clone())
+                .collect(),
+        );
+    }
     wire["semantic_graph"]["nodes"] = Value::Array(
         nodes
             .into_iter()
@@ -1246,6 +1342,7 @@ pub fn read_application_mutated_wire(
 ) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let candidate = provisional.clone();
     rekey::refresh_identity(&mut wire);
+    rekey::author_name_only_operand_rows(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     (
         CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()),
@@ -3413,63 +3510,63 @@ pub const BOUNDED_BINARY_SUBTRACTION: u32 = 2037;
 /// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
 /// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
 pub fn bounded_increment_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
         V_PARAM_X,
         "value",
-        "literal",
+        "parameter",
         &bound_key,
-        literal("integer", "3"),
+        parameter_body("x", 0),
     );
     builder.application_bounded(
         BOUNDED_INCREMENT,
         "expression",
         "binary",
-        &key(T_INTEGER),
+        &bound_key,
         application(
             "binary",
             op("quire.op.integer.add"),
-            &key(T_INTEGER),
+            &bound_key,
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
-        &[bound],
+        &[],
     );
     builder
 }
 
 /// A package holding `x - 1` over `Int[0, 9]`, parallel to [`bounded_increment_package`].
 pub fn bounded_decrement_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
         V_PARAM_X,
         "value",
-        "literal",
+        "parameter",
         &bound_key,
-        literal("integer", "3"),
+        parameter_body("x", 0),
     );
     builder.application_bounded(
         BOUNDED_DECREMENT,
         "expression",
         "binary",
-        &key(T_INTEGER),
+        &bound_key,
         application(
             "binary",
             op("quire.op.integer.sub"),
-            &key(T_INTEGER),
+            &bound_key,
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
-        &[bound],
+        &[],
     );
     builder
 }
 
 /// A package holding `x - y` where both symbolic operands independently admit `[0, 9]`.
 pub fn bounded_binary_subtraction_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let operand_bound = Bound::Integer(0, 9);
     let operand_bound_key = builder.bound(&operand_bound);
     let minuend_key = key(V_PARAM_X);
@@ -3566,11 +3663,11 @@ pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTo
             code,
             "expression",
             "binary",
-            &integer_type,
+            &bound,
             application(
                 "binary",
                 op("quire.op.integer.add"),
-                &integer_type,
+                &bound,
                 vec![reference(&predecessor_key), reference(&predecessor_key)],
             ),
             &[predecessor_key],
@@ -3742,7 +3839,13 @@ fn two_parameter_wire() -> PackageBuilder {
         (V_PARAM_C, &c),
         (V_PARAM_D, &d),
     ] {
-        builder.code(code, "value", "literal", bound, literal("integer", "3"));
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            bound,
+            parameter_body(&format!("p{code}"), 0),
+        );
     }
     builder.code(
         V_PARAM_WRONG_FORM,
@@ -3841,6 +3944,20 @@ fn two_parameter_wire() -> PackageBuilder {
         &[],
     );
     // `[0, 29]` reaches this node through `c`, so it is the one reachable bound no operand types.
+    // A parameter cannot carry dependencies. Keep its declaration intact behind
+    // a computed wrapper whose result domain remains c's own range.
+    let c_parameter = key(41_100);
+    builder.code(41_100, "value", "parameter", &c, parameter_body("c", 0));
+    let c_node = builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|node| node["node_id"] == node_ref(&key(V_PARAM_C)))
+        .unwrap();
+    c_node["node_tag"] = json!("expression");
+    c_node["semantic_form"] = json!("call");
+    c_node["body"] = reference(&c_parameter);
+    c_node["dependencies"] = json!([node_ref(&c_parameter)]);
     builder.application_bounded_anchored(
         TWO_PARAMETER_ATTACHED,
         "expression",
@@ -3874,9 +3991,8 @@ pub const QSL_PARAM_Y: u32 = 131;
 pub const QSL_PARAM_Z: u32 = 132;
 /// A parameter `p` typed by the plain Integer scalar type.
 pub const QSL_PARAM_PLAIN: u32 = 133;
-/// `q`: a `value` node of form `literal` whose body is not a literal, typed by the plain Integer
-/// scalar type and depending on the `Int[0, 29]` bound (the reader refuses an extra dependency on
-/// a `parameter`-form node, so `q` stands in for a parameter whose closure reaches a bound).
+/// `q`: an actual parameter typed by the plain Integer scalar type. Its
+/// aggregate parameter body has no artificial bound dependency.
 pub const QSL_PARAM_REACHING: u32 = 139;
 /// Parameters `u`, `v`, `w: Int[10, 20]`: an expression node's id is the digest of its content,
 /// so each further `x + y`-shaped node sums `x` with its own parameter to stay a distinct node.
@@ -3886,8 +4002,8 @@ pub const QSL_PARAM_W: u32 = 138;
 /// The `value` node QSL emits for the literal `1`: form `literal`, a `literal` body, typed by the
 /// plain Integer scalar type.
 pub const QSL_LITERAL_ONE: u32 = 134;
-/// A `value` node of form `literal` typed by the plain Integer scalar type whose body is not a
-/// literal: a reference to it is not a constant.
+/// An unbounded Integer parameter with an aggregate body: a reference to it
+/// is not a constant.
 pub const QSL_NOT_LITERAL: u32 = 135;
 /// `x + 1` (`function inc(x: Int[0, 9]): Int[0, 10] { x + 1 }`): the literal is a reference to
 /// [`QSL_LITERAL_ONE`] and the node's own result type is the plain Integer type.
@@ -3907,8 +4023,8 @@ pub const QSL_PLAIN_OPERAND: u32 = 2076;
 /// The narrowing conversion of [`QSL_PLAIN_OPERAND`].
 pub const QSL_PLAIN_OPERAND_NARROW: u32 = 2077;
 /// `q + q` narrowed to `Int[0, 29]`: no operand owns a bound, and the narrowing bounds the result.
-/// `q`'s node reaches `[0, 29]` so that IR's lowering finds a bound in the closure and it is CG's
-/// rule, not the lowering, that refuses the plain operands (see [`QSL_PARAM_REACHING`]).
+/// IR may refuse the unbounded parameter before CG inspects the narrowing;
+/// CG retains the typed `RequiresBound` refusal in either case.
 pub const QSL_PLAIN_PAIR: u32 = 2087;
 /// The narrowing conversion of [`QSL_PLAIN_PAIR`].
 pub const QSL_PLAIN_PAIR_NARROW: u32 = 2088;
@@ -4012,15 +4128,13 @@ fn qsl_shaped_wire() -> PackageBuilder {
             parameter_body(name, level),
         );
     }
-    let reached = builder.bound(&Bound::Integer(0, 29));
     builder.code(
         QSL_PARAM_REACHING,
         "value",
-        "literal",
+        "parameter",
         &integer_type,
         parameter_body("q", 0),
     );
-    builder.add_dependency(&key(QSL_PARAM_REACHING), &reached);
     builder.code(
         QSL_LITERAL_ONE,
         "value",
@@ -4031,7 +4145,7 @@ fn qsl_shaped_wire() -> PackageBuilder {
     builder.code(
         QSL_NOT_LITERAL,
         "value",
-        "literal",
+        "parameter",
         &integer_type,
         parameter_body("n", 1),
     );
@@ -4784,7 +4898,7 @@ mod bound_tests {
         };
         let anonymous = ids.resolve(&super::id(&anonymous));
         let integer_node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == anonymous)
@@ -4792,7 +4906,7 @@ mod bound_tests {
         assert!(integer_node.declaration.is_none());
         let range = ids.resolve(&super::id(&range_source));
         let checked_range = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == range)
@@ -4877,7 +4991,7 @@ mod fixture_identity_tests {
             .flat_map(|(package, items)| {
                 items.iter().map(move |item| {
                     let present = package
-                        .graph()
+                        .resolved_graph()
                         .nodes
                         .iter()
                         .any(|node| node.node_id == item.node_id);
@@ -4959,14 +5073,14 @@ mod fixture_identity_tests {
         let (admitted, ids) = builder.admit_resolved();
         let admitted_id = ids.resolve(&provisional);
         let checked = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == admitted_id)
             .expect("admitted increment");
         assert_eq!(checked.node_id, provisional);
         let dependent_checked = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == dependent)
@@ -4980,7 +5094,7 @@ mod fixture_identity_tests {
 
         let enum_id = id(&base_node_ids().enum_member);
         assert!(admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .any(|node| node.node_id == enum_id));
@@ -5008,7 +5122,7 @@ mod fixture_identity_tests {
         member_source["node_id"] = shut;
         let (changed_admitted, _) = changed_case.admit_resolved();
         let changed_member = changed_admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == id("Example/Phase/SHUT"))
@@ -5310,5 +5424,18 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
             .unwrap()
             .sort_by_cached_key(|id| serde_json::from_value::<CheckedNodeId>(id.clone()).unwrap());
     }
+    // This producer authors a structural local identity. Node-held references
+    // use each holding node's operand row; document-held references stay indices.
+    let mut rows = Vec::new();
+    for node in builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+    {
+        let mut row = Vec::new();
+        draft_rows::author_row(BASE_PACKAGE_NAME, node, &mut row);
+        rows.push(row);
+    }
+    builder.value["semantic_graph"]["operand_rows"] = json!(rows);
+
     builder
 }

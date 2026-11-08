@@ -578,7 +578,7 @@ fn a_standalone_collection_constraint_remains_unsupported_without_a_harness() {
     let bytes = quire_canonical::to_vec(&doc, quire_canonical::Limits::new(1 << 20)).unwrap();
     let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"{MODEL}\";\ninvariant Safe using v on M::Node at current {{ self.n <= 3 }}\nconstraint Limit using v on M::Node at current {{ forall(item in self.items: item >= 0) }}\n");
     let f = fixture_source(bytes, "constrained-standalone-collection", source);
-    let quantifier = f.package.graph().nodes.iter().find(|node| matches!(f.package.term(&node.node_id),Some(quire_contract_model::CheckedTerm::Application {operation,..}) if operation.identity()==Some("quire.op.collection.forall"))).expect("QSL emitted forall");
+    let quantifier = f.package.resolved_graph().nodes.iter().find(|node| matches!(f.package.term(&node.node_id),Some(quire_contract_model::CheckedTerm::Application {operation,..}) if operation.identity()==Some("quire.op.collection.forall"))).expect("QSL emitted forall");
     let items = [ObligationItem::CollectionClaim {
         package: &f.package,
         function_id: &f.constraints[0],

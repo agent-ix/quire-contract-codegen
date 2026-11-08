@@ -4,6 +4,10 @@
 #[allow(dead_code, clippy::duplicate_mod)]
 mod rekey;
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use ix_trace_rs::trace;
 use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_model::{
@@ -109,7 +113,7 @@ fn reader_variant(
         panic!("one original model document")
     };
     let selected_model = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find_map(|node| match &node.owner {
@@ -223,12 +227,15 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
             clause, original_clause,
             "the structural clause key is preserved"
         );
-        assert_eq!(original.graph().nodes.len(), package.graph().nodes.len());
+        assert_eq!(
+            original.resolved_graph().nodes.len(),
+            package.resolved_graph().nodes.len()
+        );
         let changed_bodies = original
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
-            .zip(&package.graph().nodes)
+            .zip(&package.resolved_graph().nodes)
             .filter(|(before, after)| {
                 assert_eq!(before.node_id, after.node_id);
                 before.body != after.body
@@ -250,23 +257,40 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
 // arithmetic claim. Its result type is an existing checked integer range.
 fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let (result, clause) = reader_variant("(self.balance + 1) > 1000", |wire| {
-        let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
-        let bound = nodes
+        let frame = qsl_replay::WireGraph::of_package_value(wire).expect("original holding rows");
+        let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
+        let bound_position = nodes
             .iter()
-            .find(|node| {
+            .position(|node| {
                 node["node_tag"] == "bounded_domain" && node["semantic_form"] == "integer_range"
             })
-            .expect("original declared range")["node_id"]
-            .clone();
+            .expect("original declared range");
+        let bound = frame
+            .document_value_in_row(bound_position, &nodes[bound_position]["node_id"])
+            .unwrap();
+        let authored = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node["body"]["operation"]["identity"] == "quire.op.integer.add")
+            .map(|(position, node)| {
+                (
+                    position,
+                    frame.document_value_in_row(position, node).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let package_name = wire["name"].as_str().unwrap().to_owned();
         let mut changed = 0;
-        for node in nodes {
-            if node["body"]["operation"]["identity"] == "quire.op.integer.add" {
-                node["semantic_type"] = bound.clone();
-                if coherent {
-                    node["body"]["result_type"] = bound.clone();
-                }
-                changed += 1;
+        for (position, mut node) in authored {
+            node["semantic_type"] = bound.clone();
+            if coherent {
+                node["body"]["result_type"] = bound.clone();
             }
+            let mut row = Vec::new();
+            draft_rows::author_row(&package_name, &mut node, &mut row);
+            wire["semantic_graph"]["nodes"][position] = node;
+            wire["semantic_graph"]["operand_rows"][position] = json!(row);
+            changed += 1;
         }
         assert_eq!(changed, 1, "one arithmetic result type control");
     });

@@ -723,7 +723,7 @@ fn shared_stop_source(source: &str, variants: &mut BTreeMap<String, String>) -> 
 
 /// Each Boolean connective and scalar equality generated from admitted V2 nodes agrees with
 /// direct Contract Runtime calls in outcomes, charges, counters and each single-charge denial.
-#[trace("FR-014-AC-37", "TC-024")]
+#[trace("FR-014-AC-37", "FR-014-AC-70", "FR-014-AC-71", "TC-024")]
 #[test]
 fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
     let oracles = super::exact_scalar_generation::boolean_oracles();
@@ -851,7 +851,7 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
                 quire_contract_codegen::OperationProvenance::IrConfirmed
             );
             let operation_node = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == items[0].node_id)
@@ -867,7 +867,7 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
                 Some(target_id)
             );
             let target_node = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| &node.node_id == target_id)

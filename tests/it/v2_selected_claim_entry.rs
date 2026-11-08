@@ -37,13 +37,13 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
         <[CheckedNodeId; 2]>::try_from(clauses).expect("two distinct QSL-authored clauses");
 
     let deposit = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == deposit_clause)
         .expect("deposit clause in package");
     let transfer = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == transfer_clause)

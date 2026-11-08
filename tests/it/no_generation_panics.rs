@@ -60,6 +60,69 @@ fn rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
 /// True when the module file `file` is declared by its parent under `#[cfg(test)]`: a line
 /// `mod <name>;` (with any visibility) whose attribute lines include `#[cfg(test)]`.
 fn declared_under_cfg_test(file: &Path) -> bool {
+    // A path attribute may name a test module differently from its file stem.
+    // Resolve that actual declaration rather than exempting files by naming convention.
+    fn path_module_is_test(
+        items: &[syn::Item],
+        directory: &Path,
+        file: &Path,
+        inherited: bool,
+    ) -> bool {
+        items.iter().any(|item| {
+            let syn::Item::Mod(module) = item else {
+                return false;
+            };
+            let gated = inherited
+                || module.attrs.iter().any(|attribute| {
+                    attribute.path().is_ident("cfg")
+                        && matches!(&attribute.meta,
+                    syn::Meta::List(list) if list.tokens.to_string() == "test")
+                });
+            let path = module.attrs.iter().find_map(|attribute| {
+                if !attribute.path().is_ident("path") {
+                    return None;
+                }
+                let syn::Meta::NameValue(value) = &attribute.meta else {
+                    return None;
+                };
+                let syn::Expr::Lit(value) = &value.value else {
+                    return None;
+                };
+                let syn::Lit::Str(value) = &value.lit else {
+                    return None;
+                };
+                Some(directory.join(value.value()))
+            });
+            if gated
+                && path
+                    .as_ref()
+                    .and_then(|path| path.canonicalize().ok())
+                    .is_some_and(|path| file.canonicalize().ok().as_ref() == Some(&path))
+            {
+                return true;
+            }
+            module.content.as_ref().is_some_and(|(_, children)| {
+                path_module_is_test(
+                    children,
+                    &directory.join(module.ident.to_string()),
+                    file,
+                    gated,
+                )
+            })
+        })
+    }
+    let directory = file.parent().expect("source directory");
+    if fs::read_dir(directory)
+        .expect("read module siblings")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .filter_map(|source| syn::parse_file(&source).ok())
+        .any(|syntax| path_module_is_test(&syntax.items, directory, file, false))
+    {
+        return true;
+    }
     let stem = file
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -330,6 +393,9 @@ fn tc_023_canonical_encoding_has_one_source_boundary() {
     rust_files(&root.join("src"), &mut files);
     let mut core_seen = false;
     for file in files {
+        if declared_under_cfg_test(&file) {
+            continue;
+        }
         let relative = file.strip_prefix(&root).unwrap().to_string_lossy();
         let source = fs::read_to_string(&file).unwrap();
         let code = non_test_code_outside_literals(&source);

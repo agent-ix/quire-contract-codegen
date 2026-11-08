@@ -120,7 +120,7 @@ fn admitted_case(
     }
     let checked = admitted_source(&source);
     let applications = checked
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| application_identity(node) == Some("quire.op.integer.add"))
@@ -129,7 +129,7 @@ fn admitted_case(
     let mut positions = Vec::new();
     for application in &applications {
         let conversions = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -151,7 +151,7 @@ fn admitted_case(
     for index in 0..unrelated {
         positions.push(ContractRequestPosition::ContextRoot {
             node_id: checked
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| {
@@ -187,7 +187,7 @@ fn admitted_case(
 fn ir_1299_selected_scalar_key_uses_the_admitted_occurrence_frame() {
     let (checked, _, all_positions) = admitted_case(3, 0);
     let unsupported = checked
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

@@ -54,20 +54,29 @@ pub struct OriginalScalarContext {
 }
 
 impl OriginalScalarContext {
-    /// Retain independently held original source bytes and the admitted package.
+    /// Retain independently held source bytes, the admitted package and its same-emission raw document.
+    /// Request construction requires the raw document to equal the source recompilation bytes.
     ///
     /// # Errors
     /// Refuses absent source/function or inconsistent original dependency context.
     pub fn new(
         original: CheckedPackageV2,
+        raw_package: qsl_replay::ReplayPackage,
         original_source: &LockedSource,
         inputs: ReplayInputs,
         function: &str,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, ScalarBuildError> {
-        OriginalReplayContext::new(original, original_source, inputs, function, read_limits)
-            .map(|context| Self { context })
-            .map_err(|cause| ScalarBuildError::Context(Box::new(cause)))
+        OriginalReplayContext::new(
+            original,
+            raw_package,
+            original_source,
+            inputs,
+            function,
+            read_limits,
+        )
+        .map(|context| Self { context })
+        .map_err(|cause| ScalarBuildError::Context(Box::new(cause)))
     }
 
     /// Decode an assertion playback against the original scalar identity, authenticate its
@@ -179,6 +188,7 @@ impl OriginalScalarContext {
         let obligation =
             qsl_replay::parity_obligation(&preimage).map_err(ScalarBuildError::Identity)?;
         let wire = self.context.inputs.wire(
+            self.context.raw_package.clone(),
             RequestTargetWire::function(
                 self.context.selection.clone(),
                 qsl_replay::OccurrenceKey::new(node.clone(), occurrence.clone()),
@@ -399,9 +409,8 @@ pub(crate) fn same_wire(left: &ReplayRequestWire, right: &ReplayRequestWire) -> 
     // Exhaustive destructuring deliberately makes an upstream wire extension a compile error,
     // requiring its original-context tie to be considered rather than silently omitted.
     let ReplayRequestWire {
-        package_name,
+        package,
         profile_selections,
-        sources,
         dependencies,
         replay_target,
         source,
@@ -416,9 +425,8 @@ pub(crate) fn same_wire(left: &ReplayRequestWire, right: &ReplayRequestWire) -> 
         byte_provision,
         documents,
     } = left;
-    package_name == &right.package_name
+    package == &right.package
         && profile_selections == &right.profile_selections
-        && sources == &right.sources
         && dependencies == &right.dependencies
         && replay_target == &right.replay_target
         && source == &right.source

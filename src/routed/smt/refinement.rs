@@ -288,10 +288,12 @@ fn serialize_verified_fields<Item, Subjects>(
                 bytes.extend_from_slice(&row.to_le_bytes());
             }
         }
-        for field in [
-            record.query_bytes.as_deref().expect("validated query"),
-            record.proof_bytes.as_deref().expect("validated proof"),
-        ] {
+        let (Some(query), Some(proof)) =
+            (record.query_bytes.as_deref(), record.proof_bytes.as_deref())
+        else {
+            return Err(RefinementHandoffError::MissingField);
+        };
+        for field in [query, proof] {
             let length =
                 u64::try_from(field.len()).map_err(|_| RefinementHandoffError::LengthOverflow)?;
             bytes.extend_from_slice(&length.to_le_bytes());
