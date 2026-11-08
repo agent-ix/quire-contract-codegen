@@ -86,7 +86,7 @@ fn base_package() -> serde_json::Value {
             "semantic_type": node_ref(&ids.dimension),
             "declaration": {"qualified_name": ["Example", "Distance"]},
             "dependencies": [], "occurrences": declared,
-            "body": {"term": "dimension", "terms": []},
+            "body": {"term": "dimension", "base": true, "terms": []},
             "owner": base_owner(),
         }),
     ];
