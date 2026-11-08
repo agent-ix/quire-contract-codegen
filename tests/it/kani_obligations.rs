@@ -614,8 +614,8 @@ fn scalar_records(
 fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     // A V2 claim's domain is read from its IR bound, inclusive at both ends. Node 1001 is
     // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness --
-    // not a typed refusal. Both its operands are references to the corpus's `value` node whose
-    // body is the literal `3`, so each is a constant and ranged at its own value (IR-302); the
+    // not a typed refusal. Both operands reference computed call wrappers with the admitted `[-1000, 1000]`
+    // domain. Their referenced literal children do not turn those calls into constants; the
     // per-operand bounded ranges are TC-033's.
     let (scalar, claim_map, ids) = scalar_package();
     let node_1001 = ids.resolve(&code_id(1001));
@@ -655,7 +655,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
             .iter()
             .map(|argument| (argument.minimum, argument.maximum))
             .collect::<Vec<_>>(),
-        [(3, 3), (3, 3)]
+        [(-1000, 1000), (-1000, 1000)]
     );
 }
 
@@ -769,10 +769,10 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     );
     // The assumption is scoped by the same ranges
     // `tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity` checks via
-    // `identity.arguments` above (each operand a literal `3`, pinned at its value): this is the
+    // `identity.arguments` above (each computed operand has its admitted integer range): this is the
     // corresponding source-level check.
-    assert!(source.contains("kani::assume(left >= 3_i64 && left <= 3_i64);"));
-    assert!(source.contains("kani::assume(right >= 3_i64 && right <= 3_i64);"));
+    assert!(source.contains("kani::assume(left >= -1000_i64 && left <= 1000_i64);"));
+    assert!(source.contains("kani::assume(right >= -1000_i64 && right <= 1000_i64);"));
 }
 
 /// Each of the four rendered integer operations states its own native `i128` expression, written

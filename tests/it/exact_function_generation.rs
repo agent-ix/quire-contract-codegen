@@ -2883,8 +2883,10 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
             syn::visit::visit_expr_assign(self, expression);
         }
         fn visit_expr_field(&mut self, expression: &'ast syn::ExprField) {
-            let static_self =
-                matches!(&*expression.base, syn::Expr::Path(path) if path.path.is_ident("self"));
+            let static_self = matches!(&*expression.base, syn::Expr::Path(path) if path.path.is_ident("self"))
+                || matches!(&*expression.base, syn::Expr::Field(field)
+                    if matches!(&field.member, syn::Member::Unnamed(index) if index.index == 0)
+                    && matches!(&*field.base, syn::Expr::Path(path) if path.path.is_ident("self")));
             if !static_self {
                 if let syn::Member::Named(name) = &expression.member {
                     if name == "location" || name == "losses" {
@@ -2901,8 +2903,8 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     assert!(reads.0.is_empty(), "invocation field reads: {:?}", reads.0);
     assert_eq!(
         lib.matches("evaluation.location =").count(),
-        2,
-        "only the two statically known result/declaration boundary annotations"
+        1,
+        "the shared prepared boundary adds its statically known declaration location"
     );
     assert!(
         lib.contains("Result<Result<eval::Evaluation, eval::CallFailure>, CheckedFunctionError>")

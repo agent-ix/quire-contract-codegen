@@ -1503,14 +1503,21 @@ fn omitted_earlier_function_does_not_renumber_the_checked_origin() {
 #[test]
 fn operand_type_refusal_retains_the_original_v2_frame() {
     let package = admitted_source();
-    let bounded = package
+    let call = item(&package, "probe_add", "add");
+    let argument = package
         .resolved_graph()
         .nodes
         .iter()
-        .find(|node| node.node_tag.as_ref() == "bounded_domain")
-        .expect("QSL emitted the authored bounded parameter domain")
-        .node_id
-        .clone();
+        .find(|node| node.node_id == call.argument_node_ids[0])
+        .expect("original add argument");
+    let bounded = argument.semantic_type.clone();
+    assert!(package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .any(|node| node.node_id == bounded
+            && node.node_tag.as_ref() == "bounded_domain"
+            && node.semantic_form.as_ref() == "integer_range"));
     let mut declaration = declared_source_body(
         &package,
         "add",
@@ -1547,9 +1554,13 @@ fn operand_type_refusal_retains_the_original_v2_frame() {
         !source.contents.contains("pub fn oracle_"),
         "a refused item emits no concrete oracle"
     );
-    assert!(matches!(&generated.claim_map.items[0].result,
+    assert!(
+        matches!(&generated.claim_map.items[0].result,
         ClaimDisposition::Refused { refusal: quire_contract_codegen::ExactFunctionRefusal::UnsupportedOperandType { type_node_id } }
-        if type_node_id == &bounded));
+        if type_node_id == &bounded),
+        "original-frame refusal: {:?}",
+        generated.claim_map.items[0].result
+    );
 }
 
 /// Real owner declarations and body mutations run together in one emitted crate.

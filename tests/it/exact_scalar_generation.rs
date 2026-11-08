@@ -1968,7 +1968,21 @@ fn tc_024_anonymous_integer_range_generates_one_addition() {
             "value": value,
         })
     };
-    builder.code(OPERAND, "value", "literal", &integer, typed_literal("3"));
+    builder.code(
+        OPERAND + 2,
+        "value",
+        "literal",
+        &integer,
+        typed_literal("3"),
+    );
+    builder.node_with(
+        &key(OPERAND),
+        "expression",
+        "call",
+        &integer,
+        reference(&key(OPERAND + 2)),
+        &[key(OPERAND + 2)],
+    );
     builder.application_bounded(
         ADD,
         "expression",
@@ -2097,11 +2111,11 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
             code,
             "expression",
             "binary",
-            &key(T_INTEGER),
+            &bound_key,
             application(
                 "binary",
                 op("quire.op.integer.add"),
-                &key(T_INTEGER),
+                &bound_key,
                 vec![
                     reference(&key(V_INTEGER)),
                     literal("integer", &code.to_string()),
@@ -2311,10 +2325,14 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
             operation: integer_add_0_9(),
         }],
     );
-    assert!(matches!(
-        dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
-        Some(ClaimDisposition::Generated(_))
-    ), "bounded increment claims: {:?}", oracles.claim_map.items);
+    assert!(
+        matches!(
+            dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
+            Some(ClaimDisposition::Generated(_))
+        ),
+        "bounded increment claims: {:?}",
+        oracles.claim_map.items
+    );
 }
 
 fn add_over(low: i64, high: i64) -> ExactScalarOperation {
@@ -4068,7 +4086,14 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     };
     let (package, ids) = derivation_package().admit_resolved();
     let node = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
-    let integer = ids.resolve(&code_id(T_INTEGER));
+    let integer = package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|candidate| candidate.node_id == node)
+        .expect("requested conversion")
+        .semantic_type
+        .clone();
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,

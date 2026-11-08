@@ -3448,7 +3448,7 @@ pub const BOUNDED_BINARY_SUBTRACTION: u32 = 2037;
 /// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
 /// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
 pub fn bounded_increment_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
@@ -3462,21 +3462,21 @@ pub fn bounded_increment_package() -> PackageBuilder {
         BOUNDED_INCREMENT,
         "expression",
         "binary",
-        &key(T_INTEGER),
+        &bound_key,
         application(
             "binary",
             op("quire.op.integer.add"),
-            &key(T_INTEGER),
+            &bound_key,
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
-        &[bound],
+        &[],
     );
     builder
 }
 
 /// A package holding `x - 1` over `Int[0, 9]`, parallel to [`bounded_increment_package`].
 pub fn bounded_decrement_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
@@ -3490,21 +3490,21 @@ pub fn bounded_decrement_package() -> PackageBuilder {
         BOUNDED_DECREMENT,
         "expression",
         "binary",
-        &key(T_INTEGER),
+        &bound_key,
         application(
             "binary",
             op("quire.op.integer.sub"),
-            &key(T_INTEGER),
+            &bound_key,
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
-        &[bound],
+        &[],
     );
     builder
 }
 
 /// A package holding `x - y` where both symbolic operands independently admit `[0, 9]`.
 pub fn bounded_binary_subtraction_package() -> PackageBuilder {
-    let mut builder = corpus_package_for_codes(&[T_INTEGER]);
+    let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
     let operand_bound = Bound::Integer(0, 9);
     let operand_bound_key = builder.bound(&operand_bound);
     let minuend_key = key(V_PARAM_X);
@@ -3601,11 +3601,11 @@ pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTo
             code,
             "expression",
             "binary",
-            &integer_type,
+            &bound,
             application(
                 "binary",
                 op("quire.op.integer.add"),
-                &integer_type,
+                &bound,
                 vec![reference(&predecessor_key), reference(&predecessor_key)],
             ),
             &[predecessor_key],
@@ -3882,6 +3882,20 @@ fn two_parameter_wire() -> PackageBuilder {
         &[],
     );
     // `[0, 29]` reaches this node through `c`, so it is the one reachable bound no operand types.
+    // A parameter cannot carry dependencies. Keep its declaration intact behind
+    // a computed wrapper whose result domain remains c's own range.
+    let c_parameter = key(41_100);
+    builder.code(41_100, "value", "parameter", &c, parameter_body("c", 0));
+    let c_node = builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|node| node["node_id"] == node_ref(&key(V_PARAM_C)))
+        .unwrap();
+    c_node["node_tag"] = json!("expression");
+    c_node["semantic_form"] = json!("call");
+    c_node["body"] = reference(&c_parameter);
+    c_node["dependencies"] = json!([node_ref(&c_parameter)]);
     builder.application_bounded_anchored(
         TWO_PARAMETER_ATTACHED,
         "expression",
@@ -5348,5 +5362,50 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
             .unwrap()
             .sort_by_cached_key(|id| serde_json::from_value::<CheckedNodeId>(id.clone()).unwrap());
     }
+    // This producer authors a structural local identity. Node-held references
+    // use each holding node's operand row; document-held references stay indices.
+    fn author_slots(value: &mut Value, row: &mut Vec<Value>) {
+        if value.get("package").and_then(Value::as_str) == Some(BASE_PACKAGE_NAME) {
+            if let Some(path) = value.get_mut("path").and_then(Value::as_array_mut) {
+                for segment in path {
+                    if let Some(index) = segment.get("node").and_then(Value::as_u64) {
+                        let target = json!(index);
+                        let slot = row
+                            .iter()
+                            .position(|entry| entry == &target)
+                            .unwrap_or_else(|| {
+                                row.push(target);
+                                row.len() - 1
+                            });
+                        *segment = json!({"operand": slot});
+                    }
+                }
+            }
+        }
+        match value {
+            Value::Array(items) => {
+                for item in items {
+                    author_slots(item, row);
+                }
+            }
+            Value::Object(fields) => {
+                for item in fields.values_mut() {
+                    author_slots(item, row);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut rows = Vec::new();
+    for node in builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+    {
+        let mut row = Vec::new();
+        author_slots(node, &mut row);
+        rows.push(Value::Array(row));
+    }
+    builder.value["semantic_graph"]["operand_rows"] = Value::Array(rows);
+
     builder
 }

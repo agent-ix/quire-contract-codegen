@@ -1235,7 +1235,24 @@ impl Twin {
             .find(|ty| ty["identity"] == range_type("audit"))
             .expect("audit value type");
         audit["scalar"] = json!("string");
-        audit["constraints"] = json!([]);
+        audit["constraints"] = json!([
+            {"keyword":"minLength", "operands":{"value":0}, "appliesTo":range_type("audit")},
+            {"keyword":"maxLength", "operands":{"value":8}, "appliesTo":range_type("audit")},
+            {"keyword":"format", "operands":{"name":"text-profile:nfc"}, "appliesTo":range_type("audit")},
+        ]);
+        for constraint in audit["constraints"]
+            .as_array_mut()
+            .expect("text constraints")
+        {
+            let keyword = constraint["keyword"].as_str().expect("keyword");
+            constraint["identity"] =
+                json!(format!("{}/constraints/{keyword}", range_type("audit")));
+            constraint["diagnosticCode"] = json!(format!(
+                "text.{}",
+                constraint["keyword"].as_str().expect("keyword")
+            ));
+            constraint["origin"] = generated(&range_type("audit"));
+        }
         self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
     }
 
