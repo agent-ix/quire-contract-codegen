@@ -735,12 +735,18 @@ fn another_raw_emission_refuses_before_invocation() {
     let mut original = checked(SOURCE);
     let (node, occurrence) = application(&original, "f");
     let substituted = checked(&SOURCE.replace("Int[0, 9]", "Int[0, 8]"));
-    assert_ne!(original.raw, substituted.raw, "the changed domain changes emitted bytes");
+    assert_ne!(
+        original.raw, substituted.raw,
+        "the changed domain changes emitted bytes"
+    );
     original.raw = substituted.raw;
-    let result = context(original, "f")
-        .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000);
-    assert!(matches!(&result, Err(CompositeBuildError::ContextMismatch)),
-        "another raw emission must refuse at context binding: {:?}", result.err());
+    let result =
+        context(original, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000);
+    assert!(
+        matches!(&result, Err(CompositeBuildError::ContextMismatch)),
+        "another raw emission must refuse at context binding: {:?}",
+        result.err()
+    );
 }
 
 /// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
