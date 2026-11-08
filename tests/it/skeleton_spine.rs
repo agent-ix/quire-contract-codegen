@@ -689,7 +689,10 @@ fn tc_026_a_changed_dependency_selection_is_refused_before_replay() {
         units_library(BIG).bytes,
     ));
 
+    let mut changed_internals = base.clone();
+    changed_internals.dependencies[1].refinement_internals = Some(Vec::new());
     for (case, wire, position) in [
+        ("internal-step rows", changed_internals, 1),
         ("missing", missing, 1),
         ("extra", extra, 2),
         ("reordered", reordered, 0),

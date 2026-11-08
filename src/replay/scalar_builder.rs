@@ -54,7 +54,8 @@ pub struct OriginalScalarContext {
 }
 
 impl OriginalScalarContext {
-    /// Retain independently held original source bytes and the admitted package.
+    /// Retain independently held source bytes, the admitted package and its same-emission raw document.
+    /// Request construction requires the raw document to equal the source recompilation bytes.
     ///
     /// # Errors
     /// Refuses absent source/function or inconsistent original dependency context.

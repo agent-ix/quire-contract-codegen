@@ -208,7 +208,9 @@ impl OriginalCompositeEqContext {
         &self.context
     }
 
-    /// Retain the original context and compare the request source against the independently
+    /// Retain the original admitted context and its same-emission complete raw package.
+    /// Requests require byte equality between that raw document and source recompilation.
+    /// Compare the request source against the independently
     /// retained original source, including its full identity and bytes.
     ///
     /// [`Self::request_from_packet`] recompiles using the constructed request's admitted stage limits and

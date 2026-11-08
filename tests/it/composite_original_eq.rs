@@ -728,6 +728,19 @@ fn different_semantic_package_refuses_before_invocation() {
     ));
 }
 
+/// A caller cannot pair the original admitted graph with another emission's raw document.
+#[trace("FR-033-AC-1", "TC-048")]
+#[test]
+fn another_raw_emission_refuses_before_invocation() {
+    let mut original = checked(SOURCE);
+    let (node, occurrence) = application(&original, "f");
+    original.raw = checked(&format!("{SOURCE}\n")).raw;
+    assert!(matches!(
+        context(original, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
+        Err(CompositeBuildError::ContextMismatch)
+    ));
+}
+
 /// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
 #[trace("FR-033-AC-1", "TC-048")]
 #[test]
