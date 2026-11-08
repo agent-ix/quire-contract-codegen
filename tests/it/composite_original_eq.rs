@@ -734,7 +734,9 @@ fn different_semantic_package_refuses_before_invocation() {
 fn another_raw_emission_refuses_before_invocation() {
     let mut original = checked(SOURCE);
     let (node, occurrence) = application(&original, "f");
-    original.raw = checked(&format!("{SOURCE}\n")).raw;
+    let substituted = checked(&SOURCE.replace("Int[0, 9]", "Int[0, 8]"));
+    assert_ne!(original.raw, substituted.raw, "the changed domain changes emitted bytes");
+    original.raw = substituted.raw;
     let result = context(original, "f")
         .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000);
     assert!(matches!(&result, Err(CompositeBuildError::ContextMismatch)),
