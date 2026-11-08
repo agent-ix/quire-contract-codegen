@@ -3180,7 +3180,9 @@ mod tests {
     fn record_chain_output_bytes(records: u64) -> u64 {
         // Each record emits bounded-width identity rows, source entries and field types.
         // 8 KiB per one-field record plus 1 MiB of envelope data bounds this grammar.
-        records.checked_mul(8192).and_then(|bytes| bytes.checked_add(1 << 20))
+        records
+            .checked_mul(8192)
+            .and_then(|bytes| bytes.checked_add(1 << 20))
             .expect("finite fixture output bound")
     }
 
@@ -4247,8 +4249,10 @@ fn deep_matches_shallow() {
 }
 }
 "#;
-        let test = test.replace("__RECORDS__", &RECORDS.to_string())
-            .replace("__OUTPUT_BYTES__", &record_chain_output_bytes(u64::try_from(RECORDS).unwrap()).to_string());
+        let test = test.replace("__RECORDS__", &RECORDS.to_string()).replace(
+            "__OUTPUT_BYTES__",
+            &record_chain_output_bytes(u64::try_from(RECORDS).unwrap()).to_string(),
+        );
         std::fs::write(scratch.join("tests/deep.rs"), test).expect("deep agreement test");
         // Recompilation must use the same public owner cohort as generation. Cargo
         // adapts the scratch package entry while retaining those resolved dependencies.
