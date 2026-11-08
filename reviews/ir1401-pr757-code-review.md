@@ -763,3 +763,40 @@ scope:
     \    pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError>\
     \ {"
 ```
+
+## New findings (disposition pass 7)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The new quire-specification-qualification dev dependency uses a Git source absent from deny.toml allow-git, so the required cargo-deny source-policy gate rejects the resolved dependency graph. | deny.toml:82; Cargo.toml:58 |
+
+## Targeted review (round 7)
+
+Targeted round 7 reviews only 2485560f...a6bd0a2655cea62d1b834cca309113a7fb07cb20. The complete diff adds two lines to deny.toml: an explanatory comment and the exact https://github.com/agent-ix/quire-specification URL. This matches the already-reviewed Cargo.toml dev dependency and its resolved Cargo.lock Git source. unknown-git and unknown-registry remain deny; no organization/domain wildcard, license/advisory exception, policy relaxation or runtime source change is added. The pre-fix source-policy defect is verified directly against the prior allow-list and resolved dependency source; the gate failure is reported by the lead. Inspected /tmp/CG757-qspec-source-deny-fix.log, which concludes advisories ok, bans ok, licenses ok, sources ok; existing unmatched-source/license and wildcard warnings remain advisory. No new/open finding remains after the correction. This is not a full review or aggregate gate acceptance: docs and tests remain unrun in the continuing combined gate. No Cargo, aggregate build, source edit, push or merge performed by reviewer. Earlier review/disposition conclusions are carried forward unchanged.
+
+## Dispositions (round 7)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | The exact already-used QSpec Git source is allowed without broadening policy; inspected cargo-deny output reports all four policy checks ok. |
+
+## Latest verdict (round 7)
+
+**PASS** — FND-004 fixed; no open code-review findings. Docs/test aggregate continuation remains outstanding.
+
+## Targeted examined scope (round 7)
+
+```yaml
+scope:
+- id: deny.toml
+  path: deny.toml
+  role: examined
+  excerpt: "    # Published QSpec qualification vectors used by the model-variant\
+    \ agreement dev dependency.\n    \"https://github.com/agent-ix/quire-specification\"\
+    ,"
+- id: Cargo.toml
+  path: Cargo.toml
+  role: context_only
+  excerpt: quire-specification = { package = "quire-specification-qualification",
+    git = "https://github.com/agent-ix/quire-specification", branch = "main" }
+```
