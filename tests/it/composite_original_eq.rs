@@ -40,7 +40,7 @@ fn structural_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
             CheckedNodePathSegment::Node(child) => {
                 Some(PathSegment::Node(structural_node_key(child)?))
             }
-            CheckedNodePathSegment::Index(_) => None,
+            CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => None,
         })
         .collect::<Option<Vec<_>>>()?;
     NodeKey::new(id.package.to_string(), path, id.ordinal).ok()

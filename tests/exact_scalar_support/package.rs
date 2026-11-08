@@ -198,7 +198,8 @@ fn fixture_label(id: &CheckedNodeId) -> String {
             quire_contract_model::CheckedNodePathSegment::Node(_) => {
                 panic!("fixture node has a nested path: {id:?}")
             }
-            quire_contract_model::CheckedNodePathSegment::Index(_) => {
+            quire_contract_model::CheckedNodePathSegment::Index(_)
+            | quire_contract_model::CheckedNodePathSegment::Operand(_) => {
                 panic!("fixture node has an indexed path: {id:?}")
             }
         })

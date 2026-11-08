@@ -690,9 +690,8 @@ fn replay_collection_function(
     .expect("QSL writes the environment through its authoritative builder");
 
     let request = ReplayRequestWire {
-        package_name: "ir268-symbolic".to_owned(),
+        package: qsl_replay::ReplayPackage::read(&site.package, u64::MAX).unwrap(),
         profile_selections: Vec::new(),
-        sources: vec![("agent-ix".to_owned(), "ir268-symbolic.native".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(selection, site.site.declaration.clone()),
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {

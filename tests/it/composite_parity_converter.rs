@@ -82,7 +82,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     let compiled = compile_package(
         qsl_replay::CompileUnit {
             source: SourceIdentity::new("test", "ir666"),
-            package_name: "ir666".to_owned(),
+            package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
             path: "ir666.native",
             bytes: source,
         },
@@ -210,9 +210,8 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     };
     let obligation = parity_obligation(&preimage).expect("the public preimage encodes");
     let wire = ReplayRequestWire {
-        package_name: "ir666".to_owned(),
+        package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
         profile_selections: Vec::new(),
-        sources: vec![("test".to_owned(), "ir666".to_owned())],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(
             qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),

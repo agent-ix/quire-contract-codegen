@@ -597,14 +597,12 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
     // The executor sees the request and envelope the replay built, and its value comes back.
     let seen = RefCell::new(None);
     let replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
-    let expected_package = replay.wire.package_name.clone();
-    let expected_sources = replay.wire.sources.clone();
+    let expected_package = replay.wire.package.clone();
     let sentinel = respecting.clone();
     let returned = replay
         .replay_through(|wire: ReplayRequestWire, envelope| {
             *seen.borrow_mut() = Some((
-                wire.package_name.clone(),
-                wire.sources.clone(),
+                wire.package.clone(),
                 envelope
                     .replay_target()
                     .as_state_clause()
@@ -617,11 +615,10 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
         .expect("the executor's value is returned");
     assert_eq!(&returned, respecting, "the sentinel replaces the verdict");
     assert_ne!(&returned, violating);
-    let Some((package_name, sources, clause, node)) = seen.take() else {
+    let Some((package_name, clause, node)) = seen.take() else {
         panic!("the executor was called");
     };
     assert_eq!(package_name, expected_package);
-    assert_eq!(sources, expected_sources);
     assert_eq!(clause, BALANCE);
     assert_eq!(
         node,

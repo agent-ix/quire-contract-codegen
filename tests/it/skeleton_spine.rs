@@ -402,7 +402,9 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
         &parameters,
         |witness| {
             let mut wire = request_of(&package, witness);
-            wire.sources.clear();
+            let mut document: serde_json::Value = serde_json::from_slice(wire.package.bytes()).unwrap();
+            document["lock"]["sources"] = serde_json::json!([]);
+            wire.package = qsl_replay::ReplayPackage::read(&serde_json::to_vec(&document).unwrap(), u64::MAX).unwrap();
             wire
         },
         ReplayLimits::default(),
@@ -502,8 +504,9 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     // The backend member is the identity string alone.
     assert_eq!(wire.backend, "kani");
     // Destructure without `..` to keep the selected wire shape explicit.
-    let qsl_replay::DependencyEntryWire { identity, sources } = &wire.dependencies[2];
+    let qsl_replay::DependencyEntryWire { identity, sources, refinement_internals } = &wire.dependencies[2];
     assert_eq!(identity, "test/units");
+    assert_eq!(refinement_internals, &None);
     let [source] = sources.as_slice() else {
         panic!("the dependency's own lock source: {sources:?}")
     };
@@ -665,6 +668,7 @@ fn tc_026_a_changed_dependency_selection_is_refused_before_replay() {
     missing.dependencies.pop();
     let mut extra = base.clone();
     extra.dependencies.push(qsl_replay::DependencyEntryWire {
+        refinement_internals: None,
         identity: "test/other".to_owned(),
         sources: vec![(AUTHORITY.to_owned(), "lib-other".to_owned())],
     });
