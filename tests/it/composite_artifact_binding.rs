@@ -36,7 +36,10 @@ fn limits() -> quire_exact::ScalarLimits {
         result_units: u64::MAX,
     }
 }
-fn context(package: &CheckedPackageV2, raw_package: qsl_replay::ReplayPackage) -> OriginalCompositeEqContext {
+fn context(
+    package: &CheckedPackageV2,
+    raw_package: qsl_replay::ReplayPackage,
+) -> OriginalCompositeEqContext {
     OriginalCompositeEqContext::new(
         package.clone(),
         raw_package,
@@ -66,7 +69,11 @@ pub(super) fn binding(
     node: &CheckedNodeId,
     occurrence: &CheckedOccurrence,
 ) -> Result<OriginalCompositeArtifactBinding, CompositeBuildError> {
-    context(package, qsl_replay::ReplayPackage::read(compiled.package().bytes(), u64::MAX).unwrap()).retain_generated_artifact(
+    context(
+        package,
+        qsl_replay::ReplayPackage::read(compiled.package().bytes(), u64::MAX).unwrap(),
+    )
+    .retain_generated_artifact(
         generated,
         node,
         occurrence,

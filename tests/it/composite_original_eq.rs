@@ -106,7 +106,9 @@ struct OriginalPackage {
 }
 impl std::ops::Deref for OriginalPackage {
     type Target = CheckedPackageV2;
-    fn deref(&self) -> &Self::Target { &self.checked }
+    fn deref(&self) -> &Self::Target {
+        &self.checked
+    }
 }
 impl OriginalPackage {
     fn into_context(
@@ -180,13 +182,14 @@ fn checked_with_extra_source(
 }
 
 fn context(package: OriginalPackage, function: &str) -> OriginalCompositeEqContext {
-    package.into_context(
-        &inputs(SOURCE).source,
-        inputs(SOURCE),
-        function,
-        CheckedPackageReadLimits::bounded(),
-    )
-    .unwrap()
+    package
+        .into_context(
+            &inputs(SOURCE).source,
+            inputs(SOURCE),
+            function,
+            CheckedPackageReadLimits::bounded(),
+        )
+        .unwrap()
 }
 
 // Existing FR-033 controls use the claim producer before invoking the new packet-only request
@@ -956,13 +959,14 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     let second = application.occurrences[1].clone();
     assert_ne!(first, second);
     assert_ne!(second.ordinal, 0);
-    let context = package.into_context(
-        &inputs(REPEATED_SOURCE).source,
-        inputs(REPEATED_SOURCE),
-        "repeated",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("the repeated source selects one checked function");
+    let context = package
+        .into_context(
+            &inputs(REPEATED_SOURCE).source,
+            inputs(REPEATED_SOURCE),
+            "repeated",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .expect("the repeated source selects one checked function");
     let first_packet = context
         .parity_packet(&node, &first, EqualityOperator::Equal, &[], 100_000)
         .expect("the first checked occurrence produces a packet");
@@ -1124,13 +1128,14 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     let (node, occurrence) = application(&package, "f");
     let mut retained = inputs(SOURCE);
     retained.stage_limits.insert("s1.input_bytes".to_owned(), 1);
-    let context = package.into_context(
-        &inputs(SOURCE).source,
-        retained,
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .unwrap();
+    let context = package
+        .into_context(
+            &inputs(SOURCE).source,
+            retained,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .unwrap();
     assert!(
         matches!(context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::StageLimit(_))))
     );
@@ -1189,9 +1194,9 @@ fn original_imported_context_refuses_before_invocation() {
             &evidence(),
         ) {
             CheckedPackageV2ReadResult::Admitted(package) => OriginalPackage {
-            checked: *package,
-            raw: qsl_replay::ReplayPackage::read(bytes, u64::MAX).unwrap(),
-        },
+                checked: *package,
+                raw: qsl_replay::ReplayPackage::read(bytes, u64::MAX).unwrap(),
+            },
             other => panic!("genuine library admits: {other:?}"),
         };
         (
@@ -1252,13 +1257,9 @@ fn original_request_preserves_the_owning_reader_limit() {
     let (node, occurrence) = application(&package, "f");
     let mut read_limits = CheckedPackageReadLimits::bounded();
     read_limits.bytes = 1;
-    let original = package.into_context(
-        &inputs(SOURCE).source,
-        inputs(SOURCE),
-        "f",
-        read_limits,
-    )
-    .expect("retaining already-admitted inputs does not re-read them");
+    let original = package
+        .into_context(&inputs(SOURCE).source, inputs(SOURCE), "f", read_limits)
+        .expect("retaining already-admitted inputs does not re-read them");
     assert!(matches!(
         original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::PackageReadLimit(_))
@@ -1275,13 +1276,14 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
     retained
         .stage_limits
         .insert("s1.input_bytes".to_owned(), u64::MAX);
-    let original = package.into_context(
-        &inputs(SOURCE).source,
-        retained,
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("retain authentic source before request-stage validation");
+    let original = package
+        .into_context(
+            &inputs(SOURCE).source,
+            retained,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .expect("retain authentic source before request-stage validation");
     assert!(
         matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::Recompile(cause))
@@ -1309,13 +1311,14 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
             let (equal_node, equal_occurrence) = application(&package, "f");
             let (not_equal_node, not_equal_occurrence) =
                 application_with_operator(&package, "n", "quire.op.structural.ne");
-            let retained = package.into_context(
-                &inputs(&source).source,
-                inputs(&source),
-                "f",
-                CheckedPackageReadLimits::bounded(),
-            )
-            .expect("authentic source supplies one retained context");
+            let retained = package
+                .into_context(
+                    &inputs(&source).source,
+                    inputs(&source),
+                    "f",
+                    CheckedPackageReadLimits::bounded(),
+                )
+                .expect("authentic source supplies one retained context");
             let mut expected_in_context = None;
             for _ in 0..requests {
                 let equal = retained

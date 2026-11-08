@@ -230,8 +230,15 @@ impl OriginalCompositeEqContext {
         function: &str,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, CompositeBuildError> {
-        OriginalReplayContext::new(original, raw_package, original_source, inputs, function, read_limits)
-            .map(|context| Self { context })
+        OriginalReplayContext::new(
+            original,
+            raw_package,
+            original_source,
+            inputs,
+            function,
+            read_limits,
+        )
+        .map(|context| Self { context })
     }
 
     /// Build the retained body from the original Eq or Ne application's two positional operands.

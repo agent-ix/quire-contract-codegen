@@ -66,9 +66,16 @@ impl OriginalScalarContext {
         function: &str,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, ScalarBuildError> {
-        OriginalReplayContext::new(original, raw_package, original_source, inputs, function, read_limits)
-            .map(|context| Self { context })
-            .map_err(|cause| ScalarBuildError::Context(Box::new(cause)))
+        OriginalReplayContext::new(
+            original,
+            raw_package,
+            original_source,
+            inputs,
+            function,
+            read_limits,
+        )
+        .map(|context| Self { context })
+        .map_err(|cause| ScalarBuildError::Context(Box::new(cause)))
     }
 
     /// Decode an assertion playback against the original scalar identity, authenticate its

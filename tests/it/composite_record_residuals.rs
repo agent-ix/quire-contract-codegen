@@ -32,14 +32,19 @@ fn every_published_native_file_and_claim_map_member_keeps_its_original_authority
         .filter(|entry| entry.role == CheckedOccurrenceRole::Expression);
     let occurrence = occurrences.next().unwrap();
     assert!(occurrences.next().is_none());
-    assert!(composite_artifact_binding::binding(&package, &compiled, &generated, &node, occurrence).is_ok());
+    assert!(composite_artifact_binding::binding(
+        &package, &compiled, &generated, &node, occurrence
+    )
+    .is_ok());
     assert!(!generated.artifacts.is_empty());
     for index in 0..generated.artifacts.len() {
         let mut changed = generated.clone();
         changed.artifacts[index].contents.push(' ');
         assert!(
             matches!(
-                composite_artifact_binding::binding(&package, &compiled, &changed, &node, occurrence),
+                composite_artifact_binding::binding(
+                    &package, &compiled, &changed, &node, occurrence
+                ),
                 Err(CompositeBuildError::GeneratedArtifactChanged)
             ),
             "all published artifact bytes: {}",
@@ -85,7 +90,9 @@ fn every_published_native_file_and_claim_map_member_keeps_its_original_authority
         );
         assert!(
             matches!(
-                composite_artifact_binding::binding(&package, &compiled, &changed, &node, occurrence),
+                composite_artifact_binding::binding(
+                    &package, &compiled, &changed, &node, occurrence
+                ),
                 Err(CompositeBuildError::GeneratedArtifactChanged)
             ),
             "complete native claim-map authority {member}"

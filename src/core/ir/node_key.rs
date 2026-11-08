@@ -32,7 +32,9 @@ pub(crate) fn checked_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
                     match segment {
                         CheckedNodePathSegment::Name(name) => pending.push(Step::Text(name)),
                         CheckedNodePathSegment::Node(child) => pending.push(Step::Visit(child)),
-                        CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => return None,
+                        CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => {
+                            return None
+                        }
                     }
                 }
             }
