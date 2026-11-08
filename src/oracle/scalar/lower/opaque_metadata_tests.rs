@@ -77,7 +77,7 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
                     continue;
                 }
                 for segment in value["path"].as_array_mut().unwrap() {
-                    if let Some(index) = segment.get("index").and_then(Value::as_u64) {
+                    if let Some(index) = segment.get("node").and_then(Value::as_u64) {
                         let slot = match row.iter().position(|value| *value == index) {
                             Some(slot) => slot,
                             None => {
