@@ -155,7 +155,7 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
 fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
     let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
     let clause_body = &package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == clause)
@@ -201,7 +201,7 @@ fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
     );
     assert!(!encoded.to_string().contains("pub fn oracle_clause"));
     let non_clause = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "expression")
@@ -223,7 +223,7 @@ fn admitted_clause_refuses_non_clause_node() {
     let twin = Twin::new();
     let (package, _) = twin.emitted_package("BalanceNeverDrops");
     let non_clause = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "expression")
@@ -245,7 +245,7 @@ fn clause_oracle_refuses_a_clause_from_another_admitted_package() {
     });
     assert!(!admitted
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .any(|node| node.node_id == foreign.clause));
@@ -797,7 +797,7 @@ fn qsl_precondition_draws_selected_own_field_domain() {
     assert_eq!(field_input.name, "current_balance");
     assert_eq!((field_input.lower, field_input.upper), (-5, 10));
     let object = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.semantic_form == "object_type")
@@ -2771,7 +2771,7 @@ pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     let (package, clause) = twin.emitted_package(clause_name);
     let node = |form: &str| {
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.semantic_form.as_ref() == form)
@@ -3102,7 +3102,7 @@ fn state_frame_producer_ids_connect_object_and_bound() {
     let frame = package::id(&key(shape.scoped(FRAME)));
     let (lower, upper) = model::FIELDS[0].1;
     let bound = package::id(&Bound::Integer(lower, upper).key());
-    let graph = &package.graph().nodes;
+    let graph = &package.resolved_graph().nodes;
     let admitted_frame = graph
         .iter()
         .find(|node| node.node_id == frame)
@@ -3132,7 +3132,7 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
         let (package, ids) = package_for(&shape).admit_resolved();
         let frame = ids.resolve(&package::id(&key(shape.scoped(FRAME))));
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == frame)
@@ -5379,7 +5379,7 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
     ];
     for ((package, clause), check) in cases {
         let object = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &*node.semantic_form == "object_type")
@@ -5429,7 +5429,7 @@ fn selected_model_variant_field_is_unranged_in_generated_frame_identity() {
     let (package, clause) = Twin::build(&["balance"], &[CLAUSES[0]], 0)
         .emitted_package_with_unread_variant_audit("BalanceNeverDrops");
     let object = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.semantic_form == "object_type")
@@ -5582,7 +5582,7 @@ fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override(
     let twin = Twin::with_field_ranges((0, 1000), (0, 1_000_000));
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let object = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.semantic_form == "object_type")
@@ -5654,7 +5654,7 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
     let twin = Twin::build(&["balance"], &[CLAUSES[0]], 0);
     let (package, clause) = twin.emitted_package_with_wide_audit_range("BalanceNeverDrops");
     let object = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.semantic_form == "object_type")
@@ -6151,7 +6151,7 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     let site = twin.operation_site("deposit").expect("located");
     let node_of = |form: &str| {
         let found = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == form)
@@ -6207,7 +6207,7 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     let twin = Twin::new();
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let object = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &*node.semantic_form == "object_type")
@@ -6246,7 +6246,7 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     assert_eq!(
         generated.frame.identity.scope.anchor,
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| package
@@ -6258,7 +6258,7 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     assert_eq!(
         generated.frame.identity.scope.frame,
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| package

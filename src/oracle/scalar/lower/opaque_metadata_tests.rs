@@ -91,10 +91,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     );
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
-    let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
+    let target = original.resolved_graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.mul"))).unwrap();
     let bound = original
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|n| {
@@ -151,7 +151,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     }))
     .unwrap();
     narrow.node_id = key.clone();
-    assert!(original.graph().nodes.iter().all(|n| n.node_id != key));
+    assert!(original.resolved_graph().nodes.iter().all(|n| n.node_id != key));
     let mut narrow_wire = serde_json::to_value(&narrow).unwrap();
     narrow_wire["body"] = narrow_body;
     wire["semantic_graph"]["nodes"]
@@ -174,7 +174,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     }
     let baseline_bytes = encode_draft(&wire);
     let baseline = read(&baseline_bytes, &evidence, "TRUE_NARROW_BASELINE");
-    let opaque_node = baseline.graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
+    let opaque_node = baseline.resolved_graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.add"))).unwrap();
     let CheckedTerm::Application { operation, .. } = &opaque_node.body else {
         panic!("admitted opaque node is an application");
@@ -213,8 +213,8 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         "metadata is not a semantic child"
     );
     assert_eq!(
-        baseline.graph().nodes.len(),
-        original.graph().nodes.len() + 1
+        baseline.resolved_graph().nodes.len(),
+        original.resolved_graph().nodes.len() + 1
     );
     {
         let (package, add_key) = (&baseline, &opaque_node.node_id);
@@ -282,7 +282,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let semantic_key = rekey_application(&mut wire, &opaque_key);
     let semantic_bytes = encode_draft(&wire);
     let semantic = read(&semantic_bytes, &evidence, "TRUE_NARROW_SEMANTIC");
-    assert_eq!(semantic.graph().nodes.len(), baseline.graph().nodes.len());
+    assert_eq!(semantic.resolved_graph().nodes.len(), baseline.resolved_graph().nodes.len());
     let graph = Graph::from_checked(&semantic);
     assert!(references(graph.term(&key), &target.node_id));
     assert!(

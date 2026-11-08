@@ -52,7 +52,7 @@ fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV
 
 fn application<'a>(package: &'a CheckedPackageV2, identity: &str) -> &'a CheckedSemanticNodeV2 {
     let nodes = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| operation_identity(node) == Some(identity))
@@ -97,7 +97,7 @@ fn assert_generated(
             ordinal: entry.ordinal,
         }
     };
-    let conversion = package.graph().nodes.iter().find(|candidate| {
+    let conversion = package.resolved_graph().nodes.iter().find(|candidate| {
         operation_identity(candidate) == Some("quire.op.numeric.narrow")
             && matches!(
                 application_arguments(candidate).first(),
@@ -220,7 +220,7 @@ fn assert_inline(
     };
     assert_eq!(literal, &value.to_string());
     let integer = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == type_id)
@@ -299,7 +299,7 @@ fn equality_with_a_bounded_peer_keeps_the_narrowed_literal_as_a_graph_child() {
         panic!("narrowed literal is a graph reference");
     };
     let literal = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == literal_id)

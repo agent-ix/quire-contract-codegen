@@ -97,7 +97,7 @@ fn focused_golden_items(package: &CheckedPackageV2) -> Vec<ExactScalarItem> {
         .filter(|item| {
             item.node_id == code_id(MISSING)
                 || package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .any(|node| node.node_id == item.node_id)
@@ -690,7 +690,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
-    let graph = qsl_replay::WireGraph::new(scalar.graph().nodes.iter().map(|node| &node.node_id))
+    let graph = qsl_replay::WireGraph::new(scalar.resolved_graph().nodes.iter().map(|node| &node.node_id))
         .expect("admitted graph has structural keys");
     let node_key = graph
         .key(&node_1001)
@@ -1184,7 +1184,7 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
 /// produced. `ClaimMap`/`ExactScalarClaim` are fully `pub`, so a hand-assembled claim
 /// map can name a `node_id` that has an entry in `claim_map.items` (so it does not hit the
 /// pre-existing "no entry in the claim map" `UnknownNode` ground at all) but no entry in
-/// `package.graph()` at all.
+/// `package.resolved_graph()` at all.
 ///
 /// `code_id(MISSING)` -- this fixture module's own dedicated guaranteed-absent-from-the-graph
 /// sentinel -- is deliberately *not* reused here: `golden_items()` already chains

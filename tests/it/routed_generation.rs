@@ -171,7 +171,7 @@ fn admitted_routing_input_with_limits<'a>(
         let application = checked.source_map().iter().find(|source| {
             source.node_id == node_id && source.role == CheckedOccurrenceRole::Expression
         });
-        let conversion = checked.graph().nodes.iter().find(|node| {
+        let conversion = checked.resolved_graph().nodes.iter().find(|node| {
             operation_identity(&node.body) == Some("quire.op.numeric.narrow")
                 && application_arguments(&node.body)
                     .and_then(|arguments| arguments.first())
@@ -1743,7 +1743,7 @@ fn work_qsl_package() -> CheckedPackageV2 {
 
 fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
     let declaration = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1767,7 +1767,7 @@ fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> Check
         .unwrap_or_else(|| panic!("QSL function {function} has a body binding"))
         .clone();
     let body_node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == body_id)
@@ -1890,7 +1890,7 @@ fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
             "{function} exact inferred endpoints"
         );
         let outer = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == harness.identity.node_id)
@@ -2009,7 +2009,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
     // graph nodes. Its balanced shape stays below the independent depth/endpoint ceilings.
     let work_node = qsl_function_application(&package, "work_nested");
     let graph = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .map(|node| (&node.node_id, node))
@@ -2498,7 +2498,7 @@ fn tc_033_unauthenticated_view_refusal_uses_lowest_request_index() {
         .expect("genuine quantity conversion");
     let division = &derived
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| operation_identity(&node.body) == Some("quire.op.integer.div"))

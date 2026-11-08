@@ -233,7 +233,7 @@ fn original_composite_body_and_actual_emitted_bytes_have_independent_authority()
         admitted_enum_equality::generate_items(&package, Some(compiled.context()), &[item], &[])
             .unwrap();
     let node_record = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|entry| entry.node_id == node)

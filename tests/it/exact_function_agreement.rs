@@ -111,7 +111,7 @@ fn admitted_source() -> CheckedPackageV2 {
 
 pub(super) fn function_id(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -127,7 +127,7 @@ pub(super) fn function_id(package: &CheckedPackageV2, name: &str) -> CheckedNode
 pub(super) fn body_id(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
     let function = function_id(package, name);
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == function)
@@ -152,7 +152,7 @@ pub(super) fn body_id(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
 
 fn type_id(package: &CheckedPackageV2, form: &str) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "scalar_type" && node.semantic_form.as_ref() == form)
@@ -164,7 +164,7 @@ fn type_id(package: &CheckedPackageV2, form: &str) -> CheckedNodeId {
 fn item(package: &CheckedPackageV2, probe: &str, function: &str) -> ExactFunctionItem {
     let call_node_id = body_id(package, probe);
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == call_node_id)
@@ -478,7 +478,7 @@ pub(super) fn genuine_case_and_healthy() -> (
         capability_requirements: Vec::new(),
     };
     let shape_type = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -609,7 +609,7 @@ pub(super) fn genuine_temporal_and_healthy(
     };
     let package = *package;
     let temporal_id = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "temporal" && node.semantic_form.as_ref() == form)
@@ -1095,7 +1095,7 @@ fn tc_031_genuine_qsl_source_generates_four_direct_function_claims() {
         "{claims:?}"
     );
     let nodes = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .map(|node| &node.node_id)
@@ -1504,7 +1504,7 @@ fn omitted_earlier_function_does_not_renumber_the_checked_origin() {
 fn operand_type_refusal_retains_the_original_v2_frame() {
     let package = admitted_source();
     let bounded = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "bounded_domain")
@@ -1578,7 +1578,7 @@ fn tc_057_generated_checked_invariant_guards_use_checked_owner_inputs() {
     );
     let package = admitted_source_text(SOURCE);
     let holder = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

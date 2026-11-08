@@ -102,7 +102,7 @@ fn selection(
     name: &str,
 ) -> qsl_replay::CallableSelection {
     let function = &package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

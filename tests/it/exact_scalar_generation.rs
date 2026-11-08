@@ -386,7 +386,7 @@ fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
         panic!("original fixture must admit: {admitted:?}");
     };
     let expected_body = &original
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == prior)
@@ -406,7 +406,7 @@ fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
         panic!("valid changed body should admit under its structural key: {result:?}");
     };
     let changed_node = changed
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == prior)
@@ -2011,7 +2011,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let anonymous = ids.resolve(&id(&key(T_INTEGER)));
     let int5 = ids.resolve(&id(&INT5.key()));
     let range = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == int5)
@@ -2021,7 +2021,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let rounded = ids.resolve(&code_id(1053));
     let result_type = ids.resolve(&code_id(T_DECIMAL_AWAY));
     let conversion = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == rounded)
@@ -2324,7 +2324,7 @@ fn add_over(low: i64, high: i64) -> ExactScalarOperation {
 fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2373,7 +2373,7 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
 fn tc_024_admitted_protocol_node_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "obligation")
@@ -2411,7 +2411,7 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
     assert!(
         reached == &requested_id
             || package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .any(|node| &node.node_id == reached),
@@ -2448,7 +2448,7 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
 fn tc_024_ac44_direct_control_case_is_unsupported() {
     let package = qspec_package("positive-union-nodes.json");
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -2504,7 +2504,7 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
     };
     let package = qspec_package("positive-union-nodes.json");
     let case = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -3893,7 +3893,7 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         };
         assert!(generated.checked_bounds.is_empty());
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == claim.node_id)

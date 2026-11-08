@@ -309,8 +309,14 @@ impl<'a> PackageItems<'a> {
                 .map(|node| &node.node_id),
         )
         .ok();
-        let source_frame =
-            qsl_replay::WireGraph::new(source.resolved_graph().nodes.iter().map(|node| &node.node_id)).ok();
+        let source_frame = qsl_replay::WireGraph::new(
+            source
+                .resolved_graph()
+                .nodes
+                .iter()
+                .map(|node| &node.node_id),
+        )
+        .ok();
         let represented_nodes: BTreeMap<_, _> = source
             .resolved_graph()
             .nodes

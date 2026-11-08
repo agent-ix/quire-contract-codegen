@@ -93,7 +93,7 @@ fn fixture_with_body(doc: &Value, preconditions: &str, body: &str) -> CheckedPac
 }
 
 fn clauses(package: &CheckedPackageV2) -> Vec<CheckedNodeId> {
-    package.graph().nodes.iter().filter(|node| matches!(package.term(&node.node_id), Some(CheckedTerm::Application { operation, .. }) if operation.state_clause_kind().ok().flatten().is_some()))
+    package.resolved_graph().nodes.iter().filter(|node| matches!(package.term(&node.node_id), Some(CheckedTerm::Application { operation, .. }) if operation.state_clause_kind().ok().flatten().is_some()))
         .map(|node| node.node_id.clone()).collect()
 }
 

@@ -84,7 +84,7 @@ pub(super) fn fixture_source(bytes: Vec<u8>, name: &str, source: String) -> Fixt
         other => panic!("public IR admission: {other:?}"),
     };
     let context = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "object_type")
@@ -92,7 +92,7 @@ pub(super) fn fixture_source(bytes: Vec<u8>, name: &str, source: String) -> Fixt
         .node_id
         .clone();
     let clauses = |kind| {
-        package.graph().nodes.iter().filter(|node|matches!(package.term(&node.node_id),Some(CheckedTerm::Application{operation,..}) if operation.state_clause_kind().ok().flatten()==Some(kind))).map(|node|node.node_id.clone()).collect::<Vec<_>>()
+        package.resolved_graph().nodes.iter().filter(|node|matches!(package.term(&node.node_id),Some(CheckedTerm::Application{operation,..}) if operation.state_clause_kind().ok().flatten()==Some(kind))).map(|node|node.node_id.clone()).collect::<Vec<_>>()
     };
     let safety = clauses(StateClauseKind::Invariant)
         .into_iter()

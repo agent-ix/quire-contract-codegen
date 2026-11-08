@@ -21,7 +21,7 @@ fn every_published_native_file_and_claim_map_member_keeps_its_original_authority
         admitted_enum_equality::generate_items(&package, Some(compiled.context()), &[item], &[])
             .unwrap();
     let original = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|entry| entry.node_id == node)

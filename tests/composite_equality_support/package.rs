@@ -2061,14 +2061,14 @@ mod fixture_identity_tests {
         let (admitted, ids) = builder.admit_resolved();
         let admitted_id = ids.resolve(&producer_id);
         let checked = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == admitted_id)
             .expect("admitted equality");
         assert_eq!(checked.node_id, producer_id);
         let dependent = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == dependent_id)
@@ -2165,7 +2165,7 @@ mod fixture_identity_tests {
 
         let (admitted, ids) = builder.admit_resolved();
         assert_eq!(ids.resolve(&second), second);
-        let nodes = &admitted.graph().nodes;
+        let nodes = &admitted.resolved_graph().nodes;
         for (id, target) in [(&first, &second), (&second, &first)] {
             let checked = nodes
                 .iter()
@@ -2232,7 +2232,7 @@ mod fixture_identity_tests {
         let open = id(&base_node_ids().enum_member);
         let (admitted, _) = builder.admit_resolved();
         let member = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == open)
@@ -2261,7 +2261,7 @@ mod fixture_identity_tests {
             panic!("the producer's SHUT member should admit")
         };
         let changed = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == shut)
@@ -2272,7 +2272,7 @@ mod fixture_identity_tests {
             json!("SHUT")
         );
         assert!(admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .all(|node| node.node_id != open));
@@ -2285,7 +2285,7 @@ mod fixture_identity_tests {
         let (admitted, _) = builder.admit_resolved();
         let parameter = code_id(parameter_code(T_BOOLEAN));
         let expected = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == parameter)
@@ -2304,7 +2304,7 @@ mod fixture_identity_tests {
             panic!("a valid body change under the same structural key should admit")
         };
         let actual = changed
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == parameter)
@@ -2324,12 +2324,12 @@ mod fixture_identity_tests {
             panic!("a consistent unused ordinal does not cause a reader refusal")
         };
         assert!(changed
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .any(|node| node.node_id == alternate));
         assert!(changed
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .all(|node| node.node_id != unused));

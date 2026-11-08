@@ -408,7 +408,7 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(diagnostic.code, V2NumericErrorCode::UnknownClause);
 
     let non_clause = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() != "state")

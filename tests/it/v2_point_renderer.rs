@@ -14,7 +14,7 @@ use super::kani_obligations_state_frame::native_twin::Twin;
 
 fn claim<'a>(package: &'a CheckedPackageV2, clause: &CheckedNodeId) -> &'a CheckedOccurrence {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == clause)
@@ -196,7 +196,7 @@ fn two_authentic_claims_of_one_pointed_node_share_the_point() {
         "equal bodies and points share one node"
     );
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == clauses[0])
@@ -262,7 +262,7 @@ fn changed_or_unpointed_selection_returns_typed_no_artifact_refusal() {
         assert_eq!(diagnostic.occurrence, *occurrence);
     }
     let unpointed = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "state_clause" && node.node_id != *pointed)

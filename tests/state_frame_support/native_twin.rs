@@ -1210,7 +1210,7 @@ impl Twin {
                 assert_eq!(matches.len(), 1, "one QSL claim at {name}'s source region");
                 let clause = &matches[0].node_id;
                 let node = package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|node| &node.node_id == clause)
@@ -1326,7 +1326,7 @@ impl Twin {
             other => panic!("QSL's emitted package is admitted: {other:?}"),
         };
         let clause_node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

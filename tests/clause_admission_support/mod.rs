@@ -413,7 +413,7 @@ impl Twin {
             other => panic!("QSL emitted package is admitted: {other:?}"),
         };
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

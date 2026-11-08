@@ -236,7 +236,7 @@ fn application_with_operator(
     operator: &str,
 ) -> (CheckedNodeId, CheckedOccurrence) {
     let declaration = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -252,7 +252,7 @@ fn application_with_operator(
         .flat_map(|entry| &entry.regions)
         .collect::<Vec<_>>();
     let application = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -947,7 +947,7 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
 fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     let package = checked(REPEATED_SOURCE);
     let application = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -1308,7 +1308,7 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
         let mut expected_across_request_counts = None;
         for requests in [2, 4, 8] {
             let package = checked(&source);
-            let graph_nodes = package.graph().nodes.len();
+            let graph_nodes = package.resolved_graph().nodes.len();
             let original_package_name = package.name().to_owned();
             let (equal_node, equal_occurrence) = application(&package, "f");
             let (not_equal_node, not_equal_occurrence) =

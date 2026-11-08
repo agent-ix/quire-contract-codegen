@@ -4782,7 +4782,7 @@ mod bound_tests {
         };
         let anonymous = ids.resolve(&super::id(&anonymous));
         let integer_node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == anonymous)
@@ -4790,7 +4790,7 @@ mod bound_tests {
         assert!(integer_node.declaration.is_none());
         let range = ids.resolve(&super::id(&range_source));
         let checked_range = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == range)
@@ -4875,7 +4875,7 @@ mod fixture_identity_tests {
             .flat_map(|(package, items)| {
                 items.iter().map(move |item| {
                     let present = package
-                        .graph()
+                        .resolved_graph()
                         .nodes
                         .iter()
                         .any(|node| node.node_id == item.node_id);
@@ -4957,14 +4957,14 @@ mod fixture_identity_tests {
         let (admitted, ids) = builder.admit_resolved();
         let admitted_id = ids.resolve(&provisional);
         let checked = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == admitted_id)
             .expect("admitted increment");
         assert_eq!(checked.node_id, provisional);
         let dependent_checked = admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == dependent)
@@ -4978,7 +4978,7 @@ mod fixture_identity_tests {
 
         let enum_id = id(&base_node_ids().enum_member);
         assert!(admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .any(|node| node.node_id == enum_id));
@@ -5006,7 +5006,7 @@ mod fixture_identity_tests {
         member_source["node_id"] = shut;
         let (changed_admitted, _) = changed_case.admit_resolved();
         let changed_member = changed_admitted
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == id("Example/Phase/SHUT"))

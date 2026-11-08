@@ -418,10 +418,15 @@ pub fn checked_function_declarations(
     }
     let mut declarations = Vec::new();
     let mut keys = std::collections::BTreeSet::new();
-    for node in declaring_package.resolved_graph().nodes.iter().filter(|node| {
-        node.node_tag.as_ref() == "composite_type"
-            && matches!(node.semantic_form.as_ref(), "record" | "tuple" | "union")
-    }) {
+    for node in declaring_package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.node_tag.as_ref() == "composite_type"
+                && matches!(node.semantic_form.as_ref(), "record" | "tuple" | "union")
+        })
+    {
         // The facade takes wire node identities. Union ValueType identities
         // instead carry kernel handles; retain the owner's explicit mapping.
         let node_key = checked_function_key(declaring_package, &node.node_id)?;

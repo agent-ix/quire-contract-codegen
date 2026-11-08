@@ -130,8 +130,14 @@ impl<'a> ContractLookup<'a> {
         for entry in source.source_map() {
             sources.entry(&entry.node_id).or_default().push(entry);
         }
-        let source_frame =
-            qsl_replay::WireGraph::new(source.resolved_graph().nodes.iter().map(|node| &node.node_id)).ok();
+        let source_frame = qsl_replay::WireGraph::new(
+            source
+                .resolved_graph()
+                .nodes
+                .iter()
+                .map(|node| &node.node_id),
+        )
+        .ok();
         let source_by_key = source_frame
             .as_ref()
             .map(|frame| {
@@ -139,7 +145,13 @@ impl<'a> ContractLookup<'a> {
                     .keys()
                     .iter()
                     .cloned()
-                    .zip(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
+                    .zip(
+                        source
+                            .resolved_graph()
+                            .nodes
+                            .iter()
+                            .map(|node| &node.node_id),
+                    )
                     .collect::<BTreeMap<_, _>>()
             })
             .unwrap_or_default();

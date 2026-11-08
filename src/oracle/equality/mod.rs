@@ -850,14 +850,25 @@ pub fn generate_composite_equality_oracles(
         ));
     }
     let graph = Graph::new(package);
-    let source_frame =
-        qsl_replay::WireGraph::new(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
-            .map_err(|_| OracleGenerationError::InvalidPlanState)?;
+    let source_frame = qsl_replay::WireGraph::new(
+        source
+            .resolved_graph()
+            .nodes
+            .iter()
+            .map(|node| &node.node_id),
+    )
+    .map_err(|_| OracleGenerationError::InvalidPlanState)?;
     let source_keys = source_frame
         .keys()
         .iter()
         .cloned()
-        .zip(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
+        .zip(
+            source
+                .resolved_graph()
+                .nodes
+                .iter()
+                .map(|node| &node.node_id),
+        )
         .collect::<BTreeMap<_, _>>();
     let source_by_output = graph
         .node_keys()

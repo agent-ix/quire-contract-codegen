@@ -101,7 +101,7 @@ pub(super) fn replay_fixture_with_extra(
         other => panic!("IR admits the emitted package: {other:?}"),
     };
     let applications = checked
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| operation_identity(&node.body) == Some(operation))
@@ -114,7 +114,7 @@ pub(super) fn replay_fixture_with_extra(
     };
     let node_id = application.node_id.clone();
     let conversion = checked
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

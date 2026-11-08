@@ -207,7 +207,7 @@ fn generate_with_context(
             .flatten()
         })
         .collect::<BTreeSet<_>>();
-    let graph = &package.checked.graph().nodes;
+    let graph = &package.checked.resolved_graph().nodes;
     let selected_groups = graph
         .iter()
         .filter(|node| selected_types.contains(&node.node_id))
@@ -682,7 +682,7 @@ fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
         assert_eq!(term["term"], "reference");
         serde_json::from_value(term["target"].clone()).expect("reader-admitted wire reference")
     }
-    let nodes = &package.graph().nodes;
+    let nodes = &package.resolved_graph().nodes;
     let lookup = |id: &CheckedNodeId| {
         nodes
             .iter()
@@ -901,7 +901,7 @@ fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
     let mut bad = super::admitted_enum_equality::direct_source_item(&package, "holder_same");
     let original = bad.left.source_type.clone();
     let boolean = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "boolean")
@@ -996,7 +996,7 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
     let package = admit(corpus_package());
     let sequence = package.ids.resolve(&code_id(SEQ_INT));
     let bound = package.ids.resolve(&code_id(CB_INT));
-    let graph = &package.checked.graph().nodes;
+    let graph = &package.checked.resolved_graph().nodes;
     let sequence_node = graph.iter().find(|node| node.node_id == sequence).unwrap();
     let bound_node = graph.iter().find(|node| node.node_id == bound).unwrap();
     assert_eq!(sequence_node.semantic_form.as_ref(), "sequence");
@@ -1748,7 +1748,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
             .iter()
             .map(|actual| {
                 package
-                    .graph()
+                    .resolved_graph()
                     .nodes
                     .iter()
                     .find(|node| {

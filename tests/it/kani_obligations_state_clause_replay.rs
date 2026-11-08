@@ -1159,7 +1159,7 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
 
     let parameters = fixture
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| node.semantic_form.as_ref() == "parameter")

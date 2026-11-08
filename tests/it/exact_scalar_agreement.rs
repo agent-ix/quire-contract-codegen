@@ -851,7 +851,7 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
                 quire_contract_codegen::OperationProvenance::IrConfirmed
             );
             let operation_node = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == items[0].node_id)
@@ -867,7 +867,7 @@ fn carried_quantity_vectors_compile_and_agree_with_owner() {
                 Some(target_id)
             );
             let target_node = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| &node.node_id == target_id)

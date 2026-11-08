@@ -605,7 +605,7 @@ fn source_context_comparison_distinguishes_checked_term_sidecar_presence() {
     let bytes = encode_checked_package_v2(
         original.name(),
         original.lock(),
-        original.graph(),
+        original.resolved_graph(),
         CheckedPackageSourceCorrespondenceRef {
             source_map: original.source_map(),
             refinement_step_rows: original.refinement_step_rows(),

@@ -801,7 +801,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
     let (package, ids) = builder.admit_with_resolved(limits);
     eprintln!(
         "IR-496 AC7 phase=admission-complete admitted_v2_nodes={}",
-        package.graph().nodes.len()
+        package.resolved_graph().nodes.len()
     );
     let resolved_code_id = |code| ids.resolve(&code_id(code));
     let parameter = |code| FunctionScheduleParameter {
@@ -1782,7 +1782,7 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     let (package, combined, healthy_only, case_id, area_call_id, healthy_call_id) =
         super::exact_function_agreement::genuine_case_and_healthy();
     let case = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == case_id)
@@ -1850,7 +1850,7 @@ fn tc_031_ac33_genuine_temporal_roots_leave_a_callable_sibling() {
         let (package, combined, healthy_only, temporal_id, healthy_call_id) =
             super::exact_function_agreement::genuine_temporal_and_healthy(form);
         let temporal = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == temporal_id)

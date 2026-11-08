@@ -44,7 +44,7 @@ pub(super) fn admit_twin(
     let [clause] = <[quire_contract_model::CheckedNodeId; 1]>::try_from(clauses)
         .expect("one QSL-authored clause");
     let claim = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == clause)
@@ -283,7 +283,7 @@ fn v2_accessor_population_and_refusal_fields_agree() {
         ] {
             let (package, clause) = twin.emitted_package(name);
             let claim = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == clause)
@@ -387,7 +387,7 @@ fn v2_accessor_population_and_refusal_fields_agree() {
     ] {
         let (package, clause) = twin.emitted_package(name);
         let claim = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == clause)

@@ -134,7 +134,7 @@ fn admitted_clause_body_sets_the_population_and_implication_count() {
 fn one_admitted_population_retains_all_four_coverage_classes() {
     let (package, _) = Twin::with_mixed_coverage_clauses().emitted_package("BalanceNeverDrops");
     let mut inputs: Vec<_> = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
@@ -175,7 +175,7 @@ fn one_admitted_population_retains_all_four_coverage_classes() {
 fn every_admitted_clause_requires_its_own_generated_source_map_and_export() {
     let (package, _) = Twin::with_distinct_balance_clauses().emitted_package("BalanceNeverDrops");
     let clauses: Vec<_> = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
@@ -382,7 +382,7 @@ fn each_llvm_input_class_refuses_without_invented_probe_counts() {
 fn foreign_checked_node_in_source_map_refuses_before_observation() {
     let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
     let other = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id != inputs[0].node_id)

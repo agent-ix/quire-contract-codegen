@@ -139,7 +139,7 @@ fn clause_planning_and_reading_share_one_graph_walk() {
         derive_v2_clause_descriptor(&package, &clause).unwrap()
     );
     let non_clause = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_tag.as_ref() == "expression")

@@ -98,7 +98,7 @@ fn reader_variant(
         "contract_version": "quire.checked-package/v2",
         "name": package.name(),
         "lock": package.lock(),
-        "semantic_graph": package.graph(),
+        "semantic_graph": package.resolved_graph(),
         "source_map": package.source_map(),
         "capability_report": package.capability_report(),
         "diagnostics": package.diagnostics(),
@@ -109,7 +109,7 @@ fn reader_variant(
         panic!("one original model document")
     };
     let selected_model = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find_map(|node| match &node.owner {
@@ -223,12 +223,12 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
             clause, original_clause,
             "the structural clause key is preserved"
         );
-        assert_eq!(original.graph().nodes.len(), package.graph().nodes.len());
+        assert_eq!(original.resolved_graph().nodes.len(), package.resolved_graph().nodes.len());
         let changed_bodies = original
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
-            .zip(&package.graph().nodes)
+            .zip(&package.resolved_graph().nodes)
             .filter(|(before, after)| {
                 assert_eq!(before.node_id, after.node_id);
                 before.body != after.body

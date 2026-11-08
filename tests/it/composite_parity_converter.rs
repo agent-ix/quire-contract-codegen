@@ -101,7 +101,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
     ) else {
         panic!("read package")
     };
-    let nodes = &package.graph().nodes;
+    let nodes = &package.resolved_graph().nodes;
     let graph = qsl_replay::WireGraph::new(nodes.iter().map(|node| &node.node_id))
         .expect("admitted graph has structural keys");
     let named = |name: &str| {

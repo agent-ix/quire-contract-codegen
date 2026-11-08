@@ -67,8 +67,9 @@ pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> 
         .iter()
         .map(|node| serde_json::from_value::<CheckedNodeId>(node.get("node_id")?.clone()).ok())
         .collect::<Option<Vec<_>>>()?;
-    let rows: Vec<Vec<u64>> = serde_json::from_value(document.get("semantic_graph")?.get("operand_rows")?.clone())
-        .ok()?;
+    let rows: Vec<Vec<u64>> =
+        serde_json::from_value(document.get("semantic_graph")?.get("operand_rows")?.clone())
+            .ok()?;
     qsl_replay::WireGraph::with_operand_rows(&ids, &rows).ok()
 }
 
