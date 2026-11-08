@@ -149,6 +149,8 @@ fn compile_native_twin(source: &str, function: &str) -> ReplayPackage {
 }
 
 /// Replays `values` against `native`, the QSL source compiled and recompiled.
+// Exercise the public inline mismatch error without adding an error allocation.
+#[allow(clippy::result_large_err)]
 fn replay_against(
     native: &str,
     values: &[(String, WitnessValue)],
@@ -604,6 +606,8 @@ fn importing_inputs(library: &LockedSource) -> (ReplayInputs, DependencyLock) {
     (inputs(&unit, vec![lock.clone()]), lock)
 }
 
+// Exercise the public inline mismatch error without adding an error allocation.
+#[allow(clippy::result_large_err)]
 fn replay_q(
     package: &ReplayPackage,
     x: i64,
