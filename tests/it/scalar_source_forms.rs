@@ -320,7 +320,8 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
     for form in ["binary", "unary", "conversion"] {
         let mut wire = original.clone();
         let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
-        let position = nodes.iter()
+        let position = nodes
+            .iter()
             .position(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
             .unwrap();
         nodes[position]["semantic_form"] = form.into();
