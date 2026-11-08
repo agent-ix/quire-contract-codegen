@@ -914,3 +914,116 @@ scope:
 ## Final exact evidence receipt (round 8)
 
 Final exact 50,000-record receipt /tmp/CG757-round8-deep-acyclic.log now passes: 1 passed, 0 failed, 523 filtered, 368.17 seconds; runner /tmp/CG757-round8-results.tsv records exit 0. This runs the unchanged deep-generation and independently compiled native small-stack assertions; the 65,536-record work-limit exact log also passes. All 24 listed focused failure cases now have successful exact receipts. Scoped lint is still pending, and no aggregate gate clearance is claimed.
+
+## Targeted review (round 9)
+
+Targeted round 9 reviews all sixteen files in 98360e5c0d4fac8f74b5988da20651b698c645e6...9ce68c8dceedc7750e6169bc3d2a623be6a41bfa (+540/-101). Original gate log /tmp/IR-1401-final-unrun-tests-98360e5c0.log reports 795 pass, 47 failures and 36 ignored. Independently checked the 47-name mapping in /tmp/CG757-round9-report.json: every corresponding actual log contains the exact named test and 1 passed/0 failed. Inspected scoped Clippy success and format receipt, final new-row guard and real routed native denial/cancellation/counters/refusal receipt. A prior zero-match native-meter attempt is explicitly excluded. Docs and aggregate continuation remain unrun; no Cargo, broad test, source edit, push or merge by reviewer.
+
+Only two production files change. Scalar model dispatch restores the specified blocker for nonvariant requested Model roots without admitting unsupported scalar operations or changing variant_type operands. Refinement serialization returns the existing typed MissingField instead of expect and preserves validated byte layout. Caller-triggered inference is not broadened.
+
+The fixture changes distinguish raw graph writers from resolved inspection, append one aligned row per authored node, retain document/foreign indices and resolve original identities through their holding rows. The case-sibling control explicitly rewrites only the newly appended row; the bounded-arithmetic control rewrites only intentionally mutated arithmetic rows. Original imported bytes and existing row order are preserved. Carried-vector slot authoring is inside its deliberate producer, not a blanket strict-reader normalizer, but its duplicated implementation is an open finding.
+
+Parameters now have actual parameter bodies and required Text metadata, with empty parameter dependencies. Computed wrappers retain their own range; explicit result-bound and separate reachable-bound controls remain distinct. Routed tests intentionally select literal children only for their authored literal controls and use the same selected OwnResult conversion as the direct negotiation comparator. Kani range assertions for computed wrappers now check full [-1000,1000] ranges rather than pretending a referenced child makes a call a constant. Work/source ceilings and their refusal checks remain; no ignore or workload reduction added.
+
+The scanner resolves actual path-attributed cfg(test) declarations with inherited gating and canonical path association; there is no filename-only exemption. Expanded genuine function corpus uses four explicit functions and their original indices; invocation reads remain scanned while static prepared metadata is excluded. Native equality comparison uses the current owner try_check_type boundary. The original selected call, not first graph bound, determines expected operand refusal IDs.
+
+The duplicate-field source test correctly observes the current native owner cause, but governing FR-018-AC-8, its adverse-case text and TC-029 still demand None and prohibit ambiguous-name. Inspected the locked QSL 81ae5b6 source/tests and the actual exact duplicate-source receipt: the native public cause is Some("ambiguous-name"). This must be reconciled in the governing spec, preserving that native cause rather than projecting it away. The stale requirement is recorded in gap-analysis FND-002.
+
+## New findings (disposition pass 9)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | high | FR-018-AC-8 and TC-029 require the duplicate-field public cause to be None and prohibit ambiguous-name, while the current native owner and the revised source control retain Some("ambiguous-name"). | spec/oracle/functional/FR-018-composite-equality-oracles.md:712 |
+
+## Dispositions (round 9)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | still-open | Update the governing AC, adverse-case wording and TC-029 to describe the actual retained native public cause; do not erase or synthesize it in CG. Preserve no admitted context and no public CG generation for this source refusal. |
+
+## Latest verdict (round 9)
+
+**FAIL** — FND-002 remains open; historical FND-001 stays fixed. Plan completion: not assessed. Existing repository-wide trace gaps remain baseline.
+
+## Targeted examined scope (round 9)
+
+```yaml
+scope:
+- id: src/oracle/scalar/lower.rs
+  path: src/oracle/scalar/lower.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: src/routed/smt/refinement.rs
+  path: src/routed/smt/refinement.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: tests/admitted_composite_support/agreement_cases.rs
+  path: tests/admitted_composite_support/agreement_cases.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: tests/composite_equality_support/package.rs
+  path: tests/composite_equality_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for composite/structural equality
+- id: tests/exact_scalar_support/package.rs
+  path: tests/exact_scalar_support/package.rs
+  role: examined
+  excerpt: //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
+- id: tests/it/admitted_composite_equality.rs
+  path: tests/it/admitted_composite_equality.rs
+  role: examined
+  excerpt: '// SPDX-License-Identifier: AGPL-3.0-or-later'
+- id: tests/it/composite_equality_generation.rs
+  path: tests/it/composite_equality_generation.rs
+  role: examined
+  excerpt: '//! FR-018: composite/structural equality oracle generation over admitted'
+- id: tests/it/exact_function_agreement.rs
+  path: tests/it/exact_function_agreement.rs
+  role: examined
+  excerpt: //! FR-021 direct-function corpus from one QSL source and separate Contract
+    IR admission.
+- id: tests/it/exact_function_generation.rs
+  path: tests/it/exact_function_generation.rs
+  role: examined
+  excerpt: '//! FR-021: function-application oracle generation over admitted CheckedPackage'
+- id: tests/it/exact_scalar_generation.rs
+  path: tests/it/exact_scalar_generation.rs
+  role: examined
+  excerpt: '//! FR-014: exact complete-V1 scalar oracle generation over admitted'
+- id: tests/it/kani_obligations.rs
+  path: tests/it/kani_obligations.rs
+  role: examined
+  excerpt: //! FR-015 separate bounded Kani obligations, FR-017 Kani execution, and
+    Contract IR FR-036
+- id: tests/it/kani_obligations_state_frame.rs
+  path: tests/it/kani_obligations_state_frame.rs
+  role: examined
+  excerpt: '//! FR-015 (IR-412): one `state_clause` postcondition over one integer
+    field becomes an'
+- id: tests/it/no_generation_panics.rs
+  path: tests/it/no_generation_panics.rs
+  role: examined
+  excerpt: '//! NFR-005 / TC-042: no panic token on a generation or analysis path.'
+- id: tests/it/routed_generation.rs
+  path: tests/it/routed_generation.rs
+  role: examined
+  excerpt: '//! FR-022 routed generation: `generate_routed` runs the routed kind''s
+    generation arm keyed by the'
+- id: tests/it/v2_clause_integer_literals.rs
+  path: tests/it/v2_clause_integer_literals.rs
+  role: examined
+  excerpt: //! Public generation controls for the general V2 clause integer-leaf policy.
+- id: tests/state_frame_support/native_twin.rs
+  path: tests/state_frame_support/native_twin.rs
+  role: examined
+  excerpt: '//! The QSL twin of the state-frame fixture: the `test/bank` domain package,
+    the native unit'
+- id: FR-018-AC-8
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Test |
+- id: TC-029
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: '`cause() == None` for this Assembly refusal.'
+```

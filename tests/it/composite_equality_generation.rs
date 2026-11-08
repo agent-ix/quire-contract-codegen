@@ -7,6 +7,10 @@
 //! `check_type` guard, AC-9's denial injection, AC-11's complementary
 //! outcomes) are covered by `tests/composite_equality_agreement.rs`.
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use ix_trace_rs::trace;
 use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
@@ -478,41 +482,6 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     // Only the newly authored equality row needs document references lowered
     // into its own canonical slots. The imported graph keeps its original bytes.
     let mut extended = builder.wire();
-    fn slots(value: &mut serde_json::Value, row: &mut Vec<serde_json::Value>, package: &str) {
-        if value.get("package").and_then(serde_json::Value::as_str) == Some(package) {
-            if let Some(path) = value
-                .get_mut("path")
-                .and_then(serde_json::Value::as_array_mut)
-            {
-                for segment in path {
-                    if let Some(index) = segment.get("node").and_then(serde_json::Value::as_u64) {
-                        let index = json!(index);
-                        let slot =
-                            row.iter()
-                                .position(|item| item == &index)
-                                .unwrap_or_else(|| {
-                                    row.push(index);
-                                    row.len() - 1
-                                });
-                        *segment = json!({"operand":slot});
-                    }
-                }
-            }
-        }
-        match value {
-            serde_json::Value::Array(items) => {
-                for item in items {
-                    slots(item, row, package);
-                }
-            }
-            serde_json::Value::Object(fields) => {
-                for item in fields.values_mut() {
-                    slots(item, row, package);
-                }
-            }
-            _ => {}
-        }
-    }
     let position = extended["semantic_graph"]["nodes"]
         .as_array()
         .unwrap()
@@ -520,10 +489,10 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         - 1;
     let mut row = Vec::new();
     let package_name = extended["name"].as_str().unwrap().to_owned();
-    slots(
+    draft_rows::author_row(
+        &package_name,
         &mut extended["semantic_graph"]["nodes"][position],
         &mut row,
-        &package_name,
     );
     extended["semantic_graph"]["operand_rows"][position] = json!(row);
     let (admission, _, ids) = PackageBuilder::from_wire(extended).read_resolved();

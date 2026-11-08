@@ -4,6 +4,10 @@
 #[allow(dead_code, clippy::duplicate_mod)]
 mod rekey;
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use ix_trace_rs::trace;
 use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_model::{
@@ -276,38 +280,6 @@ fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResul
             })
             .collect::<Vec<_>>();
         let package_name = wire["name"].as_str().unwrap().to_owned();
-        fn slots(value: &mut Value, row: &mut Vec<Value>, package: &str) {
-            if value.get("package").and_then(Value::as_str) == Some(package) {
-                if let Some(path) = value.get_mut("path").and_then(Value::as_array_mut) {
-                    for segment in path {
-                        if let Some(index) = segment.get("node").and_then(Value::as_u64) {
-                            let target = json!(index);
-                            let slot = row
-                                .iter()
-                                .position(|entry| entry == &target)
-                                .unwrap_or_else(|| {
-                                    row.push(target);
-                                    row.len() - 1
-                                });
-                            *segment = json!({"operand":slot});
-                        }
-                    }
-                }
-            }
-            match value {
-                Value::Array(items) => {
-                    for item in items {
-                        slots(item, row, package);
-                    }
-                }
-                Value::Object(fields) => {
-                    for item in fields.values_mut() {
-                        slots(item, row, package);
-                    }
-                }
-                _ => {}
-            }
-        }
         let mut changed = 0;
         for (position, mut node) in authored {
             node["semantic_type"] = bound.clone();
@@ -315,7 +287,7 @@ fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResul
                 node["body"]["result_type"] = bound.clone();
             }
             let mut row = Vec::new();
-            slots(&mut node, &mut row, &package_name);
+            draft_rows::author_row(&package_name, &mut node, &mut row);
             wire["semantic_graph"]["nodes"][position] = node;
             wire["semantic_graph"]["operand_rows"][position] = json!(row);
             changed += 1;

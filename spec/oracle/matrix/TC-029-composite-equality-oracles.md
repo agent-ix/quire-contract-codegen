@@ -53,9 +53,10 @@ the enum-only owner facade does not excuse dropping it.
    dependency provision. Retain `AdmittedRefusal::Package` and its real
    `CompileRefusal` payload and available locus. Through the root facade's
    public accessors assert `code() == Code::AmbiguousDeclaration` and
-   `cause() == None` for this Assembly refusal. Do not infer or synthesize an
-   `ambiguous-name` public cause from the internal assembly diagnosis, add a
-   dependency on QSL assembly internals, or require a new QSL API. The precise
+   `cause() == Some("ambiguous-name")` for this Assembly refusal, retaining the
+   actual native cause now exposed by the published QSL facade. Do not erase or
+   synthesize the cause from an internal assembly diagnosis, add a dependency
+   on QSL assembly internals, or require a new QSL API. The precise
    duplicate name/cause remains asserted in the separate private
    declaration-defense control below.
    No successful `AdmittedContext` or CG artifact is produced; do not attempt

@@ -21,6 +21,10 @@ use std::{fs, path::PathBuf};
 #[path = "../../../../tests/checked_package_support/evidence.rs"]
 mod checked_package_evidence;
 
+#[allow(clippy::duplicate_mod)] // shared test draft writer mounted in each test module
+#[path = "../../../../tests/checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 // Exact full-key substitution in an authored draft; no IDs are fabricated.
 fn replace_key(value: &mut Value, old: &Value, new: &Value) {
     if value == old {
@@ -63,43 +67,8 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
     let package = authored["name"].as_str().unwrap().to_owned();
     let mut rows = Vec::new();
     for node in authored["semantic_graph"]["nodes"].as_array_mut().unwrap() {
-        let mut row = Vec::<u64>::new();
-        let mut pending = vec![node];
-        while let Some(value) = pending.pop() {
-            let is_id = value.as_object().is_some_and(|members| {
-                members.len() == 3
-                    && members.contains_key("package")
-                    && members.contains_key("path")
-                    && members.contains_key("ordinal")
-            });
-            if is_id {
-                if value["package"].as_str() != Some(package.as_str()) {
-                    continue;
-                }
-                for segment in value["path"].as_array_mut().unwrap() {
-                    if let Some(index) = segment.get("node").and_then(Value::as_u64) {
-                        let slot = match row.iter().position(|value| *value == index) {
-                            Some(slot) => slot,
-                            None => {
-                                row.push(index);
-                                row.len() - 1
-                            }
-                        };
-                        *segment = json!({"operand": u64::try_from(slot).unwrap()});
-                    }
-                    assert!(
-                        segment.is_string() || segment.get("operand").is_some(),
-                        "the authored draft contains document-index references only"
-                    );
-                }
-                continue;
-            }
-            match value {
-                Value::Object(members) => pending.extend(members.values_mut().rev()),
-                Value::Array(values) => pending.extend(values.iter_mut().rev()),
-                _ => {}
-            }
-        }
+        let mut row = Vec::new();
+        draft_rows::author_row(&package, node, &mut row);
         rows.push(row);
     }
     authored["semantic_graph"]["operand_rows"] = json!(rows);

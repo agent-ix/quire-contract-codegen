@@ -14,6 +14,10 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
+#[allow(clippy::duplicate_mod)] // shared explicit test draft-row writer
+#[path = "../checked_package_support/draft_rows.rs"]
+mod draft_rows;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
@@ -5422,48 +5426,16 @@ pub fn carried_quantity_package(vectors: &Value, target: &str, code: u32) -> Pac
     }
     // This producer authors a structural local identity. Node-held references
     // use each holding node's operand row; document-held references stay indices.
-    fn author_slots(value: &mut Value, row: &mut Vec<Value>) {
-        if value.get("package").and_then(Value::as_str) == Some(BASE_PACKAGE_NAME) {
-            if let Some(path) = value.get_mut("path").and_then(Value::as_array_mut) {
-                for segment in path {
-                    if let Some(index) = segment.get("node").and_then(Value::as_u64) {
-                        let target = json!(index);
-                        let slot = row
-                            .iter()
-                            .position(|entry| entry == &target)
-                            .unwrap_or_else(|| {
-                                row.push(target);
-                                row.len() - 1
-                            });
-                        *segment = json!({"operand": slot});
-                    }
-                }
-            }
-        }
-        match value {
-            Value::Array(items) => {
-                for item in items {
-                    author_slots(item, row);
-                }
-            }
-            Value::Object(fields) => {
-                for item in fields.values_mut() {
-                    author_slots(item, row);
-                }
-            }
-            _ => {}
-        }
-    }
     let mut rows = Vec::new();
     for node in builder.value["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
     {
         let mut row = Vec::new();
-        author_slots(node, &mut row);
-        rows.push(Value::Array(row));
+        draft_rows::author_row(BASE_PACKAGE_NAME, node, &mut row);
+        rows.push(row);
     }
-    builder.value["semantic_graph"]["operand_rows"] = Value::Array(rows);
+    builder.value["semantic_graph"]["operand_rows"] = json!(rows);
 
     builder
 }
