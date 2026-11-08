@@ -77,3 +77,19 @@ scope:
   role: examined
   excerpt: fn reconstructed_union_members_execute_equality()
 ```
+
+## Targeted final-gate follow-up
+
+Targeted final-gate follow-up at repair head 7b68f2375d26013b6971218554f14210aa73a87e: touches_kani now includes exactly tests/checked_package_support/draft_rows.rs. Existing classification vector and transitive-walk required vector include that path; the original per-transitive-target assertion remains unchanged. Verified baseline 95356b5 already contains kani_obligations -> exact_scalar_support/package.rs -> checked_package_support/draft_rows.rs, so this is a pre-existing narrow inventory omission, repaired by broadening scope. /tmp/IR-1401-union-kani-scope-focused.log records clippy completion and 2 exact tests passed, 877 filtered. /tmp/IR-1401-union-solver-configured.log records 1 exact live-solver test passed with actual configured cvc5, 523 filtered, no source change. Lead reports aggregate library 516 passed/1 configuration failure/7 ignored, IT 842 passed/1 inventory failure/36 ignored, docs 16 passed; both failures have the focused resolutions above. Aggregate check/fmt/spec/lint/MSRV/deny/docs/preflight passed per lead receipt; no aggregate or actual Kani rerun was performed by reviewer.
+
+```yaml
+scope:
+- id: scripts/cg_gates.rs:touches_kani
+  path: scripts/cg_gates.rs
+  role: examined
+  excerpt: '"tests/checked_package_support/draft_rows.rs",'
+- id: tests/it/kani_gate.rs:scope-classification
+  path: tests/it/kani_gate.rs
+  role: examined
+  excerpt: '"transitive include target must be in the Kani-touching set"'
+```
