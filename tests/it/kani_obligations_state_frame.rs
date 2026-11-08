@@ -5389,7 +5389,9 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
             .expect("model table");
         let member_type = fields.field("audit").expect("present audit").member_type();
         match check {
-            None => assert!(member_type.is_none()),
+            None => assert_eq!(member_type, Some(&CheckedMemberType::TextBounds {
+                lower: 0, upper: 8, profile: "nfc".into(),
+            })),
             Some((lower, upper)) => assert_eq!(
                 member_type,
                 Some(&CheckedMemberType::IntRange { lower, upper })
