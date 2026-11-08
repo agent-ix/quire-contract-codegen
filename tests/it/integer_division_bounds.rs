@@ -274,7 +274,7 @@ fn generated_values(modulo_only: bool) {
             panic!("derived oracle refused: {claim:?}")
         };
         let node = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == claim.node_id)
@@ -288,13 +288,13 @@ fn generated_values(modulo_only: bool) {
                 continue;
             };
             let operand = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| &node.node_id == target)
                 .unwrap();
             let typing = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == operand.semantic_type)

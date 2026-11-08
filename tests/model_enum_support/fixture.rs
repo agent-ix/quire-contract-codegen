@@ -70,7 +70,7 @@ pub fn colors(
     );
     let first = witnesses["Red"];
     let declared = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.node_id == first.enum_type)
@@ -93,7 +93,7 @@ pub fn colors(
         .map(|(case, witness)| {
             assert_eq!(witness.enum_type, first.enum_type);
             let member = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .find(|node| node.node_id == witness.member)
@@ -118,7 +118,7 @@ pub fn colors(
 
 pub fn equality_application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
     let function = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {
@@ -134,7 +134,7 @@ pub fn equality_application(package: &CheckedPackageV2, function: &str) -> Check
         .flat_map(|entry| &entry.regions)
         .collect::<Vec<_>>();
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| {

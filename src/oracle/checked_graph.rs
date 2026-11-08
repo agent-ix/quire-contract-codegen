@@ -42,7 +42,7 @@ impl GraphBody for CheckedTerm {
     type Owner = CheckedPackageV2;
 
     fn nodes(owner: &Self::Owner) -> &[CheckedSemanticNodeV2<Self>] {
-        &owner.graph().nodes
+        &owner.resolved_graph().nodes
     }
 
     fn node<'a>(

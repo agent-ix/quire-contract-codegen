@@ -63,7 +63,7 @@ fn bound_member<'a>(term: &'a CheckedTerm, expected: &str) -> &'a CheckedTerm {
 }
 
 fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles, String) {
-    let nodes = package.graph().nodes.iter().filter(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some(identity))).collect::<Vec<_>>();
+    let nodes = package.resolved_graph().nodes.iter().filter(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some(identity))).collect::<Vec<_>>();
     let [node] = nodes.as_slice() else {
         panic!("one genuine {identity} application: {nodes:?}");
     };
@@ -75,13 +75,13 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
             panic!("quantity source is an owner-emitted reference");
         };
         let source = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &node.node_id == target)
             .unwrap();
         let source_type = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == source.semantic_type)
@@ -96,7 +96,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
             panic!("source retains its unit reference");
         };
         let unit = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &node.node_id == unit)
@@ -119,7 +119,7 @@ fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles,
             panic!("source retains its carrier reference");
         };
         let carrier = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &node.node_id == carrier)
@@ -396,8 +396,8 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
         );
     }
     let package = admit(&bytes);
-    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
-    let sibling = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.total_order"))).unwrap();
+    let node = package.resolved_graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
+    let sibling = package.resolved_graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.total_order"))).unwrap();
     let good = derive_exact_scalar_items(&package, std::slice::from_ref(&sibling.node_id))
         .pop()
         .unwrap()
@@ -550,7 +550,7 @@ fn same_shape_ieee_descriptor_mismatch_retains_caller_declared_generation() {
     use quire_contract_codegen::{ExactScalarItem, ExactScalarOperation};
     use quire_exact::{IeeeComparison, IeeeWidth};
     let package = compiled("function subject using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }");
-    let node = package.graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
+    let node = package.resolved_graph().nodes.iter().find(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some("quire.op.ieee.numeric_equal"))).unwrap();
     let output = generate_exact_scalar_oracles(
         &package,
         &[ExactScalarItem {

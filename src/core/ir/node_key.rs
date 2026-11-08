@@ -67,7 +67,8 @@ pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> 
         .iter()
         .map(|node| serde_json::from_value::<CheckedNodeId>(node.get("node_id")?.clone()).ok())
         .collect::<Option<Vec<_>>>()?;
-    qsl_replay::WireGraph::new(ids.iter()).ok()
+    let rows = serde_json::from_value(document.get("semantic_graph")?.get("operand_rows")?.clone()).ok()?;
+    qsl_replay::WireGraph::with_operand_rows(&ids, &rows).ok()
 }
 
 /// Emit a typed IR identity without recursion or a digest adaptation.
