@@ -3228,7 +3228,8 @@ mod tests {
         // Each record emits bounded-width identity rows, source entries and field types.
         // 8 KiB per one-field record, plus 1 MiB for fixed envelope data, bounds
         // this fixture's writer while retaining the original deep/work-limit cases.
-        let output_bytes = count.checked_mul(8192)
+        let output_bytes = count
+            .checked_mul(8192)
             .and_then(|bytes| bytes.checked_add(1 << 20))
             .expect("finite fixture output bound");
         let stages = StageLimits::default()

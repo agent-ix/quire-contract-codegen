@@ -1224,12 +1224,25 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
     let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
     if let Some(rows) = wire["semantic_graph"].get_mut("operand_rows") {
         let original = rows.as_array().expect("authored operand rows");
-        assert_eq!(original.len(), nodes.len(), "one original row per fixture node");
-        assert!(original.iter().all(|row| row.as_array().is_some_and(Vec::is_empty)),
-            "name-only fixture pruning does not remap indexed operands");
-        *rows = Value::Array(original.iter().zip(&nodes)
-            .filter(|(_, node)| keep(&node["node_id"]))
-            .map(|(row, _)| row.clone()).collect());
+        assert_eq!(
+            original.len(),
+            nodes.len(),
+            "one original row per fixture node"
+        );
+        assert!(
+            original
+                .iter()
+                .all(|row| row.as_array().is_some_and(Vec::is_empty)),
+            "name-only fixture pruning does not remap indexed operands"
+        );
+        *rows = Value::Array(
+            original
+                .iter()
+                .zip(&nodes)
+                .filter(|(_, node)| keep(&node["node_id"]))
+                .map(|(row, _)| row.clone())
+                .collect(),
+        );
     }
     wire["semantic_graph"]["nodes"] = Value::Array(
         nodes

@@ -1514,15 +1514,24 @@ mod checked_invariant_tests {
         candidates.sort();
         // Ask the active compiler to load crate metadata. An MSRV check can
         // leave a newer timestamp on an incompatible compiler's rlib.
-        let library = candidates.into_iter().find(|library| {
-            Command::new("rustc")
-                .args(["--edition=2021", "--crate-type", "lib", "--emit=metadata"])
-                .arg("--extern").arg(format!("quire_exact={}", library.display()))
-                .arg("-L").arg(format!("dependency={}", dependencies.display()))
-                .arg("-o").arg(directory.join("metadata_probe.rmeta"))
-                .arg(&probe_source).output().expect("load exact compiler metadata")
-                .status.success()
-        }).expect("an exact dependency with metadata accepted by the active compiler");
+        let library = candidates
+            .into_iter()
+            .find(|library| {
+                Command::new("rustc")
+                    .args(["--edition=2021", "--crate-type", "lib", "--emit=metadata"])
+                    .arg("--extern")
+                    .arg(format!("quire_exact={}", library.display()))
+                    .arg("-L")
+                    .arg(format!("dependency={}", dependencies.display()))
+                    .arg("-o")
+                    .arg(directory.join("metadata_probe.rmeta"))
+                    .arg(&probe_source)
+                    .output()
+                    .expect("load exact compiler metadata")
+                    .status
+                    .success()
+            })
+            .expect("an exact dependency with metadata accepted by the active compiler");
         let helpers = native_helper_lines(Helpers {
             bound: true,
             equality: false,

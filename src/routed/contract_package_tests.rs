@@ -3614,8 +3614,12 @@ mod tests {
             &serde_json::to_value(&local).expect("local key"),
             &serde_json::to_value(&target).expect("selected target key"),
         );
-        let local_position = checked.resolved_graph().nodes.iter()
-            .position(|node| node.node_id == local).expect("local original position");
+        let local_position = checked
+            .resolved_graph()
+            .nodes
+            .iter()
+            .position(|node| node.node_id == local)
+            .expect("local original position");
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))
                 .expect("checked wire canonicalizes");
