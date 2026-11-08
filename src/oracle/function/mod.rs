@@ -280,7 +280,7 @@ pub fn generate_function_schedules_with_limits(
     let _ = schedule::WorkCounter::new(limits.generation_work_units)?;
     let source_nodes = Graph::from_checked(package);
     let mut type_kinds = BTreeMap::new();
-    for node in &package.graph().nodes {
+    for node in &package.resolved_graph().nodes {
         if node.node_tag.as_ref() == "scalar_type" {
             let kind = match node.semantic_form.as_ref() {
                 "boolean" => Some(schedule::ValueKind::Boolean),
@@ -1589,7 +1589,7 @@ pub(crate) struct FunctionPreflightGraph<'a> {
 impl<'a> FunctionPreflightGraph<'a> {
     /// Index the admitted graph once, before classifying its function items.
     pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
-        let mut graph = Self::from_nodes(&checked.graph().nodes);
+        let mut graph = Self::from_nodes(&checked.resolved_graph().nodes);
         graph.checked = Some(checked);
         graph
     }
@@ -3845,7 +3845,7 @@ mod tests {
             other => return Err(format!("selected program admits: {other:?}")),
         };
         let call_id = checked
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

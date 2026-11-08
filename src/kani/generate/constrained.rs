@@ -33,7 +33,7 @@ fn selected_clause(
     use ConstrainedMethodRefusal as R;
     let node = selection
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == selection.clause)
@@ -250,7 +250,7 @@ pub(super) fn lower(
         });
     }
     let mut preconditions = vec![Vec::new(); operations.len()];
-    for node in &package.graph().nodes {
+    for node in &package.resolved_graph().nodes {
         let Some(CheckedTerm::Application {
             operation,
             arguments,

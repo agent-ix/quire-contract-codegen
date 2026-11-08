@@ -799,7 +799,7 @@ pub fn generate_composite_equality_oracles(
             let bytes = encode_checked_package_v2(
                 original.name(),
                 original.lock(),
-                original.graph(),
+                original.resolved_graph(),
                 CheckedPackageSourceCorrespondenceRef {
                     source_map: original.source_map(),
                     refinement_step_rows: original.refinement_step_rows(),
@@ -851,13 +851,13 @@ pub fn generate_composite_equality_oracles(
     }
     let graph = Graph::new(package);
     let source_frame =
-        qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id))
+        qsl_replay::WireGraph::new(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
             .map_err(|_| OracleGenerationError::InvalidPlanState)?;
     let source_keys = source_frame
         .keys()
         .iter()
         .cloned()
-        .zip(source.graph().nodes.iter().map(|node| &node.node_id))
+        .zip(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
         .collect::<BTreeMap<_, _>>();
     let source_by_output = graph
         .node_keys()
@@ -937,7 +937,7 @@ pub fn generate_composite_equality_oracles(
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
         } else if let Some(node_tag) = source
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == item.node_id)
@@ -2648,7 +2648,7 @@ mod tests {
     /// Genuine baseline nodes; private mutation tests alter bodies only after this admission.
     fn recursive_shape_nodes() -> Vec<FixtureNode> {
         let (package, _) = recursive_fixture();
-        let nodes = &package.graph().nodes;
+        let nodes = &package.resolved_graph().nodes;
         let named = |name: &str| {
             nodes
                 .iter()
@@ -2701,7 +2701,7 @@ mod tests {
 
     fn fixture_nodes(package: &CheckedPackageV2) -> Vec<FixtureNode> {
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .map(|node| FixtureNode::from_admitted(node, package.term(&node.node_id)))
@@ -3264,7 +3264,7 @@ mod tests {
             other => panic!("large original source must pass the real IR reader: {other:?}"),
         };
         let by_name = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter_map(|node| {
@@ -3290,7 +3290,7 @@ mod tests {
             })
             .collect();
         let leaf = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.semantic_form.as_ref() == "boolean")
@@ -3957,7 +3957,7 @@ mod tests {
         let original_bytes = encode_checked_package_v2(
             original.name(),
             original.lock(),
-            original.graph(),
+            original.resolved_graph(),
             CheckedPackageSourceCorrespondenceRef {
                 source_map: original.source_map(),
                 refinement_step_rows: original.refinement_step_rows(),

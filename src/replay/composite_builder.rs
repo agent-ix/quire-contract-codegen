@@ -720,7 +720,7 @@ impl OriginalReplayContext {
             return Err(CompositeBuildError::ImportedContextUnsupported);
         }
         original
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {

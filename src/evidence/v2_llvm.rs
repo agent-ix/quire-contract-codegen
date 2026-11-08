@@ -155,7 +155,7 @@ fn analyze_inner(
     body: &mut AnalysisBody,
 ) -> Result<(), CoverageDiagnostic> {
     let clauses: Vec<_> = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .inspect(|_| {
@@ -458,12 +458,12 @@ mod request_view_tests {
         assert_eq!(row["population"], "complete");
         println!(
             "IR276_LLVM_WORK R={} K={} population_entries={} shared_view_builds={}",
-            package.graph().nodes.len(),
+            package.resolved_graph().nodes.len(),
             inputs.len(),
             measured.0,
             measured.1
         );
-        assert_eq!(measured, (package.graph().nodes.len(), 1), "one original-order population census and one actual shared view construction; no standalone per-item index construction");
+        assert_eq!(measured, (package.resolved_graph().nodes.len(), 1), "one original-order population census and one actual shared view construction; no standalone per-item index construction");
     }
 
     struct ArtifactInput {
@@ -487,7 +487,7 @@ mod request_view_tests {
 
     fn artifacts(package: &CheckedPackageV2) -> Vec<ArtifactInput> {
         package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
@@ -551,7 +551,7 @@ mod request_view_tests {
         }
         println!(
             "IR276_LLVM_ARTIFACTS R={} K={} source_bytes={} map_bytes={} report_bytes={}",
-            package.graph().nodes.len(),
+            package.resolved_graph().nodes.len(),
             owned.len(),
             owned.iter().map(|input| input.source.len()).sum::<usize>(),
             owned.iter().map(|input| input.map.len()).sum::<usize>(),

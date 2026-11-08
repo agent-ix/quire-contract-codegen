@@ -151,7 +151,7 @@ impl<'a> CollectionGraph<'a> {
     pub(super) fn new(package: &'a CheckedPackageV2) -> Self {
         #[cfg(test)]
         COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
-        let mut index = CollectionNodeIndex::from_nodes(package.graph().nodes.iter());
+        let mut index = CollectionNodeIndex::from_nodes(package.resolved_graph().nodes.iter());
         index.package = Some(package);
         Self {
             package,
@@ -166,7 +166,7 @@ pub(super) fn preconditions_by_anchor(
     package: &CheckedPackageV2,
 ) -> BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> {
     let mut preconditions = BTreeMap::<_, Vec<_>>::new();
-    for node in &package.graph().nodes {
+    for node in &package.resolved_graph().nodes {
         let Some(CheckedTerm::Application {
             operation,
             arguments,

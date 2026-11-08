@@ -775,7 +775,7 @@ mod tests {
     fn renderer_mutants_refuse_before_any_artifact_exists() {
         let (package, clause) = fixture();
         let claim = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.node_id == clause)

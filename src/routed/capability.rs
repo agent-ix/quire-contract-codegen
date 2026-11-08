@@ -86,7 +86,7 @@ mod scalar_cache_tests {
             }
             assert_eq!(
                 crate::oracle::scalar::derive::take_scalar_derive_graph_visits(),
-                package.graph().nodes.len(),
+                package.resolved_graph().nodes.len(),
                 "both exact targets must share one scalar graph walk"
             );
         }

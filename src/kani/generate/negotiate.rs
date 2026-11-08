@@ -131,7 +131,7 @@ impl<'a> ContractLookup<'a> {
             sources.entry(&entry.node_id).or_default().push(entry);
         }
         let source_frame =
-            qsl_replay::WireGraph::new(source.graph().nodes.iter().map(|node| &node.node_id)).ok();
+            qsl_replay::WireGraph::new(source.resolved_graph().nodes.iter().map(|node| &node.node_id)).ok();
         let source_by_key = source_frame
             .as_ref()
             .map(|frame| {
@@ -139,7 +139,7 @@ impl<'a> ContractLookup<'a> {
                     .keys()
                     .iter()
                     .cloned()
-                    .zip(source.graph().nodes.iter().map(|node| &node.node_id))
+                    .zip(source.resolved_graph().nodes.iter().map(|node| &node.node_id))
                     .collect::<BTreeMap<_, _>>()
             })
             .unwrap_or_default();
@@ -276,7 +276,7 @@ impl<'a> ScalarFormLookups<'a> {
             .entry(std::ptr::from_ref(package))
             .or_insert_with(|| {
                 let mut graph = BTreeMap::new();
-                for node in &package.graph().nodes {
+                for node in &package.resolved_graph().nodes {
                     graph.entry(&node.node_id).or_insert(node);
                 }
                 graph
@@ -1688,7 +1688,7 @@ mod tests {
         let (package, clause) =
             native_twin::Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
         let non_clause = &package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| &*node.node_tag != "state")
@@ -1814,7 +1814,7 @@ mod tests {
                 other => panic!("owner source is admitted: {other:?}"),
             };
             let clauses = package
-                .graph()
+                .resolved_graph()
                 .nodes
                 .iter()
                 .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
@@ -1847,7 +1847,7 @@ mod tests {
                     negotiate_kani_obligations(&request).expect("well-formed admitted request");
                 let source_visits = request_lookup_work::take();
                 let clause_views = request_lookup_work::take_clause_views();
-                let graph_size = package.graph().nodes.len();
+                let graph_size = package.resolved_graph().nodes.len();
                 let source_size = package.source_map().len();
                 assert!(source_size > 0);
                 println!("IR276_WORK K={count} R={graph_size} S={source_size} source_visits={source_visits} clause_view_builds={clause_views}");
@@ -1950,7 +1950,7 @@ mod tests {
             other => panic!("owner-emitted graph admits unchanged: {other:?}"),
         };
         let function = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -1961,7 +1961,7 @@ mod tests {
             .node_id
             .clone();
         let nodes = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .filter(|node| {
@@ -2072,12 +2072,12 @@ mod tests {
                     ));
                     println!(
                     "IR276_COLLECTION_WORK K={k} R={} constructors={constructions} reversed={reverse}",
-                    package.graph().nodes.len()
+                    package.resolved_graph().nodes.len()
                 );
                     if constructions != 1 {
                         excessive_constructions.push((
                             k,
-                            package.graph().nodes.len(),
+                            package.resolved_graph().nodes.len(),
                             reverse,
                             constructions,
                         ));

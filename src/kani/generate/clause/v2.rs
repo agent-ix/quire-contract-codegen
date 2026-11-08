@@ -1700,7 +1700,7 @@ mod postcondition_signature_tests {
         assert_eq!(source.limit, 0);
         assert_eq!(source.work, 1);
         let context = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.semantic_form.as_ref() == "object_type")
@@ -1715,7 +1715,7 @@ mod postcondition_signature_tests {
             .emitted_package("ResultWithParameters");
         let view = ClauseGraphView::new(&package);
         let context = package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| node.semantic_form.as_ref() == "object_type")
