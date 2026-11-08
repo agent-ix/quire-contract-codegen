@@ -319,19 +319,16 @@ fn ieee_extension_preserves_binary_support_and_refuses_other_shapes() {
     let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     for form in ["binary", "unary", "conversion"] {
         let mut wire = original.clone();
-        let node = wire["semantic_graph"]["nodes"]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .find(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
+        let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
+        let position = nodes.iter()
+            .position(|node| node["body"]["operation"]["identity"] == "quire.op.ieee.numeric_equal")
             .unwrap();
-        node["semantic_form"] = form.into();
-        let id = serde_json::from_value(node["node_id"].clone()).unwrap();
+        nodes[position]["semantic_form"] = form.into();
         let CheckedPackageV2ReadResult::Admitted(package) = read_mutated_wire(wire) else {
             panic!("IR independently admits expression forms with catalogued call bodies");
         };
         let item = ExactScalarItem {
-            node_id: id,
+            node_id: package.resolved_graph().nodes[position].node_id.clone(),
             operation: ExactScalarOperation::IeeeComparison {
                 comparison: IeeeComparison::NumericEqual,
                 width: IeeeWidth::Binary64,
