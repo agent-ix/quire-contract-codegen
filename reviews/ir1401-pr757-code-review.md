@@ -730,3 +730,36 @@ scope:
   excerpt: '//! The QSL twin of the state-frame fixture: the `test/bank` domain package,
     the native unit'
 ```
+
+## New findings (disposition pass 6)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | high | The inline dependency-mismatch error expansion leaves five cfg(test) replay helpers failing result_large_err under the required Clippy -D warnings gate, so the combined gate stops before tests. | src/replay/function.rs:810; src/replay/function.rs:1070; src/replay/function.rs:1089; src/replay/function.rs:1105; src/replay/function.rs:1124 |
+
+## Targeted review (round 6)
+
+Targeted follow-up only: 78cb3a5612f137ce7c7f8a0edc49c0ceaa500023...17d867980442cc1c9710caa9576d4d16c91e655d changes exactly src/replay/function.rs with ten inserted lines. Inspected all five helper annotations and actual failed combined-gate diagnostics at former lines 810, 1070, 1089, 1105 and 1124 in /tmp/IR-1401-combined-final-78cb3a561.log. Inspected /tmp/CG757-libtest-clippy-fix.log (cargo clippy --locked --lib --tests -- -D warnings completed successfully) and empty successful format log /tmp/CG757-libtest-fmt-fix.log; format exit status is supplied by the dispatching lead, while Clippy success is explicit in its log. No function body, error representation, allocation behavior, global lint policy or gate command changes. Each allow is under cfg(test), names only result_large_err and documents the same deliberate inline-error policy already applied to production entry points. This is a justified local lint annotation, not suppression of a functional defect. No new/open issue remains after the targeted fix. Previous full-review conclusions are carried forward, not rerun. No Cargo, aggregate build, branch edit, push or merge performed by reviewer.
+
+## Dispositions (round 6)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | Candidate 17d867980442cc1c9710caa9576d4d16c91e655d adds only five function-scoped documented result_large_err allowances, preserving complete inline owner errors without a new Box allocation; the cfg(test) Clippy lane and format evidence pass. |
+
+## Latest verdict (round 6)
+
+**PASS** — FND-003 fixed; no open code-review findings.
+
+## Targeted examined scope (round 6)
+
+```yaml
+scope:
+- id: src/replay/function.rs
+  path: src/replay/function.rs
+  role: examined
+  excerpt: "    #[cfg(test)]\n    // Retain complete dependency mismatch fields inline;\
+    \ boxing adds a fallible allocation.\n    #[allow(clippy::result_large_err)]\n\
+    \    pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError>\
+    \ {"
+```
