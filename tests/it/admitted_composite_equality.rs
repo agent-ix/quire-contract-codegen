@@ -635,3 +635,42 @@ fn source_context_comparison_distinguishes_checked_term_sidecar_presence() {
         Err(OracleGenerationError::ContextPackageContentMismatch)
     );
 }
+
+#[trace("FR-018-AC-2", "FR-018-AC-8", "FR-018-AC-17", "TC-029")]
+#[test]
+fn genuine_union_reconstruction_compiles_and_prepares_typed_members() {
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nunion Shape { Empty, Flag(Boolean) }\nfunction f using v(a: Shape,b: Shape): Boolean pure { a = b }\n";
+    let compiled = qsl_replay::compile_admitted(
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new("test", "union.native"),
+            package_name: "union-identifier".to_owned(),
+            path: "union.native",
+            bytes: source.as_bytes(),
+        },
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
+        qsl_replay::ReplayLimits::default(),
+    )
+    .expect("genuine union source");
+    let package = checked(&compiled, &[]);
+    let item = super::admitted_enum_equality::direct_source_item(&package, "f");
+    let generated = generate_items(&package, Some(compiled.context()), &[item], &[])
+        .expect("genuine union generation");
+    let ClaimDisposition::Generated(claim) = &generated.claim_map.items[0].result else {
+        panic!("genuine union refused");
+    };
+    let names = format!(
+        "pub use self::{{{} as environment_shape, {} as oracle_shape}};\n",
+        claim.environment_symbol, claim.oracle_symbol
+    );
+    super::exact_scalar_agreement::run_agreement_cases(
+        "admitted-union-identifier",
+        generated
+            .artifacts
+            .iter()
+            .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
+        &[("names.rs", &names), ("original.native", source)],
+        "tests/admitted_composite_support/union_identifier.rs",
+    );
+}
