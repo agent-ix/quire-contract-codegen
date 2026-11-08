@@ -120,7 +120,7 @@ pub enum SpineReplayError {
     /// The producer packet did not admit or bind to the selected function claim.
     Packet(FunctionPacketError),
     /// The replay request changed an admitted dependency identity or source selection.
-    DependencySelectionMismatch(DependencySelectionMismatch),
+    DependencySelectionMismatch(Box<DependencySelectionMismatch>),
 }
 
 impl fmt::Display for SpineReplayError {
@@ -681,7 +681,7 @@ impl ReplayPackage {
     pub fn check_dependency_selection(
         &self,
         request: &ReplayRequestWire,
-    ) -> Result<(), DependencySelectionMismatch> {
+    ) -> Result<(), Box<DependencySelectionMismatch>> {
         for position in 0..self
             .selected_dependencies
             .len()
@@ -690,11 +690,11 @@ impl ReplayPackage {
             let expected = self.selected_dependencies.get(position);
             let actual = request.dependencies.get(position);
             if expected != actual {
-                return Err(DependencySelectionMismatch {
+                return Err(Box::new(DependencySelectionMismatch {
                     position,
                     expected: expected.cloned(),
                     actual: actual.cloned(),
-                });
+                }));
             }
         }
         Ok(())
