@@ -67,7 +67,8 @@ fn original_red_green_truth_table_agrees_with_owner_and_counters() {
                 result_units: u64::MAX,
             };
             let mut direct_meter = Meter::new(limits);
-            let direct = compare_enum(operator, red, right, &mut direct_meter);
+            let direct = compare_enum(operator, red, right, &mut direct_meter)
+                .expect("the genuine members belong to the same unordered model enum");
             let mut generated_meter = Meter::new(limits);
             let actual = oracle(red, right, &mut generated_meter)
                 .expect("a genuine model member is a valid generated input");
@@ -78,7 +79,7 @@ fn original_red_green_truth_table_agrees_with_owner_and_counters() {
                     "the authored truth arm"
                 );
             }
-            assert_eq!(format!("{actual:?}"), format!("{direct:?}"));
+            assert_eq!(actual, direct, "complete owner outcome");
             for kind in LimitKind::ALL {
                 assert_eq!(generated_meter.consumed(kind), direct_meter.consumed(kind));
             }
