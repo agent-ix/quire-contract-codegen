@@ -735,7 +735,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let package = checked(SOURCE);
     let mut retained = inputs(SOURCE);
     retained.dependencies.push(DependencyLock {
-                refinement_internals: None,
+        refinement_internals: None,
         identity: "test/extra".to_owned(),
         source: retained.source.clone(),
     });

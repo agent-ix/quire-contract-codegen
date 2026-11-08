@@ -684,7 +684,7 @@ impl StateClauseReplay {
             .collect::<Vec<_>>();
         ensure_unique_documents(&documents)?;
         let wire = run.wire(
-                raw_package.clone(),
+            raw_package.clone(),
             RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
             obligation_identity.clone(),

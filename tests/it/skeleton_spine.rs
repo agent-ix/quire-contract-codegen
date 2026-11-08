@@ -448,7 +448,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
 /// One dependency selection of the proved lock, with its own source.
 fn dependency_lock() -> DependencyLock {
     DependencyLock {
-                refinement_internals: None,
+        refinement_internals: None,
         identity: "test/units".to_owned(),
         source: locked("lib-units", b"a dependency source"),
     }
@@ -587,7 +587,7 @@ fn importing_inputs(library: &LockedSource) -> (ReplayInputs, DependencyLock) {
          function q using v(x: Int[0, 9]): Boolean pure {{ u::big(x) }}\n"
     );
     let lock = DependencyLock {
-                refinement_internals: None,
+        refinement_internals: None,
         identity: "test/units".to_owned(),
         source: library.clone(),
     };

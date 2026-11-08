@@ -1257,7 +1257,9 @@ impl<'a> From<&'a ReplayPackageError> for ReplaySettlement<'a> {
             ReplayPackageError::InvalidFunction { .. } => Self::CgDefect,
             ReplayPackageError::Dependencies(cause) => cause.into(),
             ReplayPackageError::CallSite(refusal) => refusal.as_ref().into(),
-            ReplayPackageError::WitnessEntryName(_) | ReplayPackageError::RawPackage(_) => Self::CgDefect,
+            ReplayPackageError::WitnessEntryName(_) | ReplayPackageError::RawPackage(_) => {
+                Self::CgDefect
+            }
         }
     }
 }
