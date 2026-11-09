@@ -1437,7 +1437,10 @@ pub(crate) mod tests {
                 body: CheckedTerm::Literal {
                     type_id: node("3"),
                     value_kind: LiteralKind::Boolean,
-                    value: serde_json::json!(true),
+                    value: quire_contract_model::CheckedJson::from_serializable(
+                        &serde_json::json!(true),
+                    )
+                    .expect("checked json literal"),
                 },
             }
         };

@@ -1769,9 +1769,8 @@ mod tests {
             match items.at(0, &expression).expect("first position") {
                 PackageItem::Lowered { closure, .. } => {
                     assert_eq!(
-                        closure
-                            .root
-                            .body
+                        serde_json::to_value(&closure.root.body)
+                            .expect("checked json serializes")
                             .pointer("/operation/identity")
                             .and_then(serde_json::Value::as_str),
                         Some(operation)

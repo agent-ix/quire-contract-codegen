@@ -313,7 +313,7 @@ fn stopped_result_expression_keeps_checked_body_location() {
         .expect("stopped expression identifies its checked body");
     assert!(matches!(
         location.origin,
-        quire_semantic_value::location::Origin::Body { ref function, index: 0 }
+        quire_semantic_value::location::ExpressionOwner::Body { ref function, index: 0 }
             if function == "add"
     ));
     assert_eq!(location.depth(), 0);

@@ -17,7 +17,7 @@ use quire_semantic_value::{
     declaration::{
         DeclarationCause, EnvironmentFailure, EnvironmentLimitKind, TypeEnvironmentLimits,
     },
-    location::{Location, Origin},
+    location::{ExpressionLocation as Location, ExpressionOwner as Origin},
     object_closure::ObjectClosure,
 };
 

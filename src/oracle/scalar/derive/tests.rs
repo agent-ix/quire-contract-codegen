@@ -243,7 +243,8 @@ fn zero_literal() -> CheckedTerm {
     CheckedTerm::Literal {
         type_id: node_id('1'),
         value_kind: LiteralKind::Integer,
-        value: serde_json::json!("0"),
+        value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!("0"))
+            .expect("checked json literal"),
     }
 }
 
@@ -554,7 +555,8 @@ fn carried_conversion_private_mismatches_preserve_valid_sibling() {
         CheckedTerm::Literal {
             type_id: node_id('1'),
             value_kind: kind,
-            value: serde_json::json!(value),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(value))
+                .expect("checked json literal"),
         }
     }
     let unit = v2_node('b', "scalar_type", "unit", 'b', None);

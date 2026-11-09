@@ -20,17 +20,16 @@ use crate::oracle::operator_catalog::{IntegerOperator, Operator as CatalogOperat
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use num_bigint::BigInt;
 use quire_contract_model::{
-    ApplicationOperator, BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole,
-    CheckedSemanticNodeV2, CheckedTerm, CompleteContractNodeV2, CompleteLoweringRecordV2,
-    ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
-    ContractSourceKeyV1,
+    ApplicationOperator, BoundedDomainForm, CheckedJson, CheckedNodeId, CheckedNodeTag,
+    CheckedOccurrenceRole, CheckedSemanticNodeV2, CheckedTerm, CompleteContractNodeV2,
+    CompleteLoweringRecordV2, ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1,
+    ContractResultViewV1, ContractSourceKeyV1,
 };
 use quire_exact::{
     ComparisonOperator, IeeeComparison, IeeeWidth, IntegerDomain, IntegerInterval,
     OrderingOperator, RoundingMode,
 };
 use quire_semantic_value::declaration::EqualityOperator;
-use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
@@ -1071,7 +1070,7 @@ impl<'n> BoundView<'n, CheckedTerm> {
     }
 }
 
-impl<'n> BoundView<'n, Value> {
+impl<'n> BoundView<'n, CheckedJson> {
     pub(super) fn admitted(
         closure: &'n quire_contract_model::ContractReachedClosureV1<'_>,
         selected: SelectedResult<'n>,
@@ -1085,7 +1084,7 @@ impl<'n> BoundView<'n, Value> {
     }
 }
 
-pub(super) struct Bounds<'g, 'n, Body: GraphBody = Value, NodeBody = CheckedTerm> {
+pub(super) struct Bounds<'g, 'n, Body: GraphBody = CheckedJson, NodeBody = CheckedTerm> {
     pub(super) graph: &'g Graph<'g, Body>,
     pub(super) node: BoundView<'n, NodeBody>,
 }
@@ -2430,7 +2429,7 @@ pub(super) fn contract_checked_operation<'a>(
 
 fn contract_scalar_shape(
     graph: &Graph<'_>,
-    node: &CheckedSemanticNodeV2<Value>,
+    node: &CheckedSemanticNodeV2<CheckedJson>,
     operation: &ExactScalarOperation,
 ) -> Result<Result<(), ExactScalarRefusal>, OracleGenerationError> {
     let shape = Shape::of(operation)?;

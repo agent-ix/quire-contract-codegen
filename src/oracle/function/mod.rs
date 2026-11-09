@@ -1746,7 +1746,7 @@ fn source_nested_body_matches<Body: GraphBody>(
             .is_some_and(|arguments| source_argument_refs_match(&index.graph, caller, arguments))
 }
 
-struct FunctionSourceIndex<'a, Body: GraphBody = serde_json::Value> {
+struct FunctionSourceIndex<'a, Body: GraphBody = quire_contract_model::CheckedJson> {
     graph: CheckedGraph<'a, Body>,
     by_name_body: BTreeMap<(&'a str, &'a CheckedNodeId), Option<&'a CheckedNodeId>>,
 }
@@ -3347,7 +3347,7 @@ pub fn generate_exact_function_oracles(
                 let name = serde_json::to_string(&declaration.name)
                     .map_err(|_| OracleGenerationError::InvalidPlanState)?;
                 let origin = format!(
-                    "sv::location::Origin::Body {{ function: {name}.to_owned(), index: {index} }}"
+                    "sv::location::ExpressionOwner::Body {{ function: {name}.to_owned(), index: {index} }}"
                 );
                 owner_render::classified_item(
                     &source_index,
@@ -4003,7 +4003,8 @@ mod tests {
         let literal = CheckedTerm::Literal {
             type_id: type_node.clone(),
             value_kind: LiteralKind::Integer,
-            value: serde_json::json!("7"),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!("7"))
+                .expect("checked json literal"),
         };
         let types = BTreeMap::from([(type_node.clone(), schedule::ValueKind::Integer)]);
         assert_eq!(
@@ -4016,7 +4017,10 @@ mod tests {
         let malformed = CheckedTerm::Literal {
             type_id: type_node,
             value_kind: LiteralKind::Integer,
-            value: serde_json::json!("seven"),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                "seven"
+            ))
+            .expect("checked json literal"),
         };
         assert!(matches!(
             decode_schedule_operand(&malformed, &owner, &types),
@@ -4079,7 +4083,10 @@ mod tests {
             let literal = CheckedTerm::Literal {
                 type_id: ty.clone(),
                 value_kind: LiteralKind::Integer,
-                value: serde_json::json!(spelling),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    spelling
+                ))
+                .expect("checked json literal"),
             };
             assert_eq!(
                 decode_schedule_operand(&literal, &owner, &types),
@@ -4100,7 +4107,8 @@ mod tests {
             let literal = CheckedTerm::Literal {
                 type_id: ty.clone(),
                 value_kind: LiteralKind::Integer,
-                value,
+                value: quire_contract_model::CheckedJson::from_serializable(&value)
+                    .expect("checked json literal"),
             };
             assert_eq!(
                 decode_schedule_operand(&literal, &owner, &types),
@@ -4114,7 +4122,8 @@ mod tests {
         let unsupported = CheckedTerm::Literal {
             type_id: ty,
             value_kind: LiteralKind::Text,
-            value: serde_json::Value::Null,
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::Value::Null)
+                .expect("checked json literal"),
         };
         assert_eq!(
             decode_schedule_operand(&unsupported, &owner, &BTreeMap::new()),
@@ -4208,7 +4217,10 @@ mod tests {
                 binding(CheckedTerm::Literal {
                     type_id: body.node_id.clone(),
                     value_kind: LiteralKind::Integer,
-                    value: serde_json::json!("1"),
+                    value: quire_contract_model::CheckedJson::from_serializable(
+                        &serde_json::json!("1"),
+                    )
+                    .expect("checked json literal"),
                 }),
                 binding(reference(&body.node_id)),
             ],

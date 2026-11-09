@@ -875,8 +875,12 @@ pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> Pack
     }
     let map = wire["source_map"].as_array_mut().expect("source map");
     map.retain(|entry| {
-        !replaced
-            .contains(&serde_json::from_value(entry["node_id"].clone()).expect("source node key"))
+        !replaced.contains(
+            &serde_json::from_value::<quire_contract_model::CheckedNodeId>(
+                entry["node_id"].clone(),
+            )
+            .expect("source node key"),
+        )
     });
     map.extend(entries);
     PackageBuilder::from_wire(wire)

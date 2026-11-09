@@ -194,7 +194,10 @@ fn tc_024_nested_inference_reports_missing_cycle_unsupported_and_bad_literals() 
             CheckedTerm::Literal {
                 type_id: node_id('0'),
                 value_kind: LiteralKind::from_wire(value_kind).expect("closed fixture kind"),
-                value: serde_json::json!(literal_value),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    literal_value
+                ))
+                .expect("checked json literal"),
             },
         );
         let unary = inference_application_node(
@@ -242,7 +245,10 @@ fn tc_024_nested_inference_accepts_inline_canonical_integer_literals() {
                     value: Box::new(CheckedTerm::Literal {
                         type_id: node_id('0'),
                         value_kind: LiteralKind::Integer,
-                        value: serde_json::json!("0"),
+                        value: quire_contract_model::CheckedJson::from_serializable(
+                            &serde_json::json!("0"),
+                        )
+                        .expect("checked json literal"),
                     }),
                 },
                 CheckedTerm::Binding {
@@ -250,7 +256,10 @@ fn tc_024_nested_inference_accepts_inline_canonical_integer_literals() {
                     value: Box::new(CheckedTerm::Literal {
                         type_id: node_id('0'),
                         value_kind: LiteralKind::Integer,
-                        value: serde_json::json!("9"),
+                        value: quire_contract_model::CheckedJson::from_serializable(
+                            &serde_json::json!("9"),
+                        )
+                        .expect("checked json literal"),
                     }),
                 },
             ],
@@ -266,7 +275,10 @@ fn tc_024_nested_inference_accepts_inline_canonical_integer_literals() {
             CheckedTerm::Literal {
                 type_id: node_id('0'),
                 value_kind: LiteralKind::Integer,
-                value: serde_json::json!("1"),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    "1"
+                ))
+                .expect("checked json literal"),
             },
         ],
     );
@@ -306,7 +318,10 @@ fn tc_024_nested_inference_enforces_depth_before_reusing_memoized_nodes() {
                     value: Box::new(CheckedTerm::Literal {
                         type_id: node_id('0'),
                         value_kind: LiteralKind::Integer,
-                        value: serde_json::json!("0"),
+                        value: quire_contract_model::CheckedJson::from_serializable(
+                            &serde_json::json!("0"),
+                        )
+                        .expect("checked json literal"),
                     }),
                 },
                 CheckedTerm::Binding {
@@ -314,7 +329,10 @@ fn tc_024_nested_inference_enforces_depth_before_reusing_memoized_nodes() {
                     value: Box::new(CheckedTerm::Literal {
                         type_id: node_id('0'),
                         value_kind: LiteralKind::Integer,
-                        value: serde_json::json!("9"),
+                        value: quire_contract_model::CheckedJson::from_serializable(
+                            &serde_json::json!("9"),
+                        )
+                        .expect("checked json literal"),
                     }),
                 },
             ],
@@ -330,7 +348,10 @@ fn tc_024_nested_inference_enforces_depth_before_reusing_memoized_nodes() {
             CheckedTerm::Literal {
                 type_id: node_id('0'),
                 value_kind: LiteralKind::Integer,
-                value: serde_json::json!("1"),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    "1"
+                ))
+                .expect("checked json literal"),
             },
         ],
     );
@@ -524,7 +545,8 @@ fn binding_member(name: &str, value: &str) -> CheckedTerm {
         value: Box::new(CheckedTerm::Literal {
             type_id: node_id('1'),
             value_kind: LiteralKind::Integer,
-            value: serde_json::json!(value),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(value))
+                .expect("checked json literal"),
         }),
     }
 }
@@ -536,7 +558,8 @@ fn text_member(name: &str, value: &str) -> CheckedTerm {
         value: Box::new(CheckedTerm::Literal {
             type_id: node_id('1'),
             value_kind: LiteralKind::Text,
-            value: serde_json::json!(value),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(value))
+                .expect("checked json literal"),
         }),
     }
 }
@@ -665,7 +688,8 @@ fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals()
     let bare = |value: &str| CheckedTerm::Literal {
         type_id: node_id('0'),
         value_kind: LiteralKind::Integer,
-        value: serde_json::json!(value),
+        value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(value))
+            .expect("checked json literal"),
     };
     nodes.push(v2_node(
         '7',

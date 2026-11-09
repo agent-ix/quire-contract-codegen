@@ -1096,7 +1096,8 @@ mod tests {
         CheckedTerm::Literal {
             type_id: checked_node_id("1"),
             value_kind: kind,
-            value: json!(value),
+            value: quire_contract_model::CheckedJson::from_serializable(&json!(value))
+                .expect("checked json literal"),
         }
     }
 
