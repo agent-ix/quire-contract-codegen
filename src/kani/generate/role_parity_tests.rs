@@ -97,13 +97,13 @@ fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
         else {
             panic!("first node is a literal");
         };
-        assert_eq!(first, "first");
+        assert_eq!(first.as_str(), Some("first"));
         let Some(CheckedTerm::Literal { value: other, .. }) =
             index.node(&clause_test_id(2)).map(|node| &node.body)
         else {
             panic!("other node is a literal");
         };
-        assert_eq!(other, "other");
+        assert_eq!(other.as_str(), Some("other"));
         assert!(index.node(&clause_test_id(3)).is_none());
     }
     assert_eq!(visits.get(), graph.len());

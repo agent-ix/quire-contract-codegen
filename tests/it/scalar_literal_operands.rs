@@ -218,7 +218,7 @@ fn assert_inline(
     else {
         panic!("inline integer literal, never a graph reference");
     };
-    assert_eq!(literal, &value.to_string());
+    assert_eq!(literal.as_str(), Some(value.to_string().as_str()));
     let integer = package
         .resolved_graph()
         .nodes
@@ -307,7 +307,7 @@ fn equality_with_a_bounded_peer_keeps_the_narrowed_literal_as_a_graph_child() {
     let CheckedTerm::Literal { value, .. } = &literal.body else {
         panic!("narrow's child is a literal");
     };
-    assert_eq!(value, "1");
+    assert_eq!(value.as_str(), Some("1"));
     let generated = assert_generated(&package, eq, None);
     assert!(
         generated.checked_bounds.is_empty(),

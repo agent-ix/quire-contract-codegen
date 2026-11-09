@@ -52,14 +52,14 @@ pub(super) fn checked_item<Body: GraphBody>(
             symbol,
             callable,
             operator,
-            "sv::location::Origin::Expression",
+            "sv::location::ExpressionOwner::Expression",
         )
         .map_err(RenderError::Generation),
         DirectBody::Equality(operator) => equality_item(
             symbol,
             callable,
             operator,
-            "sv::location::Origin::Expression",
+            "sv::location::ExpressionOwner::Expression",
         )
         .map_err(RenderError::Generation),
     }
@@ -126,7 +126,7 @@ use quire_eval::{self as eval, Body, BodyFactory, ChildRequest, FamilyOutcome, R
 use quire_exact::{self as exact, Meter, Outcome, Refusal, Value};
 use quire_semantic_value::{self as sv, object_closure::ObjectClosure};
 
-fn evaluated(outcome: Outcome<Value>, location: &sv::location::Location) -> eval::Evaluation {
+fn evaluated(outcome: Outcome<Value>, location: &sv::location::ExpressionLocation) -> eval::Evaluation {
     let location = match &outcome {
         Outcome::Completed(_) => None,
         Outcome::Undefined(_) | Outcome::Refused(_) | Outcome::Incomplete(_) => Some(location.clone()),
@@ -138,7 +138,7 @@ struct PreparedFunction {
     environment: Result<sv::declaration::TypeEnvironment, sv::declaration::EnvironmentFailure>,
     parameters: Vec<exact::ValueType>,
     result: exact::ValueType,
-    location: sv::location::Location,
+    location: sv::location::ExpressionLocation,
     cancel: exact::Cancel,
 }
 impl PreparedFunction {
@@ -147,7 +147,7 @@ impl PreparedFunction {
         acquired: &qsl_replay::CheckedClosureCompilation,
         selection: &qsl_replay::CallableSelection,
         resources: &quire_contract_codegen::CheckedFunctionResources,
-        location: sv::location::Location,
+        location: sv::location::ExpressionLocation,
     ) -> Result<Self, CheckedFunctionError> {
         use qsl_replay::{NominalDeclarationForm as Form, NominalDeclarationMember as Member};
         use sv::declaration::{CompositeDeclaration, CompositeShape, FieldDeclaration, UnionMemberDeclaration, TypeEnvironment};
@@ -203,7 +203,7 @@ impl PreparedFunction {
                     outcome: FamilyOutcome::Evaluated(Outcome::Refused(Refusal::CheckedInvariant {
                         cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected,
                     })),
-                    location: Some(sv::location::Location::root(sv::location::Origin::TypeDeclaration { name: invalid.declaration.clone() })),
+                    location: Some(sv::location::ExpressionLocation::root(sv::location::ExpressionOwner::TypeDeclaration { name: invalid.declaration.clone() })),
                     losses: Vec::new(),
                 };
                 Ok(Some(evaluation))
@@ -351,7 +351,7 @@ pub fn oracle_{symbol}(
     apply_checked_function(
         source, admitted_unit, declaring_package, &function, arguments, objects, meter,
         |acquired, selection, resources| Ok(body_{symbol}::Factory(std::sync::Arc::new(PreparedFunction::new(
-            declaring_package, acquired, selection, resources, sv::location::Location::root({result_origin}),
+            declaring_package, acquired, selection, resources, sv::location::ExpressionLocation::root({result_origin}),
         )?))),
     )
 }}
@@ -378,10 +378,10 @@ pub(crate) mod body_{symbol} {{
     pub(crate) struct Factory {{
         prepared: std::sync::Arc<PreparedFunction>,
         callee: exact::NodeKey,
-        site: sv::location::Location,
+        site: sv::location::ExpressionLocation,
     }}
     impl Factory {{
-        pub(crate) fn new(prepared: PreparedFunction, callee: exact::NodeKey, site: sv::location::Location) -> Self {{
+        pub(crate) fn new(prepared: PreparedFunction, callee: exact::NodeKey, site: sv::location::ExpressionLocation) -> Self {{
             Self {{ prepared: std::sync::Arc::new(prepared), callee, site }}
         }}
     }}
@@ -393,7 +393,7 @@ pub(crate) mod body_{symbol} {{
     struct Invocation {{
         prepared: std::sync::Arc<PreparedFunction>,
         callee: exact::NodeKey,
-        site: sv::location::Location,
+        site: sv::location::ExpressionLocation,
     }}
     impl Body for Invocation {{
         fn resume(&mut self, input: Resume, _meter: &mut Meter)
@@ -439,7 +439,7 @@ pub fn oracle_{symbol}(
             let site =
                 selected_nested_call_site(declaring_package, &call, acquired, selection)?;
             Ok(body_{symbol}::Factory::new(
-                PreparedFunction::new(declaring_package, acquired, selection, resources, sv::location::Location::root({result_origin}))?,
+                PreparedFunction::new(declaring_package, acquired, selection, resources, sv::location::ExpressionLocation::root({result_origin}))?,
                 callee_selection.key().clone(), site.location().clone(),
             ))
         }},
@@ -474,14 +474,14 @@ mod tests {
                 "add",
                 &function(),
                 BinaryIntegerOperator::Add,
-                "sv::location::Origin::Expression"
+                "sv::location::ExpressionOwner::Expression"
             )
             .expect("scalar source"),
             equality_item(
                 "eq",
                 &function(),
                 EqualityOperatorKind::Equal,
-                "sv::location::Origin::Expression"
+                "sv::location::ExpressionOwner::Expression"
             )
             .expect("equality source"),
             call_item(
@@ -489,7 +489,7 @@ mod tests {
                 &function(),
                 &function(),
                 &function(),
-                "sv::location::Origin::Expression"
+                "sv::location::ExpressionOwner::Expression"
             )
             .expect("call source"),
         );
@@ -516,14 +516,14 @@ mod tests {
                 "add",
                 &function(),
                 BinaryIntegerOperator::Add,
-                "sv::location::Origin::Expression",
+                "sv::location::ExpressionOwner::Expression",
             )
             .expect("scalar source"),
             equality_item(
                 "eq",
                 &function(),
                 EqualityOperatorKind::Equal,
-                "sv::location::Origin::Expression",
+                "sv::location::ExpressionOwner::Expression",
             )
             .expect("equality source"),
             call_item(
@@ -531,7 +531,7 @@ mod tests {
                 &function(),
                 &function(),
                 &function(),
-                "sv::location::Origin::Expression",
+                "sv::location::ExpressionOwner::Expression",
             )
             .expect("call source"),
         ] {

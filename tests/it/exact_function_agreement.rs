@@ -1288,7 +1288,7 @@ fn tc_031_nested_static_origin_matches_the_qsl_checked_call_site() {
             function: static_name,
             index: static_index,
         },
-        quire_semantic_value::location::Origin::Body {
+        quire_semantic_value::location::ExpressionOwner::Body {
             function: qsl_name,
             index: qsl_index,
         },
@@ -1366,7 +1366,7 @@ fn tc_031_imported_static_origin_matches_the_qsl_checked_call_site() {
             function: static_name,
             index: static_index,
         },
-        quire_semantic_value::location::Origin::Body {
+        quire_semantic_value::location::ExpressionOwner::Body {
             function: qsl_name,
             index: qsl_index,
         },
@@ -1721,7 +1721,7 @@ pub(super) fn invoke_native_body(
     arguments: Vec<Value>, meter: &mut Meter,
 ) -> Result<Transition, eval::BodyFailure> {{
     let prepared = PreparedFunction::new(declaring_package, acquired, selection, &Default::default(),
-        sv::location::Location::root(sv::location::Origin::Expression)).expect("same checked owner");
+        sv::location::ExpressionLocation::root(sv::location::ExpressionOwner::Expression)).expect("same checked owner");
     let factory = body_{boolean_body_symbol}::Factory(std::sync::Arc::new(prepared));
     factory.begin().resume(Resume::Start(arguments), meter)
 }}

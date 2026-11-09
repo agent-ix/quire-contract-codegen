@@ -81,10 +81,9 @@ mod tests {
             assert!(!compact.contains("serde_json::from_value"));
             assert!(!compact.contains("Value::"));
             assert!(!compact.contains("Application{operation"));
-            // The V1 graph's generic node-body type is still Value; no scalar
-            // operation payload is read through it in these consumer modules.
-            assert_eq!(compact.matches("useserde_json::Value;").count(), 1);
-            assert_eq!(compact.matches("serde_json::Value").count(), 1);
+            // The V1 graph's node body is the IR's CheckedJson handle; these
+            // consumer modules never name a serde_json value at all.
+            assert_eq!(compact.matches("serde_json::Value").count(), 0);
         }
         assert!(derive.contains("scalar_ir::identity("));
         assert!(lower.contains("scalar_ir::identity("));

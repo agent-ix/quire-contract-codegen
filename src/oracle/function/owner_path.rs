@@ -245,6 +245,8 @@ fn map_begin_refusal(cause: ApplicationBeginRefusal) -> ExactFunctionRefusal {
             CallFailure::Storage { .. } => "begin.call.storage",
             CallFailure::Supplied(_) => "begin.call.supplied",
             CallFailure::UnsupportedHelper(_) => "begin.call.unsupported_helper",
+            CallFailure::Unsupported(_) => "begin.call.unsupported",
+            CallFailure::Limit(_) => "begin.call.limit",
         },
     };
     ExactFunctionRefusal::ApplicationBeginRefused {
@@ -552,7 +554,7 @@ mod tests {
     use quire_eval::{Body, ChildRequest, FamilyOutcome, Resume, Transition};
     use quire_exact::{Integer, LimitKind, NodeKey, Outcome, ScalarLimits};
     use quire_semantic_value::catalog::InternalFault;
-    use quire_semantic_value::location::Location;
+    use quire_semantic_value::location::ExpressionLocation as Location;
     use std::sync::Arc;
 
     const SOURCE: &str = concat!(
@@ -969,7 +971,7 @@ mod tests {
         assert_eq!(site.location(), issued.location());
         assert!(matches!(
             &site.location().origin,
-            quire_semantic_value::location::Origin::Body { function, .. } if function == "caller"
+            quire_semantic_value::location::ExpressionOwner::Body { function, .. } if function == "caller"
         ));
 
         let wrong_ordinal = handle.handle().nested_call_site(
@@ -1025,7 +1027,7 @@ mod tests {
         );
         assert!(matches!(
             &imported_site.location().origin,
-            quire_semantic_value::location::Origin::Body { function, .. } if function == "outer"
+            quire_semantic_value::location::ExpressionOwner::Body { function, .. } if function == "outer"
         ));
     }
 

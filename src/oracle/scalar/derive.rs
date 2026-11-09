@@ -20,15 +20,14 @@ use crate::core::ir::scalar_bounds::{
 use crate::oracle::checked_graph::{CheckedGraph as Graph, GraphBody};
 use crate::oracle::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm,
-    CompleteLoweringRecordV2,
+    CheckedJson, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedTerm, CompleteLoweringRecordV2,
 };
 use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
     OrderingOperator, RoundingMode,
 };
 use quire_semantic_value::declaration::EqualityOperator;
-use serde_json::Value;
 
 pub(super) fn conversion_target<Body: GraphBody, NodeBody>(
     graph: &Graph<'_, Body>,
@@ -346,7 +345,7 @@ pub(super) struct Derivation<
     'a,
     'g,
     'n,
-    Body: GraphBody = Value,
+    Body: GraphBody = CheckedJson,
     NodeBody = CheckedTerm,
     BoundBody = CheckedTerm,
 > {

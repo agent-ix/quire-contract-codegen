@@ -11,7 +11,7 @@ pub(super) fn inspect_environment(
         acquired,
         selection,
         resources,
-        sv::location::Location::root(sv::location::Origin::Expression),
+        sv::location::ExpressionLocation::root(sv::location::ExpressionOwner::Expression),
     )
     .expect("authentic selected owner inputs")
     .environment

@@ -221,7 +221,8 @@ required dependency or target path.
      (`application_begin_refused`, `begin.wrong_acquisition`) and each of
      `begin.call.input`, `begin.call.fault`, `begin.call.cancelled`,
      `begin.call.storage`, `begin.call.supplied`,
-     `begin.call.unsupported_helper`. `Admission::Accepted` writes no refusal
+     `begin.call.unsupported_helper`, `begin.call.unsupported`,
+     `begin.call.limit`. `Admission::Accepted` writes no refusal
      pair. Confirm `detail` renders the original typed result, including the
      exact package id for `Foreign`, and that each enum is mapped by one
      exhaustive match with no wildcard arm. Check a failed

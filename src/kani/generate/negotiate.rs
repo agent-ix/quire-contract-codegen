@@ -188,11 +188,14 @@ impl<'a> ContractLookup<'a> {
     fn source_node(
         &self,
         id: &CheckedNodeId,
-    ) -> Option<&'a CheckedSemanticNodeV2<serde_json::Value>> {
+    ) -> Option<&'a CheckedSemanticNodeV2<quire_contract_model::CheckedJson>> {
         self.node(self.admitted_node(id)?)
     }
 
-    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<serde_json::Value>> {
+    fn node(
+        &self,
+        id: &CheckedNodeId,
+    ) -> Option<&'a CheckedSemanticNodeV2<quire_contract_model::CheckedJson>> {
         self.graph.node(id)
     }
 

@@ -898,7 +898,7 @@ pub fn generate_composite_equality_oracles(
 
     let mut bounds_by_type: BTreeMap<
         &CheckedNodeId,
-        Vec<&CheckedSemanticNodeV2<serde_json::Value>>,
+        Vec<&CheckedSemanticNodeV2<quire_contract_model::CheckedJson>>,
     > = BTreeMap::new();
     for node in package.wire().semantic_graph.nodes.iter() {
         if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
@@ -4497,7 +4497,10 @@ fn deep_matches_shallow() {
             value: Box::new(CheckedTerm::Literal {
                 type_id: node_id('1'),
                 value_kind: LiteralKind::Integer,
-                value: serde_json::json!(value),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    value
+                ))
+                .expect("checked json literal"),
             }),
         }
     }
@@ -4508,7 +4511,10 @@ fn deep_matches_shallow() {
             value: Box::new(CheckedTerm::Literal {
                 type_id: node_id('0'),
                 value_kind: LiteralKind::Text,
-                value: serde_json::json!(value),
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    value
+                ))
+                .expect("checked json literal"),
             }),
         }
     }
@@ -4517,7 +4523,8 @@ fn deep_matches_shallow() {
         CheckedTerm::Literal {
             type_id: node_id('0'),
             value_kind: LiteralKind::from_wire(kind).expect("closed fixture kind"),
-            value: serde_json::json!(value),
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(value))
+                .expect("checked json literal"),
         }
     }
 

@@ -3,7 +3,7 @@
 
 //! Convert an admitted IR node identity to the exact structural key used by QSL.
 
-use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
+use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment, CheckedOperandEntry};
 use quire_exact::{NodeKey, PathSegment};
 
 /// Rebuild an admitted structural identity without recursing through nested operands.
@@ -32,9 +32,9 @@ pub(crate) fn checked_node_key(id: &CheckedNodeId) -> Option<NodeKey> {
                     match segment {
                         CheckedNodePathSegment::Name(name) => pending.push(Step::Text(name)),
                         CheckedNodePathSegment::Node(child) => pending.push(Step::Visit(child)),
-                        CheckedNodePathSegment::Index(_) | CheckedNodePathSegment::Operand(_) => {
-                            return None
-                        }
+                        CheckedNodePathSegment::Index(_)
+                        | CheckedNodePathSegment::Operand(_)
+                        | CheckedNodePathSegment::Dependency { .. } => return None,
                     }
                 }
             }
@@ -67,7 +67,7 @@ pub(crate) fn producer_node_keys(bytes: &[u8]) -> Option<qsl_replay::WireGraph> 
         .iter()
         .map(|node| serde_json::from_value::<CheckedNodeId>(node.get("node_id")?.clone()).ok())
         .collect::<Option<Vec<_>>>()?;
-    let rows: Vec<Vec<u64>> =
+    let rows: Vec<Vec<CheckedOperandEntry>> =
         serde_json::from_value(document.get("semantic_graph")?.get("operand_rows")?.clone())
             .ok()?;
     qsl_replay::WireGraph::with_operand_rows(&ids, &rows).ok()
@@ -80,6 +80,7 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
         Text(&'a str),
         Index(u64),
         Operand(u64),
+        Dependency(&'a str, u64),
         Finish {
             package: &'a str,
             ordinal: u64,
@@ -114,6 +115,10 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
                         quire_contract_model::CheckedNodePathSegment::Index(index) => {
                             pending.push(Step::Index(*index))
                         }
+                        quire_contract_model::CheckedNodePathSegment::Dependency {
+                            package,
+                            node,
+                        } => pending.push(Step::Dependency(package, *node)),
                     }
                 }
             }
@@ -125,6 +130,9 @@ pub(crate) fn render_checked_node_id(key: &CheckedNodeId) -> Option<String> {
             )),
             Step::Index(index) => rendered.push(format!(
                 "quire_contract_model::CheckedNodePathSegment::Index({index})"
+            )),
+            Step::Dependency(package, node) => rendered.push(format!(
+                "quire_contract_model::CheckedNodePathSegment::Dependency {{ package: {package:?}.into(), node: {node} }}"
             )),
             Step::Finish {
                 package,

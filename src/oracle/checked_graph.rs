@@ -1,10 +1,9 @@
 //! Borrowed checked terms and keyed nodes shared by oracle consumers.
 
 use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm,
-    ContractPackageV1,
+    ApplicationOperator, CheckedJson, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedTerm, ContractPackageV1,
 };
-use serde_json::Value;
 
 pub(crate) trait GraphBody: Sized {
     type Owner;
@@ -18,7 +17,7 @@ pub(crate) trait GraphBody: Sized {
     fn term<'a>(owner: &'a Self::Owner, key: &CheckedNodeId) -> Option<&'a CheckedTerm>;
 }
 
-impl GraphBody for Value {
+impl GraphBody for CheckedJson {
     type Owner = ContractPackageV1;
 
     fn nodes(owner: &Self::Owner) -> &[CheckedSemanticNodeV2<Self>] {
@@ -63,7 +62,7 @@ impl GraphBody for CheckedTerm {
 
 /// A view of one admitted lowered package, retaining the consumers' key-ordered walks.
 /// Keyed queries use the IR owner's retained index rather than rebuilding a node map.
-pub(crate) struct CheckedGraph<'a, Body: GraphBody = Value> {
+pub(crate) struct CheckedGraph<'a, Body: GraphBody = CheckedJson> {
     package: Package<'a, Body>,
     ordered: Vec<&'a CheckedSemanticNodeV2<Body>>,
     keys: std::sync::Arc<std::collections::BTreeMap<CheckedNodeId, quire_exact::NodeKey>>,
@@ -75,14 +74,14 @@ enum Package<'a, Body: GraphBody> {
     Fixture(Vec<(&'a CheckedNodeId, &'a fixture::Node<Body>)>),
 }
 
-impl<'a> CheckedGraph<'a, Value> {
+impl<'a> CheckedGraph<'a, CheckedJson> {
     /// Borrow the admitted package and order its node references once.
     pub(crate) fn new(package: &'a ContractPackageV1) -> Self {
-        let mut ordered: Vec<_> = Value::nodes(package).iter().collect();
+        let mut ordered: Vec<_> = CheckedJson::nodes(package).iter().collect();
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
         Self {
             package: Package::Owner(package),
-            keys: frame_keys(Value::nodes(package).iter().map(|node| &node.node_id)),
+            keys: frame_keys(CheckedJson::nodes(package).iter().map(|node| &node.node_id)),
             ordered,
         }
     }
