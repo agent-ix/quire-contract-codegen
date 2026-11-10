@@ -1442,28 +1442,43 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
         }
     );
     let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
-    let items = [ObligationItem::ScalarClaim {
-        path_condition: &[],
-        source: &package,
-        package: &admitted,
-        claim_map: &oracles.claim_map,
-        node_id: &mismatched,
-        claim_index: claim_index(&oracles.claim_map, &mismatched),
-        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
-    let (records, scalar_harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    assert!(scalar_harnesses.is_empty());
-    match unsupported(&records[0]) {
-        UnsupportedObligation::CallerDeclaredOperation {
-            operation_identity,
-            blocked_on,
-            ..
-        } => {
-            assert_eq!(operation_identity, "integer.add domain=[-1000,1000]");
-            assert_eq!(*blocked_on, UpstreamBlocker::OperationIdentityNotConsumed);
+    // A guard changes neither the refusal nor its precedence over the guard refusal.
+    for guarded in [false, true] {
+        let path_condition = if guarded {
+            vec![quire_contract_codegen::RequirementGuard {
+                occurrence: quire_contract_codegen::RequirementOccurrence {
+                    node_id: mismatched.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                holds: true,
+            }]
+        } else {
+            Vec::new()
+        };
+        let items = [ObligationItem::ScalarClaim {
+            path_condition: &path_condition,
+            source: &package,
+            package: &admitted,
+            claim_map: &oracles.claim_map,
+            node_id: &mismatched,
+            claim_index: claim_index(&oracles.claim_map, &mismatched),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        }];
+        let (records, scalar_harnesses) =
+            emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+        assert!(scalar_harnesses.is_empty());
+        match unsupported(&records[0]) {
+            UnsupportedObligation::CallerDeclaredOperation {
+                operation_identity,
+                blocked_on,
+                ..
+            } => {
+                assert_eq!(operation_identity, "integer.add domain=[-1000,1000]");
+                assert_eq!(*blocked_on, UpstreamBlocker::OperationIdentityNotConsumed);
+            }
+            other => panic!("expected CallerDeclaredOperation, got {other:?}"),
         }
-        other => panic!("expected CallerDeclaredOperation, got {other:?}"),
     }
 }
 

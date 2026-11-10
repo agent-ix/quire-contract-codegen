@@ -2686,7 +2686,41 @@ fn tc_033_record_refusals_precede_the_unauthenticated_view_refusal() {
         })
     ));
 
-    // A `NotApplicable` item carrying a requirement refuses before the view check.
+    // The view-independent item routed `NotApplicable` while carrying a requirement refuses as
+    // `OccurrenceNotSelected` at its lower index, ahead of the division's view refusal.
+    let mut positions = input.positions.clone();
+    let mut driver_seen = 0;
+    for position in &mut positions {
+        if let ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } = position
+        {
+            if driver_seen == 0 {
+                *result_selection = ContractDriverResultSelection::NotApplicable;
+            }
+            driver_seen += 1;
+        }
+    }
+    let not_applicable = routed[0]
+        .clone()
+        .with_scalar_selection(&plain, ContractDriverResultSelection::NotApplicable)
+        .with_requirement(requirement.clone());
+    assert_eq!(
+        generate_routed_impl(
+            input.source,
+            &plain,
+            &positions,
+            &[not_applicable, bind(1, true)],
+            &requirements::with_records(&contexts, &records),
+        ),
+        Err(RoutedGenerationError::RequirementRecord {
+            request_index: 0,
+            occurrence: Some(requirement.occurrence.clone()),
+            mismatch: Box::new(
+                quire_contract_codegen::RequirementRecordMismatch::OccurrenceNotSelected
+            ),
+        })
+    );
 }
 
 /// `RoutedGeneration.claim_map` holds the four generated package claims and the

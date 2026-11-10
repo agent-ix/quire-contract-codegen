@@ -86,7 +86,9 @@ fn direct_outcome(code: u32, guarded: bool) -> KaniObligationOutcome {
     .expect("FR-015 accepts the request")
 }
 
-#[trace("FR-022-AC-31", "TC-033")]
+/// The golden half of FR-022-AC-31 that slice (a) owns; the routed `requirement_occurrence`
+/// identity half lands in slice (b), which tags the criterion.
+#[trace("TC-033")]
 #[test]
 fn direct_increment_record_equals_the_committed_golden() {
     let golden = include_str!("../fixtures/kani-scalar/direct-increment-record.json");
@@ -1004,6 +1006,23 @@ fn not_applicable_items_with_records_are_refused() {
             RequirementRecordMismatch::OccurrenceNotSelected
         )
     );
+
+    // routing the same node `OwnResult` with its own requirement is accepted and reaches the
+    // guard handling
+    let accepted = scenario
+        .generate(&scenario.valid(), records.clone())
+        .expect("OwnResult items with their own requirements are accepted");
+    for (index, requirement) in scenario.requirements.iter().enumerate() {
+        assert_eq!(
+            kani_record(&accepted, index).0.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::PathGuardNotLowered {
+                    guard: requirement.path_condition[0].occurrence.clone(),
+                    reason: PathGuardRefusal::GuardLoweringNotImplemented,
+                }
+            }
+        );
+    }
 
     // a node with no record and no requirement keeps its unguarded behaviour
     let lowered = scenario.checked.lower(
