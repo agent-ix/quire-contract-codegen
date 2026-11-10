@@ -13,7 +13,7 @@ relationships:
 Verify [FR-052](../functional/FR-052-text-scalar-harnesses.md) through admitted
 text comparison packages (conditional on the quire-exact text carrier, IR-1445, the
 non-metered `Text` constructor, IR-1499, and for normalizing profiles the payload-byte
-bound, IR-1500, none of which is delivered), public CG generation, installed proof execution and owner
+bound, IR-1500, and the loop-free normalization, IR-1501, none of which is delivered), public CG generation, installed proof execution and owner
 replay. This case is planned; FR-014 oracle agreement does not establish Kani
 acceptance, and the caller-Text admission proof of TC-050 is a separate case.
 Execute generated proofs only with the authorized runner and budget.
@@ -38,8 +38,9 @@ Execute generated proofs only with the authorized runner and budget.
    carrier encoding for soundness, injectivity and completeness. Mutate by clipping
    the length at `C - 1`, accepting an invalid UTF-8 prefix, accepting nonzero bytes
    past the length, admitting a payload the type refuses, rejecting one it admits, and
-   swapping the byte-count and scalar-count measures (enumerate to at least two
-   bytes, so a multibyte scalar is reached); each must fail the correspondence check. Also enumerate the alphabet U+0061, U+00E9, U+FF61 and
+   swapping the byte-count and scalar-count measures (over U+00E9 under `Text[0,1]`,
+   admitted by the scalar measure and refused by the byte measure; a `Text[0,2]`
+   enumeration cannot distinguish them); each must fail the correspondence check. Also enumerate the alphabet U+0061, U+00E9, U+FF61 and
    U+10000 and assert byte order equals scalar order, the property the native
    expression relies on. Inspect the FR-025 Text row: the length binding, then the
    packed payload words, in ascending logical order, with Boolean and integer order
@@ -53,7 +54,7 @@ Execute generated proofs only with the authorized runner and budget.
 4. Request a plain `text` operand, a `text_bounds` with a missing member, a duplicate
    member, a non-canonical count, a count beyond `u64`, `min` above `max` and an
    unknown profile, and two operands naming different profiles. Assert
-   `requires-bound`, the retained unreadable-bound cause (FR-014-AC-16 for members, the owner reader for counts, `min` above `max` and the profile) and `DistinctTextProfiles`
+   `requires-bound`, the retained unreadable-bound cause (FR-014-AC-16 for members, CG's own reader for counts, `min` above `max` and the profile) and `DistinctTextProfiles`
    respectively, each with no harness, and that no result bound is requested (AC-4).
 5. Compare the generated oracle with the independent native expression from matching
    entry Meter state and limits: outcome, ordered charges, denied next charge and
@@ -99,6 +100,11 @@ Execute generated proofs only with the authorized runner and budget.
     correspondence, ordered physical bindings, argv, unwind bound, tool versions,
     target, dependency cohort including the carrier, limits, observed peak memory,
     checks, cover, playback, exit and terminal classification (AC-11).
+12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the
+    shipped `compare_text` over the step 2 enumeration for all six operators, at zero,
+    exact and short budgets, and assert equal outcome, ordered charges, denied next
+    charge and counters. Mutate the replacement's ordering, charge sequence and
+    outcome; each must fail the differential (AC-12).
 
 ## Expected Results
 
@@ -109,7 +115,7 @@ agreement.
 
 ## Status
 
-PLANNED: all eleven FR-052 criteria are unimplemented and untagged. No missing
-carrier capability (IR-1445), `Text` constructor (IR-1499), stated payload-byte bound (IR-1500), replay route or generated-proof result
+PLANNED: all twelve FR-052 criteria are unimplemented and untagged. No missing
+carrier capability (IR-1445), `Text` constructor (IR-1499), stated payload-byte bound (IR-1500), loop-free normalization (IR-1501), replay route or generated-proof result
 is waived. No capacity C is known to verify within a request's ceilings; TC-050
 recorded a 1 GiB bound exceeded and the IR-1436 review records 2.6 GiB.

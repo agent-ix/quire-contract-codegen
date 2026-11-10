@@ -37,3 +37,23 @@ CHANGES REQUIRED. depends_on edges to FR-014, FR-015, FR-016, FR-017, FR-025, FR
 | FR-052-status | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:266 | PLANNED (IR-1441). This specification supplies no implementation or generated-proof credit. All eleven criteria remain planned and untagged until P1 is delivered with the IR-269 text harness. The public Text replay value exists in `qsl_replay`; the CG decoder grouping and the carrier's physical bindings do not. Oracle agreement under FR-014 is not Kani credit. No capacity C is known to verify within the request's ceilings, and the four normalizing profiles have no stated payload-byte bound; both are open obligations of P1, not waived gaps. |
 | FR-052-bound-and-ceiling | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:95 | The owner admits a payload by its retained sequence, so P is not the declared `max`. For `binary-utf8` no normalization runs, retained equals payload, and P = `max`. For `unicode-scalars` retained equals payload and a scalar is at most four bytes, so P = 4 x `max` (checked arithmetic). For `nfc`, `nfd`, `nfkc` and `nfkd` the payload can differ in length from the retained sequence in either direction, and the bound on payload scalars per retained scalar comes from the pinned Unicode 17.0.0 tables. This requirement asserts no multiplier. The carrier (P1) must state P for these four profiles w... |
 | FR-025-text-row | examined | spec/kani/functional/FR-025-generated-subject-abi.md:75 | / Bounded Text (planned [FR-052](./FR-052-text-scalar-harnesses.md) scalar comparisons only) / `i64` calls: the byte length, then the payload bytes packed eight to a little-endian word for exactly C bytes (C the carrier capacity), length in `0..=C`, bytes at and after the length zero, prefix valid UTF-8, retained sequence admitted by the owner `TextType`; the payload-byte bound must not exceed C, else the item is `unsupported` / one owner `Text` per parameter, built by the carrier from that payload and its declared `TextType` / |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The fix adds a new deliverable to P1: 'For the four normalizing profiles it also provides a loop-free normalization', and the Behavior now takes the normalizing retained sequence from it. IR-1445's AC (carrier and Kani proofs land; memory within K-DR budget; CG's row harness consumes the carrier) does not name normalization, and IR-1500 covers only the bound P. A loop-free NFC/NFD/NFKC/NFKD over the Unicode 17 tables is a substantial piece of work with no owner, so every normalizing-profile criterion is again gated on an unticketed item (the same class as FND-001). Add it to IR-1445's AC or ticket it, and list it in the conditional sentence. | spec/kani/functional/FR-052-text-scalar-harnesses.md:58 |
+| FND-003 | low | The P3 conditional list ('AC-5, AC-9 (d), (h) and (i) and AC-10') omits AC-2, whose 'normal-form variants of one text' and TC-066 step 2's nfc enumeration need a normalizing profile, and AC-6, whose Incomplete at text.normalize-input/-output is only reachable under one. Add both (or state the rule 'every normalizing-profile part' without a list). | spec/kani/functional/FR-052-text-scalar-harnesses.md:252 |
+
+## Scope (disposition pass 1)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052-prerequisite-P1 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:58 | - P1 (ticket IR-1445) is the quire-exact text carrier: a symbolic exact `Text` operand and a native expression over it, with the tractability contract of the IR-1436 design review (D4): `Copy`, no allocation, no `chars().count()`, no SWAR and no iterator loop, counting and ordering as byte loops of at most the carrier capacity C. The carrier's capacity C and the recorded peak memory per capacity, within the K-DR memory budget its acceptance criteria name, are within IR-1445's scope. For the four normalizing profiles it also provides a loop-free normalization; absent that, those profiles are... |
+| FR-052-AC-conditions | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:252 | All supported-harness criteria are conditional on P1 (IR-1445) and P2 (IR-1499). The normalizing-profile parts of AC-5, AC-9 (d), (h) and (i) and AC-10 are also conditional on P3 (IR-1500). |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in abde7ddc |

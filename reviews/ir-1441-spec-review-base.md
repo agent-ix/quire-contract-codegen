@@ -71,3 +71,11 @@ CHANGES REQUIRED. Verified against quire-exact 5db2d5e3 (CG Cargo.lock pin; src/
 | tests.md-FR-052-row | examined | spec/kani/matrix/tests.md:13 | / FR-052 / FR-052-AC-1 through FR-052-AC-11 / TC-066 / 🚧 PLANNED (IR-1441): no text scalar Kani harness; needs the quire-exact text carrier (IR-1445); TC-066 controls have not run. / |
 | tests.md-TC-036-row | examined | spec/kani/matrix/tests.md:132 | / TC-036 / Verify the generated harness subject ABI / Integration / P0 / FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8, FR-025-AC-9, FR-025-AC-14, FR-025-AC-15, FR-025-AC-16 / 🚧 Planned / |
 | spec.md-FR-052-row | examined | spec/spec.md:92 | / Text scalar comparison harnesses / [FR-052](kani/functional/FR-052-text-scalar-harnesses.md) planned text comparison proof row with a payload-byte bound (conditional on IR-1445) / [TC-066](kani/matrix/TC-066-text-scalar-harnesses.md) planned proof and mutant controls / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in abde7ddc |
+| FND-002 | fixed | fixed in abde7ddc |
+| FND-003 | fixed | fixed in abde7ddc |

@@ -44,3 +44,24 @@ CHANGES SUGGESTED. The branch is one commit on origin/main cf10ec78 (merge-base 
 | TC-030-text-row | examined | spec/routed/matrix/TC-030-capability-settlement.md:399 | / Text scalar `expression` claim, IR-confirmed generated claim / Planned (IR-269) / Text scalar operation forms; the six comparisons are planned under FR-052 (conditional on the quire-exact text carrier, IR-1445), which supersedes this row for them only when delivered. / `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). / |
 | FR-052-behavior-refusals | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:192 | When the carrier, a finite `text_bounds` operand bound, a payload-byte bound within C, the resolved operand form or the native expression is unavailable, the item is refused with the dispositions below and no harness. A text leaf inside a composite remains FR-015's `ShadowFamilyNotBuilt`. |
 | FR-052-AC-4 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:232 | A text operand typed by no `text_bounds` (a plain `text`) yields source-associated `requires-bound` naming the operand's type node with no harness. A `text_bounds` that is unreadable under FR-014-AC-16 (a missing, duplicate or unlisted member, a non-canonical or beyond-`u64` count, `min` above `max`, or an unknown profile) yields named `unsupported` retaining that cause. Operands whose profiles differ are refused with `DistinctTextProfiles` and no harness. No result bound is required, read or reported, because a comparison has none. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The fix replaced 'dispositions below' with 'the dispositions of AC-1, AC-3 and AC-4', but three of the listed causes (the carrier, the Text constructor and the native expression unavailable) are settled by AC-7 (TC-030's OperationNotRendered/NoRenderer, or their own named disposition), which none of AC-1, AC-3 or AC-4 covers. Add AC-7. | spec/kani/functional/FR-052-text-scalar-harnesses.md:218 |
+| FND-004 | low | AC-4 (and TC-066 step 4) now calls read_text_bounds 'the owner reader ... a CG function'. Everywhere else in FR-052 'owner' means quire-exact; read_text_bounds is CG's src/core/ir/scalar_bounds.rs. Call it CG's text_bounds reader. | spec/kani/functional/FR-052-text-scalar-harnesses.md:261 |
+
+## Scope (disposition pass 1)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052-behavior-refusals | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:218 | When the carrier, the `Text` constructor, a finite `text_bounds` operand bound, a payload-byte bound within C, the resolved operand form or the native expression is unavailable, the item is refused with the dispositions of AC-1, AC-3 and AC-4 and no harness. A text leaf inside a composite remains FR-015's `ShadowFamilyNotBuilt`. |
+| FR-052-AC-4 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:261 | A text operand typed by no `text_bounds` (a plain `text`) yields source-associated `requires-bound` naming the operand's type node with no harness. A `text_bounds` that is unreadable yields named `unsupported` retaining its cause: a missing, duplicate or unlisted member (FR-014-AC-16), or a non-canonical or beyond-`u64` count, `min` above `max` or an unknown profile (each yields no bound from the owner reader `read_text_bounds`, a CG function that returns no `TextType` for them). Operands whose profiles differ are refused with `DistinctTextProfiles` and no harness. No result bound is requir... |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in abde7ddc; the replacement citation is incomplete, see FND-003 |
+| FND-002 | fixed | fixed in abde7ddc |
