@@ -323,23 +323,33 @@ required dependency or target path.
     `--only-codegen` Kani probe over a real emitted owner-path crate whose
     harness drives the body directly over generation-time-decoded prepared data
     and record the compiler outcome; no backend proof is run for this step.
-16. Pre-decoded prepared function (FR-021-AC-44 through AC-46; IR-1244).
-    Inspect the emitted harness text: it holds `const` declaration views,
-    parameters, result and location, calls `TypeEnvironment::bounded_with_cancel`
-    and `seal_union_verified`, runs `PreparedFunction::ready` and `finish`, and
-    contains no `CheckedPackageV2::read`, pre-built environment or membership
-    verdict. Run the host differential: the unmodified reader over the retained
-    bytes returns `Admitted`; `PreparedFunction::new` built through the genuine
-    path equals the value rebuilt from the const data in environment (or
-    refusal), parameters, result and location. Then run each adverse control
-    and require the differential to fail: one const member mutated, the const
-    result type, one const parameter type, the const location, retained bytes
-    mutated to a still-admitted package with a different declaration or
-    signature, and retained bytes the reader refuses. Separately, at generation
-    time, give the generator a retained package the reader refuses and require
-    the typed refusal of FR-021-AC-46 with no harness; this is a generation
-    refusal, not a differential control. Inspect that no test, doc comment, proof
-    note or matrix row credits reader decode or admission to Kani.
+16. Pre-decoded prepared function (FR-021-AC-44 through AC-47; IR-1244).
+    Inspect the `cfg(kani)` items of the emitted crate: they rebuild from
+    literal descriptors, call `TypeEnvironment::bounded_with_cancel` and
+    `seal_union_verified`, run `PreparedFunction::ready` and `finish`, and
+    contain no `CheckedPackageV2::read`, pre-built environment or membership
+    verdict (AC-44); `cfg(not(kani))` items may call the reader. For every
+    emitted harness, run the emitted host differential (AC-45): the reader
+    over the retained bytes returns `Admitted`; the genuine path returns `Ok`
+    and its `PreparedFunction` equals the rebuilt value field by field. In the
+    tagged fixture, run each AC-47 adverse control and require the differential
+    to fail: one const member, the result type, one parameter type, the
+    location, a second genuine source with a different declaration or
+    signature, mutated retained bytes (genuine path `OwnerIdentityMismatch`)
+    and truncated bytes (reader `Refused`). At generation time, feed the
+    entry a reader-`Refused` input, a reader-`Incomplete` input, an
+    acquisition or selection refusal and a failing descriptor rebuild, and
+    require the four distinct typed refusals of AC-46 with no harness; these
+    are generation refusals, not differential controls. Inspect that no test,
+    doc comment, proof note or matrix row credits reader decode or admission to
+    Kani.
+17. Stopped-body location (FR-021-AC-43). With a checked scalar function and a
+    work limit of one, compare the generated oracle's `Incomplete` payload,
+    admitted charge prefix and `Location::root(Origin::Body { function, index })`
+    with an independent FR-485 application of the same checked source; require
+    no location for a completed invocation, the result occurrence for body-local
+    `Undefined` and `Refused`, and the original origin for an earlier preparation
+    stop and a nested child.
 
 ## Verification Status
 
