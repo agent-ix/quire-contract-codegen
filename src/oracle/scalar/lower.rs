@@ -2353,6 +2353,62 @@ pub(super) fn selected_scalar_key(
     })
 }
 
+/// The V2 node of the result bound the admitted package selects for `selection`, or `None` when
+/// the selected context holds no bound (`Unnarrowed`, `MissingBound`) or the selection does not
+/// resolve. The admitted bound is a represented node; this returns it in the authenticated V2
+/// source frame, the frame of the driver's selections and requirement records.
+pub(super) fn selected_result_bound_node(
+    package: &ContractPackageV1,
+    items: &PackageItems<'_>,
+    request_index: usize,
+    node_id: &CheckedNodeId,
+    selection: &ContractDriverResultSelection,
+) -> Option<CheckedNodeId> {
+    let ContractDriverResultSelection::OwnResult {
+        application,
+        conversion,
+    } = selection
+    else {
+        return None;
+    };
+    let PackageItem::Lowered { closure, .. } = items.at(request_index, node_id).ok()? else {
+        return None;
+    };
+    let admitted_application = ContractOccurrenceKeyV1 {
+        node_id: items.accounted_node(&application.node_id)?.clone(),
+        role: application.role.clone(),
+        ordinal: application.ordinal,
+    };
+    let admitted_conversion = match conversion {
+        Some(key) => Some(ContractOccurrenceKeyV1 {
+            node_id: items.accounted_node(&key.node_id)?.clone(),
+            role: key.role.clone(),
+            ordinal: key.ordinal,
+        }),
+        None => None,
+    };
+    let ContractResultViewV1::Lowered(view) = package
+        .result_context(
+            &closure.root_structural_key,
+            &admitted_application,
+            admitted_conversion.as_ref(),
+            BoundedDomainForm::IntegerRange,
+        )
+        .ok()?
+    else {
+        return None;
+    };
+    match view.context {
+        ContractResultContextV1::DirectBounded { bound }
+        | ContractResultContextV1::Narrowed { bound, .. } => items
+            .original_represented_node(&bound.node.node_id)
+            .cloned(),
+        ContractResultContextV1::Unnarrowed
+        | ContractResultContextV1::MissingBound { .. }
+        | ContractResultContextV1::IncompleteContext => None,
+    }
+}
+
 pub(super) fn contract_checked_operation<'a>(
     graph: &Graph<'_>,
     closure: &'a quire_contract_model::ContractReachedClosureV1<'_>,

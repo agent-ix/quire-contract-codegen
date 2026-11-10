@@ -925,6 +925,17 @@ pub(crate) fn valid_selected_scalar_result(
         && selected_scalar_key(package, items, request_index, node_id, selection).is_some()
 }
 
+/// The selected result bound in the authenticated V2 frame; see `lower::selected_result_bound_node`.
+pub(crate) fn selected_result_bound(
+    package: &ContractPackageV1,
+    items: &PackageItems<'_>,
+    request_index: usize,
+    node_id: &CheckedNodeId,
+    selection: &ContractDriverResultSelection,
+) -> Option<CheckedNodeId> {
+    lower::selected_result_bound_node(package, items, request_index, node_id, selection)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

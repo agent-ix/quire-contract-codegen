@@ -26,6 +26,9 @@ use crate::{
         PackageItem, PackageItems, PackageRequestError,
     },
     core::identity::{HarnessPath, HarnessSymbol},
+    core::requirement::{
+        RequirementOccurrence, RequirementRecordMismatch, RequirementRecords, RoutedRequirement,
+    },
     kani::generate::negotiate::{negotiate_kani_native_obligations, negotiate_kani_obligations},
     kani::generate::outcome::{
         InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
@@ -55,6 +58,8 @@ pub struct RoutedGenerationItem {
     kind: BackendKind,
     /// The selection authenticated during scalar capability preflight.
     scalar_selection: Option<(ContractSourceV1, ContractDriverResultSelection)>,
+    /// The QSL requirement item's projection at this request index.
+    requirement: Option<RoutedRequirement>,
 }
 
 /// A routed item cannot be constructed from a contradictory descriptor.
@@ -99,6 +104,7 @@ impl RoutedGenerationItem {
             backend,
             kind,
             scalar_selection: None,
+            requirement: None,
         })
     }
 
@@ -112,6 +118,13 @@ impl RoutedGenerationItem {
         self.scalar_selection = Some((package.wire().package.source.clone(), selection));
         self
     }
+
+    /// Bind the QSL requirement item's projection for this request index.
+    #[must_use]
+    pub fn with_requirement(mut self, requirement: RoutedRequirement) -> Self {
+        self.requirement = Some(requirement);
+        self
+    }
 }
 
 /// The Kani generation context. Its fields have FR-015's meanings.
@@ -123,6 +136,9 @@ pub struct KaniGenerationContext<'a> {
     pub subject_path: &'a str,
     /// Loop unwind bound.
     pub unwind: u32,
+    /// The checked package's requirement records, keyed by occurrence. An empty map states that
+    /// no record exists.
+    pub requirement_records: &'a RequirementRecords,
 }
 
 /// The optional Kani generation context; process generation needs none.
@@ -212,6 +228,16 @@ pub enum RoutedGenerationError {
     ScalarSelectionMismatch {
         /// The offending driver request index.
         request_index: usize,
+    },
+    /// A routed item's requirement or its keyed record disagrees with the authenticated
+    /// selection or with the item's projection.
+    RequirementRecord {
+        /// The offending driver request index.
+        request_index: usize,
+        /// The item's occurrence, or `None` when the item carries no requirement.
+        occurrence: Option<RequirementOccurrence>,
+        /// What disagrees.
+        mismatch: RequirementRecordMismatch,
     },
     /// Request positions or keys disagree with admitted FR-330 accounting.
     Package(PackageRequestError),
@@ -387,6 +413,12 @@ fn generate_routed_with_integer_policy(
         }
     }
 
+    if let Some(records) = contexts.kani.as_ref().map(|kani| kani.requirement_records) {
+        for item in ordered.iter().filter(|item| item.kind == BackendKind::Kani) {
+            check_requirement_record(item, records, package, &package_items)?;
+        }
+    }
+
     let mut items = Vec::with_capacity(ordered.len());
     let mut admitted_by_index = BTreeMap::new();
     let mut lowered = Vec::with_capacity(ordered.len());
@@ -500,6 +532,124 @@ fn generate_routed_with_integer_policy(
     })
 }
 
+/// Checks one routed Kani item's requirement and its keyed record against the authenticated
+/// selection, in the order FR-022 fixes. The selection was already authenticated against the
+/// admitted driver position; these checks compare the QSL projection with it.
+fn check_requirement_record(
+    item: &RoutedGenerationItem,
+    records: &RequirementRecords,
+    package: &ContractPackageV1,
+    package_items: &PackageItems<'_>,
+) -> Result<(), RoutedGenerationError> {
+    let refuse = |occurrence: Option<&RoutedRequirement>, mismatch| {
+        Err(RoutedGenerationError::RequirementRecord {
+            request_index: item.request_index,
+            occurrence: occurrence.map(|requirement| requirement.occurrence.clone()),
+            mismatch,
+        })
+    };
+    let same_occurrence = |left: &RequirementOccurrence, right: &RequirementOccurrence| {
+        left.role == right.role
+            && left.ordinal == right.ordinal
+            && package_items.same_source_node(&left.node_id, &right.node_id)
+    };
+    let same_conversion = |left: &Option<RequirementOccurrence>,
+                           right: &Option<RequirementOccurrence>| match (
+        left, right,
+    ) {
+        (Some(left), Some(right)) => same_occurrence(left, right),
+        (None, None) => true,
+        _ => false,
+    };
+    let requirement = item.requirement.as_ref();
+    let Some(
+        selection @ ContractDriverResultSelection::OwnResult {
+            application,
+            conversion,
+        },
+    ) = package_items.result_selection(item.request_index)
+    else {
+        let has_records = records
+            .occurrences()
+            .any(|key| package_items.same_source_node(&key.node_id, &item.node_id));
+        return if has_records || requirement.is_some() {
+            refuse(
+                requirement,
+                RequirementRecordMismatch::OccurrenceNotSelected,
+            )
+        } else {
+            Ok(())
+        };
+    };
+    let Some(requirement) = requirement else {
+        return refuse(None, RequirementRecordMismatch::RequirementMissing);
+    };
+    let Some(record) = records.get(&requirement.occurrence) else {
+        return refuse(Some(requirement), RequirementRecordMismatch::RecordMissing);
+    };
+    let selected_application = RequirementOccurrence::from(application);
+    if !same_occurrence(&requirement.occurrence, &selected_application) {
+        return refuse(
+            Some(requirement),
+            RequirementRecordMismatch::ApplicationMismatch {
+                selected: selected_application,
+            },
+        );
+    }
+    let selected_bound = crate::oracle::scalar::selected_result_bound(
+        package,
+        package_items,
+        item.request_index,
+        &item.node_id,
+        selection,
+    );
+    if !package_items.same_source_node(&requirement.result_bound, &record.result_bound)
+        || selected_bound
+            .as_ref()
+            .is_some_and(|bound| !package_items.same_source_node(bound, &record.result_bound))
+    {
+        return refuse(
+            Some(requirement),
+            RequirementRecordMismatch::ResultBoundMismatch {
+                item: requirement.result_bound.clone(),
+                record: record.result_bound.clone(),
+                selected: selected_bound,
+            },
+        );
+    }
+    let selected_conversion = conversion.as_ref().map(RequirementOccurrence::from);
+    if !same_conversion(&requirement.conversion_context, &record.conversion_context)
+        || !same_conversion(&record.conversion_context, &selected_conversion)
+    {
+        return refuse(
+            Some(requirement),
+            RequirementRecordMismatch::ConversionContextMismatch {
+                item: requirement.conversion_context.clone(),
+                record: record.conversion_context.clone(),
+                selected: selected_conversion,
+            },
+        );
+    }
+    let same_path = requirement.path_condition.len() == record.path_condition.len()
+        && requirement
+            .path_condition
+            .iter()
+            .zip(&record.path_condition)
+            .all(|(left, right)| {
+                left.holds == right.holds && same_occurrence(&left.occurrence, &right.occurrence)
+            });
+    if !same_path {
+        return refuse(
+            Some(requirement),
+            RequirementRecordMismatch::PathConditionMismatch {
+                item: requirement.path_condition.clone(),
+                record: record.path_condition.clone(),
+            },
+        );
+    }
+    Ok(())
+}
+
 /// The three whole-call refusals, in their fixed order.
 fn refuse_inconsistent_routing(
     ordered: &[&RoutedGenerationItem],
@@ -599,6 +749,10 @@ fn generate_kani(
                 node_id: &item.node_id,
                 claim_index: *claim_index,
                 result_selection,
+                path_condition: item
+                    .requirement
+                    .as_ref()
+                    .map_or(&[], |requirement| requirement.path_condition.as_slice()),
             })
         })
         .collect::<Result<Vec<_>, RoutedGenerationError>>()?;
@@ -784,6 +938,7 @@ mod tests {
             },
             kind: BackendKind::Kani,
             scalar_selection: None,
+            requirement: None,
         }
     }
 

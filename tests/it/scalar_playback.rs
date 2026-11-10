@@ -165,6 +165,12 @@ pub(super) fn replay_fixture_with_extra(
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR admits routed package: {other:?}"),
     };
+    let requirement = crate::common::requirements::requirement_for(&checked, &selection)
+        .expect("an own-result requirement");
+    let records = crate::common::requirements::records(&std::collections::BTreeMap::from([(
+        0,
+        requirement.clone(),
+    )]));
     let route = RoutedGenerationItem::from_descriptor(
         0,
         node_id,
@@ -180,7 +186,8 @@ pub(super) fn replay_fixture_with_extra(
         },
     )
     .expect("linked Kani route")
-    .with_scalar_selection(&admitted, selection);
+    .with_scalar_selection(&admitted, selection.clone())
+    .with_requirement(requirement);
     let generated = generate_routed(
         &checked,
         &admitted,
@@ -191,6 +198,7 @@ pub(super) fn replay_fixture_with_extra(
                 ceilings: proof_ceilings(),
                 subject_path: "crate::subject",
                 unwind: 3,
+                requirement_records: &records,
             }),
         },
     )

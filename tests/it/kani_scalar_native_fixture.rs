@@ -3,7 +3,8 @@ use super::{
     generate_routed, routed_contract_lowering_profile, Artifact, BackendDescriptor, Candidate,
     ContractDriverResultSelection, ContractRequestPosition, GenerationContexts,
     KaniGenerationContext, KaniScalarObligationHarness, KindOutput, ProviderOrigin,
-    RoutedGenerationItem,
+    RequirementOccurrence, RequirementRecordInput, RequirementRecords, RoutedGenerationItem,
+    RoutedRequirement,
 };
 use super::{package, proof_ceilings_with_wall_clock};
 use package::Bound;
@@ -97,12 +98,41 @@ fn scalar_with_policy(
             ordinal: entry.ordinal,
         }
     };
+    let to_requirement =
+        |key: &quire_contract_model::ContractOccurrenceKeyV1| RequirementOccurrence {
+            node_id: key.node_id.clone(),
+            role: key.role.clone(),
+            ordinal: key.ordinal,
+        };
+    let application = occurrence(&node_id);
+    let conversion = occurrence(&narrow_id);
+    let requirement = RoutedRequirement {
+        occurrence: to_requirement(&application),
+        result_bound: package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == narrow_id)
+            .expect("the authored narrow")
+            .semantic_type
+            .clone(),
+        conversion_context: Some(to_requirement(&conversion)),
+        path_condition: Vec::new(),
+    };
+    let records = RequirementRecords::new(std::collections::BTreeMap::from([(
+        requirement.occurrence.clone(),
+        RequirementRecordInput {
+            result_bound: requirement.result_bound.clone(),
+            conversion_context: requirement.conversion_context.clone(),
+            path_condition: Vec::new(),
+        },
+    )]));
     let positions = [
         ContractRequestPosition::DriverItem {
             node_id: node_id.clone(),
             result_selection: ContractDriverResultSelection::OwnResult {
-                application: occurrence(&node_id),
-                conversion: Some(occurrence(&narrow_id)),
+                application,
+                conversion: Some(conversion),
             },
         },
         ContractRequestPosition::ContextRoot { node_id: narrow_id },
@@ -140,12 +170,14 @@ fn scalar_with_policy(
                 ContractRequestPosition::Excluded { .. }
                 | ContractRequestPosition::ContextRoot { .. } => unreachable!("driver position"),
             },
-        )],
+        )
+        .with_requirement(requirement)],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
                 ceilings: proof_ceilings_with_wall_clock(wall_clock),
                 subject_path: "crate::subject",
                 unwind: 3,
+                requirement_records: &records,
             }),
         },
     )

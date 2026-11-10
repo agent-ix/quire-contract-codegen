@@ -30,6 +30,9 @@ pub(crate) mod profile;
 pub(crate) mod provenance;
 // Source-map records tracing generated source to a clause.
 pub(crate) mod source_map;
+// The driver's typed per-occurrence requirement-record input.
+// Implements: FR-022
+pub(crate) mod requirement;
 
 // Target-owned scratch allocation shared by subsystem unit tests.
 #[cfg(test)]

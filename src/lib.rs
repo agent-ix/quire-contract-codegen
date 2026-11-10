@@ -162,6 +162,10 @@ pub use core::contract_package::{
     routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
     ContractRequestPosition, PackageRequestError,
 };
+pub use core::requirement::{
+    RequirementGuard, RequirementOccurrence, RequirementRecordInput, RequirementRecordMismatch,
+    RequirementRecords, RoutedRequirement,
+};
 pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
 pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
@@ -247,7 +251,7 @@ pub use kani::generate::negotiate::{
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
     KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason,
-    ObligationDisposition, ObligationItem, ObligationRecord, ObligationSubject,
+    ObligationDisposition, ObligationItem, ObligationRecord, ObligationSubject, PathGuardRefusal,
     StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole, UnsupportedFrameEffect,
     UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };

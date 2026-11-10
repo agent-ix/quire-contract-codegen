@@ -10,3 +10,6 @@ use quire_contract_codegen::ProofCeilings;
 
 /// Shared explicit proof-resource fixture budgets.
 pub mod proof_ceilings;
+
+/// The driver's projection of QSL requirement records for fixtures that select an `OwnResult`.
+pub mod requirements;

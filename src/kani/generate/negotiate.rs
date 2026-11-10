@@ -82,6 +82,7 @@ use crate::{
     core::identity::HarnessSymbol,
     core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
+    core::requirement::RequirementGuard,
     kani::census::{
         normalize_dependencies, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest,
         ProofDependencyState,
@@ -98,8 +99,8 @@ use crate::{
     kani::generate::outcome::{
         state_frame_disposition, CollectionUnsupportedReason, InvalidObligationItem,
         KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ObligationDisposition,
-        ObligationItem, ObligationRecord, ObligationSubject, StateFrameRefusal, StateFrameRole,
-        UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+        ObligationItem, ObligationRecord, ObligationSubject, PathGuardRefusal, StateFrameRefusal,
+        StateFrameRole, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::scalar::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
@@ -854,6 +855,7 @@ fn classify<'a>(
             node_id,
             claim_index,
             result_selection,
+            path_condition,
         } => {
             let lookup = scalar_lookups
                 .entry((std::ptr::from_ref(source), std::ptr::from_ref(package)))
@@ -865,6 +867,7 @@ fn classify<'a>(
                 node_id,
                 claim_index,
                 result_selection,
+                path_condition.first(),
             )
         }
         ObligationItem::CollectionClaim {
@@ -1152,6 +1155,7 @@ fn classify_node(
     node_id: &CheckedNodeId,
     claim_index: usize,
     result_selection: &ContractDriverResultSelection,
+    first_guard: Option<&RequirementGuard>,
 ) -> ItemState {
     let graph_node = lookup.source_node(node_id);
     let kind = graph_node.and_then(|node| {
@@ -1180,7 +1184,7 @@ fn classify_node(
             .filter(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            Some(claim) => classify_claim(lookup, claim),
+            Some(claim) => classify_claim(lookup, claim, first_guard),
         }
     };
     let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
@@ -1241,7 +1245,7 @@ pub(crate) fn classify_scalar_form<'a>(
         positions,
         request_index,
     ) {
-        Ok(claim) => classify_claim(lookups.contract(package, contract), &claim),
+        Ok(claim) => classify_claim(lookups.contract(package, contract), &claim, None),
         Err(_) => Outcome::Invalid(InvalidObligationItem::ScalarDerivationFailed),
     };
     let graph_node = lookups.checked_node(package, node_id);
@@ -1318,7 +1322,15 @@ fn refuse_unknown_node_kind<Body>(
     })
 }
 
-fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outcome {
+/// Classifies one claim. `first_guard` is the first guard of the occurrence's path condition: while
+/// guard lowering is unimplemented it settles every claim that would otherwise lower, or meet a
+/// domain or reachability refusal, as `PathGuardNotLowered`. A claim FR-014 refuses, or that has no
+/// renderer, keeps that refusal whatever its guards.
+fn classify_claim(
+    lookup: &ContractLookup<'_>,
+    claim: &ExactScalarClaim,
+    first_guard: Option<&RequirementGuard>,
+) -> Outcome {
     let graph = |id: &CheckedNodeId| lookup.source_node(id);
     match &claim.result {
         ClaimDisposition::Generated(generated) => {
@@ -1389,7 +1401,22 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
                             | crate::oracle::scalar::lower::OperandRange::Result => {}
                         }
                     }
-                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
+                    let lowering = lower_scalar_claim(claim, generated, &derived, &operand_ranges);
+                    if let (
+                        Some(guard),
+                        Ok(_)
+                        | Err(
+                            ScalarLoweringRefusal::BoundNotI64 { .. }
+                            | ScalarLoweringRefusal::ResultUnreachable { .. },
+                        ),
+                    ) = (first_guard, &lowering)
+                    {
+                        return Outcome::Unsupported(UnsupportedObligation::PathGuardNotLowered {
+                            guard: guard.occurrence.clone(),
+                            reason: PathGuardRefusal::GuardLoweringNotImplemented,
+                        });
+                    }
+                    match lowering {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {

@@ -2094,6 +2094,7 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
     );
     let result_selection = quire_contract_codegen::ContractDriverResultSelection::NotApplicable;
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &package,
         package: &contract,
         claim_map: &claim_map,
@@ -2283,6 +2284,8 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         "wrong division refusal: {refusal:?}"
     );
 
+    let requirements = crate::common::requirements::project(&plain_source, positions);
+    let records = crate::common::requirements::records(&requirements);
     let routed = quire_contract_codegen::RoutedGenerationItem::from_descriptor(
         0,
         node_id.clone(),
@@ -2290,7 +2293,8 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         &kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
     )
     .expect("linked Kani route")
-    .with_scalar_selection(contract, result_selection.clone());
+    .with_scalar_selection(contract, result_selection.clone())
+    .with_requirement(requirements[&0].clone());
     let plain_route = routed.clone();
     let generated = quire_contract_codegen::generate_routed(
         &plain_source,
@@ -2302,6 +2306,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
                 ceilings: crate::common::proof_ceilings::proof_ceilings(),
                 subject_path: "crate::subject",
                 unwind: 4,
+                requirement_records: &records,
             }),
         },
     )
@@ -2360,6 +2365,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
                     ceilings: crate::common::proof_ceilings::proof_ceilings(),
                     subject_path: "crate::subject",
                     unwind: 4,
+                    requirement_records: &records,
                 }),
             },
         ),
@@ -2592,6 +2598,7 @@ fn kani_routed_preflight_requires_selected_result_occurrences() {
         .iter()
         .enumerate()
         .map(|(claim_index, claim)| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &package,
             package: &contract,
             claim_map: &claim_map,

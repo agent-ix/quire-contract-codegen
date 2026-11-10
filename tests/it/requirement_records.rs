@@ -38,6 +38,7 @@ fn direct_increment_record() -> String {
         })
         .expect("a driver position");
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &checked,
         package: &admitted.package,
         claim_map: &claim_map,

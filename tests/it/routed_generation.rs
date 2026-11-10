@@ -25,6 +25,7 @@ use quire_contract_model::{
 
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
+use crate::common::requirements;
 use crate::kani_obligations::{package, routed_scalar_package, scalar_package};
 
 fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
@@ -128,7 +129,15 @@ fn generate_routed(
             },
         )
         .collect::<Vec<_>>();
-    generate_routed_impl(source, package, positions, &bound, contexts)
+    let requirements = requirements::project(source, positions);
+    let records = requirements::records(&requirements);
+    generate_routed_impl(
+        source,
+        package,
+        positions,
+        &requirements::bind(bound, &requirements),
+        &requirements::with_records(contexts, &records),
+    )
 }
 
 /// Lower the complete indexed driver request once and read its FR-330 package.
@@ -545,6 +554,7 @@ pub(crate) fn kani_context(subject_path: &str, unwind: u32) -> GenerationContext
             ceilings: crate::common::proof_ceilings::proof_ceilings(),
             subject_path,
             unwind,
+            requirement_records: &requirements::NO_RECORDS,
         }),
     }
 }
@@ -609,14 +619,21 @@ fn routed_scalar_selection_must_match_admitted_driver_position() {
         input.package.wire().package.source,
         other_package.package.wire().package.source
     );
-    let bound_elsewhere =
-        route(0, &fixture.rendered[0]).with_scalar_selection(&other_package.package, selection);
+    let requirement = requirements::requirement_for(input.source, &selection)
+        .expect("the fixture selects an own result");
+    let records = requirements::records(&std::collections::BTreeMap::from([(
+        0,
+        requirement.clone(),
+    )]));
+    let bound_elsewhere = route(0, &fixture.rendered[0])
+        .with_scalar_selection(&other_package.package, selection)
+        .with_requirement(requirement);
     let accepted = generate_routed_impl(
         input.source,
         &input.package,
         &input.positions,
         std::slice::from_ref(&bound_elsewhere),
-        &context,
+        &requirements::with_records(&context, &records),
     )
     .expect("the same source provenance and exact result selection remain valid");
     assert_eq!(accepted.items.len(), 1);
@@ -685,6 +702,7 @@ fn fr015(
     let items = nodes
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &fixture.package,
             package: &admitted.package,
             claim_map,
