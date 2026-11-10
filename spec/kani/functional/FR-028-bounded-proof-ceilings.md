@@ -88,7 +88,9 @@ other.
 - The generator shall record the request's memory ceiling and wall-clock ceiling in every harness
   identity.
 - When a harness runs, the generator shall hold the backend process tree to the memory ceiling and
-  the wall-clock ceiling its identity records.
+  the wall-clock ceiling its identity records. Each launch of a two-phase run (FR-017-AC-63) is
+  held to both ceilings separately and neither is raised for the witness phase, so a two-phase run
+  may take up to twice the wall-clock ceiling end to end (IR-1022).
 - If a run exceeds its wall-clock ceiling, then the generator shall stop it and classify it
   `inconclusive` with the timed-out reason, naming the ceiling.
 - If a run exceeds its memory ceiling, then the generator shall stop it and classify it
@@ -200,7 +202,7 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-028-AC-1 | Every harness identity records the request's memory ceiling and wall-clock ceiling, and changing either ceiling changes the identity. | Test (TC-039) |
-| FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. | Test (TC-039) |
+| FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. For a two-phase run (IR-1022) the ceiling bounds each launch separately, so a run may take up to twice it, and a witness phase that exceeds it is `Inconclusive` with the same reason, with no raise and no retry (FR-017-AC-63). | Test (TC-039) |
 | FR-028-AC-3 | A backend Kani run that exceeds its memory ceiling is stopped and classified KaniRunOutcome::Inconclusive with the memory-exhausted reason naming the ceiling, distinct from timed-out and never verified or falsified. FR-029 maps it to final QSL Incomplete(ResourceExhausted); FR-028-AC-24 governs the separate refinement run. | Test (TC-039) |
 | FR-028-AC-4 | Every execution evidence records the bounds of each symbolic argument and the two ceilings the run was held to. | Test (TC-039) |
 | FR-028-AC-5 | Every harness identity, generation refusal and execution evidence names its family. | Test (TC-039) |

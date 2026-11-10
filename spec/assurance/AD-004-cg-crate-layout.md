@@ -538,7 +538,7 @@ and 4i:
 | `body` | An ordered list of `Statement`: `Input`, `Assume`, `Let`, `Call` and `Assert`. See below. |
 | `cover` | Exactly one `Cover`: a condition (`ExprText`) and a message. See H-3. |
 | `unwind`, `solver` | The loop bound (`1..=MAX_OBLIGATION_UNWIND`) and the `KaniSolver`. They are not emitted into the source; they are the run options. |
-| `options` | The adapter option vector (`adapter_options(path, unwind, solver, false)`), computed once by the constructor from `path`, `unwind` and `solver`. The family's identity record reads `unwind`, `solver` and `options` from the spec, never from the request a second time, so the run options and the identity cannot disagree. |
+| `options` | The proof option vector and the witness option vector (IR-1022, FR-015-AC-9): the proof vector is `adapter_options(path, unwind, solver, false)` without `-Z concrete-playback` and `--concrete-playback print`, and the witness vector is that proof vector with `-Z concrete-playback` inserted before `--harness` and `--concrete-playback print` appended (byte-equal to the single vector `adapter_options` emitted before IR-1022). Both are computed once by the constructor from `path`, `unwind` and `solver`. The family's identity record reads `unwind`, `solver` and both vectors from the spec, never from the request a second time, so the run options and the identity cannot disagree. |
 
 `Statement` variants (all fields typed, none is a line of Rust):
 

@@ -28,14 +28,22 @@ unwinding check succeeded; and a successful run whose report lists zero successf
 Two-phase run (FR-017-AC-5, FR-017-AC-63, IR-1022): over launcher stand-ins, pair a proof report
 that fails an assertion with a witness report that (a) fails the same check class and location and
 prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only another check
-(`Inconclusive`, `WitnessDisagreed`); (c) is stopped at its wall-clock ceiling and at its memory
-ceiling (`TimedOut`, `MemoryExhausted`, ceilings unchanged, no third launch); (d) matches the
-check but prints no playback (`FailedWithoutCounterexample`). Run a proof report that fails only
-an unwinding assertion, a verified one, a cover-unsatisfied one and a no-report failure, and read
-exactly one launch each and no `concrete-playback` in its argument vector. Run a three-member batch
+(`Inconclusive`, `WitnessDisagreed`) and, separately, fails the same class at another location and
+the same location in another class (each `WitnessDisagreed`), fails the matching check plus one
+more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
+stopped at its wall-clock ceiling and at its memory ceiling (`TimedOut`, `MemoryExhausted`, no
+third launch), and a stand-in finishing at 1.5 times each ceiling with a verifying report (so a
+raised ceiling would yield `WitnessDisagreed`), reading the ceilings recorded for each launch;
+(d) matches the check but prints no playback (`FailedWithoutCounterexample`), exits with no report
+(`NoVerdict`), is cancelled (`Cancelled`), or has its report or launch refused (typed refusal,
+proof evidence retained). Run a proof report that fails only an unwinding assertion, one that
+fails an unwinding assertion beside an assertion, a Failure entry listing no failed check, a
+verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
+and no `concrete-playback` in its argument vector. Run a three-member batch
 whose proof report fails the middle member and read that only it is relaunched in a witness phase.
-Mutants: classify at the proof phase; skip the same-check comparison; relaunch after the
-unwinding failure; raise a ceiling for the witness launch; swap the vectors.
+Mutants: classify at the proof phase; compare only class, only location or neither; accept a
+superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
+swap the vectors; classify a proof-phase batch member as lacking a counterexample.
 
 Report parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-report/`, the
 exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
