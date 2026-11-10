@@ -83,6 +83,14 @@ yield no harness.
     one `WitnessValue::Text`, and a missing, duplicate, foreign, role-swapped, over-length,
     nonzero-padding, invalid-UTF-8, out-of-domain or over-limit entry refuses with a typed reason
     and no replay.
+17. For the planned [FR-053](../functional/FR-053-float-scalar-harnesses.md) float row, generate a
+    float operation and read its persisted identity: assert one `i64` bit-pattern binding per
+    operand, grouped to the original parameter with its width and any `float_rounding` pin.
+    Decode retained playback with the existing I64 checks and caps; assert a valid pattern
+    (including a negative `float64` `i64`, a negative zero and a signaling NaN) submits one
+    `WitnessValue::Float32` or `Float64` with the exact bits, and a missing, duplicate, foreign,
+    role-swapped, width-conflicting, out-of-range `float32` or over-limit entry refuses with a
+    typed reason and no replay.
 
 ## Expected Results
 
@@ -131,6 +139,9 @@ yield no harness.
 16. One text operand has its length binding and payload words grouped with its domain and capacity;
     a valid payload replays as one Text, and each malformed or out-of-domain case refuses with no
     replay (FR-025-AC-16).
+17. One float operand has one grouped `i64` bit-pattern binding; a valid pattern replays as one
+    Float32 or Float64 with exact bits, and each malformed or out-of-range case refuses with no
+    replay (FR-025-AC-17).
 
 ## Status
 
