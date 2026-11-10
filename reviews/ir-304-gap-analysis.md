@@ -59,3 +59,24 @@ Plan completion: not assessed. PR-diff gap analysis of IR-304 slice (a), not a f
 sweep. Focused branch tests pass; no `make ci` and no real Kani proofs were run (by
 instruction). The one failing lib test (`production_refinement_live_solver_handoff_reaches_qsl_checker`,
 `QUIRE_CVC5_BIN` unset) fails identically at the base-equivalent commit.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | FR-022 "Per-item precedence" step 1 now places `unsatisfiable_bound` ahead of the guard refusal, but no test pins this. A test is feasible. Either route the existing `UNSATISFIABLE` node of the routed_generation fixture (already asserted `UnsatisfiableBound` via `routed_alone`), or build a direct `ObligationItem::ScalarClaim` with a non-empty `path_condition`, as the caller-declared case now does, and assert `unsatisfiable_bound` both with and without a guard. | tests/it/routed_generation.rs:2902-2905; tests/it/kani_obligations.rs:1445-1482; src/kani/generate/negotiate.rs:1355-1362 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 0db13dba writes the NotApplicable arm: it expects `RequirementRecord { request_index: 0, OccurrenceNotSelected }` ahead of the division's view refusal. Moving the record checks after the per-item view loop in a scratch copy turns the test red. |
+| FND-002 | fixed | The golden test is retagged `#[trace("TC-033")]`, and `quire matrix` now reports FR-022-AC-31 untagged. tests.md and FR-022 record the golden half as asserted but untagged until slice (b). |
+| FND-003 | fixed | 152258e2 updates FR-022 "Scoped evidence status", TC-033 status and tests.md. AC-26, AC-28, AC-36 and AC-38 are covered, AC-37 is partial (two-guard case), AC-27 and AC-31 to AC-35 stay planned, and the TC-033 index row matches. |
+| FND-004 | fixed | `not_applicable_items_with_records_are_refused` now routes both `f` occurrences `OwnResult` with their requirements and asserts `PathGuardNotLowered`/`GuardLoweringNotImplemented` naming each item's first guard. |
+| FND-005 | fixed | FR-022 now states that `mismatch` is held in a `Box` to keep the whole-call error small. |
+| FND-006 | still-open | Per-item precedence step 1 now places `unsatisfiable_bound` and `caller_declared_operation`, but the slice (a) status bullet (FR-022:848-851) still says every item whose path condition is not empty settles `path_guard_not_lowered`. The `k`/`c` items (and these two refusals) contradict that sentence. Qualify it, e.g. "every such item that no earlier per-item refusal settles". |
+
+## Current Verdict
+
+**FAIL for the PR subset until FND-006 and FND-007 are resolved.** Both are low and small. All four medium findings are fixed and mutation-verified.

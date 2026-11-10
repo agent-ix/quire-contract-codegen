@@ -846,7 +846,9 @@ slices:
   `RequirementRecord` refusal with every `RequirementRecordMismatch` variant except
   `GuardContextMissing`, and `UnsupportedObligation::PathGuardNotLowered` with the one
   `PathGuardRefusal` variant `GuardLoweringNotImplemented`. Until slice (b) lands, every item
-  whose path condition is not empty settles `path_guard_not_lowered` with
+  whose path condition is not empty and that no earlier per-item refusal settles (an FR-014 claim
+  refusal, `unsatisfiable_bound`, `caller_declared_operation` or `operation_not_rendered`; see
+  "Per-item precedence") settles `path_guard_not_lowered` with
   `guard_lowering_not_implemented` for its first guard, whatever the guard's form, so slice (a)
   never yields an unguarded harness and never names a reason that slice (b) would contradict.
   Slice (a) also commits the golden `tests/fixtures/kani-scalar/direct-increment-record.json`

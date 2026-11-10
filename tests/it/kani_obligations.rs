@@ -1482,6 +1482,50 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
     }
 }
 
+/// An unsatisfiable bound is settled while the claim's bounds are derived, before any guard is
+/// considered, so a guarded item over it keeps `unsatisfiable_bound`.
+#[trace("FR-022-AC-37", "TC-033")]
+#[test]
+fn tc_033_an_unsatisfiable_bound_precedes_the_guard_refusal() {
+    let (package, claim_map, ids) = scalar_package();
+    let node = ids.resolve(&code_id(UNSATISFIABLE));
+    let admitted = admitted_scalar_claims(&package, &claim_map);
+    for guarded in [false, true] {
+        let path_condition = if guarded {
+            vec![quire_contract_codegen::RequirementGuard {
+                occurrence: quire_contract_codegen::RequirementOccurrence {
+                    node_id: node.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                holds: true,
+            }]
+        } else {
+            Vec::new()
+        };
+        let items = [ObligationItem::ScalarClaim {
+            path_condition: &path_condition,
+            source: &package,
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id: &node,
+            claim_index: claim_index(&claim_map, &node),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        }];
+        let (records, harnesses) =
+            emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+        assert!(harnesses.is_empty());
+        assert!(
+            matches!(
+                unsupported(&records[0]),
+                UnsupportedObligation::UnsatisfiableBound { .. }
+            ),
+            "guarded={guarded}: {:?}",
+            records[0]
+        );
+    }
+}
+
 /// One invalid item rejects the request after every item is accounted, and exposes no bytes.
 /// The whole-request refusals below (`KaniObligationError`) are generation-time classifications
 /// too: a rejected `negotiate_kani_obligations` call returns no harness at all,

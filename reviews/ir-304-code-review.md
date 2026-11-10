@@ -51,3 +51,16 @@ catch.
 | FND-002 | low | `PathConditionMismatch` is tested only by a length difference (one guard added to the record). A same-length sequence differing in a guard's `holds`, its occurrence, or order is untested, so reducing the comparison to a length check survives. | src/routed/generate.rs:778-794; tests/it/requirement_records.rs:618-636 |
 | FND-003 | low | The interim guard refusal's precedence over `domain_not_representable_in_i64` and `result_bound_unreachable` (the `BoundNotI64`/`ResultUnreachable` arms of the guard match) is untested; removing those arms survives. A guarded item whose unguarded twin is `result_bound_unreachable` would pin it. | src/kani/generate/negotiate.rs:1244-1257; tests/it/requirement_records.rs:967-1027 |
 | FND-004 | low | `selected_result_bound_node` returns `None` both for a context with no bound and for any resolution failure (`items.at`, `accounted_node`, `result_context` errors), and `None` skips the selected-bound comparison, so a resolution failure fails open. Unreachable today because `ScalarSelectionMismatch` resolves the same selection first, but nothing ties the two together. | src/oracle/scalar/lower.rs:2356-2410; src/routed/generate.rs:744-755 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 3cf6e962 adds AC-28 cases where item and record agree but differ from the authenticated selection, for the result bound and the conversion context. Deleting either selected-leg comparison in a scratch copy turns `each_single_record_change_refuses_the_whole_call` red. |
+| FND-002 | fixed | Three same-length `PathConditionMismatch` cases (holds, occurrence, order) were added. Reducing the guard comparison to a length check turns the test red. |
+| FND-003 | fixed | `guard_refusal_precedes_the_bound_and_reachability_refusals` asserts that the unguarded node settles `result_bound_unreachable` / `domain_not_representable_in_i64` and the guarded one settles `path_guard_not_lowered`. Removing the `BoundNotI64`/`ResultUnreachable` arms turns it red. |
+| FND-004 | fixed | `selected_result_bound_node` now returns `Result<Option<_>, PackageRequestError>`, and a resolution failure becomes `RoutedGenerationError::Package(Position)`. For admitted inputs this changes nothing: `selected_scalar_key` already requires the same `items.at` Lowered, `accounted_node` and Lowered `result_context` resolution before `ScalarSelectionMismatch` passes. |
+
+## Current Verdict
+
+**PASS for the PR subset after disposition round 1.** fmt-check and `clippy --all-targets -D warnings` are clean. The focused `it` set gives 160 passed, 0 failed. `--lib routed::` fails only the environmental `QUIRE_CVC5_BIN` test.
