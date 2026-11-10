@@ -176,7 +176,7 @@ sign, exponent and fraction, and it neither calls nor reproduces the owner's `Bi
 path. Under `cfg(kani)` the oracle is the owner's function with the carrier's replacement
 substituted for its arithmetic, so the proof ties that replacement to the second
 implementation and nothing else: it covers the `cfg(kani)` build, not the shipped oracle
-that runs without it. A defect in the decode or in any helper both sides call changes both
+that runs without it. A defect in the decode changes both
 sides and is invisible to the proof. The shipped oracle is tied to the replacement only by
 AC-13's host differential, and AC-13 is the only criterion that can catch such a
 decode defect. AC-14 inspects that nothing but the decode is shared.

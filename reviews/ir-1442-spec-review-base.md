@@ -104,3 +104,18 @@ CHANGES REQUIRED. Verified against quire-exact 5db2d5e3 (CG Cargo.lock pin) src/
 | FND-001 | fixed | fixed in b6bd48b9 (round 1) |
 | FND-002 | fixed | fixed in b6bd48b9 (round 1) |
 | FND-003 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-004 | fixed | fixed in 965c1d4a (round 2) |
+| FND-005 | fixed | fixed in 965c1d4a (round 2) |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Leftover wording: the Behavior still says 'A defect in the decode or in any helper both sides call changes both sides' two sentences after the SHALL that the decode is the only shared function, and then calls it 'such a decode defect'. Drop 'or in any helper both sides call' so the paragraph states one sharing rule. | spec/kani/functional/FR-053-float-scalar-harnesses.md:179 |
+
+## Scope (disposition pass 2)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-053-behavior-evaluation | examined | spec/kani/functional/FR-053-float-scalar-harnesses.md:172 | The expected side of an arithmetic operation is a second implementation in the carrier crate (P1) under the node's rounding mode. It SHALL share no function with the replacement that the oracle runs under `cfg(kani)`, apart from the decode of a bit pattern into sign, exponent and fraction, and it neither calls nor reproduces the owner's `BigInt` path. Under `cfg(kani)` the oracle is the owner's function with the carrier's replacement substituted for its arithmetic, so the proof ties that replacement to the second implementation and nothing else: it covers the `cfg(kani)` build, not the ship... |
+| FR-053-AC-14 | examined | spec/kani/functional/FR-053-float-scalar-harnesses.md:362 | The expected side of every supported operation reaches no function of the carrier's `cfg(kani)` replacement other than the bit-pattern decode (inspected: its call graph from the harness shows the decode as the only shared function, and the rounding step, sticky shift, operand classification, flag computation and charge sequence as separate implementations). A mutant that makes the expected side call the replacement's rounding step, or its classification, fails the inspection even though it still passes FR-053-AC-1's "not a second call of the oracle". A defect injected into the decode is rec... |
