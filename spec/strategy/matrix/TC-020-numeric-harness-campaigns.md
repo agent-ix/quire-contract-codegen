@@ -13,7 +13,6 @@ relationships:
 # TC-020: Verify numeric conformance campaigns and rate reporting
 
 The original same-node/different-point and pointed/unpointed-sibling cases of
-FR-011-AC-6/7 are superseded, infeasible under QSpec #449, and earn no test credit.
 Steps 7–8 instead back Planned FR-011-AC-14/15 on point-qualified V2 nodes.
 
 ## Description

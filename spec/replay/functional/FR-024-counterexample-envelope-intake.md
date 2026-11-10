@@ -318,7 +318,7 @@ members against the operation's declaration in the domain package.
   when structural identity is unchanged. State fields and ranges are compared to the admitted
   record and replay context, not placed inside `ObligationIdentity`.
 - The generator shall derive no node id and accept no caller-supplied obligation identity
-  for the frame path (FR-024-AC-24, replaced by AC-51).
+  for the frame path (replaced by AC-51).
 - If the harness's property is not `frame`, then the generator shall return
   `FrameReplayError::NotAFrame` and shall not call `call_site` or `replay_frame`.
 - If the harness's granted and checked fields are not exactly its state fields, then the
@@ -475,7 +475,6 @@ members against the operation's declaration in the domain package.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-024-AC-1 | RETIRED, replaced by FR-024-AC-47; the former CG-minted O-09 digest scheme is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
 | FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay`, `replay_frame` nor `replay_state_clause` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
 | FR-024-AC-4 | For each common required `WitnessPacket` member in turn, excluding the three alternative replay-target members of FR-024-AC-41, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
@@ -486,17 +485,13 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
 | FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name. Its packet and request carry `state_clause` as that clause's declared `QualifiedName`, with neither other replay target; its payload has no `clause` selection and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
 | FR-024-AC-13 | RETIRED, replaced by FR-024-AC-52; the former document-digest address and changed-digest checks are obsolete and earn no implementation credit. | Inspection |
-| FR-024-AC-14 | RETIRED, replaced by FR-024-AC-53; the former document-digest equality check is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A playback or post-state name outside the path's declared field list returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. | Test (TC-035) |
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. | Test (TC-035) |
 | FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
 | FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents in `ReplayRequestWire.documents`; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. | Test (TC-035) |
-| FR-024-AC-20 | RETIRED, replaced by FR-024-AC-48; the former four-member O-09 preimage and encoder are obsolete and earn no implementation credit. | Inspection |
-| FR-024-AC-21 | RETIRED, replaced by FR-024-AC-49; the former kind/occurrence-inside-digest control is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-22 | RETIRED, replaced by FR-024-AC-50; the former frame preimage member rule is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-23 | `StateFrameIdentity` and its persisted record carry `state_fields`, every field the harness draws in draw order, which `domains` (ranged fields only) and `property`'s granted and checked lists (unordered) do not give. `state_fields` is used for decoding and ordering only and is not minted. A field with no declared range is listed in `state_fields`, has no entry in `domains`, is decoded and is not range-checked or refused (the AD-003 owner may tighten that later). A regenerated harness from equal inputs has a byte-identical record, and a record without `state_fields`, or one that lists a state field twice, is not read as a frame identity; a playback schema that binds a name twice is a typed decode refusal. | Test (TC-035) |
-| FR-024-AC-24 | RETIRED, replaced by FR-024-AC-51; the former frame identity minting rule is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-25 | The frame witness is built from the real playback: the playback text decodes through the one decoder of `src/replay/witness.rs` against bindings built from the harness's `state_fields` (each `i64`, in draw order), and the transcript passed to `Witness::parse` is rendered by the one adapter rendering function from the decoded values, with the harness path and the check text the decode names. The fixed per-operation assertion text that `frame.rs` passes to `Witness::parse` today is gone. A playback of another harness, a playback with the wrong number of values and one with a wrong-width value each return a typed decode refusal carrying the decoder's cause, and call neither `call_site` nor `replay_frame`. | Test (TC-035) |
 | FR-024-AC-26 | A decoded state-field value outside the field's declared range returns `FrameReplayError::OutOfDomain` naming the field and its value, and calls neither `call_site` nor `replay_frame`; the range's two endpoints are admitted and the values one below and one above are not. A field with no declared range is not range-checked. | Test (TC-035) |
 | FR-024-AC-27 | The decoded pre-state is tied to the invocation: for every state field, the integer the pre snapshot named by the invocation holds for the object the invocation's `self` addresses equals the decoded value. A differing field returns `FrameReplayError::PreState` naming the field, decoded value and snapshot value. An invocation or pre snapshot absent from the provided documents, not in the state-clause path's typed document shape, or lacking the object or a field returns `PreState` naming what is missing. None calls `replay_frame`. A forbidden-write playback replayed against an invocation of a different pre state is refused; its own pre state settles `reproduced-with-evaluated-witness` with category `violation`. The comparison uses the provided document values and does not compute or compare a document digest. | Test |
@@ -549,13 +544,12 @@ FR-024-AC-2, FR-024-AC-3, FR-024-AC-4 and FR-024-AC-6 are backed by focused
 TC-035 tests: the `Witness::parse` source scan in `tests/it/layout.rs`, the function and
 frame domain-endpoint tests, the missing-packet-member test in
 `tests/it/kani_obligations_state_clause_replay.rs`, and the frame packet identity test in
-`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1, FR-024-AC-7 and
+`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-7 and
 FR-024-AC-8 remain planned. FR-024-AC-5 and FR-024-AC-9 are retired (IR-890);
 their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11, FR-024-AC-15 to FR-024-AC-19 and FR-024-AC-25 to FR-024-AC-29 have
-implemented slices described below. FR-024-AC-13 and FR-024-AC-14 are retired with replacement
-by Planned FR-024-AC-52 and FR-024-AC-53; their former digest tests earn no replacement credit.
+implemented slices described below. The retired digest requirement is replaced by Planned FR-024-AC-53; its former digest tests earn no replacement credit.
 FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
 IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under IR-624:
 
@@ -639,7 +633,7 @@ IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under I
   intake test change. The four additional backed criteria are FR-024-AC-2, AC-3, AC-4 and AC-6.
   The unbacked-row count is a separate diagnostic keyed by verification reference: every FR-024
   row points to TC-035, which already had tagged tests, so even the planned FR-024 criteria are
-  absent from those 232 rows. Their absence does not establish backing. The retired FR-024-AC-20 to AC-24 had tagged tests of the former digest path; replacement AC-47 to AC-51 require structural controls. AC-25 to AC-30 retain their own tagged tests.
+  absent from those 232 rows. Their absence does not establish backing. The retired digest requirements had tagged tests of the former digest path; replacement AC-47 to AC-51 require structural controls. AC-25 to AC-30 retain their own tagged tests.
 - `FR-024-AC-10` has a source-scan test for literal declarations, macro token declarations,
   Contract IR imports and paths, including alias chains across source files. Imports and qualified
   paths inside opaque macro tokens, macro expansion, generated files outside `src/`, and constructed
@@ -667,7 +661,7 @@ IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under I
 
 ## Open questions
 
-None of these is decided here. FR-024-AC-24 excludes the state-clause path because of Q-1, and
+None of these is decided here. The state-clause path remains excluded because of Q-1, and
 Q-3 is resolved by QSL ADR-013 O-09 structural identity; Q-1 and Q-4 remain open.
 
 - Q-1. The postcondition state-clause path takes a caller-supplied `obligation_identity`

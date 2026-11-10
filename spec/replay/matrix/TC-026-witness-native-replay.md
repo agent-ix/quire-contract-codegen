@@ -133,7 +133,7 @@ then a repeated identity, then a shared source owner), a lock with several defec
 whichever QSL meets first; AC-24 is therefore limited to a lock whose only defect is the repeated
 identity.
 
-The old FR-016-AC-21 to AC-23 digest controls are retired. Their existing tests are historical
+The old digest controls are retired. Their existing tests are historical
 evidence only; replacement AC-26 to AC-28 require structural producer-identity and record
 comparison tests under IR-1079.
 

@@ -464,7 +464,7 @@ repositories are outside this spec PR.
 On the current oracle-function path,
 `checked_integer_function_application_is_supported` re-lowers a
 `CheckedPackageV2`, calls `ContractPackageWireV1::read`, and preserves `Refused` and `Incomplete`
-as typed whole-envelope outcomes under FR-019-AC-48 and AC-49. On the
+as typed whole-envelope outcomes under FR-019-AC-49. On the
 FR-330 production path, only an `Admitted` package reaches CG after the
 caller's single authoritative read; `Refused` and `Incomplete` stop before
 negotiation. The code PR SHALL use that admitted result without a re-read,
@@ -525,7 +525,6 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-45 | A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in any other CG descriptor field, and whether adjacent or non-adjacent. The call returns no item settlements. The variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature. | Test (TC-030) |
 | FR-019-AC-46 | With several repeated identities, the refusal names the bytewise-first repeated identity independent of manifest order; identities differing only in case are distinct. An invalid contract version or capability vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read. | Test (TC-030) |
 | FR-019-AC-47 | QSL's registry snapshot holds each backend identity at most once (FR-290:258-265; FR-331:57), so no driver-built FR-331 manifest repeats an identity. | Analysis (FR-290:258-265; FR-331:57; CG takes no `qsl-route` dependency under FR-019's Rust input boundary paragraph, which cites FR-022 "Where the input type lives", and `generate_routed` accepts routed items rather than settlements) |
-| FR-019-AC-48 | RETIRED, replaced by FR-019-AC-54; its old path and expected/actual digest projection is obsolete and earns no implementation credit. | Inspection |
 | FR-019-AC-49 | An `Incomplete(incomplete)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete: ContractPackageIncompleteProjection })` for the whole request, with the reader's `limit_kind`, `limit`, `consumed` and `path` copied into the named CG projection. No item settlement or artifact is returned. | Test (TC-030) |
 | FR-019-AC-50 | An `Admitted` Kani function-application preflight read whose exact generator produces a claim for an otherwise supported item retains the existing `supported` settlement. | Test (TC-030) |
 | FR-019-AC-51 | Among several request items with non-`Admitted` preflight outcomes, the first failing item in manifest/item request order determines the whole-request `ContractPackageReadRefused` or `ContractPackageReadIncomplete` variant and projection, irrespective of outcome kind. Earlier successful items contribute no returned settlement or artifact. | Test (TC-030) |

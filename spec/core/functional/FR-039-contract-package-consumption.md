@@ -258,7 +258,7 @@ constructs `ContractPackageV1` from raw wire bytes or admits `Refused` or
 no CG path admits a package without Contract IR's reader or lowerer.
 
 The previously recorded internal preflight result-preservation deviation is closed
-by FR-019-AC-48 through FR-019-AC-52 and TC-030. The source-backed
+by FR-019-AC-49 through FR-019-AC-52 and TC-030. The source-backed
 `checked_integer_function_application_is_supported` path now returns the
 reader's `Refused` or `Incomplete` outcome to routed negotiation, which emits
 a CG-owned typed whole-envelope projection. A successful read retains its

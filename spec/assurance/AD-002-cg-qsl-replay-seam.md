@@ -135,7 +135,7 @@ authored).
   every other settlement, including `Inconclusive` in any category, is evidence failure.
 - R-6. Every function and frame counterexample envelope and replay request carries the
   producer-issued structural `ObligationIdentity` from QSL's selected site; CG checks the
-  harness kind and argument-domain facts separately (AD-003 E-1, FR-024-AC-20 to AC-24).
+  harness kind and argument-domain facts separately (AD-003 E-1, FR-024-AC-48 through AC-51).
 - R-7. A request names the `package_id` returned by `call_site` for the same source, and the
   replay is refused (not reproduced) when one source byte changes.
 - R-8. A request carries no contract spelling CG wrote itself. Met: QSL deleted the version and

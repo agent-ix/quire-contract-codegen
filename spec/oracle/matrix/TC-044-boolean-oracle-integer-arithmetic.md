@@ -13,8 +13,8 @@ relationships:
 ## Description
 
 **IR-348 retirement disposition (2026-10-27).** The V1 bundle-only procedures in steps 10,
-12, 13, 15 and 16 are historical and no longer count as active coverage for retired
-FR-031-AC-11/19/20/21/23/24/25. Step 11 retains its native saturating-refusal cases, while its
+12, 13, 15 and 16 are historical and no longer count as active coverage for retired criteria.
+Step 11 retains its native saturating-refusal cases, while its
 bundle cases retire. IR-1045 owns surviving native AC-2/6/16/17/18/22/26; IR-348 records the
 AC-27 cleanup after native replacement. The original procedure below remains for traceability,
 but its old bundle results cannot be cited as V2 proof. QSL-1154 owns the former QI exemplar.
@@ -163,7 +163,7 @@ kernel and can be implemented independently of those kernel calls.
    obligation clause lowering for a clause holding a `reject` add and for one holding a `saturate`
    add. Assert the refusal codes the FR-031 Consumers section names, no emitted raw arithmetic
    operator, and no artifact.
-10. V1 Kani bundle (FR-031-AC-11, AC-19). Request `generate_kani_bundle` for `amount < 1000`
+10. V1 Kani bundle (historical procedure). Request `generate_kani_bundle` for `amount < 1000`
     implies `amount + 1 <= 1000` over `0..=1000` under `reject`, with the canonical absent
     precondition and a postcondition-only subject as the exemplar has. Parse the bundle with
     `syn`, find the postcondition oracle function, and assert it returns `bool`, takes no meter,
@@ -180,7 +180,7 @@ kernel and can be implemented independently of those kernel calls.
     `bool`, takes no meter, holds one `ExprBinary` with `BinOp::Div` for R-1 and one
     `wrapping_rem` method call and no `BinOp::Rem` for R-2, holds no `exact::` call and no other
     arithmetic method, and that its file states that the arithmetic is checked by Kani
-    (FR-031-AC-23). Assert an arithmetic-free clause's bundle is unchanged.
+    Assert an arithmetic-free clause's bundle is unchanged.
 11. Saturate-division refusal (FR-031-AC-18) and the removed interim code
     (FR-031-AC-27). For each of the
     `saturate` rows below, in the native oracle and in the bundle, assert generation is refused
@@ -210,13 +210,13 @@ kernel and can be implemented independently of those kernel calls.
     expected before IR-596: `generate_bound_oracles` generates and the strategy refuses with
     `UnsupportedRelation`. The `tc_003` test for the first unsupported locus (step 6) is
     unchanged.
-12. Kani overflow is a falsifiable property (FR-031-AC-20). Generate the bundle oracle of
+12. Kani overflow is a falsifiable property (historical procedure). Generate the bundle oracle of
     `x < 5 && x * 2 <= 10` over `0..=10` under `reject` (construction O-4), and in a Kani crate
     call it from a harness with `x = kani::any()` and no assumption. Assert real Kani fails
     the "attempt to multiply with overflow" check, and that the counterexample's playback value
     satisfies `x < 5` and overflows `x * 2`; do not assert a particular value, because any
     `x` below `-2^62` is a valid answer. Assert a harness that assumes the declared domain on `x` verifies the same oracle.
-13. Differential between the two implementations (FR-031-AC-21). For add, subtract and multiply,
+13. Differential between the two implementations (historical procedure). For add, subtract and multiply,
     generate the native oracle and the Kani bundle oracle of the same typed expression (the
     constructions O-1, O-2 and O-4 and one with no guard), compile both in a generated crate
     against `quire-contract-runtime` in plain `cargo test` with no Kani (against `quire-exact`
@@ -237,7 +237,7 @@ kernel and can be implemented independently of those kernel calls.
     connective charges `boolean.result-retain` once, including when its left operand decides
     the result; a child stop charges no connective result-retain point. Denial at the
     result-retain point returns `Incomplete` before applying the denied charge.
-15. Kani divide and remainder are falsifiable properties (FR-031-AC-24). Generate the bundle
+15. Kani divide and remainder are falsifiable properties (historical procedure). Generate the bundle
     oracle of Z-1 and of Z-3, and in a Kani crate call each from a harness with unconstrained
     operands. Assert real Kani fails "attempt to divide by zero" and "attempt to divide with
     overflow" for Z-1, each with a counterexample, and "attempt to calculate the remainder with
@@ -245,7 +245,7 @@ kernel and can be implemented independently of those kernel calls.
     declared domain and the guards verifies the oracles of R-1 and R-2, and that a probe of the
     remainder `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX` at `x = i64::MIN`, `y = -1`
     verifies, the oracle's remainder being `wrapping_rem`.
-16. Differential for divide and remainder (FR-031-AC-25). Generate the native oracle and the
+16. Differential for divide and remainder (historical procedure). Generate the native oracle and the
     Kani bundle oracle of R-1, R-2 and `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX`, and of
     a guarded divide and a guarded remainder with negative operands, compile both in a generated
     crate against `quire-exact` in plain `cargo test` with no Kani, and over a grid inside the
@@ -280,5 +280,5 @@ code under AC-27 after its native replacement can emit the specified outcomes.
 
 FR-031-AC-27 remains Planned (IR-1316; IR-348): the public `UnsupportedIntegerDivision` variant,
 its rendered code and IR-601 documentation remain in `src/core/diagnostic.rs`. No absence
-control passes on this tree. Retired V1 bundle-only AC-11/19/20/21/23/24/25 retain their
-original criteria and earn no QI, native differential or V2 replacement credit.
+control passes on this tree. Retired V1 bundle-only procedures remain historical and earn no
+QI, native differential or V2 replacement credit.

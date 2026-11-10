@@ -1181,7 +1181,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 
    | Criteria | Status after V1 retirement | Owner |
    | --- | --- | --- |
-   | FR-031-AC-11/19/20/21/23/24/25; FR-015-AC-54/56 | Retired V1-bundle-only claims; their historical text remains in place. No V2 proof is inferred from the old Kani run or differential. | IR-348 |
+   | Retired V1-bundle-only claims | Original criteria removed from the active requirement artifacts. No V2 proof is inferred from the old Kani run or differential. | IR-348 |
    | FR-031-AC-18 | The bundle-consumer half retires; the native saturating divide/remainder refusal stays open. | IR-348 records the split; IR-1045 owns native implementation. |
    | FR-015-AC-7/53/58 | The V1 contract/bundle portions retire; exact cover-last and emitting-entry controls remain open for the surviving V2 precondition, scalar, state-clause, frame-effect and corpus families. | IR-348 for test-list update; IR-917 for V2 clause proof controls. |
    | FR-015-AC-2/8/9/10/11/12/13; FR-031-AC-10 | Their only tagged V1 `BoundClause` tests retire. Surviving V2 identity, assumption, refusal and native-consumer claims stay open; no coverage is carried forward from the removed tests. | IR-348 for status/test replacement; IR-266 for unrendered invariant support. |

@@ -17,7 +17,6 @@ type: TestMatrix
 | FR-004 | FR-004-AC-11 | TC-006 | 🚧 Planned (IR-1316): consuming coverage-obligation/proof-accounting evidence is absent |
 | FR-004 | FR-004-AC-16, FR-004-AC-18 through FR-004-AC-24 | TC-006 | 🚧 V2 planned (IR-815); the V2 population analyzer is not implemented |
 | FR-004 | FR-004-AC-17 | Inspection | 🚧 Planned (IR-1316; IR-815): V2 population scan reads package.graph directly outside core/ir |
-| FR-004 | FR-004-AC-25 | TC-006, TC-020 | SUPERSEDED by AC-26; original same-node/different-point case infeasible; no implementation credit |
 | FR-004 | FR-004-AC-26 | TC-006, TC-020 | 🚧 Planned (IR-1070); node-qualified point admission and generated-campaign evidence binding are not implemented |
 | FR-004 | FR-004-AC-12 | TC-006 | 🚧 Planned (IR-1316): CG analyzer has no QSL typed /2 reader input or consumer |
 | FR-004 | FR-004-AC-13 | TC-006 | 🚧 Planned (IR-1316): CG has no typed QSL disposition retention/separation at the analyzer |
@@ -34,6 +33,6 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-4, FR-004-AC-5, FR-004-AC-6, FR-004-AC-7, FR-004-AC-8, FR-004-AC-9, FR-004-AC-10, FR-004-AC-11, FR-004-AC-12, FR-004-AC-13, FR-004-AC-14, FR-004-AC-15, FR-004-AC-16, FR-004-AC-18, FR-004-AC-19, FR-004-AC-20, FR-004-AC-21, FR-004-AC-22, FR-004-AC-23, FR-004-AC-24, FR-004-AC-25, FR-004-AC-26 | 🚧 Planned / UNRUN; AC-25 superseded with no credit; bounded observation primitives are partial evidence only; QSL-520 public `/2` reader is delivered, while CG consumer, production live campaign binding and consuming-obligation evidence are unrun |
-| TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-004-AC-25, FR-004-AC-26 | 🚧 Planned; AC-25 superseded with no credit; the point-qualified V2 runner and its refusals are not implemented |
+| TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-4, FR-004-AC-5, FR-004-AC-6, FR-004-AC-7, FR-004-AC-8, FR-004-AC-9, FR-004-AC-10, FR-004-AC-11, FR-004-AC-12, FR-004-AC-13, FR-004-AC-14, FR-004-AC-15, FR-004-AC-16, FR-004-AC-18, FR-004-AC-19, FR-004-AC-20, FR-004-AC-21, FR-004-AC-22, FR-004-AC-23, FR-004-AC-24, FR-004-AC-26 | 🚧 Planned / UNRUN; bounded observation primitives are partial evidence only; QSL-520 public `/2` reader is delivered, while CG consumer, production live campaign binding and consuming-obligation evidence are unrun |
+| TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-004-AC-26 | 🚧 Planned; the point-qualified V2 runner and its refusals are not implemented |
 | TC-051 | Source census is independent of attempts and preserves producer facts | Integration | P0 | FR-036-AC-1, FR-036-AC-2, FR-036-AC-3, FR-036-AC-4, FR-036-AC-5, FR-036-AC-6, FR-036-AC-7 | 🚧 Planned; Gated on IR-759; no executed producer/consumer test claimed |

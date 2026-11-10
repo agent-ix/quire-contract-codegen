@@ -56,11 +56,6 @@ expecting an identity mismatch.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-037-AC-1 | RETIRED, replaced by FR-037-AC-6; `derive_application_node_id`, `ApplicationNodeDraft` and application preimage identities no longer exist. | Inspection |
-| FR-037-AC-2 | RETIRED, replaced by FR-037-AC-7; `ApplicationIdentityContext` and canonical preimage byte-limit derivation no longer exist. | Inspection |
-| FR-037-AC-3 | RETIRED, replaced by FR-037-AC-8; enum-member digest identity no longer defines its structural node ID. | Inspection |
-| FR-037-AC-4 | RETIRED, replaced by FR-037-AC-9; body-only changes need an admitted-body comparison, not automatic rekeying. | Inspection |
-| FR-037-AC-5 | RETIRED, replaced by FR-037-AC-10; package identity refresh through a typed digest preimage is obsolete. | Inspection |
 | FR-037-AC-6 | Both fixture builders preserve every producer-assigned structural application `CheckedNodeId` in the assembled node and its dependent references; an ungrouped fixture's requested ID equals the reader-admitted node ID. Inspection finds no local application ID derivation, application preimage encoder, version constant or digest call for that identity. | Test and Inspection |
 | FR-037-AC-7 | A recursion-group fixture retains the complete group, each member's exact producer-assigned structural ID, including its own ordinal, and references to those exact IDs; the strict reader admits the valid group without imposing contiguous group positions. A missing referenced member or a declaration path inconsistent with `node_id.path` produces the reader's typed refusal and no admitted fixture. Exceeding the complete-package byte ceiling retains the reader's typed limit result and admits no fixture. | Test |
 | FR-037-AC-8 | A canonical enum-member fixture carries its producer-assigned structural `CheckedNodeId`; the reader admits its member declaration and exact reference. Changing the case through the producer yields the corresponding structural member ID without a CG nominal preimage or digest. In-process agreement keys never compared with a checked-package identity remain classified as fixture-only. | Test and Inspection |
