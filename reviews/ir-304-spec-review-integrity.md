@@ -44,3 +44,15 @@ PASS with one low finding. All 35 AC ids in the table are unique, and AC-26..28 
 | TC-033-ir-304-procedure | examined | spec/routed/matrix/TC-033-routed-generation.md | For FR-022-AC-26 and AC-28 (slice a), build each item's `RoutedRequirement` and the package's `RequirementRecords` from the QSL `RequirementItem` and `RequirementRecord` values for the checked RR-16 package, with node keys mapped to `CheckedNodeId`. Route both RR-16 items together, then reverse their input order, and compare each request index's disposition and result assertion. Exchange only the two items' `RoutedRequirement` values and expect `ApplicationMismatch` at the lower index. Then, one change at a time: remove one item's requirement; remove its record; change its occurrence ordinal t |
 | TC-033-expected-20-28 | examined | spec/routed/matrix/TC-033-routed-generation.md | 20. Both RR-16 items are `Supported` with result assertions `[0, 10]` and `[0, 20]` at their own request indexes, unchanged by reversing the slice. Exchanging the two `RoutedRequirement` values yields `RequirementRecord` with `ApplicationMismatch` at the lower index (FR-022-AC-26). 21. The then harness assumes `p` and the else harness `!p`, each once and before the oracle call, with one Boolean guard input and the guard listed in `path_condition`; `p` precedes `q` in the nested case; exchanging the path conditions exchanges the assumptions; the unguarded item has no guard input or assumption ( |
 | TM-routed-FR-022-IR-304-row | examined | spec/routed/matrix/tests.md | FR-022 \| FR-022-AC-26 through FR-022-AC-28, FR-022-AC-31 through FR-022-AC-35 \| TC-033 \| Planned (IR-304): slice (a) typed record input and record refusals (AC-26, AC-28) and slice (b) guard lowering and occurrence identity (AC-27, AC-31 to AC-35) await code |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | AC-37's 'one with both a wrong occurrence ordinal and a wrong conversion context refuses with ApplicationMismatch' does not say the changed ordinal has a record. With an unrecorded ordinal, RecordMissing (earlier in the per-item order) is the correct result, so the expected outcome depends on an unstated fixture choice. Fix: say 'the other recorded occurrence's ordinal', as AC-28 does. | spec/routed/functional/FR-022-routed-generation.md (AC-37 row) |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at d7760170. Verified: AC-37 covers the cross-loop order (ScalarSelectionMismatch at 2 before RecordMissing at 0; RequirementRecord before UnauthenticatedOperationView) and the intra-item order. 'Where the checks run' matches generate.rs:347-436. The guard-literal rule is now GuardLiteralNotI64 in AC-32. See new FND-002 for one residual ambiguity. |

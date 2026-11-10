@@ -32,8 +32,11 @@ the FR-015 generator returns for the same items.
 - The routed backend `Candidate { identity: "kani" }`.
 - QSL RR-16's checked package and its occurrence-keyed requirement records:
   two occurrences of one `x + 1` application, with direct narrows to
-  `Int[0, 10]` and `Int[0, 20]`. A second checked function has
-  `if p then x + 1 else x + 1` and opposite guards on the two occurrences.
+  `Int[0, 10]` and `Int[0, 20]`.
+- The IR-304 guarded package named in FR-022 ("Path conditions in the scalar
+  harness"): one QSL-checked package with `f`, `g`, `h`, `k` and `c` and their
+  requirement records, so guarded and unguarded items route in one
+  `generate_routed` call over one source package.
 
 ## Test Procedure
 
@@ -92,13 +95,18 @@ with a `NotApplicable` selection, without and then with one occurrence's require
 `OccurrenceNotSelected` for both. Route the same node with an `OwnResult` selection and its
 requirement and check it reaches FR-022-AC-38 (slice a) or FR-022-AC-27 (slice b).
 
-For FR-022-AC-37, combine a `ScalarSelectionMismatch` at index 2 with a `RecordMissing` at index
-0; a `RecordMissing` with the FR-022-AC-30 plain-read view-dependent operation; and, in one item,
-a wrong result bound with a wrong path condition, then a wrong occurrence ordinal with a wrong
-conversion context. Read the single reported refusal each time.
+For FR-022-AC-37, over RR-16 combine a `ScalarSelectionMismatch` at the higher request index
+with a `RecordMissing` at the lower; in the FR-022-AC-30 plain-read package give the
+view-independent integer item a requirement with no record beside the view-dependent item; and,
+in one RR-16 item, set a wrong result bound with a wrong path condition, then the other recorded
+occurrence's ordinal with a wrong conversion context, then an ordinal with no record. Read the
+single reported refusal each time. In the IR-304 guarded package, route `k`'s `x + m` and `c`'s
+`n >= 0` with valid records in both slices, and in slice (b) an `x + 100` item whose record
+carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`; read each disposition.
 
-For FR-022-AC-38 (slice a only), route the FR-022-AC-27 then item and the FR-022-AC-33 item with
-valid records beside the unguarded RR-16 item, and read each disposition and reason.
+For FR-022-AC-38 (slice a only), make one `generate_routed` call over the IR-304 guarded package
+routing `f`'s then item, `h`'s `x + 100` and `g`'s `x + 1` with valid records, and read each
+disposition, reason and harness.
 
 For FR-022-AC-27 and AC-31 to AC-35 (slice b), route the QSL-emitted packages named in each
 criterion, with each guard's node as a `ContextRoot` in its item's context span. Inspect each
@@ -112,7 +120,7 @@ unchanged generator. For AC-32,
 route `x + 1 > 5`, `n >= 0` over a plain-Integer `n`, `x < 10^23` and a guard reading a model
 member beside a lowerable sibling, then drop one guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
 the unguarded `x + 100` control, the literal-left `20 < x` guard, and the Boolean
-`if p then (if p then 0 else x + 1) else 0` case. For AC-35, run both harnesses through FR-017 under installed
+`f(p: Boolean, x: Int[0, 9]): Int[0, 10] { if p then (if p then 0 else x + 1) else 0 }` case. For AC-35, run both harnesses through FR-017 under installed
 Kani and read the evidence outcome.
 
 For FR-022-AC-25, compile an external consumer against CG's public exports and
@@ -309,11 +317,13 @@ diagnostic-string parsing.
     (FR-022-AC-35).
 29. The `NotApplicable` control keeps its result; the recorded node and the attached requirement
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).
-30. The reported refusals are `ScalarSelectionMismatch { request_index: 2 }`,
-    `RequirementRecord`, `ResultBoundMismatch` and `ApplicationMismatch` (FR-022-AC-37).
-31. In slice (a), both guarded items are `path_guard_not_lowered` with
-    `guard_lowering_not_implemented` and no harness, and the unguarded item stays `Supported`
-    (FR-022-AC-38).
+30. The reported refusals are `ScalarSelectionMismatch` at the higher index, `RequirementRecord`,
+    `ResultBoundMismatch`, `ApplicationMismatch` and `RecordMissing`; `x + m` is
+    `requires_bound` and `n >= 0` is `operation_not_rendered` in both slices; the two-guard
+    `x + 100` is `path_guard_not_lowered` in slice (b) (FR-022-AC-37).
+31. In slice (a), in one call, `f`'s then item and `h`'s item are `path_guard_not_lowered` with
+    `guard_lowering_not_implemented` and no harness, and `g`'s item is `Supported` with a
+    harness (FR-022-AC-38).
 
 ## Scoped evidence status (IR-1316)
 

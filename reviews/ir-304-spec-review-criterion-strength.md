@@ -39,3 +39,15 @@ Jev (System One) client is not available on this host (`which jev` finds nothing
 | FR-022-AC-33 | examined | spec/routed/functional/FR-022-routed-generation.md | For QSL-emitted `if x > 5 then x + 100 else 0` over `x: Int[0, 9]` into `Int[0, 200]`, the guarded `x + 100` item is `Supported` with arguments `[6, 9]` and `[100, 100]`, a `Statement::Assume` of `x > 5`, and a result assertion against `[0, 200]`. The same item with the guard's `holds=false` has arguments `[0, 5]` and `[100, 100]`. For `if x < y then x + 1 else 0` over `x: Int[0, 9]` and `y: Int[0, 9]` into `Int[0, 10]`, a comparison between two parameters, the argument `x` keeps `[0, 9]`, `y` is a guard input over `[0, 9]`, and the harness assumes `x < y`. |
 | FR-022-AC-34 | examined | spec/routed/functional/FR-022-routed-generation.md | For QSL-emitted `f(x: Int[0, 9]): Int[0, 10] { if x > 20 then x + 100 else 0 }`, the guarded `x + 100` item settles `unsupported` as `PathConditionUnsatisfiable` naming the `x > 20` guard occurrence, the parameter `x` and its declared range `[0, 9]`, with no harness; it is not `result_bound_unreachable`. The same `x + 100` into `Int[0, 10]` with an empty path condition still settles `result_bound_unreachable` with reachable `[100, 109]` (FR-015-AC-18). |
 | FR-022-AC-35 | examined | spec/routed/functional/FR-022-routed-generation.md | For a guarded item whose guards are jointly infeasible but not emptied by narrowing (`if x < y then x + 1 else 0` with `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`), CG emits a harness whose `completed` cover follows the guard assumptions, and FR-017 execution under installed Kani reports `CoverUnsatisfied`, not `Verified`. The same harness with the guard `x > y` reports `Verified`. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | AC-38 cannot be built as written. Its discriminating clause ('while the unguarded sibling of FR-022-AC-26 stays Supported', TC-033 'beside the unguarded RR-16 item') puts items from three different checked packages in one generate_routed call: the RR-16 package, the AC-27 `if p` package and the AC-33 `if x > 5` package. generate_routed takes one CheckedPackageV2 and one admitted ContractPackageV1 per call, and the AC-27 package has no unguarded scalar item. As written, the case that separates a per-item interim refusal from a whole-call refusal cannot be constructed. Fix: name one QSL package that holds a guarded item and an unguarded sibling (for example an AC-33 package with an added unguarded `x + 1` function), or drop the sibling claim. | spec/routed/functional/FR-022-routed-generation.md (AC-38 row); spec/routed/matrix/TC-033-routed-generation.md:100-101 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at d7760170. Verified: AC-31 names the committed golden tests/fixtures/kani-scalar/direct-increment-record.json, which slice (a) captures from the unchanged generator. Byte equality also fails a `null` or `[]` serialization. The fixture does not exist yet and is a slice (a) deliverable, as stated. |
