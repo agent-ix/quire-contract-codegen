@@ -2665,7 +2665,7 @@ fn tc_033_record_refusals_precede_the_unauthenticated_view_refusal() {
         Err(RoutedGenerationError::RequirementRecord {
             request_index: 0,
             occurrence: Some(requirement.occurrence.clone()),
-            mismatch: quire_contract_codegen::RequirementRecordMismatch::RecordMissing,
+            mismatch: Box::new(quire_contract_codegen::RequirementRecordMismatch::RecordMissing),
         })
     );
 

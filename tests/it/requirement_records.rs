@@ -388,16 +388,39 @@ fn rr16() -> Scenario {
         vec![
             ItemSpec {
                 application: occurrence(&add, *first),
-                conversion: Some(occurrence(&ten, ten_ordinal)),
+                conversion: Some(occurrence(ten, ten_ordinal)),
                 path: Vec::new(),
             },
             ItemSpec {
                 application: occurrence(&add, *second),
-                conversion: Some(occurrence(&twenty, twenty_ordinal)),
+                conversion: Some(occurrence(twenty, twenty_ordinal)),
                 path: Vec::new(),
             },
         ],
     )
+}
+
+fn record_refusal(
+    request_index: usize,
+    occurrence: Option<RequirementOccurrence>,
+    mismatch: RequirementRecordMismatch,
+) -> RoutedGenerationError {
+    RoutedGenerationError::RequirementRecord {
+        request_index,
+        occurrence,
+        mismatch: Box::new(mismatch),
+    }
+}
+
+fn unboxed(error: &RoutedGenerationError) -> Option<(usize, RequirementRecordMismatch)> {
+    match error {
+        RoutedGenerationError::RequirementRecord {
+            request_index,
+            mismatch,
+            ..
+        } => Some((*request_index, (**mismatch).clone())),
+        _ => None,
+    }
 }
 
 fn kani_record(
@@ -467,13 +490,13 @@ fn each_rr16_occurrence_pairs_with_its_own_record_and_bound() {
     let exchanged = scenario.bound(&exchanged.into_iter().map(Some).collect::<Vec<_>>());
     assert_eq!(
         scenario.refusal(&exchanged, scenario.records()),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            occurrence: Some(scenario.requirements[1].occurrence.clone()),
-            mismatch: RequirementRecordMismatch::ApplicationMismatch {
+        record_refusal(
+            0,
+            Some(scenario.requirements[1].occurrence.clone()),
+            RequirementRecordMismatch::ApplicationMismatch {
                 selected: scenario.requirements[0].occurrence.clone(),
-            },
-        }
+            }
+        )
     );
 }
 
@@ -503,7 +526,7 @@ fn each_single_record_change_refuses_the_whole_call() {
             RoutedGenerationError::RequirementRecord {
                 request_index: index,
                 occurrence,
-                mismatch,
+                mismatch: Box::new(mismatch),
             }
         );
     };
@@ -617,12 +640,8 @@ fn each_single_record_change_refuses_the_whole_call() {
     records.remove(&second.occurrence);
     let error = scenario.refusal(&scenario.valid(), records);
     assert!(matches!(
-        error,
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            mismatch: RequirementRecordMismatch::RecordMissing,
-            ..
-        }
+        unboxed(&error),
+        Some((0, RequirementRecordMismatch::RecordMissing))
     ));
 }
 
@@ -660,12 +679,8 @@ fn record_checks_follow_the_fixed_order() {
     wrong.path_condition = vec![guard];
     let routed = scenario.bound(&[Some(wrong), Some(second.clone())]);
     assert!(matches!(
-        scenario.refusal(&routed, scenario.records()),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            mismatch: RequirementRecordMismatch::ResultBoundMismatch { .. },
-            ..
-        }
+        unboxed(&scenario.refusal(&routed, scenario.records())),
+        Some((0, RequirementRecordMismatch::ResultBoundMismatch { .. }))
     ));
     // the other recorded occurrence's key together with a wrong conversion context
     let mut wrong = first.clone();
@@ -673,12 +688,8 @@ fn record_checks_follow_the_fixed_order() {
     wrong.conversion_context = second.conversion_context.clone();
     let routed = scenario.bound(&[Some(wrong), Some(second.clone())]);
     assert!(matches!(
-        scenario.refusal(&routed, scenario.records()),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            mismatch: RequirementRecordMismatch::ApplicationMismatch { .. },
-            ..
-        }
+        unboxed(&scenario.refusal(&routed, scenario.records())),
+        Some((0, RequirementRecordMismatch::ApplicationMismatch { .. }))
     ));
     // an ordinal with no record
     let mut wrong = first.clone();
@@ -686,11 +697,11 @@ fn record_checks_follow_the_fixed_order() {
     let routed = scenario.bound(&[Some(wrong.clone()), Some(second.clone())]);
     assert_eq!(
         scenario.refusal(&routed, scenario.records()),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            occurrence: Some(wrong.occurrence),
-            mismatch: RequirementRecordMismatch::RecordMissing,
-        }
+        record_refusal(
+            0,
+            Some(wrong.occurrence),
+            RequirementRecordMismatch::RecordMissing
+        )
     );
 }
 
@@ -880,9 +891,10 @@ fn not_applicable_items_with_records_are_refused() {
             node_id: f_add.clone(),
             result_selection: ContractDriverResultSelection::NotApplicable,
         }];
-        let lowered = scenario
-            .checked
-            .lower(&[f_add.clone()], &routed_contract_lowering_profile());
+        let lowered = scenario.checked.lower(
+            std::slice::from_ref(&f_add),
+            &routed_contract_lowering_profile(),
+        );
         let package = admit(&scenario.checked, &lowered);
         let mut item = route(0, &f_add)
             .with_scalar_selection(&package, ContractDriverResultSelection::NotApplicable);
@@ -907,26 +919,23 @@ fn not_applicable_items_with_records_are_refused() {
     };
     assert_eq!(
         not_applicable(None).expect_err("records exist for the node"),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            occurrence: None,
-            mismatch: RequirementRecordMismatch::OccurrenceNotSelected,
-        }
+        record_refusal(0, None, RequirementRecordMismatch::OccurrenceNotSelected)
     );
     assert_eq!(
         not_applicable(Some(scenario.requirements[0].clone()))
             .expect_err("a requirement does not select an occurrence"),
-        RoutedGenerationError::RequirementRecord {
-            request_index: 0,
-            occurrence: Some(scenario.requirements[0].occurrence.clone()),
-            mismatch: RequirementRecordMismatch::OccurrenceNotSelected,
-        }
+        record_refusal(
+            0,
+            Some(scenario.requirements[0].occurrence.clone()),
+            RequirementRecordMismatch::OccurrenceNotSelected
+        )
     );
 
     // a node with no record and no requirement keeps its unguarded behaviour
-    let lowered = scenario
-        .checked
-        .lower(&[g_add.clone()], &routed_contract_lowering_profile());
+    let lowered = scenario.checked.lower(
+        std::slice::from_ref(&g_add),
+        &routed_contract_lowering_profile(),
+    );
     let package = admit(&scenario.checked, &lowered);
     let control = route(0, &g_add)
         .with_scalar_selection(&package, ContractDriverResultSelection::NotApplicable);

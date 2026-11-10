@@ -236,8 +236,8 @@ pub enum RoutedGenerationError {
         request_index: usize,
         /// The item's occurrence, or `None` when the item carries no requirement.
         occurrence: Option<RequirementOccurrence>,
-        /// What disagrees.
-        mismatch: RequirementRecordMismatch,
+        /// What disagrees; boxed to keep the whole-call error small.
+        mismatch: Box<RequirementRecordMismatch>,
     },
     /// Request positions or keys disagree with admitted FR-330 accounting.
     Package(PackageRequestError),
@@ -545,7 +545,7 @@ fn check_requirement_record(
         Err(RoutedGenerationError::RequirementRecord {
             request_index: item.request_index,
             occurrence: occurrence.map(|requirement| requirement.occurrence.clone()),
-            mismatch,
+            mismatch: Box::new(mismatch),
         })
     };
     let same_occurrence = |left: &RequirementOccurrence, right: &RequirementOccurrence| {
