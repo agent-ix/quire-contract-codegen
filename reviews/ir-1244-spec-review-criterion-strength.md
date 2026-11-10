@@ -66,3 +66,11 @@ Re-review of fix head a8848c2e.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | low | The mechanism is sound. The differential passes the reader's own Admitted value as both admitted unit and declaring package. select_checked_callable then compares handle.package_name() and acquired.package().bytes() with the re-encoded reader output (owner_path.rs:303-309) before any lookup, so any admitted bytes that differ from the unchanged acquisition yield OwnerIdentityMismatch first. But the control is pinned to 'a same-length edit to one identifier byte that the reader still returns Admitted for', and such an edit may not exist. The strict reader enforces identifier syntax, strictly ascending member order and identity joins (identity.rs, frame.rs, lock_tables.rs), and checked node ids embed names, so a single name byte usually appears in several joined places. Accept any reader-admitted retained bytes that differ from the acquisition's package, for example the second source's genuine package bytes with the first source's acquisition kept. Those always exist and keep the Admitted-then-OwnerIdentityMismatch order. | spec/oracle/functional/FR-021-function-application-oracles.md:567 |
+
+## New findings (disposition pass 4)
+
+Re-review of fix head cbc9d7fa.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | TC-031 step 16 now reruns the nested-call request 'with a caller-side classification claiming a non-call body, which must not change the refusal'. Behavior and AC-46 say the entry takes no ExactFunctionDeclaration and no caller-supplied classification, so there is no input through which a test can pass one. The control cannot be built against the entry and cannot fail; only the existing generate_exact_function_oracles takes a classification, and it is a different entry. Replace it with an inspection that the entry's signature carries no ExactFunctionDeclaration or body-classification parameter, which is what AC-46's mutation row actually guards. The derivation itself holds: the admitted V2 graph gives the body root's semantic_form ('call' versus 'binary', src/oracle/function/mod.rs:2504, 3544) and its CheckedTerm application operator, reachable through FunctionPreflightGraph::new(&CheckedPackageV2). | spec/oracle/matrix/TC-031-function-application-oracles.md:326 |

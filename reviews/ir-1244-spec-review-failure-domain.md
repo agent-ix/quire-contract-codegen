@@ -62,6 +62,7 @@ Re-review of fix head cf124b62.
 | FND-004 | fixed | fixed in a8848c2e (round 2) |
 | FND-005 | fixed | fixed in a8848c2e (round 2) |
 | FND-006 | fixed | fixed in 8bd12940 (round 3) |
+| FND-007 | fixed | fixed in cbc9d7fa (round 4) |
 
 ## New findings (disposition pass 2)
 

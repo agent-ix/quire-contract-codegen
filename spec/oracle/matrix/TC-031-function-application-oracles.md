@@ -343,11 +343,10 @@ required dependency or target path.
     time, feed the entry a reader-`Refused` input, a reader-`Incomplete`
     input, a reader-`CatalogUnavailable` input and an acquisition or selection
     refusal, and a request whose selected body is a nested call (a control
-    that fails if the entry emits a harness or returns success for it, run
-    also with a caller-side classification claiming a non-call body, which must
-    not change the refusal), and
-    require the five distinct typed refusals of AC-46 with no harness; inspect that the entry accepts no separately supplied admitted
-    package. These
+    that fails if the entry emits a harness or returns success for it), and
+    require the five distinct typed refusals of AC-46 with no harness; inspect that the entry's signature has no admitted-package,
+    `ExactFunctionDeclaration` or body-classification parameter, so no caller
+    input can supply or override them (the AC-46 mutation row guards this). These
     are generation refusals, not differential controls. Inspect that no test,
     doc comment, proof note or matrix row credits reader decode or admission to
     Kani.
