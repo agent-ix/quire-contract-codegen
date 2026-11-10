@@ -52,3 +52,5 @@ CHANGES REQUIRED. The conversion-stage failure set is correct against QSV for an
 | --- | --- | --- |
 | FND-001 | fixed | fixed in 7e4da3b1 |
 | FND-002 | still-open | The fix marks the two cases as 'reachable only from a hand-built package, because the reader refuses them upstream' (AC-5), and TC-064 step 5 says 'Build by hand, because the reader refuses them upstream'. That is self-contradictory. A hand-built package still goes through the strict reader, which refuses a carried operand of a non-convert quantity operation (operations.rs check_operands) and a malformed or unbounded carrier, so CG never sees it. These inputs can reach CG only through its private defensive seam below the reader, the term FR-014-AC-50/61/62 use. AC-12's hand-built case is different: there the reader does admit the package. Say 'reachable only at CG's private defensive seam (the reader refuses them)' in AC-5 and TC-064 step 5. |
+| FND-002 | fixed | fixed in 5b8fc028 |
+| FND-003 | fixed | fixed in 5b8fc028 |

@@ -60,3 +60,4 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not available in this environm
 | FND-002 | fixed | fixed in 7e4da3b1 |
 | FND-003 | fixed | fixed in 7e4da3b1 |
 | FND-004 | fixed | fixed in 7e4da3b1 |
+| FND-005 | fixed | fixed in 5b8fc028 |

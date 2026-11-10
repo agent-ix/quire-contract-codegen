@@ -84,7 +84,7 @@ Execute generated proofs only with the authorized runner and budget.
 12. Run the AC-14 mutants one at a time (conversion skipped on one operand, with the `lt` and `eq` points of AC-14, conversion
     charges dropped, conversion charges moved after the operation's, conversion target
     replaced by another unit of the same dimension, on arithmetic and on a comparison, where
-    a comparison must refuse `IllTyped` for distinct units) over control domains stating their
+    a comparison must refuse `IllTyped { cause: IllTypedCause::DistinctUnits }`) over control domains stating their
     distinguishing points. Each must fail with actual playback of an in-domain leaf.
 
 ## Expected Results
