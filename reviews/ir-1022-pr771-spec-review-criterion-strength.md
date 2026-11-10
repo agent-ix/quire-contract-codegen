@@ -49,6 +49,12 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed here, so this an
 | --- | --- | --- | --- |
 | FND-004 | high | AC-63(c) gets the 1.5x ceiling case backwards. A witness stand-in that finishes at 1.5 times T or M with a verifying report is killed at T or M when the ceilings are unchanged, which is the correct behaviour. So the correct implementation gives TimedOut or MemoryExhausted. Only the raise-ceiling mutant lets the stand-in finish, and only the mutant gives WitnessDisagreed. AC-63 says 'the third is WitnessDisagreed only if the recorded ceilings equal the proof launch's', so the correct code fails the AC and the mutant passes it. TC-027 has it the right way round ('so a raised ceiling would yield WitnessDisagreed') but states no expected outcome. Fix: say that the 1.5x stand-ins are TimedOut and MemoryExhausted with recorded ceilings equal to the proof launch's, and that WitnessDisagreed there means the raise-ceiling mutant. State the same expected outcome in TC-027. | spec/kani/functional/FR-017-kani-execution-evidence.md:AC-63 row (c) |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | high | The new refused-witness-group control cannot pass on correct code. In AC-63(e) and the TC-027 control, only the middle member fails, so its witness group holds one member. FR-017 (in Behavior and in AC-63(e) itself) says a group of one is a single witness run, and the code runs a group of one through run_single (execute.rs:793-795), not run_group. A single witness run that exceeds the memory ceiling is classified Ok(Inconclusive MemoryExhausted) (execute.rs:1223; AC-63(c)). It is never a group refusal: BatchMemoryExhausted comes only from run_group (execute.rs:935-940). So the expected 'WitnessPhaseRefused wrapping that group refusal' contradicts AC-63(c), and a correct implementation fails the case. The raw-refusal mutant is never exercised. Fix: use at least two held members with equal witness vector and ceilings (e.g. a four-member batch whose two middle members fail), so the witness group is a real batch that BatchMemoryExhausted refuses, and expect WitnessPhaseRefused carrying both held members' proof evidence in member order. Keep the one-member memory case as MemoryExhausted. | spec/kani/functional/FR-017-kani-execution-evidence.md:AC-63 row (e); TC-027:47-49 |
+
 ## Dispositions
 
 | FND | outcome | reason |

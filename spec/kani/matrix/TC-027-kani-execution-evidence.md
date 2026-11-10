@@ -44,9 +44,12 @@ proof evidence retained). Run a proof report that fails only an unwinding assert
 fails an unwinding assertion beside an assertion, a Failure entry listing no failed check, a
 verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
 and no `concrete-playback` in its argument vector. Run a three-member batch
-whose proof report fails the middle member and read that only it is relaunched in a witness phase; then make the witness group's stand-in exceed
-the memory ceiling and read `WitnessPhaseRefused` wrapping the group refusal and the middle
-member's proof evidence, with the outer members' results unchanged.
+whose proof report fails the middle member and read that only it is relaunched, as a single
+witness run; make that run exceed the memory ceiling and read `MemoryExhausted` (not a refusal).
+Then run a four-member batch whose proof report fails the two middle members (equal witness
+vectors and ceilings), read that they form one witness group, and make the group exceed the memory
+ceiling: expected `WitnessPhaseRefused` wrapping `BatchMemoryExhausted` and both members' proof
+evidence in member order, with the outer members' results unchanged.
 Mutants: classify at the proof phase; compare only class, only location or neither; accept a
 superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
 swap the vectors; classify a proof-phase batch member as lacking a counterexample; return the raw
