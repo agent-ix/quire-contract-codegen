@@ -32,8 +32,12 @@ prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only
 the same location in another class (each `WitnessDisagreed`), fails the matching check plus one
 more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
 stopped at its wall-clock ceiling and at its memory ceiling (`TimedOut`, `MemoryExhausted`, no
-third launch), and a stand-in finishing at 1.5 times each ceiling with a verifying report (so a
-raised ceiling would yield `WitnessDisagreed`), reading the ceilings recorded for each launch;
+third launch), and a stand-in that would finish with a verifying report only at 1.5 times each
+ceiling. Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in and
+`MemoryExhausted` for the memory one, killed at the unchanged ceiling, with the ceilings recorded
+for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
+finishes, the outcome is `WitnessDisagreed` or another verifying outcome, and the recorded
+ceiling is larger than the proof launch's, so the case fails;
 (d) matches the check but prints no playback (`FailedWithoutCounterexample`), exits with no report
 (`NoVerdict`), is cancelled (`Cancelled`), or has its report or launch refused (typed refusal,
 proof evidence retained). Run a proof report that fails only an unwinding assertion, one that

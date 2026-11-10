@@ -39,3 +39,10 @@ CHANGES REQUIRED (one medium, one low). The FR-032 and FR-017-AC-60 edges follow
 | FR-029-witness-row | examined | spec/kani/functional/FR-029-run-outcome-terminal-record.md:159 | / `inconclusive` with the witness-disagreed reason (PLANNED, IR-1022) / `Failed` / |
 | FR-032-inputs-playback | examined | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:64 | - The falsified run's retained assertion playback, which is the witness-phase playback of FR-017's two-phase run (FR-017-AC-63); a proof-phase failure without a reproducing witness phase is not a falsified run and supplies none. The scalar builder owns its decode byte |
 | FR-017-AC-60 | examined | spec/kani/functional/FR-017-kani-execution-evidence.md:876 | PLANNED (IR-917). Through the public `execute_kani_concrete_playback` entry and an installed Kani backend, a healthy V2 clause playback test reports its selected test as passed, and the plus-one owner mutant's `amount_current = 999` playback executes the same sealed generated arithmetic assertion, observes its unique assertion message or source location and reports the selected expected-panic test as passed. Both installed runs use the same `-Z function-contracts` compilation option as the sealed proof, retain their bounded stdout/stderr and memory observations, and confirm owned teardown. ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at cf7a86af. Verified in the fix commit: PLANNED (IR-1022; decision D1 of IR-1436). Over launcher stand-ins that return real-shaped reports, the run of one harne ... member as lacking a counterexample (caught by (e)). The installed-Kani controls of FR-015-AC-41, AC-119 and AC-126 run the same two-phase protocol and need IR-844 (quire-exact |
+| FND-002 | fixed | Round 1 at cf7a86af. Verified in the fix commit: - A witness-disagreed run maps to `Failed`: the proof phase and the witness phase of one harness contradicted each other, so neither a proof nor a counterexample exists and the tool, not the property, is at fault (FR-017-AC-63, FR-029-AC-37). This row is new with IR-1022 and keeps the map total. Lik |

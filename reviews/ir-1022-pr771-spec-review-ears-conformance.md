@@ -44,3 +44,10 @@ CHANGES REQUIRED (low only). quire raises no EARS warning on the new lines. Manu
 | FR-017-behavior-playback-payload | examined | spec/kani/functional/FR-017-kani-execution-evidence.md:445 | - The report carries no concrete playback. The generator shall take a falsifying playback from the witness phase's console as a payload only, after the witness report names a failed property check, and pass it through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is never the counterexample. |
 | FR-028-behavior-versions | examined | spec/kani/functional/FR-028-bounded-proof-ceilings.md:177 | - The generator shall record in the execution evidence of every run the Kani, Rust and solver versions the run used, and every option of each launched phase's option vector (FR-028-AC-23). |
 | FR-029-witness-rationale | examined | spec/kani/functional/FR-029-run-outcome-terminal-record.md:172 | - A witness-disagreed run maps to `Failed`: the proof phase and the witness phase of one harness contradicted each other, so neither a proof nor a counterexample exists and the tool, not the property, is at fault (FR-017-AC-63). This row is new with IR-1022 and keeps the map total; the matching IR-side reason and FR-030 row are not specified here. |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at cf7a86af. Verified in the fix commit: - If the witness phase's failed non-unwinding checks equal the proof phase's and Kani printed no counterexample block headed for the harness path, then the generator shall classify the run as inconclusive with the existing `FailedWithoutCounterexample` reason. - If the witness phase stops on its wal |
+| FND-002 | fixed | Round 1 at cf7a86af. Verified in the fix commit: - When the proof phase reported a failed property check that is not an unwinding assertion and no failed unwinding assertion, the generator shall launch the witness phase under the identity's same `ProofCeilings`, crate directory, target directory and installation, and shall classify the run only af |
