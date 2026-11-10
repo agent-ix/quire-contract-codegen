@@ -76,3 +76,4 @@ CHANGES REQUIRED. Verified against quire-exact 5db2d5e (unchanged at origin/main
 | --- | --- | --- |
 | FND-001 | fixed | fixed in d47cf1cc |
 | FND-002 | fixed | fixed in d47cf1cc |
+| FND-003 | fixed | fixed in 66f31461 |

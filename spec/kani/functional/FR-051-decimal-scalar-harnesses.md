@@ -54,7 +54,7 @@ operand bound mechanism needs no further prerequisite: a bounded Decimal is
 already the admitted `decimal_range` form (`coefficient_min`, `coefficient_max`,
 `scale_min`, `scale_max`, `rounding`). Under a bounds-required profile (Contract IR
 FR-038) an unbounded decimal parameter is `requires_bound` upstream, and FR-014
-refuses an unbounded operand or arithmetic result bound as `MissingBound` (FR-014-AC-21, AC-23), which maps to the `requires-bound` disposition; a
+refuses an unbounded plain-reference operand as `RequiresBound` (FR-014-AC-25, which takes precedence when another operand owns a bound or the result is typed by one) and otherwise a missing or wrong-form operand or arithmetic result bound as `MissingBound` (FR-014-AC-21, AC-23); both map to the `requires-bound` disposition; a
 profile that does not require bounds is outside this row, and CG reports the
 missing bound defensively (AC-5).
 

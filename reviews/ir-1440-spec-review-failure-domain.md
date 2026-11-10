@@ -53,3 +53,5 @@ CHANGES REQUIRED. The zero-divisor/zero-budget ordering, InexactDecimal-before-r
 | --- | --- | --- |
 | FND-001 | fixed | fixed in d47cf1cc |
 | FND-002 | fixed | fixed in d47cf1cc |
+| FND-003 | fixed | fixed in 66f31461 |
+| FND-004 | fixed | fixed in 66f31461 |
