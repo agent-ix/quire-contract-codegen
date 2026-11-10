@@ -13,7 +13,7 @@ relationships:
 Verify [FR-053](../functional/FR-053-float-scalar-harnesses.md) through admitted float
 packages (conditional on the quire-exact float carrier, IR-1446; the Contract IR float
 `requires_bound` ruling, IR-69, for the upstream half of the unpinned-operand refusal;
-and, for `sqrt` and `fma`, an FR-014 derivation that has no ticket; none is delivered),
+and, for `sqrt` and `fma`, the FR-014 derivation of IR-1502; none is delivered),
 public CG generation, installed proof execution and owner replay. This case is planned;
 FR-014 oracle agreement does not establish Kani acceptance. Execute generated proofs only
 with the authorized runner and budget. The control points named in FR-053's Behavior
@@ -28,9 +28,9 @@ used by name below.
    assert the operation, width, operand forms and, for arithmetic, the result bound are
    the admitted node's, that no result bound is read for a comparison, and that the
    expected side is not a second call of the generated oracle. Request `sqrt` and `fma`
-   and assert `OperationNotDerivable` and no harness while the FR-014 extension is
-   absent. Request `to_float32`, `to_float64`, `from_exact`, `to_rational` and `negate`
-   and assert no harness and the existing dispositions. Request a float literal operand
+   and assert `OperationNotDerivable` and no harness while the FR-014 extension
+   (IR-1502) is absent. Request `to_float32`, `to_float64`, `from_exact`, `to_rational`,
+   `float32.negate` and `float64.negate` and assert no harness and the existing dispositions. Request a float literal operand
    and assert `unsupported` naming `FloatLiteralOperand`, and a non-parameter operand and
    assert `unsupported` naming `OperandNotSupported`, each with the node (AC-1).
 2. Host-enumerate the AC-2 class-boundary set at each width, plus the `float32` values
@@ -44,13 +44,16 @@ used by name below.
 3. Request an arithmetic node whose result has no `float_rounding`, a wrong-form bound,
    two bounds, a bound unequal to the descriptor, and an unreadable `float_rounding`; and a
    comparison and an arithmetic operand whose type reaches no `float_rounding`. Assert
-   `RequiresBound`, `MissingBound`, `AmbiguousBound`, `BoundMismatch`, the retained
-   unreadable cause and the operand `requires-bound` respectively, each with no harness,
+   `RequiresBound`, `MissingBound`, `AmbiguousBound` and `BoundMismatch` at the oracle
+   boundary (`RequiresBound` and `MissingBound` are distinct refusals that both settle as the
+   `requires-bound` Kani disposition; `AmbiguousBound` and `BoundMismatch` settle as an oracle
+   refusal), then the retained unreadable cause and the operand `requires-bound`, each with no
+   harness,
    that no result bound is requested for a comparison, and that a `float_rounding` pin does
    not narrow any operand draw. Record that the unpinned-operand case is upstream
    `requires_bound` only after IR-69 (AC-3).
 4. Compare the generated oracle with the independent native expression from matching
-   entry Meter state and limits at zero, exact and short budgets at each charge point:
+   entry Meter state and limits at zero, exact and short budgets (including a short `work_units` budget) at each charge point:
    `ieee.operands`, `ieee.exact-intermediate`, `ieee.round` and `ieee.result-retain`. Run a
    finite input to confirm all four points; a NaN, an infinity, an invalid operation and a
    finite divided by a zero to confirm only `ieee.operands` and `ieee.result-retain`; and
@@ -58,7 +61,7 @@ used by name below.
    occurrences for `sqrt` and `fma` (AC-4).
 5. Exercise each reachable noncompletion: `Incomplete` at each charge point an input
    reaches, and under `exact` `Refused(IeeeNotExact)` with the would-be flags over `T1`,
-   `MAXF + MAXF`, `SUBMIN x HALF` and `sqrt(TWO)`. Assert a division by zero and an
+   `MAXF + MAXF`, `SUBMIN x HALF` and `SQ1`. Assert a division by zero and an
    invalid operation under `exact` complete with their flag. Assert no `Undefined` or
    comparison `Refused` control exists, that `DistinctIeeeWidths` has no harness control,
    and inspect the harness for no outcome-based assume (AC-5).
@@ -75,16 +78,18 @@ used by name below.
    `inconclusive` with its reason, per width, operation and rounding mode (AC-7).
 8. Run the AC-8 comparison mutants one at a time, each against only the operators and
    points AC-8 pairs with it: (a) through (e) on `numeric_equal` and `bit_identical` over
-   `Z+`/`Z-`, `QN0`/`QN0`, `ONE`/`MONE` and `QN1`/`QN2`; (f) through (k) and (m) on
+   `Z+`/`Z-`, `QN0`/`QN0` and `ONE`/`MONE`; (f) through (k) and (m) on
    `total_order` over `MONE`/`MTWO`, `MONE`/`ONE`, `Z+`/`Z-`, `ONE`/`ONE`,
-   `INF+`/`QN0`, `NQN0`/`INF-`, `QN0`/`SN1` and `NQN0`/`NSN1`; (l) the swap on
+   `INF+`/`QN0`, `NQN0`/`INF-`, `QN0`/`SN1` and `NSN1`/`NQN0`; (l) the swap on
    `total_order` over `ONE`/`TWO` only. Assert no swap claim for `numeric_equal` or
    `bit_identical`. Each must fail with actual in-domain playback (AC-8).
 9. Run the AC-9 arithmetic mutants one at a time over the stated points: the operation
    substitution over `THREE`/`TWO`; the swaps (the `add` and `mul` swap only over
-   `QN1`/`QN2`); the rounding-mode substitution over `T1` through `T4` for `add`, `sub`
-   and `fma`, `M1` for `mul`, the `ONE / THREE` (`FIVE / THREE`) pair for `div` and
-   `sqrt(TWO)` for `sqrt`, only for the mode pairs the Behavior list says each distinguishes;
+   `QN1`/`QN2`); the rounding-mode substitution over `T1` through `T4` for `add` and `fma`,
+   `S1` through `S4` for `sub`, `M1` and `M1n` for `mul`, `D1`, `Q1` and `Q1n` for `div` and
+   `SQ1` and `SQ2` for `sqrt`, only for the mode pairs the Behavior list says each separates
+   (nearest-even against nearest-away, and toward-zero against toward-negative, are not run for
+   `sqrt`, being equivalent there);
    the `exact` mutants; zero sign; division by zero; invalid operations; NaN propagation;
    overflow under each directed mode; underflow, flush-to-zero and the subnormal-to-normal
    carry; `fma` as `mul` then `add` at both widths; `sqrt` inexactness; and provenance.
@@ -115,7 +120,10 @@ used by name below.
     denied next charge and counters. Confirm the carrier makes its replacement callable from
     the host build (P1). For `nearest-even`, compare the non-NaN results with Rust's `f32`
     and `f64` operators, `sqrt` and `mul_add`. Mutate the replacement's ordering, charge
-    sequence, flags, provenance and a rounding step; each must fail the differential (AC-13).
+    sequence, flags, provenance and a rounding step, and mutate code shared by the replacement
+    and the second implementation (decode, rounding step, sticky shift, operand
+    classification); each must fail the differential (AC-13). This step cannot run until
+    IR-1446 supplies the host-callable replacement.
     The result covers the enumerated and boundary inputs, not every operand pair.
 
 ## Expected Results
@@ -127,6 +135,6 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 ## Status
 
 PLANNED: all thirteen FR-053 criteria are unimplemented and untagged. No missing carrier
-capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation (no
-ticket), replay route or generated-proof result is waived. No width, operation or rounding
+capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation
+(IR-1502), replay route or generated-proof result is waived. No width, operation or rounding
 mode is known to verify within a request's ceilings.
