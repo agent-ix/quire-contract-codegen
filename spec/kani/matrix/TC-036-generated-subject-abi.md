@@ -70,6 +70,12 @@ yield no harness.
     caps; assert an in-range index replays as the declaration's member at that position, and an
     out-of-range, missing, duplicate or foreign binding refuses with a typed reason and no replay.
     Re-run the Boolean and integer controls unchanged.
+15. For the planned [FR-051](../functional/FR-051-decimal-scalar-harnesses.md) decimal row, generate a
+    decimal operation and read its persisted identity: assert exactly two `i64` bindings,
+    coefficient then scale, grouped to the original parameter with its `decimal_range` domain.
+    Decode retained playback with the existing I64 checks and caps; assert a valid pair submits one
+    unnormalized `WitnessValue::Decimal`, and a missing, duplicate, foreign, role-swapped, negative
+    scale, out-of-domain or over-limit entry refuses with a typed reason and no replay.
 
 ## Expected Results
 
@@ -112,6 +118,9 @@ yield no harness.
     an in-range index replays as the member at that position, and each out-of-range, missing,
     duplicate or foreign binding refuses with no replay; Boolean and integer controls are
     unchanged (FR-025-AC-14).
+15. One decimal operand has two grouped `i64` bindings (coefficient, scale) with its domain; a valid
+    pair replays as one unnormalized Decimal, and each malformed or out-of-domain case refuses with
+    no replay (FR-025-AC-15).
 
 ## Status
 
