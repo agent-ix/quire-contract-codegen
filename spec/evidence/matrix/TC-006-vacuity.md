@@ -10,7 +10,7 @@ relationships:
 ---
 # TC-006: Distinguish vacuity and unexecuted control flow
 
-FR-004-AC-25's original same-node/different-point case is superseded under QSpec #449
+The original same-node/different-point case was infeasible under QSpec #449
 and earns no test credit. The node-qualified V2 controls below back Planned AC-26.
 
 ## Description

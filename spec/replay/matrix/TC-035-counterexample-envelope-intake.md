@@ -184,7 +184,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 ## Expected Results
 
 1. The `source_span` pair has equal identities, and the kind pair and the argument pair each
-   differ (FR-024-AC-1).
+    differ.
 2. `Witness::parse` accepts the rendered transcript, and the rendering function takes decoded
    values and parameter bindings, with no string of backend output (FR-024-AC-2).
 3. The values at `lo` and `hi` replay. The values at `lo - 1` and `hi + 1` are reported
@@ -367,7 +367,7 @@ debit past the floor runs to a post state QSL's snapshot admission refuses.
 Step 10 (FR-024-AC-12) is planned under IR-965: the current state-clause path still carries
 the old payload selection and has not been tested against the `state_clause` replay target.
 
-The former steps 18 to 21 (retired FR-024-AC-20 to AC-24) were implemented for the old digest shape and no longer back replacement AC-47 to AC-51. Steps 22 to 26 (FR-024-AC-25 to AC-29, IR-459) are implemented by `src/replay/obligation.rs`
+The former steps 18 to 21 were implemented for the old digest shape and no longer back replacement AC-47 to AC-51. Steps 22 to 26 (FR-024-AC-25 to AC-29, IR-459) are implemented by `src/replay/obligation.rs`
 and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
 `tests/it/kani_obligations_state_frame.rs` over the QSL twin of the state-frame fixture. The twin's
 harness scope is aligned to the node ids QSL names for the twin's compiled unit (`Twin::aligned`),

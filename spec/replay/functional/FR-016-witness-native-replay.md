@@ -162,15 +162,10 @@ wire entry has no dependency `package_id` or lock member.
 | FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` is returned as `SpineReplayError::Refused` carrying that fault. | Test (TC-026) |
 | FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
 | FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, and `qsl_replay::replay` settles the unit's falsification through the imported function. | Test (TC-026) |
-| FR-016-AC-15 | RETIRED, replaced by FR-016-AC-29; the selected QSL dependency wire has no `package_id` member. | Inspection |
 | FR-016-AC-16 | A unit whose import no lock dependency selection supplies is refused at the call site. | Test (TC-026) |
-| FR-016-AC-17 | RETIRED, replaced by FR-016-AC-30; a dependency `package_id` mismatch cannot be represented by the selected QSL wire. | Inspection |
 | FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 | FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
 | FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
-| FR-016-AC-21 | RETIRED, replaced by FR-016-AC-26; the former CG-minted O-09 digest preimage is obsolete and earns no implementation credit. | Inspection |
-| FR-016-AC-22 | RETIRED, replaced by FR-016-AC-27; the former kind/domain-inside-digest control is obsolete and earns no implementation credit. | Inspection |
-| FR-016-AC-23 | RETIRED, replaced by FR-016-AC-28; the former CG identity-derivation control is obsolete and earns no implementation credit. | Inspection |
 | FR-016-AC-24 | A lock whose only defect is one library identity selected twice is refused by QSL's `DependencyInput::new` as `DuplicateIdentity`, code `invalid_package` with cause `conflicting-definition`, and reaches the caller as `DependencyLockError::Input`. | Test (TC-026) |
 | FR-016-AC-25 | In an installed-Kani run that classifies a generated harness as `Falsified`, the retained counterexample is byte-identical to the first eligible assertion playback for that harness in the same launcher's complete captured stdout order, excluding cover blocks, and native replay uses values decoded from that retained counterexample; a `Verified` run supplies no counterexample. A test oracle observing stdout independently compares the complete fence interior, trimmed only of surrounding whitespace, with the retained counterexample before decoding or replay. Substituting another valid, self-consistent playback immediately after classification fails that oracle even when the replacement's comments, bytes, decoded values and replay agree. | Test (TC-026) |
 | FR-016-AC-26 | PLANNED (IR-1079; replaces AC-21). The function replay request carries the producer's exact QSL `ObligationIdentity(NodeKey, Option<ModelIdentity>, ordinal)` unchanged, with no CG hash, preimage, rederivation or transcript-sourced identity. A function harness missing a parameter argument, declaring an unbounded integer or bounding a Boolean refuses before replay with no substituted domain. The selected function occurrence, obligation kind and complete parameter bindings with declared domains remain on the record, sorted by declared parameter identifier, and are compared exactly before replay. | Test, Inspection (TC-026) |
@@ -187,7 +182,7 @@ record's selected occurrence, kind and ordered domains and QSL admission.
 
 FR-016-AC-1 through AC-5 retain default-suite evidence through a
 direct test-only `KaniObligationIdentity` fixture and the surviving replay and identity APIs.
-That fixture is an input to those APIs, not a replacement V1 generator or a proof claim. Retired AC-15, AC-17 and AC-21 through AC-23 no longer claim backing; replacement AC-26 through AC-30 are planned.
+That fixture is an input to those APIs, not a replacement V1 generator or a proof claim. The retired V1 identity criteria no longer claim backing; replacement AC-26 through AC-30 are planned.
 FR-016-AC-9 and AC-10 retain their default native replay tests, but the
 `skeleton_spine.rs` installed-prover E7-E9 control was removed with the V1 `BoundClause` generator.
 That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated

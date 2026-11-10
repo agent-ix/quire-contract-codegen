@@ -13,7 +13,7 @@ relationships:
 ## Description
 
 **IR-348 retirement disposition (2026-10-27).** The V1 bundle controls in steps 16 and 17
-belong to retired FR-015-AC-54/56. Step 18's inspection remains required for surviving emitters,
+are historical V1-bundle procedures, not active V2 evidence. Step 18's inspection remains required for surviving emitters,
 and FR-015-AC-7/53/58 remain open for their surviving harness families. The historical V1
 procedure below remains for traceability and does not count as current V2 evidence. IR-1044
 backs the V2 generation-time census in steps 4, 7 and 13 through two tagged tests over an admitted
@@ -553,14 +553,14 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     frame-effect and V1 bundle (the corpus kind is TC-023's). Parse each emitted source
     and read the last statement of every function attributed `#[kani::proof]` or
     `#[kani::proof_for_contract]`: it is the only `kani::cover!` of the body, and no
-    assertion follows it (FR-015-AC-53, FR-015-AC-54).
+    assertion follows it (FR-015-AC-53).
 17. Run the installed backend over a V1 bundle harness whose requires clause some
     bounded argument satisfies and whose `ensures` holds for every such argument, which classifies
     `Verified`; over the same bundle with its cover removed, which classifies
     `Inconclusive` as `MissingCoverSummary`; over the same bundle with a requires clause no
     bounded argument satisfies, which classifies `CoverUnsatisfied` (0 of 1 covers) and is
     neither `Verified` nor `Falsified`; and over the same bundle with a subject that breaks
-    its `ensures`, which classifies `Falsified` (FR-015-AC-56).
+    its `ensures`, which classifies `Falsified` under the historical V1 bundle procedure.
 18. The guard: drive every emitting entry point (precondition, V1 contract, scalar,
     state-clause and frame-effect families, `generate_kani_bundle` and the corpus generator for each family) through the
     inspection of item 16, and scan the non-test string literals of `src/` for spellings of

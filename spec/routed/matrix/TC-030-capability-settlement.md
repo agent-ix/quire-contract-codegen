@@ -65,7 +65,7 @@ it, using the existing `take_function_preflight_reads` counter for the latter.
 Repeat with one and three envelope items to assert the typed
 `EnvelopeItemCount` refusal in each case.
 
-For FR-019-AC-48 through AC-52, drive the public negotiation entry with a
+For FR-019-AC-49 through AC-52, drive the public negotiation entry with a
 source-backed Kani `V2FunctionApplication`. Use an admitted checked source
 whose lowered function package selects a dependency: the internal reader's
 empty dependency set produces `Refused(MissingImport)`. Compare the returned
