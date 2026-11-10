@@ -25,10 +25,29 @@ use crate::routed_generation::{admitted_routing_input, route};
 /// The persisted record of the harness a direct FR-015 caller gets for `x + 1` over
 /// `x: Int[0, 9]` into `Int[0, 10]`.
 fn direct_increment_record() -> String {
+    let KaniObligationOutcome::Emitted {
+        scalar_harnesses, ..
+    } = direct_outcome(package::QSL_INC, false)
+    else {
+        panic!("the request is rejected");
+    };
+    let [harness] = scalar_harnesses.as_slice() else {
+        panic!("one harness, got {scalar_harnesses:?}");
+    };
+    harness.record.contents.clone()
+}
+
+/// The direct FR-015 outcome for the QSL-shaped node `code`, under one guard when `guarded`.
+fn direct_outcome(code: u32, guarded: bool) -> KaniObligationOutcome {
     let mut builder = package::qsl_shaped_package();
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
-    let node_id = ids.resolve(&package::code_id(package::QSL_INC));
+    let node_id = ids.resolve(&package::code_id(code));
+    let path_condition = [RequirementGuard {
+        occurrence: occurrence(&node_id, 0),
+        holds: true,
+    }];
+    let path_condition = if guarded { &path_condition[..] } else { &[] };
     let routed = [route(0, &node_id)];
     let admitted = admitted_routing_input(&checked, &routed);
     let item = derive_exact_scalar_items(&checked, std::slice::from_ref(&node_id))
@@ -50,7 +69,7 @@ fn direct_increment_record() -> String {
         })
         .expect("a driver position");
     let items = [ObligationItem::ScalarClaim {
-        path_condition: &[],
+        path_condition,
         source: &checked,
         package: &admitted.package,
         claim_map: &claim_map,
@@ -58,23 +77,13 @@ fn direct_increment_record() -> String {
         claim_index: 0,
         result_selection: selection,
     }];
-    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+    negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings(),
         items: &items,
         subject_path: "crate::subject",
         unwind: 1,
     })
-    .expect("FR-015 accepts the request");
-    let KaniObligationOutcome::Emitted {
-        scalar_harnesses, ..
-    } = outcome
-    else {
-        panic!("the request is rejected");
-    };
-    let [harness] = scalar_harnesses.as_slice() else {
-        panic!("one harness, got {scalar_harnesses:?}");
-    };
-    harness.record.contents.clone()
+    .expect("FR-015 accepts the request")
 }
 
 #[trace("FR-022-AC-31", "TC-033")]
@@ -634,6 +643,71 @@ fn each_single_record_change_refuses_the_whole_call() {
             record: vec![guard],
         },
     );
+    // item and record agree with each other but not with the authenticated selection
+    let mut agreeing = first.clone();
+    agreeing.result_bound = second.result_bound.clone();
+    let mut records = scenario.records();
+    records
+        .get_mut(&first.occurrence)
+        .expect("first record")
+        .result_bound = second.result_bound.clone();
+    refused(
+        0,
+        Some(agreeing),
+        records,
+        RequirementRecordMismatch::ResultBoundMismatch {
+            item: second.result_bound.clone(),
+            record: second.result_bound.clone(),
+            selected: Some(first.result_bound.clone()),
+        },
+    );
+    let mut agreeing = first.clone();
+    agreeing.conversion_context = second.conversion_context.clone();
+    let mut records = scenario.records();
+    records
+        .get_mut(&first.occurrence)
+        .expect("first record")
+        .conversion_context = second.conversion_context.clone();
+    refused(
+        0,
+        Some(agreeing),
+        records,
+        RequirementRecordMismatch::ConversionContextMismatch {
+            item: second.conversion_context.clone(),
+            record: second.conversion_context.clone(),
+            selected: first.conversion_context.clone(),
+        },
+    );
+    // same-length path conditions that differ in the guard's value, occurrence or order
+    let at = |ordinal: u64, holds: bool| RequirementGuard {
+        occurrence: occurrence(&first.occurrence.node_id, ordinal),
+        holds,
+    };
+    for (item_path, record_path) in [
+        (vec![at(7, true)], vec![at(7, false)]),
+        (vec![at(7, true)], vec![at(8, true)]),
+        (
+            vec![at(7, true), at(8, true)],
+            vec![at(8, true), at(7, true)],
+        ),
+    ] {
+        let mut with_path = first.clone();
+        with_path.path_condition = item_path.clone();
+        let mut records = scenario.records();
+        records
+            .get_mut(&first.occurrence)
+            .expect("first record")
+            .path_condition = record_path.clone();
+        refused(
+            0,
+            Some(with_path),
+            records,
+            RequirementRecordMismatch::PathConditionMismatch {
+                item: item_path,
+                record: record_path,
+            },
+        );
+    }
     // two items fail: the lower request index is reported
     let mut records = scenario.records();
     records.remove(&first.occurrence);
@@ -1024,4 +1098,30 @@ fn claim_refusals_precede_the_guard_refusal() {
             reason: UnsupportedObligation::OperationNotRendered { .. }
         }
     ));
+}
+
+/// The guard refusal is reported ahead of `domain_not_representable_in_i64` and
+/// `result_bound_unreachable`, which the same node without a guard is settled as.
+#[trace("FR-022-AC-38", "TC-033")]
+#[test]
+fn guard_refusal_precedes_the_bound_and_reachability_refusals() {
+    for (code, plain) in [
+        (package::QSL_PLUS_HUNDRED, "result_bound_unreachable"),
+        (package::QSL_PLUS_HUGE, "domain_not_representable_in_i64"),
+    ] {
+        let reason = |guarded: bool| {
+            let KaniObligationOutcome::Emitted { records, .. } = direct_outcome(code, guarded)
+            else {
+                panic!("the request is rejected");
+            };
+            let [record] = records.as_slice() else {
+                panic!("one record");
+            };
+            serde_json::to_value(&record.disposition).expect("serializes")["reason"].clone()
+        };
+        assert_eq!(reason(false)["code"], plain);
+        let guarded = reason(true);
+        assert_eq!(guarded["code"], "path_guard_not_lowered");
+        assert_eq!(guarded["reason"], "guard_lowering_not_implemented");
+    }
 }

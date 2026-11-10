@@ -602,7 +602,8 @@ fn check_requirement_record(
         item.request_index,
         &item.node_id,
         selection,
-    );
+    )
+    .map_err(RoutedGenerationError::Package)?;
     if !package_items.same_source_node(&requirement.result_bound, &record.result_bound)
         || selected_bound
             .as_ref()

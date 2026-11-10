@@ -932,7 +932,7 @@ pub(crate) fn selected_result_bound(
     request_index: usize,
     node_id: &CheckedNodeId,
     selection: &ContractDriverResultSelection,
-) -> Option<CheckedNodeId> {
+) -> Result<Option<CheckedNodeId>, PackageRequestError> {
     lower::selected_result_bound_node(package, items, request_index, node_id, selection)
 }
 
