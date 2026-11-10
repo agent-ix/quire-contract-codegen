@@ -61,6 +61,7 @@ Re-review of fix head cf124b62.
 | FND-003 | fixed | fixed in cf124b62 (round 1) |
 | FND-004 | fixed | fixed in a8848c2e (round 2) |
 | FND-005 | fixed | fixed in a8848c2e (round 2) |
+| FND-006 | fixed | fixed in 8bd12940 (round 3) |
 
 ## New findings (disposition pass 2)
 
@@ -69,3 +70,11 @@ Re-review of fix head a8848c2e.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-006 | low | AC-44 now limits the cfg(kani) harness to non-nested function-body claims. Nothing says what the Kani-harness entry does when it is given a nested-call function (call_item, Transition::Call): emit no harness silently, refuse with a typed cause, or emit the host differential only. AC-46's four refusal causes do not cover it. Name the outcome so that FR-047 does not receive a claim with neither a harness nor a refusal. | spec/oracle/functional/FR-021-function-application-oracles.md:564 |
+
+## New findings (disposition pass 3)
+
+Re-review of fix head 8bd12940.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The fifth cause is keyed on 'a requested claim whose selected body is a nested call (ExactFunctionBody::Call)'. ExactFunctionBody::Call { callee } exists (src/oracle/function/mod.rs:1164) and is the nested-call classification. However, it is a field of the caller-supplied ExactFunctionDeclaration that the existing generator takes, and the Kani-harness entry's inputs (Behavior: retained bytes, read limits and evidence, CheckedFunctionSource, function node id) include no declaration. Say how the entry learns the body form: classified from the reader's admitted graph as the existing generator does, or with ExactFunctionDeclaration added to its inputs. Otherwise two implementers will source it differently, and a caller-supplied classification could bypass the refusal. | spec/oracle/functional/FR-021-function-application-oracles.md:566 |

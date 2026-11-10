@@ -72,3 +72,11 @@ Re-review of fix head cf124b62.
 | FND-003 | fixed | fixed in cf124b62 (round 1) |
 | FND-004 | fixed | fixed in a8848c2e (round 2) |
 | FND-005 | fixed | fixed in a8848c2e (round 2) |
+
+## New findings (disposition pass 3)
+
+Re-review of fix head 8bd12940.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | The round-3 edit to this row changed 'Inspection plus host tests;' to 'host tests;'. That half-applied edit leaves a lowercase sentence start, and it drops inspection from the stated evidence even though FR-021-AC-44's Verification is still 'Inspection, Test (TC-031)' and TC-031 step 16 still inspects the cfg(kani) items. Restore 'Inspection plus host tests'. | spec/oracle/matrix/tests.md:63 |
