@@ -43,3 +43,9 @@ CHANGES REQUIRED. Edges hold: Linear IR-1121 is blocked-by IR-1244 (and IR-1232,
 | TC-031-step-16 | examined | spec/oracle/matrix/TC-031-function-application-oracles.md:326 | 16. Pre-decoded prepared function (FR-021-AC-44 through AC-46; IR-1244). Inspect the emitted harness text: it holds `const` declaration views, parameters, result and location, calls `TypeEnvironment::bounded_with_cancel` and `seal_union_verified`, runs `PreparedFunction::ready` and `finish`, and contains no `CheckedPackageV2::read`, pre-built environment or membership verdict. Run the host differential: the unmodified reader over the retained bytes returns `Admitted`; `PreparedFunction::new` built through the genuine path equals the value rebuilt from the const data in environment (or refus... |
 | oracle-tests.md-FR-021-AC-44-46-row | examined | spec/oracle/matrix/tests.md:62 | / FR-021 / FR-021-AC-44 through FR-021-AC-46 / TC-031 / 🚧 Planned (IR-1244; spec first, code follows; IR-1121 stays blocked until that code lands): the pre-decoded prepared function for the oracle-function Kani harness, its mandatory per-harness host differential with adverse controls, and the generation-time refusal of a reader-refused package. Inspection plus host tests; reader decode and admission earn no Kani credit. / |
 | kani-tests.md-FR-047-row | examined | spec/kani/matrix/tests.md:18 | / FR-047 / FR-047-AC-1 through FR-047-AC-7 / TC-061 / 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061 additionally requires FR-021-AC-45's host differential per emitted harness (pre-decoded prepared data, IR-1244; reader decode earns no Kani credit); TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in cf124b62 (round 1) |

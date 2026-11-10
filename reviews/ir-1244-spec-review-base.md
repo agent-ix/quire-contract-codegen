@@ -52,3 +52,18 @@ CHANGES REQUIRED. Correct and verified: the in-proof/pre-decoded split names the
 | oracle-tests.md-FR-021-AC-44-46-row | examined | spec/oracle/matrix/tests.md:62 | / FR-021 / FR-021-AC-44 through FR-021-AC-46 / TC-031 / 🚧 Planned (IR-1244; spec first, code follows; IR-1121 stays blocked until that code lands): the pre-decoded prepared function for the oracle-function Kani harness, its mandatory per-harness host differential with adverse controls, and the generation-time refusal of a reader-refused package. Inspection plus host tests; reader decode and admission earn no Kani credit. / |
 | oracle-tests.md-TC-031-row | examined | spec/oracle/matrix/tests.md:113 | / TC-031 / Verify function-application oracle generation, agreement, and static location tagging / Integration / P0 / FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18, FR-021-AC-19, FR-021-AC-20, FR-021-AC-21, FR-021-AC-22, FR-021-AC-23, FR-021-AC-24, FR-021-AC-25, FR-021-AC-26, FR-021-AC-27, FR-021-AC-28, FR-021-AC-29, FR-021-AC-30, FR-021-AC-31, FR-021-AC-32, FR-021-AC-33, FR-021-AC-34, FR-021-AC-35... |
 | kani-tests.md-FR-047-row | examined | spec/kani/matrix/tests.md:18 | / FR-047 / FR-047-AC-1 through FR-047-AC-7 / TC-061 / 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061 additionally requires FR-021-AC-45's host differential per emitted harness (pre-decoded prepared data, IR-1244; reader decode earns no Kani credit); TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. / |
+
+## New findings (disposition pass 1)
+
+Re-review of fix head cf124b62.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | high | The new Kani-harness entry takes the retained package bytes and, as separate arguments, the admitted unit and the declaring package. Nothing in Behavior, AC-45 or AC-46 requires the reader's Admitted output to be the package that select_checked_callable, checked_function_declarations and PreparedFunction::new consume, or to equal it. The reader check can therefore pass on bytes unrelated to the package the descriptors come from, and the D5 binding to the unmodified reader's output does not hold. AC-47's mutated-bytes control also depends on this binding. Require that the declaring package, and the admitted unit when it is the same package, be the reader's Admitted value, or be compared equal to it, both in the entry and in the emitted differential. | spec/oracle/functional/FR-021-function-application-oracles.md:417 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in cf124b62 (round 1) |
+| FND-002 | fixed | fixed in cf124b62 (round 1) |

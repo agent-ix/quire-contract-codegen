@@ -42,3 +42,17 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not available here, so this an
 | FR-021-AC-46 | examined | spec/oracle/functional/FR-021-function-application-oracles.md:539 | When the strict reader does not return `Admitted` for the retained package bytes at generation time, the generator returns a typed `OracleGenerationError` refusal naming the reader refusal, introduced by IR-1244 (no existing variant describes it), and emits no harness, no const data and no partial bundle; an unrelated admitted item in the same request is unchanged. This is a generation-time refusal, distinct from AC-45's run-time differential control that mutates the package bytes after generation. |
 | FR-021-AC-46-mutation | examined | spec/oracle/functional/FR-021-function-application-oracles.md:590 | Generate a harness or const data from a package the strict reader refuses, drop the refusal into a partial bundle, or reuse an unrelated `OracleGenerationError` variant that hides the reader refusal. / |
 | TC-031-step-16 | examined | spec/oracle/matrix/TC-031-function-application-oracles.md:326 | 16. Pre-decoded prepared function (FR-021-AC-44 through AC-46; IR-1244). Inspect the emitted harness text: it holds `const` declaration views, parameters, result and location, calls `TypeEnvironment::bounded_with_cancel` and `seal_union_verified`, runs `PreparedFunction::ready` and `finish`, and contains no `CheckedPackageV2::read`, pre-built environment or membership verdict. Run the host differential: the unmodified reader over the retained bytes returns `Admitted`; `PreparedFunction::new` built through the genuine path equals the value rebuilt from the const data in environment (or refus... |
+
+## New findings (disposition pass 1)
+
+Re-review of fix head cf124b62.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The mutated-bytes control ('the retained bytes of the first source mutated while its source is kept, so the genuine path returns Err(CheckedFunctionError::OwnerIdentityMismatch)') does not require the mutated bytes to stay reader-admitted. An arbitrary byte mutation is most likely reader-Refused. It then fails at (a) exactly like the truncated-bytes control and never reaches the identity check, so the two controls do not separate. Specify a reader-admitted replacement (for example the second source's genuine package bytes with the first source kept) and require (a) to pass before the OwnerIdentityMismatch. This also depends on base FND-003's binding between the read package and the selection inputs. | spec/oracle/functional/FR-021-function-application-oracles.md:562 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in cf124b62 (round 1) |

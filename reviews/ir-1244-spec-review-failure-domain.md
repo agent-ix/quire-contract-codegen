@@ -42,3 +42,20 @@ CHANGES REQUIRED. The in-proof failure paths are kept genuine: ready() still map
 | FR-021-AC-45 | examined | spec/oracle/functional/FR-021-function-application-oracles.md:538 | Per emitted harness, a host test tagged to this criterion (a) runs the unmodified `CheckedPackageV2::read` over the retained package bytes and requires `CheckedPackageV2ReadResult::Admitted`; (b) builds `PreparedFunction::new` through the genuine path (`checked_function_declarations` over the acquired closure and selection, and the environment construction of AC-44) and requires it structurally equal to the value rebuilt from the generated `const` data in its environment (or its `EnvironmentFailure` refusal), parameters, result and location. Each of these adverse controls makes the differen... |
 | FR-021-AC-46 | examined | spec/oracle/functional/FR-021-function-application-oracles.md:539 | When the strict reader does not return `Admitted` for the retained package bytes at generation time, the generator returns a typed `OracleGenerationError` refusal naming the reader refusal, introduced by IR-1244 (no existing variant describes it), and emits no harness, no const data and no partial bundle; an unrelated admitted item in the same request is unchanged. This is a generation-time refusal, distinct from AC-45's run-time differential control that mutates the package bytes after generation. |
 | FR-021-AC-46-mutation | examined | spec/oracle/functional/FR-021-function-application-oracles.md:590 | Generate a harness or const data from a package the strict reader refuses, drop the refusal into a partial bundle, or reuse an unrelated `OracleGenerationError` variant that hides the reader refusal. / |
+
+## New findings (disposition pass 1)
+
+Re-review of fix head cf124b62.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The fourth AC-46 refusal, 'a failed descriptor rebuild on the host', has no reachable trigger. The descriptors come from values the genuine path has just built, so rebuilding them with the genuine constructors (NodeKey::new, UnionMember::from_admitted, Identifier::new) succeeds except on an allocation or policy failure. Yet TC-031 step 16 requires feeding the entry 'a failing descriptor rebuild'. Name the seam that makes it fail (for example the NodeKey::try_new_with before_reserve policy hook or an injected reservation denial), or drop the variant. | spec/oracle/functional/FR-021-function-application-oracles.md:561 |
+| FND-005 | medium | AC-45 embeds only the retained package bytes under cfg(not(kani)). Its step (b) runs acquisition and selection, which need the generation-time CheckedFunctionSource (source bytes, path, supplied packages, DependencyInput, stage/replay limits, body resources), the read limits and evidence, the admitted unit/declaring package and the function node id. None of these is said to be embedded or to equal what generation used. So the emitted differential either cannot run the genuine path, or runs it over different inputs. State that every generation input is embedded byte-identically and reused. | spec/oracle/functional/FR-021-function-application-oracles.md:560 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in cf124b62 (round 1) |
+| FND-002 | fixed | fixed in cf124b62 (round 1) |
+| FND-003 | fixed | fixed in cf124b62 (round 1) |

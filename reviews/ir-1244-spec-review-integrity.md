@@ -53,3 +53,20 @@ CHANGES REQUIRED. The FR-021 AC table, its mutation rows (one per new AC), the o
 | oracle-tests.md-FR-021-AC-44-46-row | examined | spec/oracle/matrix/tests.md:62 | / FR-021 / FR-021-AC-44 through FR-021-AC-46 / TC-031 / 🚧 Planned (IR-1244; spec first, code follows; IR-1121 stays blocked until that code lands): the pre-decoded prepared function for the oracle-function Kani harness, its mandatory per-harness host differential with adverse controls, and the generation-time refusal of a reader-refused package. Inspection plus host tests; reader decode and admission earn no Kani credit. / |
 | oracle-tests.md-TC-031-row | examined | spec/oracle/matrix/tests.md:113 | / TC-031 / Verify function-application oracle generation, agreement, and static location tagging / Integration / P0 / FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18, FR-021-AC-19, FR-021-AC-20, FR-021-AC-21, FR-021-AC-22, FR-021-AC-23, FR-021-AC-24, FR-021-AC-25, FR-021-AC-26, FR-021-AC-27, FR-021-AC-28, FR-021-AC-29, FR-021-AC-30, FR-021-AC-31, FR-021-AC-32, FR-021-AC-33, FR-021-AC-34, FR-021-AC-35... |
 | kani-tests.md-FR-047-row | examined | spec/kani/matrix/tests.md:18 | / FR-047 / FR-047-AC-1 through FR-047-AC-7 / TC-061 / 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061 additionally requires FR-021-AC-45's host differential per emitted harness (pre-decoded prepared data, IR-1244; reader decode earns no Kani credit); TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. / |
+
+## New findings (disposition pass 1)
+
+Re-review of fix head cf124b62.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The FR-021-AC-44 criterion row in the AC table was overwritten with its own mutation-row text: line 559 now reads 'Hand-build or accept caller-supplied descriptors, emit a pre-built TypeEnvironment ...', the same text as the mutation table's AC-44 row (line 611). quire matrix reports that text as AC-44's statement. The criterion itself is gone from the AC table: the descriptor content, the in-proof bounded_with_cancel/seal_union_verified/ready/finish/admits calls, 'no CheckedPackageV2::read under cfg(kani)', the no-credit clause, and the claimed non-nested scoping. Restore AC-44 as a real criterion and include the scoping. | spec/oracle/functional/FR-021-function-application-oracles.md:559 |
+| FND-005 | medium | The new row 'FR-021-AC-43 ... Covered (#744)' overstates coverage. The AC-43-tagged tests (tests/exact_function_support/agreement_cases.rs:292 and invariant_cases.rs:256) assert the stopped Incomplete payload, charges and Body location at a work limit of one, no location on completion, and the result occurrence for body-local Undefined/Refused. No AC-43-tagged test asserts that an earlier preparation stop keeps its own origin: the TypeDeclaration location assertion near invariant_cases.rs:403 is tagged FR-042-AC-3/FR-021-AC-39 only. No test at all asserts that a nested child's stopped location keeps its origin; the agreement nested case only completes. Mark the row Partially covered, or tag and add the missing assertions. | spec/oracle/matrix/tests.md:62 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in cf124b62 (round 1) |
+| FND-002 | fixed | fixed in cf124b62 (round 1) |
+| FND-003 | fixed | fixed in cf124b62 (round 1) |
