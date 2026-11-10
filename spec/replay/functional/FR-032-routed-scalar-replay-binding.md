@@ -126,6 +126,13 @@ producer/consumer wiring remains CODE-gated.
 - The builder shall select and decode playback through the Kani output adapter against the
   scalar identity's own qualified harness and persisted operand order, with one eight-byte
   `i64` value per symbolic operand and no function-identity coercion.
+- When a scalar identity carries `guard_inputs` (FR-022), the builder shall decode one playback
+  entry per guard input after the operand entries, in `guard_inputs` order: one eight-byte `i64`
+  for an integer guard input and one byte for a Boolean guard input.
+- If a decoded guard value lies outside its persisted `ScalarGuardDomain`, or a Boolean guard
+  byte is neither `0` nor `1`, then the builder shall refuse the playback as
+  `cg_scalar_witness_guard_out_of_domain` before replay.
+- The builder shall not pass guard values to QSL as operands.
 - When producing an admitted request, the builder shall validate the claimed node and
   catalogued operation against the proving package and every operand against its own declared
   bounds in persisted symbolic call order.
@@ -357,6 +364,7 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-16 | PLANNED / CODE-GATED. An independent fixture obtains the same application `NodeKey`/`CheckedNodeId` from IR admission and CG retention, checks the exact structural identity and complete positional body, and the actual QSL operator route accepts the matching claim. No CG-local identity derivation, copied encoder, stand-in verifier or synthetic acceptance passes. | Test |
 | FR-032-AC-17 | PLANNED / CODE-GATED. With a valid original claim retained, altering only the claimed package, path or producer ordinal, or changing one otherwise membership-valid retained body member while reusing the old structural identity, produces a typed stale-dependency/revision-mismatch refusal before scalar comparison. A body-only edit cannot pass because the node identity is equal. No claimed or recomputed digest is required. | Test |
 | FR-032-AC-18 | PLANNED / CODE-GATED. If the admitted IR read lacks a valid application identity or authentic occurrence, or CG typed generation lacks a required retained body member, the CG builder returns typed setup refusal without replay or fabricated identity. A caller string or usable sentinel cannot replace the absent authority. | Test |
+| FR-032-AC-19 | PLANNED (IR-304 slice b). For a scalar identity with `guard_inputs`, the expected playback entry count is the operand count plus the guard-input count, and the guard entries follow the operands in `guard_inputs` order: an integer guard as one eight-byte `i64` and a Boolean guard as one byte. A short playback refuses as `kani_witness_arity_mismatch`; a four-byte integer guard entry as `kani_witness_width_mismatch`; a Boolean byte `2` or an integer guard value one outside its narrowed domain as `cg_scalar_witness_guard_out_of_domain`. The decoded operand vector sent to QSL excludes the guard values. An identity without `guard_inputs` decodes exactly as before. | Test (TC-047) |
 
 ## Intent and Existing Coverage
 

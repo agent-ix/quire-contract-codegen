@@ -7,6 +7,8 @@ relationships:
     type: verifies
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-022
+    type: references
 ---
 # TC-047: Check public routed scalar lowering replay and staged-content binding
 
@@ -140,6 +142,11 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    earlier membership refusal; do not fabricate a private Encoding report. Keep original function/clause carry-only behavior and existing
    function/frame encodings.
    These are planned, unrun CG conformance checks.
+9. For FR-032-AC-19, decode synthetic Kani playback against the identity of a guarded
+   FR-022-AC-33 harness with one integer guard input and of an FR-022-AC-27 harness with one
+   Boolean guard input: valid entries, one entry short, an integer guard entry of four bytes, a
+   Boolean byte `2`, and an integer guard value one outside its narrowed domain. Decode the
+   unguarded `x + 1` identity unchanged.
 
 ## Expected Results
 
@@ -159,6 +166,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-12 | Correctly hashed invented occurrence/child or false literal value/range yields typed membership refusal | Accept self-consistent hashing as membership authority |
 | FR-032-AC-13 | Public mint refuses an unencodable preimage; CG setup returns no identity or replay | Return a usable sentinel identity or accept an unencodable claim |
 | FR-032-AC-14 | Scalar addition preserves function/clause carry-only and function/frame identity rules | Redirect other paths through scalar positional parity |
+| FR-032-AC-19 | Guard entries follow the operands in `guard_inputs` order; a short playback is `kani_witness_arity_mismatch`, a wrong width `kani_witness_width_mismatch`, a Boolean byte `2` or an out-of-domain guard value `cg_scalar_witness_guard_out_of_domain`; guard values never reach QSL as operands; an identity without guard inputs decodes as before | Count only operands, decode a Boolean as eight bytes, skip the guard domain check or append guard values to the QSL operand vector |
 
 All checks are planned; completed-route observations have the same explicit remaining CODE gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never

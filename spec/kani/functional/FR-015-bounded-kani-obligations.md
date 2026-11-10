@@ -15,6 +15,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-exact/FR-392
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-022
+    type: references
 ---
 # FR-015: Generate separate bounded Kani obligations for complete-V1 oracles
 
@@ -415,6 +417,14 @@ installed-backend or independent native-replay proof credit.
   `result_bound_unreachable` naming the result range and the reachable result
   range, and emit no harness, since no assumed input could meet its
   non-vacuity cover.
+- If a routed scalar item has a path guard that FR-022 does not lower, then
+  the generator shall refuse the item as `path_guard_not_lowered` naming the
+  guard occurrence and its `PathGuardRefusal` reason, and emit no harness.
+  FR-022 owns when this arises and its reasons (FR-022-AC-32, FR-022-AC-38).
+- If a routed scalar item's path condition empties a parameter's domain, then
+  the generator shall refuse the item as `path_condition_unsatisfiable` naming
+  the guard, the parameter and its declared domain, and emit no harness.
+  FR-022 owns the narrowing rule (FR-022-AC-34).
 - When a transition obligation reads state, the generator shall emit a harness
   that asserts the obligation over the pre-state and the post-state the
   subject ABI binds ([FR-025](./FR-025-generated-subject-abi.md) owns how state
