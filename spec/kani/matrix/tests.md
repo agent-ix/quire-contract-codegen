@@ -10,7 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-052 | FR-052-AC-1 through FR-052-AC-11 | TC-066 | 🚧 PLANNED (IR-1441): no text scalar Kani harness; needs the quire-exact text carrier (IR-1445); TC-066 controls have not run. |
+| FR-052 | FR-052-AC-1 through FR-052-AC-11 | TC-066 | 🚧 PLANNED (IR-1441): no text scalar Kani harness; needs the quire-exact text carrier (IR-1445), a non-metered `Text` constructor (IR-1499) and, for normalizing profiles, a payload-byte bound (IR-1500); TC-066 controls have not run. |
 | FR-051 | FR-051-AC-1 through FR-051-AC-10 | TC-065 | 🚧 PLANNED (IR-1440): no decimal scalar Kani harness; needs the quire-exact decimal carrier (IR-1444); TC-065 controls have not run. |
 | FR-049 | FR-049-AC-1 through FR-049-AC-11 | TC-063 | 🚧 PLANNED (IR-1438): no enum scalar Kani row implemented; TC-063 controls have not run. |
 | FR-050 | FR-050-AC-1 through FR-050-AC-10 | TC-064 | 🚧 PLANNED (IR-1439): no quantity scalar Kani harness; needs K-EXACT-quantity (IR-1443) and an upstream quantity bound mechanism (IR-1497). |
