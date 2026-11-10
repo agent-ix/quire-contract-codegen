@@ -62,8 +62,8 @@ Decimal equality and inequality (`quire.op.decimal.eq`, `.ne`) are outside this
 requirement: FR-014 refuses them as `OperationNotDerivable`, so no oracle exists
 to prove. Quantity carried-Decimal conversions are a quantity operation: FR-014-AC-62
 through AC-65 own their oracle, and FR-014-AC-51 and TC-030's Quantity scalar row
-own their Kani settlement. FR-050 excludes conversions, so no row here or there
-proves them.
+own their Kani settlement. FR-050 excludes a conversion as the requested root and composes one only as an
+operand of a quantity operation, so no row here or there proves a conversion on its own.
 
 ## Inputs
 

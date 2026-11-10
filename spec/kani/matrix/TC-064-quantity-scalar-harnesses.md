@@ -38,11 +38,13 @@ Execute generated proofs only with the authorized runner and budget.
    exponent and a large literal exponent (the owner's `IntegerBits` limit-incomplete stop at
    `UnitRationalArithmetic`). Assert each agreed typed outcome and
    charges. Inspect both harnesses for no outcome-based assume (AC-4).
-5. Request a bare `unit` parameter operand and a `bounded_quantity` operand (each
-   `requires-bound`), a leaf with a missing or unbounded carrier domain, a non-literal
-   exponent, a carried operand with no conversion, one leaf reaching two operand
-   positions, and an endpoint beyond `i64` capacity in each carrier component (AC-13).
-   Remove the carrier and, separately, the carried-leaf form and assert `OperationNotRendered` (the `NoRenderer` settlement carries no prerequisite name; assert a name only where a typed reason carries one).
+5. With the carrier available, request a bare `unit` parameter operand
+   (`requires-bound`), a `bounded_quantity` operand (`unsupported`, `NoFiniteEncoding`),
+   a conversion into a carried target, a non-literal exponent, one leaf reaching two
+   operand positions, and an endpoint beyond `i64` capacity in each carrier component
+   (AC-5, AC-13). Build by hand, because the reader refuses them upstream, a carried
+   operand with no conversion and a leaf with a missing or unbounded carrier domain
+   (`requires-bound`). Remove the carrier and assert `OperationNotRendered` (the `NoRenderer` settlement carries no prerequisite name; assert a name only where a typed reason carries one).
    Exercise an unsupported operand form, an absent native expression and a quantity
    composite leaf beside a supported sibling and assert total accounting (AC-5, AC-6). Add a quantity-literal operand and a nested
    operation operand and assert the unsupported operand form.
@@ -72,11 +74,14 @@ Execute generated proofs only with the authorized runner and budget.
     unit, outcome, ordered charges and counters at zero, exact and short budgets, with the
     converted unit equal to the conversion's target (AC-11). Shorten the budget to stop
     inside each conversion and assert the stop is the whole outcome with the operation
-    unrun; construct the dimension mismatch at the defensive seam and assert `IllTyped`
-    with zero charges (AC-12).
+    unrun; build by hand a package whose carried-to-exact conversion crosses dimensions
+    (the reader admits it) and assert `IllTyped` with zero charges for that conversion and
+    earlier conversions' charges kept (AC-12). Substitute a carried `exact` `Int[..]` target
+    for one conversion over a `1 in` leaf and assert the stage assertion (no inexact or
+    out-of-domain refusal) fails with playback (AC-12).
 11. Assert the leaf bindings per carrier and the per-component `i64` fit, including the
     Decimal lifted bound and the Rational numerator and denominator ranges (AC-13).
-12. Run the AC-14 mutants one at a time (conversion skipped on one operand, conversion
+12. Run the AC-14 mutants one at a time (conversion skipped on one operand, with the `lt` and `eq` points of AC-14, conversion
     charges dropped, conversion charges moved after the operation's, conversion target
     replaced by another unit of the same dimension) over control domains stating their
     distinguishing points. Each must fail with actual playback of an in-domain leaf.
