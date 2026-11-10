@@ -95,10 +95,10 @@ struct Fixture {
     unrendered: CheckedNodeId,
 }
 
-struct AdmittedRoutingInput<'a> {
-    source: &'a CheckedPackageV2,
-    package: ContractPackageV1,
-    positions: Vec<ContractRequestPosition>,
+pub(crate) struct AdmittedRoutingInput<'a> {
+    pub(crate) source: &'a CheckedPackageV2,
+    pub(crate) package: ContractPackageV1,
+    pub(crate) positions: Vec<ContractRequestPosition>,
 }
 
 fn generate_routed(
@@ -134,7 +134,7 @@ fn generate_routed(
 /// Lower the complete indexed driver request once and read its FR-330 package.
 /// Unrouted positions remain in accounting; sparse routed indexes are still
 /// their original driver indexes, not positions in the routed subset.
-fn admitted_routing_input<'a>(
+pub(crate) fn admitted_routing_input<'a>(
     checked: &'a CheckedPackageV2,
     routed: &[RoutedGenerationItem],
 ) -> AdmittedRoutingInput<'a> {
@@ -363,7 +363,7 @@ fn kani_backend() -> Candidate {
     }
 }
 
-fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem {
+pub(crate) fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem {
     RoutedGenerationItem::from_descriptor(
         request_index,
         node_id.clone(),
@@ -539,7 +539,7 @@ fn routed_item_constructor_refuses_mismatched_and_unknown_linked_descriptors() {
     );
 }
 
-fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
+pub(crate) fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
             ceilings: crate::common::proof_ceilings::proof_ceilings(),
@@ -724,7 +724,9 @@ fn fr015(
     }
 }
 
-fn kani_parts(output: &KindOutput) -> (&ObligationRecord, Option<&KaniScalarObligationHarness>) {
+pub(crate) fn kani_parts(
+    output: &KindOutput,
+) -> (&ObligationRecord, Option<&KaniScalarObligationHarness>) {
     match output {
         KindOutput::Kani { record, harness } => (record, harness.as_deref()),
         KindOutput::PackageRefused => panic!("expected Kani output, got IR refusal"),
