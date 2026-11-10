@@ -52,8 +52,22 @@ CHANGES REQUIRED. depends_on edges to FR-014, FR-015, FR-016, FR-017, FR-025, FR
 | FR-052-prerequisite-P1 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:58 | - P1 (ticket IR-1445) is the quire-exact text carrier: a symbolic exact `Text` operand and a native expression over it, with the tractability contract of the IR-1436 design review (D4): `Copy`, no allocation, no `chars().count()`, no SWAR and no iterator loop, counting and ordering as byte loops of at most the carrier capacity C. The carrier's capacity C and the recorded peak memory per capacity, within the K-DR memory budget its acceptance criteria name, are within IR-1445's scope. For the four normalizing profiles it also provides a loop-free normalization; absent that, those profiles are... |
 | FR-052-AC-conditions | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:252 | All supported-harness criteria are conditional on P1 (IR-1445) and P2 (IR-1499). The normalizing-profile parts of AC-5, AC-9 (d), (h) and (i) and AC-10 are also conditional on P3 (IR-1500). |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | AC-12 runs 'the carrier's cfg(kani) replacement of compare_text' on the host. Code under cfg(kani) does not compile in a host build, so the replacement has to be exposed host-side (a feature, cfg(any(kani, test)) or a public twin). IR-1501 asks for this only for the normalizing profiles. For binary-utf8 and unicode-scalars the replacement is P1's (IR-1445), and neither the P1 bullet nor IR-1445's acceptance criteria require it to be host-callable, so AC-12 has no stated way to run for those profiles. Add host exposure of the replacement to P1 (and to IR-1445). | spec/kani/functional/FR-052-text-scalar-harnesses.md:58 |
+
+## Scope (disposition pass 2)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052-prerequisite-P1 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:58 | - P1 (ticket IR-1445) is the quire-exact text carrier: a symbolic exact `Text` operand and a native expression over it, with the tractability contract of the IR-1436 design review (D4): `Copy`, no allocation, no `chars().count()`, no SWAR and no iterator loop, counting and ordering as byte loops of at most the carrier capacity C. The carrier's capacity C and the recorded peak memory per capacity, within the K-DR memory budget its acceptance criteria name, are within IR-1445's scope. It also provides the loop-free length check the proof-path draw constraint uses (AC-2), and a loop-free compa... |
+
 ## Dispositions
 
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | fixed | fixed in abde7ddc |
+| FND-002 | fixed | fixed in 1be1f107 |
+| FND-003 | still-open | Half-applied, and partly regressed. The AC-section sentence now puts the normalizing parts of AC-2, AC-5, AC-6, AC-9 (d)(h)(i), AC-10 and AC-12 under P4, but under P3 only 'the payload-byte bound of AC-3 and the normalizing-profile parts of AC-2 and AC-10'. AC-6 is still missing from the P3 list, and AC-5 and AC-9 (d)(h)(i), which were on it before, have been dropped. Yet AC-3 makes every normalizing profile unsupported until IR-1500 states P, and the Description and the P3 bullet ('Every normalizing-profile criterion is conditional on it') say the same. Make the P3 list match the P4 list (or say 'every normalizing-profile part ... is conditional on P3 and P4'). |

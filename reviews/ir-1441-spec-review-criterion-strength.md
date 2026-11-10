@@ -40,6 +40,18 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed on this host; th
 | FR-052-AC-5 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:233 | For every operator the oracle and native expression agree on the typed outcome, ordered charges, the denied next charge and consumed counters, at zero, exact and short budgets at each charge point in the Behavior list that the profile reaches. The reference neither runs the generated oracle twice nor bridges through Runtime. Normalizing profiles compare the running `text.normalize-output` index across both operands. |
 | FR-052-AC-6 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:234 | The reachable noncompletions are asserted as the agreed typed outcome and never assumed away: `Incomplete` at each charge point the profile reaches, and at run time `Err(IllTyped)` with `DistinctTextProfiles` as a non-`Verified` outcome retaining its cause. No `Undefined` or `Refused` control is drawn, because the owner produces none. No cause is relabelled and a stopped outcome is never proved completed. The generated harness contains no assumption that depends on the outcome (inspected, as FR-046-AC-4). |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | AC-12 compares the replacement with the shipped compare_text only 'over the correspondence enumeration of AC-2', which covers byte strings up to 'a stated small length'. The Kani proof covers payloads up to C. A replacement that diverges only on longer payloads passes AC-12: for example, an ordering loop bounded at C - 1, or a charge computed from a truncated length. Yet AC-12 concludes 'so the proof is tied to the shipped oracle'. Either require the differential to reach length C (or prove replacement-equals-shipped in Kani up to C), or limit the claim to the enumerated lengths and record the gap. | spec/kani/functional/FR-052-text-scalar-harnesses.md:280 |
+
+## Scope (disposition pass 2)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052-AC-12 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:280 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators over the correspondence enumeration of AC-2 on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets. A replacement whose ordering, charge sequence or outcome differs from the shipped one on any enumerated pair fails the check, so the proof is tied to the shipped oracle. |
+
 ## Dispositions
 
 | FND | Outcome | Reason |
@@ -47,3 +59,4 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed on this host; th
 | FND-001 | fixed | fixed in abde7ddc |
 | FND-002 | fixed | fixed in abde7ddc |
 | FND-003 | still-open | AC-2 now requires an enumeration length of at least two bytes, which is necessary but not sufficient: the swap also needs a declared min or max at which a multibyte scalar's byte and scalar lengths fall on opposite sides (e.g. U+00E9 under Text[0,1] or Text[2,2]). Under Text[0,2] with two-byte strings both measures admit every string, so the mutant cannot fail. Name such a bound in AC-2 and TC-066 step 2. |
+| FND-003 | fixed | fixed in 1be1f107 |

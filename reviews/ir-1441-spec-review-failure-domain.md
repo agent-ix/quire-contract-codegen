@@ -58,3 +58,5 @@ CHANGES SUGGESTED. Outcome reachability, charge order, the one-parameter-drawn-o
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | fixed | fixed in abde7ddc; the split is half-applied and opens a new gap, see FND-002 and FND-003 |
+| FND-002 | fixed | fixed in 1be1f107 |
+| FND-003 | fixed | fixed in 1be1f107 |

@@ -65,3 +65,5 @@ CHANGES SUGGESTED. The branch is one commit on origin/main cf10ec78 (merge-base 
 | --- | --- | --- |
 | FND-001 | fixed | fixed in abde7ddc; the replacement citation is incomplete, see FND-003 |
 | FND-002 | fixed | fixed in abde7ddc |
+| FND-003 | fixed | fixed in 1be1f107 |
+| FND-004 | fixed | fixed in 1be1f107 |

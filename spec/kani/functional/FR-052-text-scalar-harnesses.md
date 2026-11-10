@@ -63,7 +63,9 @@ involve a normalizing profile are also conditional on P3 and P4.
   within the K-DR memory budget its acceptance criteria name, are within IR-1445's
   scope. It also provides the loop-free length check the proof-path draw constraint
   uses (AC-2), and a loop-free comparison that replaces the owner's `compare_text`
-  under `cfg(kani)`.
+  under `cfg(kani)`. P1 must make that replacement callable from a host build, which
+  AC-12 needs for every profile (IR-1501 requires it only for normalization);
+  IR-1445's acceptance carries this requirement.
 - P2 (ticket IR-1499) is a non-metered public constructor for an owner `Text`. The
   only public way to obtain an owner `Text` today is the metered `admit_text`, so a
   harness built on today's API would run an admission per operand as setup. The
@@ -259,10 +261,11 @@ transcript grammar or occurrence key.
 
 ## Acceptance Criteria
 
-All supported-harness criteria are conditional on P1 (IR-1445) and P2 (IR-1499). The
-normalizing-profile parts of AC-2, AC-5, AC-6, AC-9 (d), (h) and (i), AC-10 and AC-12
-are also conditional on P4 (IR-1501), and the payload-byte bound of AC-3 and the
-normalizing-profile parts of AC-2 and AC-10 on P3 (IR-1500).
+All supported-harness criteria are conditional on P1 (IR-1445) and P2 (IR-1499). Every
+normalizing-profile criterion is conditional on P3 (IR-1500): the payload-byte bound
+of AC-3 and the normalizing-profile parts of AC-2, AC-5, AC-6, AC-9 (d), (h) and (i)
+and AC-10. The same normalizing-profile parts, and AC-12 for a normalizing profile,
+are also conditional on P4 (IR-1501).
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
@@ -277,7 +280,7 @@ normalizing-profile parts of AC-2 and AC-10 on P3 (IR-1500).
 | FR-052-AC-9 | Each mutant below fails with actual solver playback of an in-domain input, caught by the listed operators over a control domain that contains its distinguishing point. (a) `eq` for `ne` (and the converse): `eq` and `ne`. (b) `lt` for `le`, `gt` for `ge` (and converses): the matching ordering operator, equal operands. (c) Operand swap: `lt`, `le`, `gt` and `ge` over distinct operands; `eq` and `ne` swaps are equivalent and are not claimed. (d) Normalization skipped: in a copy of the generated harness the operands' `TextType` is built with `unicode-scalars` instead of the declared `nfc`; all six operators over `e` followed by U+0301 and U+00E9, in both operand orders (normal forms equal, raw payloads unequal). A swap between `nfc` and `nfkc` is not claimed, since that pair gives the same result and charges. (e) Shortlex order instead of lexicographic order: the four ordering operators over `b` against `aa`. (f) UTF-16 code unit order instead of scalar order: the four ordering operators over U+FF61 against U+10000 under `unicode-scalars` or `binary-utf8` (and `nfc` or `nfd`, which leave both unchanged); not under `nfkc` or `nfkd`, where U+FF61 becomes U+3002 and the two orders agree. (g) A prefix compare that ignores a trailing scalar: all six operators over `a` against `ab`. (h) A dropped or reordered charge, including one `text.normalize-output` before a scalar: every operator, a normalizing profile and a nonempty operand for the normalize points. (i) A wrong charge amount, such as the byte sum taken from the left operand only or the emitted count reset for the right operand: every operator over two nonempty operands, the reset needing a normalizing profile. (j) A stopped outcome reported completed: every operator. | Test |
 | FR-052-AC-10 | Counterexample decoding validates every physical I64 entry of a text parameter (width, little-endian bytes, comment, order, schema role, byte and value-count limits), then the length, the zero padding, the UTF-8 prefix through `TextPayload::from_utf8` and the retained sequence's admission by the original `TextType`, before grouping. Grouping yields one `WitnessValue::Text` per parameter through the public replay route for that exact declaration. Missing, duplicate, foreign, role-swapped, domain-conflicting and malformed schemas or entries, a length above C, nonzero padding, invalid UTF-8 and a payload the type refuses are refused with typed causes and no replay. An unavailable replay capability is reported without claiming acceptance. | Test |
 | FR-052-AC-11 | Run evidence records the operation and source association, both operands' `text_bounds`, the payload-byte bound P and the capacity C per operand, correspondence, ordered physical bindings and their logical grouping, subject and full ordered backend arguments, the unwind bound, Kani/Rust/CBMC/solver versions, target, dependency cohort including the carrier, limits, the observed peak memory, raw checks, cover and playback, exit and typed terminal outcome. No-run, refusal, cover failure, resource exhaustion and semantic falsification remain distinguishable; preparation alone earns no proof result. | Test |
-| FR-052-AC-12 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators over the correspondence enumeration of AC-2 on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets. A replacement whose ordering, charge sequence or outcome differs from the shipped one on any enumerated pair fails the check, so the proof is tied to the shipped oracle. | Test |
+| FR-052-AC-12 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets, over the AC-2 enumeration and over a fixed long-payload family at the capacity boundaries: payload lengths `C - 1` and `C` for each supported profile, and a length `C + 1` payload that the encoding refuses, with the compared pair differing only at the last scalar, at the first scalar and only in length. A replacement whose ordering loop stops at `C - 1`, whose charge is computed from a truncated length, or whose ordering, charge sequence or outcome otherwise differs on any enumerated or boundary pair fails the check. The check ties the proof to the shipped oracle for the enumerated and boundary payloads, not for every payload up to C. | Test |
 
 ## Dependencies
 
