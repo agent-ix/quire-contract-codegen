@@ -355,7 +355,7 @@ Each is a gap this change leaves visible and none is an end state. No ticket is 
 change.
 
 - A shadow or a production harness for each leaf and member family `ShadowFamilyNotBuilt` names:
-  text, enum, rational, decimal, quantity, float, sequence, set, bag and ordered set; the scalar
+  text, enum (comparison leaves planned under FR-049), rational, decimal, quantity, float, sequence, set, bag and ordered set; the scalar
   families are their own rows and PRs.
 - Equality over a `convert<T>` operand and over operands that are neither parameters nor literals.
 - A shadow for function application (FR-021) and for the kernel types ADR-003 Q1 names.

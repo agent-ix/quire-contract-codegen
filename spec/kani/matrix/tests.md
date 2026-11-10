@@ -10,6 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
+| FR-049 | FR-049-AC-1 through FR-049-AC-10 | TC-063 | 🚧 PLANNED (IR-1438): no enum scalar Kani row implemented; TC-063 controls have not run. |
 | FR-047 | FR-047-AC-1 through FR-047-AC-7 | TC-061 | 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned/open; AC-2's only tagged V1 `BoundClause` test retires under IR-348, and surviving V2 identity evidence remains required. |
 | FR-015 | FR-015-AC-3, FR-015-AC-5, FR-015-AC-6 | TC-025 | ✅ Covered |
