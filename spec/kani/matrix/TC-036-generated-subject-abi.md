@@ -91,6 +91,16 @@ yield no harness.
     `WitnessValue::Float32` or `Float64` with the exact bits, and a missing, duplicate, foreign,
     role-swapped, width-conflicting, out-of-range `float32` or over-limit entry refuses with a
     typed reason and no replay.
+18. For the planned [FR-050](../functional/FR-050-quantity-scalar-harnesses.md) quantity row, generate
+    a quantity operation over a `convert` of a carried leaf for each of an `Int[..]`, a `Decimal[..]`
+    and a `Rational[..]` carrier and read its persisted identity: assert the carrier's ordered `i64`
+    bindings (one; coefficient then scale; numerator then denominator), grouped to the leaf
+    parameter with its carrier domain, and no binding for the converted operand. Decode retained
+    playback with the existing I64 checks and caps; assert a valid tuple submits one owner carried
+    quantity per leaf, and a missing, duplicate, foreign, role-swapped, out-of-domain, noncanonical
+    Rational or over-limit entry refuses with a typed reason and no replay. Declare a leaf whose
+    component endpoint exceeds `i64` and assert `unsupported` retaining the endpoint with no
+    harness.
 
 ## Expected Results
 
@@ -142,6 +152,10 @@ yield no harness.
 17. One float operand has one grouped `i64` bit-pattern binding; a valid pattern replays as one
     Float32 or Float64 with exact bits, and each malformed or out-of-range case refuses with no
     replay (FR-025-AC-17).
+18. One carried-quantity leaf has its carrier's ordered `i64` bindings grouped with its domain and
+    fixed source unit; a valid tuple replays as one owner carried quantity per leaf, each
+    malformed or out-of-domain case refuses with no replay, and an endpoint beyond `i64` is
+    `unsupported` with no harness (FR-025-AC-18).
 
 ## Status
 

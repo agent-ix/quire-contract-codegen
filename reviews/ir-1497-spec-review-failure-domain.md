@@ -1,0 +1,56 @@
+---
+id: SR-17940486709564847047608
+title: "IR-1497 PR #773 FR-050 failure-domain analysis"
+type: SpecReview
+analysis: failure-domain
+date: 2026-11-10
+scope: "agent-ix/quire-contract-codegen; PR #773 @ b58d99bc; IR-1497; spec/kani/functional/FR-050-quantity-scalar-harnesses.md, spec/kani/functional/FR-025-generated-subject-abi.md, spec/kani/matrix/TC-064-quantity-scalar-harnesses.md, spec/kani/matrix/TC-036-generated-subject-abi.md, spec/kani/matrix/tests.md, spec/routed/matrix/TC-030-capability-settlement.md, spec/spec.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-050
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-064
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/FR-025
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1497 (related IR-1439). Spec-only PR #773 (head b58d99bc, one commit on 67739cf5): FR-050 draws exact quantity magnitudes from the carried_quantity leaf of a convert<Quantity<u>> operand and composes the conversion into the operation proof; new FR-050-AC-11..14, FR-025-AC-18 and carried-leaf ABI row, TC-064 steps 10-12, TC-036 step 18, tests.md, spec.md row 96, TC-030 row. The decision itself (language unchanged, bounded_quantity is a dense interval, carried_quantity gives the finite domain) is not re-litigated; this review checks that the spec implements it correctly. Checked against: quire-semantic-value origin/main src/quantity.rs (convert_quantity, convert, QuantityTarget::Exact, Conversion::identified_quantity, evaluate_quantity_unit, compare_quantity); CG src/oracle/scalar/render.rs and lower.rs (QuantityConversion body calls quantity_owner = quire_semantic_value::quantity; check_operand); CG src/kani/generate/negotiate.rs and outcome.rs (RequiresBound, MissingBound, NoFiniteEncoding); Contract IR origin/main 7add9a5 operations.rs (check_bounded_dimensions, check_quantity_conversion, check_operands carried-operand refusal, SameDimension not enforced); Contract IR FR-038-AC-73/248/471/485/486; QSpec FR-142-AC-27..31 and FR-154 'Unit bounds'; CG FR-014-AC-21..25, 48..52, 59..68; FR-046-AC-2, FR-051-AC-2/AC-5; FR-028; Linear IR-1443 (comment of 2026-11-10).
+
+## Verdict
+
+CHANGES REQUIRED. The conversion-stage failure set is correct against QSV for an exact target (IllTyped before charge, Incomplete at any conversion charge, no Refused). AC-5's dispositions misclassify bounded_quantity and include controls only reachable below the reader without saying so. AC-12's later-operand charge claim is in the base review.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | AC-5 maps 'a bounded_quantity operand (an interval with no finite domain)' to requires-bound. The reader admits bounded operands to quantity add, convert and lt, and a bounded-quantity parameter lowers without requires_bound under the bounds-required profile (Contract IR FR-038-AC-486). This input is therefore reachable from an admitted package, not defensive. CG's RequiresBound disposition is documented as 'An unbounded type has no bounding domain', and adding a bound cannot help a type that already has one. The Description's own reason, 'no finite domain', is what CG's existing unsupported UnsupportedObligation::NoFiniteEncoding means (negotiate.rs). Today the FR-014 operand check would also refuse this operand as an operand-form mismatch, not as RequiresBound. Unlike FR-051-AC-5 and FR-053-AC-3, AC-5 also does not say which FR-014 refusal (RequiresBound under AC-25, or MissingBound under AC-21/23) feeds requires-bound for the bare-unit case. Move bounded_quantity to the unsupported list with a named no-finite-encoding reason, and name the FR-014 refusal for the bare-unit case. | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:157 |
+| FND-002 | medium | TC-064 step 5 'Request[s] ... a leaf with a missing or unbounded carrier domain ... a carried operand with no conversion'. Neither can arrive through an admitted package. The Contract IR reader refuses a carried operand of any quantity operation other than convert as ill_typed/operator-ineligible (operations.rs check_operands, the identity != quantity.convert branch), and QSpec FR-142-AC-27 refuses it, as well as a carrier that is not a bounded Int[..], Decimal[..] or Rational[..]. AC-5 marks only the bare-unit case as 'reaching CG defensively'. As written, a tester would build a package the reader rejects and never reach CG's disposition. Mark these two inputs as CG private-seam controls (as FR-014-AC-50/61/62 do for theirs) and say that through the reader they are reader refusals. | spec/kani/matrix/TC-064-quantity-scalar-harnesses.md:41 |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-050-AC-5 | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:157 | A bare exact `unit` or `compound_unit` parameter operand (Contract IR's `requires_bound` of FR-038-AC-73 reaching CG defensively), a `bounded_quantity` operand (an interval with no finite domain), and a leaf whose carrier domain is missing or unbounded each yield source-associated `requires-bound` naming the operand and domain with no harness. A carried quantity operand that is not under a conversion, one leaf parameter reaching two operand positions (named, and not modelled as equal), and a `pow` whose exponent is not a literal integer each yield `unsupported` naming the operand, parameter or |
+| FR-050-AC-6 | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:158 | When P1 (K-EXACT-quantity, IR-1443) or P2 is unavailable the item remains settled as TC-030's Quantity scalar row states, `OperationNotRendered`, with the `NoRenderer` settlement carrying no prerequisite name (a typed reason names it only where one is carried), with no harness and no Verified claim. Unsupported operand form (including a quantity-literal operand and a nested operation operand, neither of which this row composes), absent native expression and a quantity leaf of a composite each keep their own named disposition, with total per-item accounting under FR-039 and an unchanged support |
+| FR-050-AC-12 | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:164 | A conversion-stage stop is the whole outcome and is asserted equal to the native one: an `IllTyped` conversion (reachable only for a hand-built dimension mismatch at CG's defensive seam) with zero charges and unchanged counters (FR-014-AC-65), or an incomplete outcome at a conversion charge under a short budget, leaves the operation unrun with no operation charge and no later operand converted, and is never proved completed. No inexact or out-of-domain conversion refusal is expected, because the target is exact and the leaf lies inside its carrier; if the owner returned one the assertion fails |
+| TC-064-step-5 | examined | spec/kani/matrix/TC-064-quantity-scalar-harnesses.md:41 | 5. Request a bare `unit` parameter operand and a `bounded_quantity` operand (each `requires-bound`), a leaf with a missing or unbounded carrier domain, a non-literal exponent, a carried operand with no conversion, one leaf reaching two operand positions, and an endpoint beyond `i64` capacity in each carrier component (AC-13). Remove the carrier and, separately, the carried-leaf form and assert `OperationNotRendered` (the `NoRenderer` settlement carries no prerequisite name; assert a name only where a typed reason carries one). Exercise an unsupported operand form, an absent native expression a |
+| FR-050-P2 | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:44 | Two prerequisites are named and neither is delivered. (P1) K-EXACT-quantity (ticket IR-1443) is the quire-exact carrier giving a symbolic carried-quantity leaf built from its carrier's physical bindings and a native expression over it. (P2, ticket IR-1497) The finite magnitude domain of an operand comes from a carried leaf, not from the operand itself, because no other bounded form is finite: Contract IR FR-038-AC-73, FR-038-AC-471 and FR-014-AC-60 make every bare exact `unit` or `compound_unit` parameter `requires_bound` before CG; the `bounded_quantity` form (Contract IR FR-038-AC-485 and AC |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Two naming slips in the rewritten AC-5. First, a leaf with a missing or unbounded carrier domain yields requires-bound 'via FR-014's MissingBound, AC-21'. AC-21 is the result-bound inference rule; the operand case is FR-014-AC-23. Both map to requires-bound in negotiate.rs. Second, UnsupportedObligation::NoFiniteEncoding (outcome.rs) carries only node_id and node_tag, so it cannot 'name the operand and its interval' as AC-5 says. Either drop 'and its interval' or specify where the interval is recorded. | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:161 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 7e4da3b1 |
+| FND-002 | still-open | The fix marks the two cases as 'reachable only from a hand-built package, because the reader refuses them upstream' (AC-5), and TC-064 step 5 says 'Build by hand, because the reader refuses them upstream'. That is self-contradictory. A hand-built package still goes through the strict reader, which refuses a carried operand of a non-convert quantity operation (operations.rs check_operands) and a malformed or unbounded carrier, so CG never sees it. These inputs can reach CG only through its private defensive seam below the reader, the term FR-014-AC-50/61/62 use. AC-12's hand-built case is different: there the reader does admit the package. Say 'reachable only at CG's private defensive seam (the reader refuses them)' in AC-5 and TC-064 step 5. |
+| FND-002 | fixed | fixed in 5b8fc028 |
+| FND-003 | fixed | fixed in 5b8fc028 |
