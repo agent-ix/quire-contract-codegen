@@ -53,3 +53,11 @@ CHANGES REQUIRED. Structure is sound: quire validate passes on all eight files; 
 | tests.md-FR-053-row | examined | spec/kani/matrix/tests.md:13 | / FR-053 / FR-053-AC-1 through FR-053-AC-13 / TC-067 / 🚧 PLANNED (IR-1442): no float scalar Kani harness; needs the quire-exact float carrier (IR-1446) and the Contract IR float `requires_bound` ruling (IR-69), and `sqrt`/`fma` an FR-014 derivation that has no ticket; TC-067 controls have not run. / |
 | tests.md-TC-036-row | examined | spec/kani/matrix/tests.md:133 | / TC-036 / Verify the generated harness subject ABI / Integration / P0 / FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8, FR-025-AC-9, FR-025-AC-14, FR-025-AC-15, FR-025-AC-16, FR-025-AC-17 / 🚧 Planned / |
 | spec.md-FR-053-row | examined | spec/spec.md:92 | / IEEE float scalar operation harnesses / [FR-053](kani/functional/FR-053-float-scalar-harnesses.md) planned float comparison and arithmetic proof row (conditional on IR-1446 and IR-69; `sqrt` and `fma` also on an FR-014 derivation with no ticket) / [TC-067](kani/matrix/TC-067-float-scalar-harnesses.md) planned proof and mutant controls / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-002 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-003 | fixed | fixed in b6bd48b9 (round 1) |

@@ -45,3 +45,25 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not available in this environm
 | FR-053-rounding-points | examined | spec/kani/functional/FR-053-float-scalar-harnesses.md:191 | Rounding-mode points. The six modes are `exact`, `toward-zero`, `toward-positive`, `toward-negative`, `nearest-even` and `nearest-away`. `u` is one unit in the last place of `ONE`. `T1` is `add(ONE, 2^-24)` (a tie; `2^-24` is `0x33800000`; at `binary64` it is `add(ONE, 2^-53)` with `2^-53` as `0x3CA0000000000000`). `T2` is `add(ONE, 1.5 x 2^-24)` (`0x33C00000`; `binary64` `0x3CA8000000000000`), three quarters of `u`. `T3` is `add(ONE, 2^-25)` (`0x33000000`; `binary64` `2^-54`, `0x3C90000000000000`), a quarter of `u`. `T4` is `add(MONE, -2^-25)` (`0xB3000000`; `binary64` `0xBC90000000000000`... |
 | TC-067-step-8 | examined | spec/kani/matrix/TC-067-float-scalar-harnesses.md:76 | 8. Run the AC-8 comparison mutants one at a time, each against only the operators and points AC-8 pairs with it: (a) through (e) on `numeric_equal` and `bit_identical` over `Z+`/`Z-`, `QN0`/`QN0`, `ONE`/`MONE` and `QN1`/`QN2`; (f) through (k) and (m) on `total_order` over `MONE`/`MTWO`, `MONE`/`ONE`, `Z+`/`Z-`, `ONE`/`ONE`, `INF+`/`QN0`, `NQN0`/`INF-`, `QN0`/`SN1` and `NQN0`/`NSN1`; (l) the swap on `total_order` over `ONE`/`TWO` only. Assert no swap claim for `numeric_equal` or `bit_identical`. Each must fail with actual in-domain playback (AC-8). |
 | TC-067-step-9 | examined | spec/kani/matrix/TC-067-float-scalar-harnesses.md:83 | 9. Run the AC-9 arithmetic mutants one at a time over the stated points: the operation substitution over `THREE`/`TWO`; the swaps (the `add` and `mul` swap only over `QN1`/`QN2`); the rounding-mode substitution over `T1` through `T4` for `add`, `sub` and `fma`, `M1` for `mul`, the `ONE / THREE` (`FIVE / THREE`) pair for `div` and `sqrt(TWO)` for `sqrt`, only for the mode pairs the Behavior list says each distinguishes; the `exact` mutants; zero sign; division by zero; invalid operations; NaN propagation; overflow under each directed mode; underflow, flush-to-zero and the subnormal-to-normal... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The step 8 point list for (a) through (e) dropped QN1/QN2 along with the fixed (d) point, but QN1/QN2 is AC-8 (e)'s only point: over Z+/Z-, QN0/QN0 and ONE/MONE a NaN-canonicalizing bit_identical agrees with the owner (QN0/QN0 is true either way), so (e) has no listed point in the TC. Restore QN1/QN2 for (e). | spec/kani/matrix/TC-067-float-scalar-harnesses.md:79 |
+
+## Scope (disposition pass 1)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-053-AC-8 | examined | spec/kani/functional/FR-053-float-scalar-harnesses.md:356 | Each comparison mutant below fails with actual solver playback of an in-domain input, caught by the listed operators at a point stated in the Behavior control points. (a) `numeric_equal` as bit equality: `numeric_equal`, over (`Z+`, `Z-`), expected true. (b) NaN reflexive in `numeric_equal`: `numeric_equal`, over (`QN0`, `QN0`), expected false. (c) `numeric_equal` ignoring the sign of a nonzero value: `numeric_equal`, over (`ONE`, `MONE`), expected false. (d) `bit_identical` as numeric equality: `bit_identical`, over (`Z+`, `Z-`), expected false, and over (`QN0`, `QN0`), expected true. (e) ... |
+| TC-067-step-8 | examined | spec/kani/matrix/TC-067-float-scalar-harnesses.md:79 | 8. Run the AC-8 comparison mutants one at a time, each against only the operators and points AC-8 pairs with it: (a) through (e) on `numeric_equal` and `bit_identical` over `Z+`/`Z-`, `QN0`/`QN0` and `ONE`/`MONE`; (f) through (k) and (m) on `total_order` over `MONE`/`MTWO`, `MONE`/`ONE`, `Z+`/`Z-`, `ONE`/`ONE`, `INF+`/`QN0`, `NQN0`/`INF-`, `QN0`/`SN1` and `NSN1`/`NQN0`; (l) the swap on `total_order` over `ONE`/`TWO` only. Assert no swap claim for `numeric_equal` or `bit_identical`. Each must fail with actual in-domain playback (AC-8). |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-002 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-003 | fixed | fixed in b6bd48b9 (round 1) |
+| FND-004 | fixed | fixed in b6bd48b9 (round 1) |

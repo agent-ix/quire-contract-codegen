@@ -77,8 +77,9 @@ used by name below.
    and a missing verdict, and assert none is `Verified` and the memory case is
    `inconclusive` with its reason, per width, operation and rounding mode (AC-7).
 8. Run the AC-8 comparison mutants one at a time, each against only the operators and
-   points AC-8 pairs with it: (a) through (e) on `numeric_equal` and `bit_identical` over
-   `Z+`/`Z-`, `QN0`/`QN0` and `ONE`/`MONE`; (f) through (k) and (m) on
+   points AC-8 pairs with it: (a) through (c) on `numeric_equal` over `Z+`/`Z-`,
+   `QN0`/`QN0` and `ONE`/`MONE`; (d) and (e) on `bit_identical` over `Z+`/`Z-`, `QN0`/`QN0` and
+   `QN1`/`QN2` (the only point that catches (e)); (f) through (k) and (m) on
    `total_order` over `MONE`/`MTWO`, `MONE`/`ONE`, `Z+`/`Z-`, `ONE`/`ONE`,
    `INF+`/`QN0`, `NQN0`/`INF-`, `QN0`/`SN1` and `NSN1`/`NQN0`; (l) the swap on
    `total_order` over `ONE`/`TWO` only. Assert no swap claim for `numeric_equal` or
@@ -120,11 +121,17 @@ used by name below.
     denied next charge and counters. Confirm the carrier makes its replacement callable from
     the host build (P1). For `nearest-even`, compare the non-NaN results with Rust's `f32`
     and `f64` operators, `sqrt` and `mul_add`. Mutate the replacement's ordering, charge
-    sequence, flags, provenance and a rounding step, and mutate code shared by the replacement
-    and the second implementation (decode, rounding step, sticky shift, operand
-    classification); each must fail the differential (AC-13). This step cannot run until
+    sequence, flags, provenance, rounding step, sticky shift and operand classification (each
+    must fail this differential and the proof against the expected side), and mutate the
+    bit-pattern decode shared by both sides (it fails only this differential) (AC-13). This step cannot run until
     IR-1446 supplies the host-callable replacement.
     The result covers the enumerated and boundary inputs, not every operand pair.
+
+14. Inspect the call graph of each supported operation's expected side and assert the
+    bit-pattern decode is the only function it shares with the carrier's `cfg(kani)`
+    replacement. Mutate the expected side to call the replacement's rounding step and then its
+    operand classification; each must fail the inspection while still passing the "not a second
+    call of the oracle" check of step 1 (AC-14).
 
 ## Expected Results
 
@@ -134,7 +141,7 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 
 ## Status
 
-PLANNED: all thirteen FR-053 criteria are unimplemented and untagged. No missing carrier
+PLANNED: all fourteen FR-053 criteria are unimplemented and untagged. No missing carrier
 capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation
 (IR-1502), replay route or generated-proof result is waived. No width, operation or rounding
 mode is known to verify within a request's ceilings.
