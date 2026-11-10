@@ -50,6 +50,7 @@ FAIL (one medium, two low). The interval rules are sound as stated for the param
 | --- | --- | --- | --- |
 | FND-004 | low | The precedence of the guard outcomes (path_guard_not_lowered, path_condition_unsatisfiable and slice (a) guard_lowering_not_implemented) against an item's other per-item FR-015 refusals is stated only relative to the reachable-result check. Those other refusals are requires_bound, NoRenderer for a comparison claim (ScalarOperation::of renders only add, sub, mul, negate and implies), domain_not_representable_in_i64 and oracle_refused. QSL writes guarded records for comparison claims (claims/tests.rs nest: `n >= 0` under (flag, false), where n is plain Integer), so such an item meets two refusals and its reason is unspecified. AC-34's Boolean case gives no domain for x. Fix: state the per-item order, for example guard refusals after operand/renderer refusals or before them, and give AC-34's Boolean case its types. | spec/routed/functional/FR-022-routed-generation.md:346-359 |
 
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -57,3 +58,4 @@ FAIL (one medium, two low). The interval rules are sound as stated for the param
 | FND-001 | fixed | Round 1 at d7760170. Verified against IR lower.rs at the locked c8dca8c and at origin/main 7add9a5a. A root is restricted only by profile.supported_tags (line 928) and require_bounds (line 951). CG's routed_contract_lowering_profile admits Value and Expression with require_bounds false, so parameter and plain-Integer guard roots lower. A non-lowered guard root now settles GuardRootNotLowered (AC-32). |
 | FND-002 | fixed | Round 1 at d7760170. Verified: the mirror table is correct (c<x to x>c, c<=x to x>=c, c>x to x<c, c>=x to x<=c), and negation applies after mirroring. AC-34 adds the literal-left `20 < x` case. |
 | FND-003 | fixed | Round 1 at d7760170. Verified: `declared` is now a ScalarGuardDomain with a Boolean arm, and AC-34 adds the nested-p Boolean case. |
+| FND-004 | fixed | Round 2 at fc1988f8. Verified: the per-item precedence list and its EARS bullet match the existing lowering order. FR-014 claim refusals come before Kani lowering, ScalarOperation::of fails with NoRenderer (scalar.rs:233) before the to_i64 checks, and ResultUnreachable comes last. The list is separate from the whole-call order and from AC-30's whole-call refusal. AC-37 adds k (requires_bound) and c (operation_not_rendered, the OperationNotRendered code). AC-34's Boolean case now types x. |

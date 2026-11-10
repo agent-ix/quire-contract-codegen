@@ -51,8 +51,10 @@ PASS with one low finding. All 35 AC ids in the table are unique, and AC-26..28 
 | --- | --- | --- | --- |
 | FND-002 | low | AC-37's 'one with both a wrong occurrence ordinal and a wrong conversion context refuses with ApplicationMismatch' does not say the changed ordinal has a record. With an unrecorded ordinal, RecordMissing (earlier in the per-item order) is the correct result, so the expected outcome depends on an unstated fixture choice. Fix: say 'the other recorded occurrence's ordinal', as AC-28 does. | spec/routed/functional/FR-022-routed-generation.md (AC-37 row) |
 
+
 ## Dispositions
 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Round 1 at d7760170. Verified: AC-37 covers the cross-loop order (ScalarSelectionMismatch at 2 before RecordMissing at 0; RequirementRecord before UnauthenticatedOperationView) and the intra-item order. 'Where the checks run' matches generate.rs:347-436. The guard-literal rule is now GuardLiteralNotI64 in AC-32. See new FND-002 for one residual ambiguity. |
+| FND-002 | fixed | Round 2 at fc1988f8. Verified: AC-37 now distinguishes the other recorded occurrence's ordinal (ApplicationMismatch) from an unrecorded ordinal (RecordMissing). |

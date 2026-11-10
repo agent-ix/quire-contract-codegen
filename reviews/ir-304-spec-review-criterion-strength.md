@@ -46,8 +46,16 @@ Jev (System One) client is not available on this host (`which jev` finds nothing
 | --- | --- | --- | --- |
 | FND-002 | medium | AC-38 cannot be built as written. Its discriminating clause ('while the unguarded sibling of FR-022-AC-26 stays Supported', TC-033 'beside the unguarded RR-16 item') puts items from three different checked packages in one generate_routed call: the RR-16 package, the AC-27 `if p` package and the AC-33 `if x > 5` package. generate_routed takes one CheckedPackageV2 and one admitted ContractPackageV1 per call, and the AC-27 package has no unguarded scalar item. As written, the case that separates a per-item interim refusal from a whole-call refusal cannot be constructed. Fix: name one QSL package that holds a guarded item and an unguarded sibling (for example an AC-33 package with an added unguarded `x + 1` function), or drop the sibling claim. | spec/routed/functional/FR-022-routed-generation.md (AC-38 row); spec/routed/matrix/TC-033-routed-generation.md:100-101 |
 
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | AC-37's slice (b) two-guard case cannot be built from the package it names. It routes, 'in the IR-304 guarded package', an `x + 100` item whose record carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`. No function of that package (f, g, h, k, c) contains `x > 20` or `x + 1 > 5`; h has only `x > 5`. In slice (b), GuardContextMissing is a whole-call check that runs before per-item settlement, and it needs each guard node as a ContextRoot in the item's span. The guard nodes must therefore exist in the checked package, with expression occurrences QSL emitted. As written, the case that tests precedence step 3 before step 5 refuses the whole call or cannot be assembled. Fix: add a function such as `j(x: Int[0, 9]): Int[0, 200] { if x > 20 then (if x + 1 > 5 then x + 100 else 0) else 0 }` to the guarded package and cite its item. | spec/routed/functional/FR-022-routed-generation.md:310-316 (guarded package), AC-37 row; spec/routed/matrix/TC-033-routed-generation.md:98-106 |
+
 ## Dispositions
 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Round 1 at d7760170. Verified: AC-31 names the committed golden tests/fixtures/kani-scalar/direct-increment-record.json, which slice (a) captures from the unchanged generator. Byte equality also fails a `null` or `[]` serialization. The fixture does not exist yet and is a slice (a) deliverable, as stated. |
+| FND-002 | fixed | Round 2 at fc1988f8. Verified: AC-38 and TC-033 step 31 use one IR-304 guarded package (f, g, h, k, c) in one generate_routed call, and g is an unguarded sibling. The functions type-check as written: x + 1 into Int[0, 10], x + 100 into Int[0, 200], x + m into Integer, and n >= 0 into Boolean. |

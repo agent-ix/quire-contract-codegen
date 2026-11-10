@@ -34,7 +34,7 @@ the FR-015 generator returns for the same items.
   two occurrences of one `x + 1` application, with direct narrows to
   `Int[0, 10]` and `Int[0, 20]`.
 - The IR-304 guarded package named in FR-022 ("Path conditions in the scalar
-  harness"): one QSL-checked package with `f`, `g`, `h`, `k` and `c` and their
+  harness"): one QSL-checked package with `f`, `g`, `h`, `k`, `c` and `j` and their
   requirement records, so guarded and unguarded items route in one
   `generate_routed` call over one source package.
 
@@ -101,8 +101,9 @@ view-independent integer item a requirement with no record beside the view-depen
 in one RR-16 item, set a wrong result bound with a wrong path condition, then the other recorded
 occurrence's ordinal with a wrong conversion context, then an ordinal with no record. Read the
 single reported refusal each time. In the IR-304 guarded package, route `k`'s `x + m` and `c`'s
-`n >= 0` with valid records in both slices, and in slice (b) an `x + 100` item whose record
-carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`; read each disposition.
+`n >= 0` with valid records in both slices, and in slice (b) `j`'s `x + 100` item, whose record
+carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]` with both guard nodes as context roots;
+read each disposition.
 
 For FR-022-AC-38 (slice a only), make one `generate_routed` call over the IR-304 guarded package
 routing `f`'s then item, `h`'s `x + 100` and `g`'s `x + 1` with valid records, and read each
@@ -319,7 +320,7 @@ diagnostic-string parsing.
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).
 30. The reported refusals are `ScalarSelectionMismatch` at the higher index, `RequirementRecord`,
     `ResultBoundMismatch`, `ApplicationMismatch` and `RecordMissing`; `x + m` is
-    `requires_bound` and `n >= 0` is `operation_not_rendered` in both slices; the two-guard
+    `requires_bound` and `n >= 0` is `operation_not_rendered` in both slices; `j`'s two-guard
     `x + 100` is `path_guard_not_lowered` in slice (b) (FR-022-AC-37).
 31. In slice (a), in one call, `f`'s then item and `h`'s item are `path_guard_not_lowered` with
     `guard_lowering_not_implemented` and no harness, and `g`'s item is `Supported` with a
