@@ -76,6 +76,13 @@ yield no harness.
     Decode retained playback with the existing I64 checks and caps; assert a valid pair submits one
     unnormalized `WitnessValue::Decimal`, and a missing, duplicate, foreign, role-swapped, negative
     scale, out-of-domain or over-limit entry refuses with a typed reason and no replay.
+16. For the planned [FR-052](../functional/FR-052-text-scalar-harnesses.md) text row, generate a
+    text comparison and read its persisted identity: assert the byte-length binding then the packed
+    payload words, grouped to the original parameter with its `text_bounds` domain and capacity.
+    Decode retained playback with the existing I64 checks and caps; assert a valid payload submits
+    one `WitnessValue::Text`, and a missing, duplicate, foreign, role-swapped, over-length,
+    nonzero-padding, invalid-UTF-8, out-of-domain or over-limit entry refuses with a typed reason
+    and no replay.
 
 ## Expected Results
 
@@ -121,6 +128,9 @@ yield no harness.
 15. One decimal operand has two grouped `i64` bindings (coefficient, scale) with its domain; a valid
     pair replays as one unnormalized Decimal, and each malformed or out-of-domain case refuses with
     no replay (FR-025-AC-15).
+16. One text operand has its length binding and payload words grouped with its domain and capacity;
+    a valid payload replays as one Text, and each malformed or out-of-domain case refuses with no
+    replay (FR-025-AC-16).
 
 ## Status
 
