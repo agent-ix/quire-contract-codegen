@@ -106,7 +106,7 @@ Execute generated proofs only with the authorized runner and budget.
     charge and counters. Repeat over a fixed long-payload family: per supported profile
     a stated host `TextType` and the largest admitted length L = min(P, C) and L - 1
     (`unicode-scalars` with all four-byte scalars), with pairs differing only in the
-    final byte position L (a continuation byte of a multibyte last scalar, or a
+    payload's own final byte (position L, or L - 1 for the shorter payloads; a continuation byte of a multibyte last scalar, or a
     one-byte final scalar, never a differing lead byte), only in the first byte, and
     only in length. For a payload of C + 1 bytes assert the carrier's encoding
     refusal, not agreement. Confirm the carrier makes its replacement callable from

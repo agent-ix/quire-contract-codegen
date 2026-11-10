@@ -73,3 +73,4 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed on this host; th
 | FND-003 | still-open | AC-2 now requires an enumeration length of at least two bytes, which is necessary but not sufficient: the swap also needs a declared min or max at which a multibyte scalar's byte and scalar lengths fall on opposite sides (e.g. U+00E9 under Text[0,1] or Text[2,2]). Under Text[0,2] with two-byte strings both measures admit every string, so the mutant cannot fail. Name such a bound in AC-2 and TC-066 step 2. |
 | FND-003 | fixed | fixed in 1be1f107 |
 | FND-004 | fixed | fixed in 672d8079 |
+| FND-005 | fixed | fixed in 32334405 |
