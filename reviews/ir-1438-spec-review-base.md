@@ -75,3 +75,4 @@ names. Two high and four medium findings.
 | FND-004 | fixed | Zero-member and unbounded-set controls removed; Behavior states a zero-member enum never reaches CG. |
 | FND-005 | fixed | Behavior states the index is bounded by the admitted member count and no separate index ceiling exists; AC-8 over-bound control removed. |
 | FND-006 | fixed | AC-4 now names `Incomplete` as the only reachable non-Completed outcome and requires the `OracleStop::IllTyped` path to be non-Verified retaining its cause. |
+| FND-007 | fixed | Fix 436629e7: Description now scopes eq/ne to any admitted enum declaration and lt/le/gt/ge to an `ordered enum` declaration only; AC-1 and TC-063 Description/step 1 no longer say model-owned. |

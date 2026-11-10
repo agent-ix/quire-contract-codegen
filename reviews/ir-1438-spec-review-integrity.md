@@ -62,3 +62,4 @@ while FR-049-AC-9 keeps that leaf at its composite disposition. Three medium fin
 | FND-001 | fixed | Fix 1479c253 adds the FR-025 table row "Enum operand (planned FR-049 comparison row only)" with one `i64` call, plus FR-025-AC-14 and an FR-049 Symbolic ABI section and AC-10 for playback decode. TC-036 procedure gap recorded separately as FND-004. |
 | FND-002 | fixed | Description now names `unsupported`/`OperationNotRendered` as the replaced disposition and leaves the FR-015 `ShadowFamilyNotBuilt` row unchanged for composite enum leaves. |
 | FND-003 | fixed | FR-015 and FR-028 parentheticals now say only a standalone enum comparison node moves to FR-049 and an enum leaf inside a composite keeps the shadow row, matching FR-049-AC-9. |
+| FND-004 | fixed | Fix 436629e7 adds TC-036 procedure step 14 and expected result 14 for the FR-049 enum `i64` binding and playback decode, citing FR-025-AC-14. |
