@@ -356,7 +356,7 @@ change.
 
 - A shadow or a production harness for each leaf and member family `ShadowFamilyNotBuilt` names:
   text, enum (a standalone comparison node is planned under FR-049; an enum leaf inside a composite stays here), rational, decimal, quantity, float, sequence, set, bag and ordered set; the scalar
-  families are their own rows and PRs.
+  families are their own rows and PRs (quantity scalar operations: planned FR-050).
 - Equality over a `convert<T>` operand and over operands that are neither parameters nor literals.
 - A shadow for function application (FR-021) and for the kernel types ADR-003 Q1 names.
 - A bounded depth, declared in the model, for a recursive declaration, so it can leave
