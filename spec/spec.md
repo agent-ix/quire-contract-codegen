@@ -90,6 +90,7 @@ scalar proof qualification are distinct, both still required.
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) live caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) tagged cancellation path |
 | Finite rational function predicates | [FR-046](kani/functional/FR-046-rational-function-predicate-harnesses.md) planned whole-function proof and canonical finite encoding | [TC-060](kani/matrix/TC-060-rational-function-predicate-harnesses.md) planned generated-proof and replay controls |
 | Enum scalar comparison harnesses | [FR-049](kani/functional/FR-049-enum-scalar-harnesses.md) planned enum comparison proof row (eq/ne; ordering on ordered enums) | [TC-063](kani/matrix/TC-063-enum-scalar-harnesses.md) planned proof and mutant controls |
+| Quantity scalar operation harnesses | [FR-050](kani/functional/FR-050-quantity-scalar-harnesses.md) planned bounded quantity operation proof (conditional on IR-1443 and an upstream bound mechanism, IR-1497) | [TC-064](kani/matrix/TC-064-quantity-scalar-harnesses.md) planned generated-proof and mutant controls |
 | Current-V2 function proof producer | [FR-047](kani/functional/FR-047-v2-function-proof-producer.md) planned exact claim-occurrence harness and replay context | [TC-061](kani/matrix/TC-061-v2-function-proof-producer.md) planned installed proof, replay and refusal controls |
 | Real-Kani lane gating | NFR-006 live installed-Kani lane controls; [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) current-build module discharge and mutation controls Open after retirement of the fixed V1 inventory and hold, with V2 implication and same-claim FR-003@4 producers planned | TC-045 live lane controls; [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) module proof and mutation controls Open pending genuine current-build claims |
 | Typed obligation inventories, criterion-keyed candidate tuples and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
@@ -166,7 +167,7 @@ the fixed V1 claim inventory, its held row, and its coupled test were retired.
 `scripts/cg_gates.rs` and `tests/it/kani_gate.rs` retain the separate NFR-006
 real-Kani lane controls. FR-041's V2 implication and historical FR-003@4
 claims (AC-6 to AC-10) remain planned. FR-034 and
-FR-046 retain planned obligations without a completed implementation claim here.
+FR-046 and FR-050 retain planned obligations without a completed implementation claim here.
 FR-015's V2 contract/invariant, composite and graph obligations remain planned
 or partial where their individual criteria say so.
 The computed matrix supplies trace-tag status, not a proof verdict: a tagged
