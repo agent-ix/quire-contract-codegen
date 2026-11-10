@@ -106,6 +106,7 @@ CHANGES REQUIRED. Verified against quire-exact 5db2d5e3 (CG Cargo.lock pin) src/
 | FND-003 | fixed | fixed in b6bd48b9 (round 1) |
 | FND-004 | fixed | fixed in 965c1d4a (round 2) |
 | FND-005 | fixed | fixed in 965c1d4a (round 2) |
+| FND-006 | fixed | fixed in f56571e5 (round 3) |
 
 ## New findings (disposition pass 2)
 
