@@ -70,23 +70,32 @@ Check the typed whole-call selection refusal occurs before any harness.
 Inspect the generation path for any bound search across the package or
 source-text/QSL context reconstruction.
 
-For FR-022-AC-26 through AC-28, project both QSL `RequirementItem`s and
-their keyed records through the driver's typed CG input. Route both RR-16
-items together, then reverse their input order. Compare each output's
-selected conversion, result assertion, application occurrence in the
-obligation identity and harness identity by request index. Route the guarded
-pair and inspect each proof condition: the then claim requires `p=true`, the
-else claim requires `p=false`, and an unguarded item has no guard. Evaluate a
-counterexample with `p=false` against the then item and with `p=true` against
-the else item to verify neither counts as a proof of the opposite claim.
-Remove one record, then separately replace its result bound, conversion
-occurrence and guard sequence with the other occurrence's values. Mismatch
-the item's occurrence-key node with the authenticated application selection
-in a separate case; the record has no application-node field. Assert that the
-typed refusal identifies the affected request index and occurrence and that
-no oracle, harness or obligation identity is emitted for
-that request. Keep the shared application node and the other record present
-so a node-id fallback would fail this test.
+For FR-022-AC-26 and AC-28 (slice a), build each item's `RoutedRequirement` and the package's
+`RequirementRecords` from the QSL `RequirementItem` and `RequirementRecord` values for the
+checked RR-16 package, with node keys mapped to `CheckedNodeId`. Route both RR-16 items
+together, then reverse their input order, and compare each request index's disposition and
+result assertion. Exchange only the two items' `RoutedRequirement` values and expect
+`ApplicationMismatch` at the lower index. Then, one change at a time: remove one item's
+requirement; remove its record; change its occurrence ordinal to a recorded occurrence that is
+not the authenticated application; replace the item's, then the record's, result bound with the
+other occurrence's; replace the item's, then the record's, conversion context with the other
+occurrence's; and add a guard to the record only. Keep the other occurrence's record of the same
+node present in every case, so a node-id fallback would generate instead of refusing. Assert the
+whole-call `RequirementRecord` variant, request index and occurrence, and that no oracle
+artifact, claim map or harness is returned. Make two items fail and check the lower index is
+reported. Route an existing `NotApplicable` item without a requirement as the unchanged control.
+
+For FR-022-AC-27 and AC-31 to AC-35 (slice b), route the QSL-emitted packages named in each
+criterion, with each guard's node as a `ContextRoot` in its item's context span. Inspect each
+harness's `Statement::Assume` list and order, symbolic input ranges, `guard_inputs`,
+`path_condition` and `requirement_occurrence`, and the persisted record JSON. For AC-27, also
+exchange the two records' path conditions together with the items' projections and check the
+assumptions exchange. For AC-31, generate the same scalar node through direct
+`negotiate_kani_obligations` and compare its record bytes with the pre-IR-304 record. For AC-32,
+route `x + 1 > 5` and a plain-Integer comparison guard beside a lowerable sibling, then drop one
+guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
+the unguarded `x + 100` control. For AC-35, run both harnesses through FR-017 under installed
+Kani and read the evidence outcome.
 
 For FR-022-AC-25, compile an external consumer against CG's public exports and
 match `RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
@@ -247,27 +256,42 @@ diagnostic-string parsing.
     `oracle_refused` carrying the exact FR-014 variant and its node, position
     or limit fields, and no harness. The supported item's claim and harness
     are unchanged.
-20. The RR-16 items retain separate `[0, 10]` and `[0, 20]` result
-    assertions, separate conversion occurrences, and distinct obligation and
-    harness identities despite sharing the add node. Reordering the routed
-    input changes none of those per-index values (FR-022-AC-26).
-21. The guarded pair's proof conditions include their own ordered QSL guard
-    sequences with opposite required outcomes; wrong-branch assignments do
-    not establish either claim. The unguarded item has no added guard
-    (FR-022-AC-27).
-22. Each missing or mismatched keyed record yields a typed refusal naming
-    the request index and occurrence, with no generated artifact or identity
-    for that request. No other record of the shared node is substituted
-    (FR-022-AC-28).
+20. Both RR-16 items are `Supported` with result assertions `[0, 10]` and `[0, 20]` at their own
+    request indexes, unchanged by reversing the slice. Exchanging the two `RoutedRequirement`
+    values yields `RequirementRecord` with `ApplicationMismatch` at the lower index
+    (FR-022-AC-26).
+21. The then harness assumes `p` and the else harness `!p`, each once and before the oracle call,
+    with one Boolean guard input and the guard listed in `path_condition`; `p` precedes `q` in
+    the nested case; exchanging the path conditions exchanges the assumptions; the unguarded item
+    has no guard input or assumption (FR-022-AC-27).
+22. Each single change yields `RequirementRecord` with `RequirementMissing` (`occurrence: None`),
+    `RecordMissing`, `ApplicationMismatch`, `ResultBoundMismatch`, `ConversionContextMismatch`
+    or `PathConditionMismatch` respectively, naming the request index and occurrence, with no
+    oracle artifact, claim map or harness; the lower failing index is reported; the
+    `NotApplicable` control is unchanged (FR-022-AC-28).
 23. A routed item naming excluded driver index `1` yields the typed
     `ExcludedDriverIndex` whole-call refusal before any oracle or harness;
     routed items at bound indexes `0` and `2` retain their own selections
     (FR-022-AC-29).
+24. The two RR-16 identities and records differ in `requirement_occurrence`, serialized as node,
+    role and ordinal; the direct FR-015 record omits the field and keeps its bytes
+    (FR-022-AC-31).
+25. Lowerable guards produce their assumptions; `x + 1 > 5` yields `PathGuardNotLowered` with
+    `UnsupportedGuardForm`, the plain-Integer guard `UnboundedGuardOperand`, each without a
+    harness and with the sibling unchanged; the missing guard root yields the whole-call
+    `GuardContextMissing` (FR-022-AC-32).
+26. The guarded `x + 100` has arguments `[6, 9]` and `[100, 100]` (`[0, 5]` with `holds=false`);
+    the `x < y` item keeps `x` at `[0, 9]` with guard input `y` over `[0, 9]` (FR-022-AC-33).
+27. The dead-branch item is `PathConditionUnsatisfiable` naming the guard, `x` and `[0, 9]`, with
+    no harness; the unguarded control remains `result_bound_unreachable` (FR-022-AC-34).
+28. The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
+    (FR-022-AC-35).
 
 ## Scoped evidence status (IR-1316)
 
-FR-022-AC-26/27/28 remain Planned (IR-1316; IR-304): the production routed item carries no typed
-QSL occurrence-record/path-condition intake. Same-node selected-bound controls do not establish
-record-key association, ordered guards or typed missing/mismatched-record refusal. FR-022-AC-1
-and AC-20 are separate analysis obligations; the source/API analysis is recorded in FR-022 and
-receives no backend-execution credit.
+FR-022-AC-26/27/28 and AC-31 to AC-35 are Planned (IR-304): the production routed item carries
+no typed QSL occurrence-record/path-condition intake. Slice (a) covers AC-26 and AC-28; slice (b)
+covers AC-27 and AC-31 to AC-35 (FR-022, "Scoped evidence status"). Same-node selected-bound
+controls do not establish record-key association, ordered guards or typed missing/mismatched-record
+refusal. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
+recorded in FR-022 and receives no backend-execution credit.
