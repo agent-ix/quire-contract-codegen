@@ -58,3 +58,20 @@ names. Two high and four medium findings.
 | FR-049-AC-10 | examined | Run evidence records node, enum identity and ordered member list, operator, encoding, argv, tool versions, limits, checks, cover, playback, exit and terminal outcome. |
 | TC-063 | examined | Eight-step planned procedure covering AC-1 to AC-10 through admission, generation, installed proof execution and owner replay. |
 | FR-014-AC-2 | context_only | enum comparison (including equality and inequality over a selected model-owned `model`/`variant_type`, using its original checked member identities) |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | After the fix, FR-049's Description still scopes the row to "an enum scalar comparison node ... over a model-owned enum declaration", but every model-owned declaration is unordered (QSV `EnumDeclaration::model_owned`), while FR-049-AC-1 and TC-063 step 1 now require `lt/le/gt/ge` harnesses over an `ordered enum`, which is a source-declared declaration (`EnumDeclaration::new`, as `src/oracle/equality/admitted.rs:96` builds). The normative statement excludes the declarations its own ordered-operator criteria need; TC-063's Description repeats "a model-owned enum". | spec/kani/functional/FR-049-enum-scalar-harnesses.md:25-28; spec/kani/matrix/TC-063-enum-scalar-harnesses.md:13-14 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix 1479c253: AC-1 limits lt/le/gt/ge to an `ordered enum`; Behavior and AC-8 refuse ordering over an unordered declaration as `UnorderedEnumOrdering`. Residual statement-scope mismatch recorded separately as FND-007. |
+| FND-002 | fixed | AC-3 now says a minted identity fails eq/ne and ordering operators are not claimed to detect it. |
+| FND-003 | fixed | AC-6 pairs each mutant with the operators that detect it; reordered-list mutant moved to AC-3 against ordering proofs only. |
+| FND-004 | fixed | Zero-member and unbounded-set controls removed; Behavior states a zero-member enum never reaches CG. |
+| FND-005 | fixed | Behavior states the index is bounded by the admitted member count and no separate index ceiling exists; AC-8 over-bound control removed. |
+| FND-006 | fixed | AC-4 now names `Incomplete` as the only reachable non-Completed outcome and requires the `OracleStop::IllTyped` path to be non-Verified retaining its cause. |

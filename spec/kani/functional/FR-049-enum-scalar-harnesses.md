@@ -23,8 +23,9 @@ relationships:
 ## Description
 
 When an admitted request selects an `enum` scalar comparison node
-(`quire.op.enum.eq`, `.ne`, `.lt`, `.le`, `.gt` or `.ge`) over a model-owned
-enum declaration, CG SHALL generate a bounded Kani row proving that the
+(`quire.op.enum.eq`, `.ne`, `.lt`, `.le`, `.gt` or `.ge`) over an admitted enum
+declaration (eq and ne over any admitted declaration; lt, le, gt and ge over an
+`ordered enum` declaration only), CG SHALL generate a bounded Kani row proving that the
 generated enum oracle of
 [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) agrees with a
 native expression of the same comparison over every pair of declared members.
@@ -133,7 +134,7 @@ unavailable the item is `unsupported` with no harness.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-049-AC-1 | For `eq` and `ne` over a model-owned enum of at least three members, and for each of `lt`, `le`, `gt` and `ge` over an `ordered enum` of at least three members, CG generates one harness whose oracle is FR-014's generated enum comparison and whose expected value is the native operator over indices. Oracle and native sides come from the same admitted node and retain its source association. | Test |
+| FR-049-AC-1 | For `eq` and `ne` over an admitted enum declaration of at least three members, and for each of `lt`, `le`, `gt` and `ge` over an `ordered enum` of at least three members, CG generates one harness whose oracle is FR-014's generated enum comparison and whose expected value is the native operator over indices. Oracle and native sides come from the same admitted node and retain its source association. | Test |
 | FR-049-AC-2 | The symbolic domain is exactly the declared members: each operand index is an `i64` constrained to `0..member_count`, every ordered pair is reachable and no out-of-range index is reachable. Admitting one extra index, dropping the last member or fixing one operand to a constant fails the correspondence check. | Test |
 | FR-049-AC-3 | Operand values are built from the owner's checked member identities in declared order. A minted member identity (same position, different key) makes the `eq` or `ne` proof fail; a member list reordered relative to the declaration makes the ordering proofs over an `ordered enum` fail. Ordering operators are not claimed to detect a minted identity, since they compare position. | Test |
 | FR-049-AC-4 | The assertion requires `Completed` with the native Boolean and no assumption depends on the oracle outcome. A control producing `Incomplete` keeps that typed outcome and cannot become `Verified`. A path reaching `OracleStop::IllTyped` is non-`Verified` and retains its cause. | Test |

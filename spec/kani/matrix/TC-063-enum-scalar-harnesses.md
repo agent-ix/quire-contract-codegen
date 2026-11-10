@@ -11,7 +11,7 @@ relationships:
 ## Description
 
 Verify [FR-049](../functional/FR-049-enum-scalar-harnesses.md) through an
-admitted package with a model-owned enum, public CG generation, installed proof
+admitted package with enum declarations (eq/ne over any declaration, ordering over an `ordered enum`), public CG generation, installed proof
 execution and owner replay. This case is planned; the existing native enum
 comparison oracle checks do not establish proof acceptance. Execute generated
 proofs only with the authorized runner and budget.
@@ -19,7 +19,7 @@ proofs only with the authorized runner and budget.
 ## Test Procedure
 
 1. Admit a package with an `ordered enum` of at least three members and an
-   unordered model-owned enum. Request `eq` and `ne` for both, and `lt`, `le`,
+   unordered enum declaration. Request `eq` and `ne` for both, and `lt`, `le`,
    `gt`, `ge` for the ordered enum. Retain source association and inspect that
    oracle and native expression derive from the same node (AC-1).
 2. Independently enumerate member pairs and compare with the harness domain:

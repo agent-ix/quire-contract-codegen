@@ -39,3 +39,10 @@ behaviour.
 | FR-049 Behavior, assertion | examined | When asserting, the harness SHALL compare the oracle's `Outcome<bool>` against a native expression of the operator over the two indices ... The assertion SHALL require `Completed` with the native Boolean. |
 | FR-049 Behavior, refusals | examined | When two operands are drawn from different enums, or a node's operand is not an admitted member of its enum, the item is refused with a typed reason before any harness. |
 | FR-049 Behavior, cover | examined | When emitting an enum harness, CG SHALL include exactly one final completion cover after all assertions. |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Sentence split into separate "The harness SHALL build ..." and "The harness SHALL NOT mint, rename or reorder members." statements; `quire validate` no longer reports the line-67 EARS warnings. |
+| FND-002 | fixed | Refusals rewritten in unwanted form: "If an ordering operator is requested over an unordered declaration ..., then CG SHALL refuse the item ...", and likewise for the IllTyped and incomplete-member-list cases. |

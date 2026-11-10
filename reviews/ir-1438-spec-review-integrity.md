@@ -48,3 +48,17 @@ while FR-049-AC-9 keeps that leaf at its composite disposition. Three medium fin
 | TC-063 | examined | Verifies FR-049; status PLANNED, all ten criteria unimplemented and untagged. |
 | FR-025 argument table | context_only | Boolean, Bounded integer, Bounded Rational (planned FR-046 predicate slice only) rows |
 | FR-046 / FR-025-AC-10 | context_only | Every supported FR-046 Rational argument has exactly two ordered I64 physical bindings ... Actual playback decodes losslessly |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The fix adds FR-025-AC-14 with Verification `Test (TC-036)` and adds it to TC-036's matrix row, but TC-036's procedure (spec/kani/matrix/TC-036) has no step for the enum `i64` binding or its playback decode; FR-025-AC-10 to AC-13 each have a numbered step there. AC-14 is mapped to a test case that does not exercise it. | spec/kani/functional/FR-025-generated-subject-abi.md:185; spec/kani/matrix/tests.md:129 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix 1479c253 adds the FR-025 table row "Enum operand (planned FR-049 comparison row only)" with one `i64` call, plus FR-025-AC-14 and an FR-049 Symbolic ABI section and AC-10 for playback decode. TC-036 procedure gap recorded separately as FND-004. |
+| FND-002 | fixed | Description now names `unsupported`/`OperationNotRendered` as the replaced disposition and leaves the FR-015 `ShadowFamilyNotBuilt` row unchanged for composite enum leaves. |
+| FND-003 | fixed | FR-015 and FR-028 parentheticals now say only a standalone enum comparison node moves to FR-049 and an enum leaf inside a composite keeps the shadow row, matching FR-049-AC-9. |
