@@ -71,3 +71,5 @@ CHANGES REQUIRED. depends_on edges to FR-014, FR-015, FR-016, FR-017, FR-025, FR
 | FND-001 | fixed | fixed in abde7ddc |
 | FND-002 | fixed | fixed in 1be1f107 |
 | FND-003 | still-open | Half-applied, and partly regressed. The AC-section sentence now puts the normalizing parts of AC-2, AC-5, AC-6, AC-9 (d)(h)(i), AC-10 and AC-12 under P4, but under P3 only 'the payload-byte bound of AC-3 and the normalizing-profile parts of AC-2 and AC-10'. AC-6 is still missing from the P3 list, and AC-5 and AC-9 (d)(h)(i), which were on it before, have been dropped. Yet AC-3 makes every normalizing profile unsupported until IR-1500 states P, and the Description and the P3 bullet ('Every normalizing-profile criterion is conditional on it') say the same. Make the P3 list match the P4 list (or say 'every normalizing-profile part ... is conditional on P3 and P4'). |
+| FND-003 | fixed | fixed in 672d8079 |
+| FND-004 | fixed | fixed in 672d8079 |

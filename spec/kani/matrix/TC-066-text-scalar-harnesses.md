@@ -103,14 +103,18 @@ Execute generated proofs only with the authorized runner and budget.
 12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the
     shipped `compare_text` over the step 2 enumeration for all six operators, at zero,
     exact and short budgets, and assert equal outcome, ordered charges, denied next
-    charge and counters. Repeat over a fixed long-payload family at the capacity
-    boundaries: lengths `C - 1` and `C` per supported profile, and a `C + 1` payload
-    the encoding refuses, with pairs differing only at the last scalar, only at the
-    first scalar and only in length. Confirm the carrier makes its replacement
-    callable from the host build (P1). Mutate the replacement's ordering, charge
-    sequence and outcome, plus an ordering loop bounded at `C - 1` and a charge from a
-    truncated length; each must fail the differential (AC-12). The result covers the
-    enumerated and boundary payloads, not every payload up to C.
+    charge and counters. Repeat over a fixed long-payload family: per supported profile
+    a stated host `TextType` and the largest admitted length L = min(P, C) and L - 1
+    (`unicode-scalars` with all four-byte scalars), with pairs differing only in the
+    final byte position L (a continuation byte of a multibyte last scalar, or a
+    one-byte final scalar, never a differing lead byte), only in the first byte, and
+    only in length. For a payload of C + 1 bytes assert the carrier's encoding
+    refusal, not agreement. Confirm the carrier makes its replacement callable from
+    the host build (P1). Mutate the replacement's ordering, charge sequence and
+    outcome, plus an ordering loop bounded at L - 1 (which must fail the final-byte
+    pair) and a charge from a truncated length; each must fail the differential
+    (AC-12). The result covers the enumerated and boundary payloads, not every payload
+    up to C.
 
 ## Expected Results
 

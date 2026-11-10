@@ -52,6 +52,18 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed on this host; th
 | --- | --- | --- | --- |
 | FR-052-AC-12 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:280 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators over the correspondence enumeration of AC-2 on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets. A replacement whose ordering, charge sequence or outcome differs from the shipped one on any enumerated pair fails the check, so the proof is tied to the shipped oracle. |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Three gaps in AC-12's boundary family. (1) 'Differing only at the last scalar' catches the 'loop stops at C - 1' mutant only if the difference is in the final byte. For a multibyte last scalar whose lead byte differs, a C - 1 loop still sees the difference. Require the pair to differ only in byte C (an ASCII last scalar, or equal leading bytes and a different final continuation byte). (2) 'Lengths C - 1 and C for each supported profile' cannot always be built. unicode-scalars is supported only when 4 x max <= C, so an admitted payload of length C exists only when C = 4 x max and every scalar is 4 bytes. State the family per profile at its largest admitted length, min(P, C), or name the host TextType it uses. (3) The C + 1 payload is placed in a family over which the two implementations 'agree', but the replacement cannot hold it while the shipped compare_text compares it normally. Say what is asserted for C + 1 (the carrier's encoding refusal, not agreement). | spec/kani/functional/FR-052-text-scalar-harnesses.md:283 |
+
+## Scope (disposition pass 3)
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052-AC-12 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:283 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets, over the AC-2 enumeration and over a fixed long-payload family at the capacity boundaries: payload lengths `C - 1` and `C` for each supported profile, and a length `C + 1` payload that the encoding refuses, with the compared pair differing only at the last scalar, at the first scalar and only in length. A replacement whose ordering loop stops at `C ... |
+
 ## Dispositions
 
 | FND | Outcome | Reason |
@@ -60,3 +72,4 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not installed on this host; th
 | FND-002 | fixed | fixed in abde7ddc |
 | FND-003 | still-open | AC-2 now requires an enumeration length of at least two bytes, which is necessary but not sufficient: the swap also needs a declared min or max at which a multibyte scalar's byte and scalar lengths fall on opposite sides (e.g. U+00E9 under Text[0,1] or Text[2,2]). Under Text[0,2] with two-byte strings both measures admit every string, so the mutant cannot fail. Name such a bound in AC-2 and TC-066 step 2. |
 | FND-003 | fixed | fixed in 1be1f107 |
+| FND-004 | fixed | fixed in 672d8079 |
