@@ -63,3 +63,16 @@ CHANGES REQUIRED. Verified against quire-exact 5db2d5e (unchanged at origin/main
 | tests.md-FR-051-row | examined | spec/kani/matrix/tests.md:13 | / FR-051 / FR-051-AC-1 through FR-051-AC-10 / TC-065 / 🚧 PLANNED (IR-1440): no decimal scalar Kani harness; needs the quire-exact decimal carrier (IR-1444); TC-065 controls have not run. / |
 | tests.md-TC-036-row | examined | spec/kani/matrix/tests.md:130 | / TC-036 / Verify the generated harness subject ABI / Integration / P0 / FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8, FR-025-AC-9, FR-025-AC-14, FR-025-AC-15 / 🚧 Planned / |
 | spec.md-FR-051-row | examined | spec/spec.md:92 | / Decimal scalar operation harnesses / [FR-051](kani/functional/FR-051-decimal-scalar-harnesses.md) planned decimal arithmetic, rounding and ordering proof row / [TC-065](kani/matrix/TC-065-decimal-scalar-harnesses.md) planned proof and mutant controls / |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Half-applied FND-001 fix: TC-065 step 1 still admits orderings 'each with `decimal_range` operand and result bounds', and the inserted clause leaves a broken sentence ('orderings have no result bound and that the expected side is not a second call'). FR-051-AC-10 likewise still records 'operand and result `decimal_range` bounds' for every operation. Say the result bound applies to the six arithmetic operations only in both places. | spec/kani/matrix/TC-065-decimal-scalar-harnesses.md:21 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in d47cf1cc |
+| FND-002 | fixed | fixed in d47cf1cc |

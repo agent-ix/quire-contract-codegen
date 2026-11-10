@@ -39,3 +39,17 @@ CHANGES REQUIRED. The zero-divisor/zero-budget ordering, InexactDecimal-before-r
 | FR-025-decimal-row | examined | spec/kani/functional/FR-025-generated-subject-abi.md:74 | / Bounded Decimal (planned [FR-051](./FR-051-decimal-scalar-harnesses.md) scalar operations only) / two `i64` calls: coefficient then scale, inside the original `decimal_range` intervals and constrained by owner `DecimalType::contains`; the pair is the retained representation / one owner `Decimal::new(Integer::from(c), s)` value for the original parameter / |
 | TC-065-step-4 | examined | spec/kani/matrix/TC-065-decimal-scalar-harnesses.md:42 | 4. Exercise each reachable noncompletion: zero divisor (and the same input at a    zero budget, which stops `Incomplete` at `decimal.operands`), `exact` rounding    over one third at scale two (`InexactDecimal`), an add, mul and negate result    outside the result domain (`DecimalOutOfDomain`), and each `Incomplete` charge    point. Assert the agreed typed outcome and charges, and inspect the harness for    no outcome-based assume (AC-4). |
 | FR-051-AC-9 | examined | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:159 | Counterexample decoding validates two physical I64 entries per decimal parameter (width, little-endian bytes, comment, order, schema role, byte and value-count limits), then the scale range, the original domain and `DecimalType::contains`, before grouping. Grouping yields one `WitnessValue::Decimal { coefficient, scale }` per parameter through the public replay route for that exact declaration, retaining the unnormalized pair. Missing, duplicate, foreign, role-swapped, domain-conflicting and malformed schemas or entries, a negative or oversize scale and an out-of-domain pair are refused wit... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | Half-applied FND-002 fix: the FR-025 Bounded Decimal ABI row still draws the pair 'inside the original `decimal_range` intervals and constrained by owner `DecimalType::contains`', which now contradicts FR-051 Behavior and AC-2: the bound applies to value-only membership, and a raw coefficient outside [coefficient_min, coefficient_max] that `contains` admits (the owner's `(5000, 2)` for 50 in Decimal[0,100;0,2]) must be drawn. Align the FR-025 row with FR-051 (scales 0..=scale_max, `contains`, carrier envelope). | spec/kani/functional/FR-025-generated-subject-abi.md:74 |
+| FND-004 | medium | AC-2 now requires every `contains` member at scales 0..=scale_max, including the owner's result form c x 10^(scale_max - s), to be reachable, and the FR-025 ABI binds the coefficient as one `i64`. The largest such raw coefficient is max(/lo/, /hi/) x 10^(scale_max - scale_min), but AC-5 only refuses 'a coefficient endpoint beyond signed `i64`'. For Decimal[0, 10^18; 0, 2] both endpoints fit i64, yet 10^18 retained at scale two is 10^20, which no i64 draw reaches, so AC-2 cannot hold for a type AC-5 admits. Make AC-5's capacity check the lifted bound (refuse as named `unsupported` when it exceeds i64 or the carrier envelope). | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:181 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in d47cf1cc |
+| FND-002 | fixed | fixed in d47cf1cc |

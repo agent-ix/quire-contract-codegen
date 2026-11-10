@@ -37,3 +37,16 @@ CHANGES SUGGESTED. depends_on edges to FR-014, FR-015, FR-016, FR-017, FR-025, F
 | FR-051-AC-4 | examined | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:154 | Each reachable noncompletion is asserted as the agreed typed outcome and never assumed away: `Undefined(DivisionByZero)` for a zero divisor (and `Incomplete` at `decimal.operands` instead at a zero budget, since the zero check follows that charge), `Refused(InexactDecimal)` for an inexact quotient or product under `exact` rounding, `Refused(DecimalOutOfDomain)` for an add, mul or negate result outside the result domain, and `Incomplete` at each charge point named in the Behavior list. No cause is relabelled and a stopped outcome is never proved completed. The generated harness contains no a... |
 | FR-051-AC-2 | examined | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:152 | Each operand is drawn as a (coefficient, scale) pair inside its inclusive `decimal_range` coefficient and scale intervals and satisfies the owner `DecimalType::contains`. Every pair so admitted is reachable exactly once, including numerically equal pairs with different scales, and an independent host enumeration of the admitted set matches the encoding; clipping an endpoint, admitting a pair that `contains` rejects, collapsing equal-valued pairs to one representation or drawing only the target scale fails the correspondence check (QSpec FR-196-AC-5). |
 | FR-051-description-exclusions | examined | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:52 | Decimal equality and inequality (`quire.op.decimal.eq`, `.ne`) are outside this requirement: FR-014 refuses them as `OperationNotDerivable`, so no oracle exists to prove. Quantity carried Decimal conversions are FR-050 and FR-014-AC-62. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The new sentence says FR-014 'reports `RequiresBound` for an unbounded operand or arithmetic result bound'. FR-014-AC-21/AC-23 refuse a missing result bound (and an unbounded operand where no other bound exists) as `MissingBound`; `RequiresBound` is the plain-reference case of FR-014-AC-25. Both map to the `requires-bound` disposition in kani/generate/negotiate.rs, so AC-5's outcome is right, but the named owner refusal is not. Say 'RequiresBound or MissingBound'. | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:55 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in d47cf1cc |
+| FND-002 | fixed | fixed in d47cf1cc |

@@ -20,10 +20,10 @@ Execute generated proofs only with the authorized runner and budget.
 
 1. Admit packages covering decimal `add`, `sub`, `mul`, `div`, `negate`,
    `convert_rounding` and `lt`, `le`, `gt`, `ge`, each with `decimal_range` operand
-   and result bounds. Request each harness and assert the operation, operand forms
-   (and, for the six arithmetic operations, the result bound) are the admitted
-   node's; orderings have no result bound and that the expected side is not a
-   second call of the generated oracle. Request `decimal.eq` and `decimal.ne` and
+   bounds, and a result bound for the six arithmetic operations only (orderings have
+   none). Request each harness and assert the operation, operand forms (and, for the
+   arithmetic operations, the result bound) are the admitted node's, and that the
+   expected side is not a second call of the generated oracle. Request `decimal.eq` and `decimal.ne` and
    assert no harness and FR-014's `OperationNotDerivable` (AC-1).
 2. Independently enumerate each operand's admitted (coefficient, scale) set at scales
    `0..=scale_max` with exact host arithmetic and `DecimalType::contains`, and
@@ -53,9 +53,10 @@ Execute generated proofs only with the authorized runner and budget.
    yield only `Completed` or `Incomplete`, and inspect the harness for no
    outcome-based assume (AC-4).
 5. Request a missing, unbounded and repeated `decimal_range`, and, for an arithmetic
-   operation only, a missing and an ambiguous result bound (an ordering needs none), a coefficient endpoint beyond `i64` and a scale beyond
-   the carrier. Assert named `requires-bound` or `unsupported` retaining the
-   endpoint, with no harness and no clipping. Remove the carrier and assert
+   operation only, a missing and an ambiguous result bound (an ordering needs none), a lifted coefficient bound `max(|lo|,|hi|) x 10^(scale_max - scale_min)` beyond
+   `i64` (for example `Decimal[0,10^18;0,2]`, whose endpoints fit but whose lifted
+   bound is 10^20), and a scale beyond the carrier. Assert named `requires-bound` or `unsupported` retaining the
+   endpoint and lifted bound, with no harness and no clipping. Remove the carrier and assert
    `OperationNotRendered` (`NoRenderer`, no prerequisite name). Exercise an
    unsupported operand form, an absent native expression and a decimal composite
    leaf beside a supported sibling and assert total accounting (AC-5, AC-6).

@@ -42,3 +42,10 @@ CHANGES REQUIRED. The FR-025 ABI table row, tests.md FR-051 row, spec.md row and
 | tests.md-FR-051-row | examined | spec/kani/matrix/tests.md:13 | / FR-051 / FR-051-AC-1 through FR-051-AC-10 / TC-065 / 🚧 PLANNED (IR-1440): no decimal scalar Kani harness; needs the quire-exact decimal carrier (IR-1444); TC-065 controls have not run. / |
 | spec.md-FR-051-row | examined | spec/spec.md:92 | / Decimal scalar operation harnesses / [FR-051](kani/functional/FR-051-decimal-scalar-harnesses.md) planned decimal arithmetic, rounding and ordering proof row / [TC-065](kani/matrix/TC-065-decimal-scalar-harnesses.md) planned proof and mutant controls / |
 | TC-030-decimal-row | examined | spec/routed/matrix/TC-030-capability-settlement.md:397 | / Decimal scalar `expression` claim, IR-confirmed generated claim / Planned (IR-269) / Decimal scalar operation forms; the arithmetic, rounding and ordering operations are planned under FR-051 (conditional on the quire-exact decimal carrier, IR-1444), which supersedes this row for them only when delivered. / `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in d47cf1cc |
+| FND-002 | fixed | fixed in d47cf1cc |
