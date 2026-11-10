@@ -321,8 +321,25 @@ required dependency or target path.
     row credits registry, selection or `begin_call` behaviour to a Kani proof;
     that behaviour stays with the host tests named in FR-021 Behavior. Run the
     `--only-codegen` Kani probe over a real emitted owner-path crate whose
-    harness drives the body directly beside the genuinely read package and
-    record the compiler outcome; no backend proof is run for this step.
+    harness drives the body directly over generation-time-decoded prepared data
+    and record the compiler outcome; no backend proof is run for this step.
+16. Pre-decoded prepared function (FR-021-AC-44 through AC-46; IR-1244).
+    Inspect the emitted harness text: it holds `const` declaration views,
+    parameters, result and location, calls `TypeEnvironment::bounded_with_cancel`
+    and `seal_union_verified`, runs `PreparedFunction::ready` and `finish`, and
+    contains no `CheckedPackageV2::read`, pre-built environment or membership
+    verdict. Run the host differential: the unmodified reader over the retained
+    bytes returns `Admitted`; `PreparedFunction::new` built through the genuine
+    path equals the value rebuilt from the const data in environment (or
+    refusal), parameters, result and location. Then run each adverse control
+    and require the differential to fail: one const member mutated, the const
+    result type, one const parameter type, the const location, retained bytes
+    mutated to a still-admitted package with a different declaration or
+    signature, and retained bytes the reader refuses. Separately, at generation
+    time, give the generator a retained package the reader refuses and require
+    the typed refusal of FR-021-AC-46 with no harness; this is a generation
+    refusal, not a differential control. Inspect that no test, doc comment, proof
+    note or matrix row credits reader decode or admission to Kani.
 
 ## Verification Status
 

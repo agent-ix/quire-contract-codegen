@@ -383,9 +383,15 @@ session; CG's current schedule and location map do not supply it.
   unforgeable and has no constructor from bytes; CG shall not add or request
   one. The Kani obligation is therefore exactly: the generated body, driven
   directly through `BodyFactory::begin` and `Body::resume(Resume::Start(..))`
-  over arguments and a `Meter` and beside the genuinely read retained
-  `CheckedPackageV2` (FR-039 strict reader, unmodified), yields the oracle
-  outcome. It does NOT cover, and earns no proof credit for, acquisition,
+  over arguments and a `Meter` and over generation-time-decoded prepared data
+  that CG derives from the strict-reader-admitted retained `CheckedPackageV2`
+  (FR-039, unmodified), and that a host differential binds to that reader's
+  output (FR-021-AC-44 through AC-46), yields the oracle outcome. Running
+  `CheckedPackageV2::read` inside the proof is not part of the obligation:
+  the reader alone exceeds the 16 GiB compile budget (IR-1244). Reader decode
+  and admission earn no Kani proof credit; the host differential carries
+  them. It does NOT cover, and earns no proof credit for, reader decode,
+  reader admission, acquisition,
   source authentication, owner/identity binding, callable selection,
   registration, `begin_call`, the nested-call site or scheduler, or the typed
   `CheckedFunctionError` mapping. That glue is covered only by the host tests
@@ -402,6 +408,25 @@ session; CG's current schedule and location map do not supply it.
   `typed_facade_outcomes_keep_distinct_serializable_cause_codes`. A nested
   call body (`Transition::Call`) needs the QSL scheduler and is outside the
   Kani obligation until a proof-safe scheduler entry exists.
+- The function generator shall emit the pre-decoded prepared data (IR-1244) as
+  `const` data holding only the reader's outputs consumed by `PreparedFunction::new`: the
+  declaration views reachable from the selected callable (key, qualified name,
+  form and members) and the selected signature (parameters and result), plus
+  the result location. The emitted harness shall build the type environment
+  from that data through the genuine `TypeEnvironment::bounded_with_cancel`
+  and `seal_union_verified` calls, and shall run the generated
+  `PreparedFunction::ready` and `finish` result-membership guards (`admits`)
+  unchanged; no pre-built `TypeEnvironment`, membership verdict or
+  environment refusal is emitted as data. CG shall derive the data from the
+  retained package only after the strict reader returns `Admitted`; it shall
+  not accept hand-built or caller-supplied prepared data. A retained package
+  the strict reader refuses shall yield a typed generation refusal and no
+  harness (FR-021-AC-46). The bounded cut above is the recommended cut; a
+  wider pre-decode is permitted only if it keeps every guard and environment
+  construction named here inside the proof and keeps AC-45's differential
+  complete. Whether the cut fits the 16 GiB compile budget is measured under
+  IR-1244.
+
 - When an emitted function body returns `Outcome::Completed(value)`, the
   generated body shall compare that value with the same checker-issued
   `CallableSelection::signature().result()` supplied at registration, using
@@ -509,6 +534,9 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-41 | For a plain strict-reader-admitted V1 package, after existing duplicate, capability and item-precedence checks, an eligible selected call item or declaration body with an admitted `Unsupported` accounting record whose `node_tag` is `"temporal"` and whose requested-root-kind view is `NotAdmitted` causes whole-call `OracleGenerationError::UnauthenticatedRequestedRootKind { request_index, node_id }` before claim map, schedule, oracle or partial publication. These V1 facts trigger refusal without deciding whether the requested root is direct `formula`, direct `fairness` or a temporal clause. For a direct call item the error names its own driver request index and call-node root; for a declared body reached through a distinct valid call item it names the body's declaration driver request index and body root, never that call item's index/root. The lowest eligible driver request index wins across both kinds, independent of function and item slice order. The first reachable `unsupported_node_id` and `node_tag` do not substitute for the requested root. The same canonical V1 bytes read through authenticated `read_with_source` retain AC-11's clause blocker and AC-33's direct formula/fairness `Unsupported` claim, including unaffected sibling results. A plain-read request without an eligible temporal-tag `Unsupported` record retains its existing result. | Test (TC-031) |
 | FR-021-AC-42 | The emitted function-oracle crate, compiled with `cfg(kani)`, declares every `body_{symbol}` module `pub(crate)` with a `pub(crate)` `Factory` and omits every `oracle_{symbol}` host entry, and compiled without `cfg(kani)` is unchanged (all `oracle_{symbol}` entries present and behaving as AC-35 through AC-37 require). A source-level check of the emitted text proves the `#[cfg(not(kani))]` gate on each host entry and the module visibility; the Kani obligation and its explicit exclusions are as stated in Behavior, and no test, doc comment or matrix row credits the host glue to a Kani proof. | Test (TC-031), Inspection |
 | FR-021-AC-43 | Given a checked scalar function whose result expression is stopped by a work limit of one, the generated oracle and an independent FR-485 application of the same checked source return the same `Incomplete` payload and admitted charge prefix. Both evaluations name the checked result occurrence with `Location::root(Origin::Body { function, index })`, including the same depth and last index. A completed invocation has no result location. The generated wrapper also assigns that occurrence to body-local `Undefined` and `Refused` results, while an earlier preparation stop and a nested child's location retain their own origins. | Test and Inspection (TC-031) |
+| FR-021-AC-44 | The emitted `cfg(kani)` harness for each function claim builds its prepared function from `const` data that CG generated from the retained package after the strict reader returned `Admitted` (not hand-built, not caller-supplied), consisting of the selected callable's declaration views and signature parameters/result plus the result location. Under `cfg(kani)` the harness calls `TypeEnvironment::bounded_with_cancel` and, for each union declaration, `seal_union_verified`, and runs `PreparedFunction::ready` and `finish` with their `admits` result-membership guard; the emitted text holds no pre-built `TypeEnvironment`, membership verdict or environment refusal, and no `CheckedPackageV2::read` call. No test, doc comment, proof note or matrix row credits reader decode or admission to Kani. | Inspection, Test (TC-031) |
+| FR-021-AC-45 | Per emitted harness, a host test tagged to this criterion (a) runs the unmodified `CheckedPackageV2::read` over the retained package bytes and requires `CheckedPackageV2ReadResult::Admitted`; (b) builds `PreparedFunction::new` through the genuine path (`checked_function_declarations` over the acquired closure and selection, and the environment construction of AC-44) and requires it structurally equal to the value rebuilt from the generated `const` data in its environment (or its `EnvironmentFailure` refusal), parameters, result and location. Each of these adverse controls makes the differential fail: mutating one const declaration member (its value type, field identifier or presence); changing the const result type; changing one const parameter type; changing the const location; mutating the retained package bytes so the reader still admits a package whose selected declaration or signature differs; mutating the retained package bytes so the reader refuses (fails at (a)). Each control's fixture is chosen so the mutated value is observable in the compared structure (a declaration with a member whose type, identifier and presence all differ from the mutation's replacement, a result and parameters of distinct types), so none is an equivalent mutant. | Test (TC-031) |
+| FR-021-AC-46 | When the strict reader does not return `Admitted` for the retained package bytes at generation time, the generator returns a typed `OracleGenerationError` refusal naming the reader refusal, introduced by IR-1244 (no existing variant describes it), and emits no harness, no const data and no partial bundle; an unrelated admitted item in the same request is unchanged. This is a generation-time refusal, distinct from AC-45's run-time differential control that mutates the package bytes after generation. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -557,6 +585,9 @@ written.
 | FR-021-AC-41 | Inspect an unavailable requested-root kind to decide whether the plain-read guard runs, infer a direct formula or fairness root from the V1 `node_tag` or a represented node, report the call item's index for a declaration-body refusal, or change the selected index when either slice is permuted. |
 | FR-021-AC-42 | Leave an `oracle_{symbol}` host entry compiled under `cfg(kani)` (re-importing the QSL compiler into the proof), gate out the body module so the proof has nothing to drive, add a QSL-closure constructor from bytes, or credit registry/selection/begin_call behaviour to the Kani proof. |
 | FR-021-AC-43 | Leave the generated body wrapper's stopped `Evaluation.location` empty, use the requested call site's origin in place of the checked result occurrence, or change a stopped payload or charge prefix while assigning the location. |
+| FR-021-AC-44 | Hand-build or accept caller-supplied prepared data, emit a pre-built `TypeEnvironment`, a membership verdict or an environment refusal as data, drop `ready`/`finish` or the `admits` guard from the harness, call `CheckedPackageV2::read` under `cfg(kani)`, or credit reader decode to a Kani proof. |
+| FR-021-AC-45 | Compare only some fields, compare the const data to itself instead of to the reader-built value, skip the `Admitted` requirement, or accept a differential that passes after one const member, the result type, a parameter type, the location or the retained bytes is mutated. |
+| FR-021-AC-46 | Generate a harness or const data from a package the strict reader refuses, drop the refusal into a partial bundle, or reuse an unrelated `OracleGenerationError` variant that hides the reader refusal. |
 
 ## Dependencies
 

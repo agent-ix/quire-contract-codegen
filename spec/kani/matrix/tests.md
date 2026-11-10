@@ -15,7 +15,7 @@ type: TestMatrix
 | FR-051 | FR-051-AC-1 through FR-051-AC-10 | TC-065 | 🚧 PLANNED (IR-1440): no decimal scalar Kani harness; needs the quire-exact decimal carrier (IR-1444); TC-065 controls have not run. |
 | FR-049 | FR-049-AC-1 through FR-049-AC-11 | TC-063 | 🚧 PLANNED (IR-1438): no enum scalar Kani row implemented; TC-063 controls have not run. |
 | FR-050 | FR-050-AC-1 through FR-050-AC-10 | TC-064 | 🚧 PLANNED (IR-1439): no quantity scalar Kani harness; needs K-EXACT-quantity (IR-1443) and an upstream quantity bound mechanism (IR-1497). |
-| FR-047 | FR-047-AC-1 through FR-047-AC-7 | TC-061 | 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. |
+| FR-047 | FR-047-AC-1 through FR-047-AC-7 | TC-061 | 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061 additionally requires FR-021-AC-45's host differential per emitted harness (pre-decoded prepared data, IR-1244; reader decode earns no Kani credit); TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned/open; AC-2's only tagged V1 `BoundClause` test retires under IR-348, and surviving V2 identity evidence remains required. |
 | FR-015 | FR-015-AC-3, FR-015-AC-5, FR-015-AC-6 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-4 | TC-025 | 🚧 Open after IR-348: the only tagged V1 `BoundClause` assumption test retired; surviving V2 runtime-outcome assumptions need criterion-preserving evidence. |
