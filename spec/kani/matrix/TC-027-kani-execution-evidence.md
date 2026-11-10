@@ -25,6 +25,18 @@ success from a process that exited unsuccessfully; a successful run with no cove
 a failed unwinding assertion with playbacks present; a report in which an
 unwinding check succeeded; and a successful run whose report lists zero successful checks.
 
+Two-phase run (FR-017-AC-5, FR-017-AC-63, IR-1022): over launcher stand-ins, pair a proof report
+that fails an assertion with a witness report that (a) fails the same check class and location and
+prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only another check
+(`Inconclusive`, `WitnessDisagreed`); (c) is stopped at its wall-clock ceiling and at its memory
+ceiling (`TimedOut`, `MemoryExhausted`, ceilings unchanged, no third launch); (d) matches the
+check but prints no playback (`FailedWithoutCounterexample`). Run a proof report that fails only
+an unwinding assertion, a verified one, a cover-unsatisfied one and a no-report failure, and read
+exactly one launch each and no `concrete-playback` in its argument vector. Run a three-member batch
+whose proof report fails the middle member and read that only it is relaunched in a witness phase.
+Mutants: classify at the proof phase; skip the same-check comparison; relaunch after the
+unwinding failure; raise a ceiling for the witness launch; swap the vectors.
+
 Report parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-report/`, the
 exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
 unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no

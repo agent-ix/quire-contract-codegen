@@ -387,7 +387,14 @@ follows its contract call. Each contract harness carries a `requires` for every
 package precondition sharing its anchor and embeds no other obligation's
 oracle; the postcondition requested without its sibling precondition is refused
 naming that precondition, with no harness. Every identity records solver
-`cadical` and the ordered option vector, and no option enables stubbing.
+`cadical` and both ordered option vectors (the proof vector with no concrete-playback
+option, and the witness vector that inserts `-Z concrete-playback` before `--harness` and ends
+with `--concrete-playback print`, byte-equal to the pre-IR-1022 vector), and no option in either
+enables stubbing (FR-015-AC-9). Mutants, each caught by a tagged equality of both vectors against
+the recomputed ones: leave `--concrete-playback print` in the proof vector; omit the witness
+vector; move `-Z concrete-playback` after `--harness`; emit a stubbing option in the witness
+vector only. Seal validation (`src/kani/generate/spec.rs`) rejects any other vector today and
+must validate both under IR-1022.
 Regeneration is byte-identical, while the changed unwind bound and the changed
 subject each produce a different identity. Every symbolic argument
 carries an inclusive assumption equal to its IR domain, the post-state result
@@ -486,6 +493,11 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     and restore the full sealed rust artifact after removing the appended test.
     A mutation confined to a hand-written compiled subject or a harness probe
     does not satisfy this control (FR-015-AC-40, FR-015-AC-41).
+    Each unconstrained mutant run is the two-phase run of FR-017-AC-63 (IR-1022): its witness
+    phase needs the trace mode, which quire-exact TC-931 measured at 19.7 GB against 8.18 GB
+    sliced on the meter harness (AD-007, IR-844), so the AC-41, AC-119 and AC-126 mutant
+    controls may not fit 16 GiB. A witness phase stopped by the ceiling is `Inconclusive` and
+    leaves the control unmet; no ceiling raise, smaller range or weaker assertion may stand in.
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.

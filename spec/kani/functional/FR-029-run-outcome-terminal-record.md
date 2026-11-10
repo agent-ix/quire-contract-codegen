@@ -156,6 +156,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   | `inconclusive` with the failure-without-counterexample reason, cause `timeout` | `Incomplete(IncompleteCause::TimedOut)` |
   | `inconclusive` with the failure-without-counterexample reason, cause `properties_failed`, `exit_code`, `unknown` or no cause | `Failed` |
   | `inconclusive` with the missing-cover-summary reason | `Failed` |
+  | `inconclusive` with the witness-disagreed reason (PLANNED, IR-1022) | `Failed` |
   | `cancelled { source }` | `Incomplete(IncompleteCause::Cancelled { source })`, with IR `KaniCancellationSource` converted exhaustively to `quire_exact::CancelCause` |
 
   The direct `cancelled` arm keeps this function total for its public input type. In production,
@@ -168,6 +169,10 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   cover-unsatisfied run are both vacuous: the run established no property over a satisfiable domain.
 - An exhausted unwind bound is a configured resource bound the run exhausted before it completed. A
   run with no verdict is a build, launcher or solver failure, so the tool failed, not the property.
+- A witness-disagreed run maps to `Failed`: the proof phase and the witness phase of one harness
+  contradicted each other, so neither a proof nor a counterexample exists and the tool, not the
+  property, is at fault (FR-017-AC-63). This row is new with IR-1022 and keeps the map total; the
+  matching IR-side reason and FR-030 row are not specified here.
 - A missing cover summary maps to `Failed`: under the option vector every harness identity records,
   the backend prints a cover summary for every run, so its omission is the tool breaking its output
   contract, not a verdict on the property.
