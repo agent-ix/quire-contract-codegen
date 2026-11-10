@@ -426,7 +426,7 @@ session; CG's current schedule and location map do not supply it.
   input, limits and body resources) and the function node id. It takes no
   separate admitted unit or declaring package: both are the reader's own
   `Admitted` output for those bytes, so the reader's result and the package
-  that selection and `PreparedFunction::new` use are one value. The existing
+  that selection and `PreparedFunction::new` use are one value. The entry takes no `ExactFunctionDeclaration`: it classifies the selected body form, including a nested call, from that admitted graph itself and accepts no caller-supplied classification (FR-021-AC-46). The existing
   entry's signature is unchanged.
 - That entry shall run `CheckedPackageV2::read` over the retained bytes and
   proceed only on `Admitted` (a `Refused`, `Incomplete` or `CatalogUnavailable` result is a typed generation refusal), then run `acquire_checked_closure`,
