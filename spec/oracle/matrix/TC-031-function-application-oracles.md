@@ -321,8 +321,42 @@ required dependency or target path.
     row credits registry, selection or `begin_call` behaviour to a Kani proof;
     that behaviour stays with the host tests named in FR-021 Behavior. Run the
     `--only-codegen` Kani probe over a real emitted owner-path crate whose
-    harness drives the body directly beside the genuinely read package and
-    record the compiler outcome; no backend proof is run for this step.
+    harness drives the body directly over generation-time-decoded prepared data
+    and record the compiler outcome; no backend proof is run for this step.
+16. Pre-decoded prepared function (FR-021-AC-44 through AC-47; IR-1244).
+    Inspect the `cfg(kani)` items of the emitted crate: they rebuild from
+    literal descriptors, call `TypeEnvironment::bounded_with_cancel` and
+    `seal_union_verified`, run `PreparedFunction::ready` and `finish`, and
+    contain no `CheckedPackageV2::read`, pre-built environment or membership
+    verdict (AC-44); `cfg(not(kani))` items may call the reader. For every
+    emitted harness, run the emitted host differential (AC-45): the reader
+    over the retained bytes returns `Admitted`; the genuine path returns `Ok`
+    and its `PreparedFunction` equals the rebuilt value field by field. In the
+    tagged fixture, run each AC-47 adverse control and require the differential
+    to fail: one const member, the result type, one parameter type, the
+    location, a second genuine source with a different declaration or
+    signature, the second genuine source's retained bytes kept with the first
+    source's acquisition (assert `Admitted` first; genuine path
+    `OwnerIdentityMismatch`) and
+    truncated bytes (reader `Refused`). Also check that the host test embeds
+    every genuine-path input identically to generation (AC-45). At generation
+    time, feed the entry a reader-`Refused` input, a reader-`Incomplete`
+    input, a reader-`CatalogUnavailable` input and an acquisition or selection
+    refusal, and a request whose selected body is a nested call (a control
+    that fails if the entry emits a harness or returns success for it), and
+    require the five distinct typed refusals of AC-46 with no harness; inspect that the entry's signature has no admitted-package,
+    `ExactFunctionDeclaration` or body-classification parameter, so no caller
+    input can supply or override them (the AC-46 mutation row guards this). These
+    are generation refusals, not differential controls. Inspect that no test,
+    doc comment, proof note or matrix row credits reader decode or admission to
+    Kani.
+17. Stopped-body location (FR-021-AC-43). With a checked scalar function and a
+    work limit of one, compare the generated oracle's `Incomplete` payload,
+    admitted charge prefix and `Location::root(Origin::Body { function, index })`
+    with an independent FR-485 application of the same checked source; require
+    no location for a completed invocation, the result occurrence for body-local
+    `Undefined` and `Refused`, and the original origin for an earlier preparation
+    stop and a nested child.
 
 ## Verification Status
 

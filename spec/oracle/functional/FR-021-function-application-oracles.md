@@ -383,9 +383,21 @@ session; CG's current schedule and location map do not supply it.
   unforgeable and has no constructor from bytes; CG shall not add or request
   one. The Kani obligation is therefore exactly: the generated body, driven
   directly through `BodyFactory::begin` and `Body::resume(Resume::Start(..))`
-  over arguments and a `Meter` and beside the genuinely read retained
-  `CheckedPackageV2` (FR-039 strict reader, unmodified), yields the oracle
-  outcome. It does NOT cover, and earns no proof credit for, acquisition,
+  over arguments and a `Meter` and over generation-time-decoded prepared
+  data. CG derives that data at generation time from three genuine owners,
+  never by hand: the strict reader's admission (FR-039, unmodified) of the
+  retained package bytes, QSL's `acquire_checked_closure` acquisition of the
+  caller's source, and QSL's callable selection (`checked_function_declarations`
+  supplies the declaration views and `selection.signature()` the parameters
+  and result). A host differential binds the data to those outputs
+  (FR-021-AC-44 through AC-47). Running `CheckedPackageV2::read` inside the
+  proof is not part of the obligation: the reader alone exceeds the 16 GiB
+  compile budget (IR-1244). Reader decode and admission earn no Kani proof
+  credit, and the host differential does not widen that: it evidences only that
+  this harness's data equals what the genuine reader, acquisition and selection
+  path yields for the retained bytes, not that the reader decodes correctly.
+  The obligation does NOT cover, and earns no proof credit for, reader decode,
+  reader admission, acquisition,
   source authentication, owner/identity binding, callable selection,
   registration, `begin_call`, the nested-call site or scheduler, or the typed
   `CheckedFunctionError` mapping. That glue is covered only by the host tests
@@ -402,6 +414,46 @@ session; CG's current schedule and location map do not supply it.
   `typed_facade_outcomes_keep_distinct_serializable_cause_codes`. A nested
   call body (`Transition::Call`) needs the QSL scheduler and is outside the
   Kani obligation until a proof-safe scheduler entry exists.
+- Ownership (IR-1244): FR-021's function generator owns deriving and emitting
+  the pre-decoded prepared data and the per-harness host differential; the
+  FR-047 producer (IR-1121) consumes the emitted harness and gates its verdict
+  on that differential (FR-047-AC-8). `generate_exact_function_oracles` receives
+  only an already-admitted `&CheckedPackageV2` and neither the acquisition nor
+  the selection, so IR-1244 adds a separate Kani-harness entry that takes the
+  unit's retained package bytes (and, once IR-1122 lands, an imported owner's)
+  with their `CheckedPackageReadLimits` and `CheckedPackageEvidence`, a
+  `CheckedFunctionSource` (the caller's source bytes, packages, dependency
+  input, limits and body resources) and the function node id. It takes no
+  separate admitted unit or declaring package: both are the reader's own
+  `Admitted` output for those bytes, so the reader's result and the package
+  that selection and `PreparedFunction::new` use are one value. The entry takes no `ExactFunctionDeclaration`: it classifies the selected body form, including a nested call, from that admitted graph itself and accepts no caller-supplied classification (FR-021-AC-46). The existing
+  entry's signature is unchanged.
+- That entry shall run `CheckedPackageV2::read` over the retained bytes and
+  proceed only on `Admitted` (a `Refused`, `Incomplete` or `CatalogUnavailable` result is a typed generation refusal), then run `acquire_checked_closure`,
+  `select_checked_callable`, `checked_function_declarations` and
+  `PreparedFunction::new` through the genuine owner path. It shall emit the
+  results as literal descriptors, not Rust `const` items of the QSV types
+  (`NodeKey`, `ValueType`, `UnionMember` and `Identifier` hold heap or `Arc`
+  state and have fallible constructors), and the harness shall rebuild the
+  values from them with the genuine constructors inside the proof. The
+  descriptors are exactly: each reachable declaration's key, qualified name,
+  form, members (identifier, value type, presence, union bindings) and
+  `NominalDeclaration::node()` (the final key `seal_union_verified` needs);
+  the selected signature's parameters and result; the result location; and the
+  `TypeEnvironmentLimits` and `Cancel` sources, so both sides of the
+  differential use the same limits. Widening this set requires a spec
+  amendment. The harness shall build the type environment through the genuine
+  `TypeEnvironment::bounded_with_cancel` and `seal_union_verified` calls and
+  run the generated `PreparedFunction::ready` and `finish` result-membership
+  guards (`admits`) unchanged; no pre-built `TypeEnvironment`, membership
+  verdict or environment refusal is emitted as data. A descriptor rebuild
+  that fails inside the proof is a failed assertion, never a skipped or
+  assumed-away path. The generation-time host rebuild has no refusal of its
+  own (descriptors come from genuine values), so a failed rebuild in the
+  AC-45 test is a test failure. Generation-time failures are typed refusals with no
+  harness (FR-021-AC-46). Whether the cut fits the 16 GiB compile budget is
+  measured under IR-1244.
+
 - When an emitted function body returns `Outcome::Completed(value)`, the
   generated body shall compare that value with the same checker-issued
   `CallableSelection::signature().result()` supplied at registration, using
@@ -509,6 +561,10 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-41 | For a plain strict-reader-admitted V1 package, after existing duplicate, capability and item-precedence checks, an eligible selected call item or declaration body with an admitted `Unsupported` accounting record whose `node_tag` is `"temporal"` and whose requested-root-kind view is `NotAdmitted` causes whole-call `OracleGenerationError::UnauthenticatedRequestedRootKind { request_index, node_id }` before claim map, schedule, oracle or partial publication. These V1 facts trigger refusal without deciding whether the requested root is direct `formula`, direct `fairness` or a temporal clause. For a direct call item the error names its own driver request index and call-node root; for a declared body reached through a distinct valid call item it names the body's declaration driver request index and body root, never that call item's index/root. The lowest eligible driver request index wins across both kinds, independent of function and item slice order. The first reachable `unsupported_node_id` and `node_tag` do not substitute for the requested root. The same canonical V1 bytes read through authenticated `read_with_source` retain AC-11's clause blocker and AC-33's direct formula/fairness `Unsupported` claim, including unaffected sibling results. A plain-read request without an eligible temporal-tag `Unsupported` record retains its existing result. | Test (TC-031) |
 | FR-021-AC-42 | The emitted function-oracle crate, compiled with `cfg(kani)`, declares every `body_{symbol}` module `pub(crate)` with a `pub(crate)` `Factory` and omits every `oracle_{symbol}` host entry, and compiled without `cfg(kani)` is unchanged (all `oracle_{symbol}` entries present and behaving as AC-35 through AC-37 require). A source-level check of the emitted text proves the `#[cfg(not(kani))]` gate on each host entry and the module visibility; the Kani obligation and its explicit exclusions are as stated in Behavior, and no test, doc comment or matrix row credits the host glue to a Kani proof. | Test (TC-031), Inspection |
 | FR-021-AC-43 | Given a checked scalar function whose result expression is stopped by a work limit of one, the generated oracle and an independent FR-485 application of the same checked source return the same `Incomplete` payload and admitted charge prefix. Both evaluations name the checked result occurrence with `Location::root(Origin::Body { function, index })`, including the same depth and last index. A completed invocation has no result location. The generated wrapper also assigns that occurrence to body-local `Undefined` and `Refused` results, while an earlier preparation stop and a nested child's location retain their own origins. | Test and Inspection (TC-031) |
+| FR-021-AC-44 | For each non-nested function-body claim the Kani-harness entry emits (nested-call bodies are outside the Kani obligation per Behavior), the `cfg(kani)` items of the emitted crate rebuild the prepared function from the literal descriptors Behavior lists, call `TypeEnvironment::bounded_with_cancel` and, for each union declaration, `seal_union_verified`, and run `PreparedFunction::ready` and `finish` with their `admits` guard. The text of those `cfg(kani)` items holds no pre-built `TypeEnvironment`, membership verdict or environment refusal and no `CheckedPackageV2::read` call; `cfg(not(kani))` host items may call the reader. The descriptors come only from the entry's genuine reader, acquisition and selection path, never hand-built or caller-supplied. No test, doc comment, proof note or matrix row credits reader decode or admission to Kani. | Inspection, Test (TC-031) |
+| FR-021-AC-45 | For every harness the entry emits, the emitted crate embeds under `cfg(not(kani))`, identically to the values the entry used at generation, every input of the genuine path (the retained package bytes, `CheckedPackageReadLimits` and evidence features, the `CheckedFunctionSource` fields: source identity, path, source bytes, package bytes, dependency input, stage and replay limits and body resources, and the function node id), and carries a `cfg(not(kani))` host test (`PreparedFunction` is private to that crate) that (a) runs the unmodified `CheckedPackageV2::read` over the embedded bytes and requires `CheckedPackageV2ReadResult::Admitted`; (b) runs acquisition, selection, `checked_function_declarations` and `PreparedFunction::new` through the genuine path over the reader's own `Admitted` output as the admitted unit and declaring package, requiring `Ok`, and (c) requires the value rebuilt from the descriptors to equal it field by field: environment (compared with `TypeEnvironment`'s semantic equality, which ignores `admission_work_units`, or the `EnvironmentFailure` refusal by its derived equality), parameters, result and location; `PreparedFunction` and `Cancel` have no equality, and the shared limits and cancel source are the same value on both sides. A reader result other than `Admitted`, a genuine `Err(CheckedFunctionError)`, a failed descriptor rebuild or any field difference fails the test, never skips it. | Test (TC-031) |
+| FR-021-AC-46 | The Kani-harness entry refuses at generation time, with a typed refusal and no harness, const or partial bundle, each of five causes kept apart: the reader's `Refused(CheckedPackageRefusal)`; its `Incomplete(CheckedPackageIncomplete)`; its `CatalogUnavailable(CatalogReadError)`; and any `CheckedFunctionError` from acquisition, selection, `checked_function_declarations` or the genuine `PreparedFunction::new`, carried as its `CheckedFunctionErrorCode`; and a requested claim whose selected body is a nested call, which is outside the Kani obligation per Behavior, refused with its own typed cause naming the function and emitting no harness, no const data and no host differential for it. IR-1244 adds five distinct `OracleGenerationError` variants for them (names chosen by the coder; no existing variant describes them). The entry takes the unit's (and, once IR-1122 lands, an imported owner's) retained bytes, reads them itself and uses only the reader's `Admitted` output as the admitted unit and declaring package; it accepts no separately supplied admitted package and no caller-supplied body classification: the entry takes no `ExactFunctionDeclaration`, and classifies the body form (`ExactFunctionBody::Call` or not) itself from the reader's `Admitted` graph for the function node id, so no caller input can bypass the nested-call refusal. An unrelated admitted request in the same call is unchanged. These are generation-time refusals, distinct from AC-47's run-time differential controls. | Test, Inspection (TC-031) |
+| FR-021-AC-47 | Over a tagged fixture with a record or union declaration, a parameter and a result type that differ observably from each replacement below, AC-45's differential passes for the unmutated harness and fails for each of these adverse controls: one const declaration member's value type, identifier or presence changed; the const result type changed; one const parameter type changed; the const location changed; a second genuine source (source, acquisition and retained bytes all of the second source) whose selected declaration or signature differs, run against the first source's descriptors, giving a field difference; retained bytes that the reader admits but that differ from the acquisition's package (the second genuine source's bytes with the first source's acquisition kept), where the test asserts `Admitted` first and the failing step is the genuine path's `Err(CheckedFunctionError::OwnerIdentityMismatch)` from `select_checked_callable`'s comparison against the acquisition, not the reader; and the retained bytes truncated so the reader returns `Refused`. This criterion is a fixture test and is not required of every emitted harness; AC-45 is. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -557,6 +613,10 @@ written.
 | FR-021-AC-41 | Inspect an unavailable requested-root kind to decide whether the plain-read guard runs, infer a direct formula or fairness root from the V1 `node_tag` or a represented node, report the call item's index for a declaration-body refusal, or change the selected index when either slice is permuted. |
 | FR-021-AC-42 | Leave an `oracle_{symbol}` host entry compiled under `cfg(kani)` (re-importing the QSL compiler into the proof), gate out the body module so the proof has nothing to drive, add a QSL-closure constructor from bytes, or credit registry/selection/begin_call behaviour to the Kani proof. |
 | FR-021-AC-43 | Leave the generated body wrapper's stopped `Evaluation.location` empty, use the requested call site's origin in place of the checked result occurrence, or change a stopped payload or charge prefix while assigning the location. |
+| FR-021-AC-44 | Hand-build or accept caller-supplied descriptors, emit a pre-built `TypeEnvironment`, a membership verdict or an environment refusal as data, drop `ready`/`finish` or the `admits` guard from the `cfg(kani)` items, call `CheckedPackageV2::read` under `cfg(kani)`, or credit reader decode to a Kani proof. |
+| FR-021-AC-45 | Compare only some fields, compare the descriptors to themselves instead of to the genuine owner-path value, skip the `Admitted` requirement or the genuine `Err` check, run the genuine path over inputs not embedded identically to generation, feed it a package other than the reader's own output, or emit the differential for only some harnesses. |
+| FR-021-AC-46 | Silently emit nothing, or a harness, for a nested-call body instead of its typed refusal; generate a harness from a reader-refused, reader-incomplete, catalog-unavailable or acquisition/selection-refused input, drop the refusal into a partial bundle, merge the reader's `Refused`, `Incomplete` and `CatalogUnavailable` causes or hide them behind an unrelated variant, accept a separately supplied admitted unit or declaring package instead of the reader's own output, or let a caller-supplied body classification override the entry's own. |
+| FR-021-AC-47 | Accept a differential that passes after one const member, the result type, a parameter type, the location, a second genuine source, admitted bytes differing from the acquisition's package or truncated bytes is applied; or use bytes the reader refuses and so never reach the `OwnerIdentityMismatch` step. |
 
 ## Dependencies
 

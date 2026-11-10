@@ -29,7 +29,12 @@ function-site selector are Planned; current V1 replay APIs do not back them.
    names that exact function/occurrence and all arguments, and the original
    source/dependency lock and limits are retained (AC-1, AC-4, AC-7).
 2. Run the unmodified harness through installed Kani within its recorded
-   ceilings. Require `Verified` and a satisfied cover. Mutate only the selected
+   ceilings. The harness runs over generation-time-decoded prepared data, not an
+   in-proof `CheckedPackageV2::read`. Require FR-021-AC-45's recorded differential
+   pass for this exact emitted harness (TC-031 step 16); with the differential
+   missing, failed or not run, require the typed refusal of FR-047-AC-8 and no
+   evidence verdict. Credit no reader decode or admission to Kani
+   (FR-047-AC-1, FR-047-AC-8, FR-021-AC-44 through AC-47). Require `Verified` and a satisfied cover. Mutate only the selected
    function body in a separately admitted same-claim source, regenerate through
    the same producer, and require `Falsified`. Independently retain the first
    eligible assertion playback from complete stdout. Check its bytes against
