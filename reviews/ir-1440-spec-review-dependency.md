@@ -51,3 +51,4 @@ CHANGES SUGGESTED. depends_on edges to FR-014, FR-015, FR-016, FR-017, FR-025, F
 | FND-001 | fixed | fixed in d47cf1cc |
 | FND-002 | fixed | fixed in d47cf1cc |
 | FND-003 | still-open | The fix renamed the owner refusal to `MissingBound` only ('refuses an unbounded operand or arithmetic result bound as `MissingBound` (FR-014-AC-21, AC-23)'). FR-014-AC-25 refuses an unbounded plain-reference operand as `RequiresBound` wherever another operand owns a bound or the result is typed by one (for example decimal `x + y` with only `y` bounded), and that takes precedence over `MissingBound`. The disposition (`requires-bound`) is right either way; the sentence should say `RequiresBound` (FR-014-AC-25) or `MissingBound` (FR-014-AC-21, AC-23). |
+| FND-003 | fixed | fixed in 6cfbb0a6 |
