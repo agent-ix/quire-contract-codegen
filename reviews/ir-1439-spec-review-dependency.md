@@ -55,6 +55,7 @@ CHANGES REQUIRED. The IR-1443 carrier gate is stated correctly, but it is not th
 | FND-002 | fixed | fixed in f255c11d |
 | FND-003 | fixed | fixed in e738e884/66c9558c |
 | FND-004 | fixed | fixed in e738e884/66c9558c |
+| FND-005 | fixed | fixed in bf0243db |
 
 ## New findings (disposition pass 2)
 

@@ -65,6 +65,7 @@ CHANGES REQUIRED. FR-050's operation list, oracle reuse (#750-#754 compound and 
 | FND-003 | fixed | fixed in f255c11d |
 | FND-004 | deferred | The FR-015 pattern divergence is gone (#765 no longer touches FR-015). Textual conflicts with open #764 (head 1479c253) remain in FR-025, FR-028, kani/matrix/tests.md and spec.md per `git merge-tree`; they are inherent to two open siblings and are resolved by rebasing whichever PR lands second, not by a change to this PR. |
 | FND-005 | fixed | fixed in e738e884/66c9558c |
+| FND-006 | fixed | fixed in bf0243db |
 
 ## New findings (disposition pass 2)
 
