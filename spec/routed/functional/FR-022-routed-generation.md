@@ -231,7 +231,7 @@ A record mismatch is the whole-call
 `RoutedGenerationError::RequirementRecord { request_index, occurrence,
 mismatch }`, where `occurrence` is the item's `RequirementOccurrence`, or `None`
 when the item carries no requirement, and `mismatch` is one
-`RequirementRecordMismatch`:
+`RequirementRecordMismatch`, held in a `Box` to keep the whole-call error small:
 
 - `RequirementMissing`: an `OwnResult` item carries no `RoutedRequirement`.
 - `OccurrenceNotSelected`: a `NotApplicable` item has records or carries a
@@ -320,7 +320,9 @@ and `j(x: Int[0, 9]): Int[0, 200] { if x > 20 then (if x + 1 > 5 then x + 100 el
 The generator reports the first that applies, in this order:
 
 1. an FR-014 claim refusal (`requires_bound`, `oracle_refused` or
-   `no_derivable_claim`);
+   `no_derivable_claim`), including `unsatisfiable_bound` while the claim's bounds are
+   derived, and `caller_declared_operation`, which is settled from the operation's provenance
+   before any guard is considered;
 2. `operation_not_rendered` (FR-015 has no scalar renderer for the operation,
    for example an integer comparison claim);
 3. `path_guard_not_lowered`, for the first guard in outermost-first order that
@@ -829,11 +831,14 @@ checks descriptor/backend identity before deriving the closed kind. There is no 
 backend/kind accessor. Rust field privacy prevents external struct construction or reassignment
 of those fields. This is an API/privacy fact; constructor tests alone are not its proof method.
 
-FR-022-AC-26/27/28 and FR-022-AC-31 to FR-022-AC-38 are Planned (IR-304), with FR-032-AC-19.
-Routed items retain a package source and `ContractDriverResultSelection`, without the QSL
-occurrence requirement-record/path-condition intake. Current selected-bound controls do not
-establish occurrence-specific record association, ordered branch guards in proof obligations or
-the required missing/wrong-keyed-record refusals. IR-304 lands in two slices:
+FR-022-AC-26, AC-28, AC-36 and AC-38 are covered by IR-304 slice (a) tests, and AC-37 is covered
+except its two-guard `j` case. FR-022-AC-27 and FR-022-AC-31 to FR-022-AC-35 stay Planned, with
+FR-032-AC-19 and the two-guard case of AC-37 (slice (b)); the slice (a) golden half of
+FR-022-AC-31 is asserted but untagged because the criterion's routed `requirement_occurrence`
+identity is slice (b).
+Slice (a) adds the QSL occurrence requirement-record intake and the missing/wrong-keyed-record
+refusals; ordered branch guards in proof obligations are not yet lowered. IR-304 lands in two
+slices:
 
 - Slice (a), typed record input: `RequirementOccurrence`, `RequirementGuard`,
   `RequirementRecordInput`, `RequirementRecords`, `RoutedRequirement`,
