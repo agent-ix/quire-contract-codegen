@@ -761,7 +761,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | an integer leaf whose type is a plain `integer` with no bound | `requires_bound`, `unbounded_type` naming that node |
 | an integer leaf whose bound is not an `integer_range`, or has an endpoint outside `i64` | `unsupported`, `domain_not_representable_in_i64` naming the bound node, as FR-015-AC-17 states for a scalar |
 | a declaration that reaches itself (a recursive record or tuple) | `requires_bound`, `unbounded_type` naming the declaration's node: its depth has no declared bound, and none is invented |
-| a leaf or member of family text, enum, rational, decimal, quantity, float, sequence, set, bag or ordered set | `unsupported`, `ShadowFamilyNotBuilt` naming the family and the node; the equality oracle of FR-018 still generates for it |
+| a leaf or member of family text, enum, rational, decimal, quantity, float, sequence, set, bag or ordered set (a standalone enum comparison node is instead planned under [FR-049](./FR-049-enum-scalar-harnesses.md); an enum leaf inside a composite keeps this row) | `unsupported`, `ShadowFamilyNotBuilt` naming the family and the node; the equality oracle of FR-018 still generates for it |
 | a `reference` composite, or a model or relation node | `unsupported`, blocked on `agent-ix/quire-spec-language#120`, as FR-018-AC-7 states |
 | an operand that is neither a parameter nor a literal, or an operand that is a `convert<T>` | `unsupported`, `OperandNotSupported` naming the operand's node |
 | a closure whose pair-node count exceeds the shadow size budget | `unsupported`, `ShadowShapeOverBudget` naming the count and the budget |

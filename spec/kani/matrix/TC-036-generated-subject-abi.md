@@ -63,6 +63,13 @@ yield no harness.
     and inspect the order of the result-domain assertion, clause assertion and final cover. For
     a Boolean result, check `true` and `false` subject returns against the exact oracle-bound
     Boolean; change only that oracle argument to its opposite as a negative control.
+14. For the planned [FR-049](../functional/FR-049-enum-scalar-harnesses.md) enum row, generate a
+    comparison over an enum operand and read its persisted identity: assert exactly one `i64`
+    physical binding grouped to the original parameter with declaration, ordered member list and
+    index bounds. Decode retained playback with the existing I64 width, byte and comment checks and
+    caps; assert an in-range index replays as the declaration's member at that position, and an
+    out-of-range, missing, duplicate or foreign binding refuses with a typed reason and no replay.
+    Re-run the Boolean and integer controls unchanged.
 
 ## Expected Results
 
@@ -101,6 +108,10 @@ yield no harness.
     assertion and final cover follow. For both Boolean returns, the oracle-bound value equals
     the subject-returned `bool`; the opposite-value control fails this identity check
     (FR-025-AC-13).
+14. One enum operand has exactly one grouped `i64` binding with declaration, members and bounds;
+    an in-range index replays as the member at that position, and each out-of-range, missing,
+    duplicate or foreign binding refuses with no replay; Boolean and integer controls are
+    unchanged (FR-025-AC-14).
 
 ## Status
 
