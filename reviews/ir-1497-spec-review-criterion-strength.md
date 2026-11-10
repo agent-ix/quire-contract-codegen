@@ -45,3 +45,18 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not available in this environm
 | FR-050-AC-14 | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:166 | These composition mutants fail with actual solver playback of an in-domain leaf input, each over a control domain stating its distinguishing point: one operand's conversion skipped (its leaf read as already in the target unit), over a leaf whose source unit scale differs from the target's, a nonzero leaf magnitude, a nonzero other operand for `mul` and `div`, a literal exponent other than 0 for `pow`, and for a comparison operands straddling the converted threshold (`60 cm` against `0.7 m`); the conversion's charges dropped, and separately moved after the operation's charges, under a budget th |
 | TC-064-step-10 | examined | spec/kani/matrix/TC-064-quantity-scalar-harnesses.md:68 | 10. For each carrier (`Int[..]`, `Decimal[..]`, `Rational[..]`) draw the leaf parameters and compare the generated pipeline (conversions in operand order, then the operation) with the independent native `convert_quantity` (`QuantityTarget::Exact`) and `evaluate_quantity_unit` or `compare_quantity` sequence on one Meter: value, result unit, outcome, ordered charges and counters at zero, exact and short budgets, with the converted unit equal to the conversion's target (AC-11). Shorten the budget to stop inside each conversion and assert the stop is the whole outcome with the operation unrun; con |
 | TC-064-step-12 | examined | spec/kani/matrix/TC-064-quantity-scalar-harnesses.md:79 | 12. Run the AC-14 mutants one at a time (conversion skipped on one operand, conversion charges dropped, conversion charges moved after the operation's, conversion target replaced by another unit of the same dimension) over control domains stating their distinguishing points. Each must fail with actual playback of an in-domain leaf. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | AC-14 now limits the wrong-same-dimension-target mutant to arithmetic because 'a comparison does not observe the unit'. QSV compare_quantity calls check_comparable, which refuses distinct units of one dimension as IllTyped(DistinctUnits) before any charge. So a comparison does observe the unit, and this mutant (for example an m target replaced by cm against an m operand) is caught on comparisons as IllTyped against the native Ok. The restriction is safe but rests on a false statement and drops a catchable mutant. Keep comparisons in the mutant, with that distinguishing point, or remove the rationale. | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:170 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 7e4da3b1 |
+| FND-002 | fixed | fixed in 7e4da3b1 |
+| FND-003 | fixed | fixed in 7e4da3b1 |
+| FND-004 | fixed | fixed in 7e4da3b1 |

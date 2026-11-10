@@ -45,3 +45,10 @@ PASS WITH LOW FINDINGS. Structure is intact: FR-050-AC-11..14 and FR-025-AC-18 a
 | FR-051-conversion-note | examined | spec/kani/functional/FR-051-decimal-scalar-harnesses.md:61 | Decimal equality and inequality (`quire.op.decimal.eq`, `.ne`) are outside this requirement: FR-014 refuses them as `OperationNotDerivable`, so no oracle exists to prove. Quantity carried-Decimal conversions are a quantity operation: FR-014-AC-62 through AC-65 own their oracle, and FR-014-AC-51 and TC-030's Quantity scalar row own their Kani settlement. FR-050 excludes conversions, so no row here or there proves them. |
 | FR-050-fallback | examined | spec/kani/functional/FR-050-quantity-scalar-harnesses.md:63 | Whether the composed proof (leaf construction, conversion and operation in one harness) fits the proof ceilings of FR-028, including the harness's memory ceiling (the project's 16 GiB Kani budget), is not known and is measured later under IR-1443. If it does not fit, this requirement does not narrow the domain to make it fit: the finite-grid bound for exact quantity parameters in the QSpec FR-154 "Unit bounds" is then the fallback and is to be specified under its own ticket, which does not exist yet. |
 | TC-030-quantity-row | examined | spec/routed/matrix/TC-030-capability-settlement.md:401 | / Quantity scalar `expression` claim, IR-confirmed generated claim, including identity `quire.op.quantity.convert`, read through source-authenticated V1 handoff / Planned (IR-269) / Quantity scalar operation forms; the conversion's settlement is FR-014-AC-51; non-conversion operations are planned under FR-050 (conditional on IR-1443; operands are conversions of carried-quantity leaves, IR-1497), which supersedes this row for them only when delivered. / `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 7e4da3b1 |
+| FND-002 | fixed | fixed in 7e4da3b1 |

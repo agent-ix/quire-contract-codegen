@@ -42,9 +42,9 @@ Execute generated proofs only with the authorized runner and budget.
    (`requires-bound`), a `bounded_quantity` operand (`unsupported`, `NoFiniteEncoding`),
    a conversion into a carried target, a non-literal exponent, one leaf reaching two
    operand positions, and an endpoint beyond `i64` capacity in each carrier component
-   (AC-5, AC-13). Build by hand, because the reader refuses them upstream, a carried
-   operand with no conversion and a leaf with a missing or unbounded carrier domain
-   (`requires-bound`). Remove the carrier and assert `OperationNotRendered` (the `NoRenderer` settlement carries no prerequisite name; assert a name only where a typed reason carries one).
+   (AC-5, AC-13). At CG's private defensive seam, because the reader refuses them, request
+   a carried operand with no conversion and a leaf with a missing or unbounded carrier
+   domain (`requires-bound`). Remove the carrier and assert `OperationNotRendered` (the `NoRenderer` settlement carries no prerequisite name; assert a name only where a typed reason carries one).
    Exercise an unsupported operand form, an absent native expression and a quantity
    composite leaf beside a supported sibling and assert total accounting (AC-5, AC-6). Add a quantity-literal operand and a nested
    operation operand and assert the unsupported operand form.
@@ -83,7 +83,8 @@ Execute generated proofs only with the authorized runner and budget.
     Decimal lifted bound and the Rational numerator and denominator ranges (AC-13).
 12. Run the AC-14 mutants one at a time (conversion skipped on one operand, with the `lt` and `eq` points of AC-14, conversion
     charges dropped, conversion charges moved after the operation's, conversion target
-    replaced by another unit of the same dimension) over control domains stating their
+    replaced by another unit of the same dimension, on arithmetic and on a comparison, where
+    a comparison must refuse `IllTyped` for distinct units) over control domains stating their
     distinguishing points. Each must fail with actual playback of an in-domain leaf.
 
 ## Expected Results

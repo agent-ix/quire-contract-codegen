@@ -75,3 +75,14 @@ CHANGES REQUIRED. Verified correct: carried operands are refused by the reader (
 | tests.md-TC-036-row | examined | spec/kani/matrix/tests.md:133 | / TC-036 / Verify the generated harness subject ABI / Integration / P0 / FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8, FR-025-AC-9, FR-025-AC-14, FR-025-AC-15, FR-025-AC-16, FR-025-AC-17, FR-025-AC-18 / 🚧 Planned / |
 | spec.md-FR-050-row | examined | spec/spec.md:96 | / Quantity scalar operation harnesses / [FR-050](kani/functional/FR-050-quantity-scalar-harnesses.md) planned bounded quantity operation proof over the carried leaf of a `convert` operand (conditional on IR-1443; decision IR-1497) / [TC-064](kani/matrix/TC-064-quantity-scalar-harnesses.md) planned generated-proof and mutant controls / |
 | TC-030-quantity-row | examined | spec/routed/matrix/TC-030-capability-settlement.md:401 | / Quantity scalar `expression` claim, IR-confirmed generated claim, including identity `quire.op.quantity.convert`, read through source-authenticated V1 handoff / Planned (IR-269) / Quantity scalar operation forms; the conversion's settlement is FR-014-AC-51; non-conversion operations are planned under FR-050 (conditional on IR-1443; operands are conversions of carried-quantity leaves, IR-1497), which supersedes this row for them only when delivered. / `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). / |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 7e4da3b1 |
+| FND-002 | fixed | fixed in 7e4da3b1 |
+| FND-003 | fixed | fixed in 7e4da3b1 |
+| FND-004 | fixed | fixed in 7e4da3b1 |
+| FND-005 | fixed | fixed in 7e4da3b1 |
+| FND-006 | fixed | fixed in 7e4da3b1 |
