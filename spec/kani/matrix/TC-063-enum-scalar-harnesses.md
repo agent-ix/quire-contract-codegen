@@ -18,35 +18,45 @@ proofs only with the authorized runner and budget.
 
 ## Test Procedure
 
-1. Admit a package containing an enum of at least three ordered members and one
-   comparison node per operator (`eq`, `ne`, `lt`, `le`, `gt`, `ge`). Request
-   each harness and retain the source association. Inspect that oracle and native
-   expression derive from the same node (AC-1).
+1. Admit a package with an `ordered enum` of at least three members and an
+   unordered model-owned enum. Request `eq` and `ne` for both, and `lt`, `le`,
+   `gt`, `ge` for the ordered enum. Retain source association and inspect that
+   oracle and native expression derive from the same node (AC-1).
 2. Independently enumerate member pairs and compare with the harness domain:
-   every ordered pair reachable, no out-of-range index. Apply mutations adding an
-   index, dropping the last member and fixing one operand; each must fail the
-   correspondence check (AC-2).
+   every ordered pair reachable, no out-of-range `i64` index. Apply mutations
+   adding an index, dropping the last member and fixing one operand; each must
+   fail the correspondence check (AC-2).
 3. Inspect operand construction from the owner's checked member identities in
-   declared order. Mutate to a reordered list and a minted identity; the ordered
-   operators must fail (AC-3).
+   declared order. Mutate to a minted identity (same position, different key)
+   and assert `eq`/`ne` fail; mutate to a reordered member list and assert the
+   ordering operators over the ordered enum fail (AC-3).
 4. Inspect assertions and assumptions: completion required, no outcome-based
-   assume. Exercise reachable non-`Completed` outcomes and assert they keep their
-   typed outcome (AC-4).
-5. Run the healthy harnesses through the approved bounded path with full ordered
-   options. Verify all checks and exactly one final cover. Run each mutant
-   (`lt`/`le`, `gt`/`ge`, `eq`/`ne` swaps, reversed order, reordered member list),
-   retain the failed check and playback, and replay the in-domain indices through
+   assume. Exercise a reachable `Incomplete` outcome and assert it keeps its
+   typed outcome; force the `OracleStop::IllTyped` path and assert a
+   non-`Verified` outcome retaining the cause (AC-4).
+5. Run the healthy harnesses through the approved bounded path with full
+   ordered options; verify all checks and exactly one final cover. Run the
+   mutants, each against the operator that can detect it: `lt`/`le` swaps,
+   `gt`/`ge` swaps, `eq`/`ne` swaps, reversed ordering, minted identity.
+   Retain failed checks and playback and replay the in-domain indices through
    the owner route (AC-5, AC-6).
-6. Check separate controls for unsatisfied cover, failed unwind, timeout, memory
-   exhaustion and missing verdict; none may be `Verified` (AC-7).
-7. Request cross-enum operands, a non-member operand, a zero-member enum, a
-   member count above the index bound and an unbounded member set beside a
+6. Check separate controls for unsatisfied cover, failed unwind, timeout,
+   memory exhaustion and missing verdict; none may be `Verified` (AC-7).
+7. Request an ordering operator over the unordered enum, operands of different
+   declarations, and a declaration with an incomplete member list beside a
    supported sibling. Assert named dispositions, no harness and an unchanged
-   sibling. Request a text, rational, decimal, quantity and composite node and
-   assert their dispositions are unchanged (AC-8, AC-9).
-8. Inspect the run record for node and enum identity, ordered members, operator,
-   encoding, full argv with unwind options, tool versions, target, limits, checks,
-   cover, playback, exit and terminal outcome (AC-10).
+   sibling. Request text, rational, decimal, quantity and composite nodes,
+   including an enum leaf inside a composite, and assert their dispositions are
+   unchanged (AC-8, AC-9).
+8. Inspect the physical schema: one `i64` per enum operand with declaration,
+   member list and bounds. Perturb retained playback to an out-of-range index
+   and to missing, duplicate and foreign bindings, and assert typed refusal with
+   no replay; assert an in-range index replays as the member at that position
+   (AC-10).
+9. Inspect the run record for node and declaration identity, ordered members and
+   ordered flag, operator, encoding, full argv with unwind options, tool
+   versions, target, limits, checks, cover, playback, exit and terminal outcome
+   (AC-11).
 
 ## Expected Results
 
@@ -57,4 +67,4 @@ classification and receive no proof credit.
 
 ## Status
 
-PLANNED (IR-1438): all ten FR-049 criteria are unimplemented and untagged.
+PLANNED (IR-1438): all eleven FR-049 criteria are unimplemented and untagged.
