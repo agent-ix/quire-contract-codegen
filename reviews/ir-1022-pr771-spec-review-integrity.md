@@ -71,6 +71,12 @@ CHANGES REQUIRED. quire validate passes on all nine changed files. Its only warn
 | --- | --- | --- | --- |
 | FND-008 | low | Two single-vector phrases remain. The Behavior counterpart of AC-19 still appends the export flags 'after the unchanged harness options' (AC-19 itself now says 'each launched phase's unchanged identity option vector'). The FR-035 caller-harness bullet (line 430) reads 'the option vector from whichever kind's identity the caller supplied', although Inputs now gives every identity, the caller harness included, a proof vector and a witness vector. Fix: 'after the launched phase's unchanged identity option vector' and 'the proof and witness option vectors'. | spec/kani/functional/FR-017-kani-execution-evidence.md:293-294, 430 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | TC-025's procedure still says 'read the solver and the option vector out of each identity'. Every identity now records a proof vector and a witness vector, and the same TC compares both against literal vectors at line 393. Fix: 'read the solver and both option vectors'. | spec/kani/matrix/TC-025-bounded-kani-obligations.md:322 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -82,3 +88,4 @@ CHANGES REQUIRED. quire validate passes on all nine changed files. Its only warn
 | FND-005 | fixed | Round 1 at cf7a86af. Verified in the fix commit: / `options` / The proof option vector and the witness option vector (IR-1022, FR-015-AC-9): the proof vector is `adapter_options(path, unwind, solver, false)` without `-Z concrete-playback` and `--concrete-playback print`, and the witness vector is that proof vector with `-Z concrete-playback` inser |
 | FND-006 | fixed | Round 1 at cf7a86af. Verified in the fix commit: falsifies with original-domain native playback from its FR-017-AC-63 witness phase (subject to the FR-015-AC-41 fit caveat; `WitnessDisagreed` is also inconclusive). The IR-948 impossible-precondition control must complete as CoverUnsatisfied at the same ceiling, not resource exhaustion or a vacuous |
 | FND-007 | fixed | Round 1 at cf7a86af. Verified in the fix commit: / FR-017 / FR-017-AC-63 / TC-027 / 🚧 Planned (IR-1022): two-phase run over launcher stand-ins; the installed-Kani controls of FR-015-AC-41, AC-119 and AC-126 need IR-844 and may not fit 16 GiB / |
+| FND-008 | fixed | Round 2 at 263dcd09. Verified in the fix commit: that exact order after the launched phase's unchanged identity option vector. `N` is the actual child-only mapped / and the proof and witness option vectors from whichever kind's identity the caller supplied, |

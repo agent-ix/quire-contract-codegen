@@ -319,7 +319,7 @@ assumptions, and run the installed Kani backend on the bounded harnesses.
 
 Additionally: count the covers in each generated harness and locate the
 contract cover relative to the contract call; request a postcondition without
-the precondition sharing its anchor; read the solver and the option vector out
+the precondition sharing its anchor; read the solver and both option vectors (proof and witness) out
 of each identity; regenerate from equal inputs and compare bytes; regenerate
 with a changed unwind bound and a changed subject and compare identities;
 search each harness source for a loop bound; and submit a request with no

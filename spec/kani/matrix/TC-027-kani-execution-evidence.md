@@ -44,10 +44,13 @@ proof evidence retained). Run a proof report that fails only an unwinding assert
 fails an unwinding assertion beside an assertion, a Failure entry listing no failed check, a
 verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
 and no `concrete-playback` in its argument vector. Run a three-member batch
-whose proof report fails the middle member and read that only it is relaunched in a witness phase.
+whose proof report fails the middle member and read that only it is relaunched in a witness phase; then make the witness group's stand-in exceed
+the memory ceiling and read `WitnessPhaseRefused` wrapping the group refusal and the middle
+member's proof evidence, with the outer members' results unchanged.
 Mutants: classify at the proof phase; compare only class, only location or neither; accept a
 superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
-swap the vectors; classify a proof-phase batch member as lacking a counterexample.
+swap the vectors; classify a proof-phase batch member as lacking a counterexample; return the raw
+group refusal, or drop the proof evidence, for a refused witness group.
 
 Report parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-report/`, the
 exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
