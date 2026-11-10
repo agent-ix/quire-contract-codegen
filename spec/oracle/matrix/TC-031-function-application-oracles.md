@@ -335,14 +335,16 @@ required dependency or target path.
     tagged fixture, run each AC-47 adverse control and require the differential
     to fail: one const member, the result type, one parameter type, the
     location, a second genuine source with a different declaration or
-    signature, a same-length identifier-byte edit the reader still admits
-    (assert `Admitted` first; genuine path `OwnerIdentityMismatch`) and
+    signature, the second genuine source's retained bytes kept with the first
+    source's acquisition (assert `Admitted` first; genuine path
+    `OwnerIdentityMismatch`) and
     truncated bytes (reader `Refused`). Also check that the host test embeds
     every genuine-path input identically to generation (AC-45). At generation
     time, feed the entry a reader-`Refused` input, a reader-`Incomplete`
     input, a reader-`CatalogUnavailable` input and an acquisition or selection
-    refusal, and require the four distinct typed refusals of AC-46 with no
-    harness; inspect that the entry accepts no separately supplied admitted
+    refusal, and a request whose selected body is a nested call (a control
+    that fails if the entry emits a harness or returns success for it), and
+    require the five distinct typed refusals of AC-46 with no harness; inspect that the entry accepts no separately supplied admitted
     package. These
     are generation refusals, not differential controls. Inspect that no test,
     doc comment, proof note or matrix row credits reader decode or admission to

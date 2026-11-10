@@ -59,3 +59,13 @@ Re-review of fix head cf124b62.
 | FND-001 | fixed | fixed in cf124b62 (round 1) |
 | FND-002 | fixed | fixed in cf124b62 (round 1) |
 | FND-003 | fixed | fixed in cf124b62 (round 1) |
+| FND-004 | fixed | fixed in a8848c2e (round 2) |
+| FND-005 | fixed | fixed in a8848c2e (round 2) |
+
+## New findings (disposition pass 2)
+
+Re-review of fix head a8848c2e.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | AC-44 now limits the cfg(kani) harness to non-nested function-body claims. Nothing says what the Kani-harness entry does when it is given a nested-call function (call_item, Transition::Call): emit no harness silently, refuse with a typed cause, or emit the host differential only. AC-46's four refusal causes do not cover it. Name the outcome so that FR-047 does not receive a claim with neither a harness nor a refusal. | spec/oracle/functional/FR-021-function-application-oracles.md:564 |

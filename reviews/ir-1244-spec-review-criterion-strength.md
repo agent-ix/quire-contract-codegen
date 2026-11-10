@@ -56,3 +56,12 @@ Re-review of fix head cf124b62.
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | fixed | fixed in cf124b62 (round 1) |
+| FND-002 | fixed | fixed in a8848c2e (round 2) |
+
+## New findings (disposition pass 2)
+
+Re-review of fix head a8848c2e.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The mechanism is sound. The differential passes the reader's own Admitted value as both admitted unit and declaring package. select_checked_callable then compares handle.package_name() and acquired.package().bytes() with the re-encoded reader output (owner_path.rs:303-309) before any lookup, so any admitted bytes that differ from the unchanged acquisition yield OwnerIdentityMismatch first. But the control is pinned to 'a same-length edit to one identifier byte that the reader still returns Admitted for', and such an edit may not exist. The strict reader enforces identifier syntax, strictly ascending member order and identity joins (identity.rs, frame.rs, lock_tables.rs), and checked node ids embed names, so a single name byte usually appears in several joined places. Accept any reader-admitted retained bytes that differ from the acquisition's package, for example the second source's genuine package bytes with the first source's acquisition kept. Those always exist and keep the Admitted-then-OwnerIdentityMismatch order. | spec/oracle/functional/FR-021-function-application-oracles.md:567 |

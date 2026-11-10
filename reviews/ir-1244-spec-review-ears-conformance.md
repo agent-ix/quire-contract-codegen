@@ -49,3 +49,5 @@ CHANGES SUGGESTED. The new Behavior bullet is a well-formed ubiquitous 'The func
 | --- | --- | --- |
 | FND-001 | still-open | AC-46 now fixes four distinct causes and leaves the names to the coder, which is acceptable because the causes are fixed. But it lists only the reader's Refused and Incomplete arms. The pinned reader (quire-contract-model c8dca8c, CG Cargo.lock) also returns CheckedPackageV2ReadResult::CatalogUnavailable(CatalogReadError), and CG already matches it (src/replay/composite_builder.rs:775). The author's claim that the pinned reader has no CatalogUnavailable is false. A CatalogUnavailable read has no named outcome; add it as its own refusal. |
 | FND-002 | still-open | The non-nested scoping is not in the branch. The AC-44 criterion row was overwritten with mutation-row text (integrity FND-004), and no Behavior, AC or TC-031 text limits the harness to scalar/equality bodies or says what a nested-call claim gets. |
+| FND-001 | fixed | fixed in a8848c2e (round 2) |
+| FND-002 | fixed | fixed in a8848c2e (round 2) |

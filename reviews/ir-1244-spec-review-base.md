@@ -67,3 +67,4 @@ Re-review of fix head cf124b62.
 | --- | --- | --- |
 | FND-001 | fixed | fixed in cf124b62 (round 1) |
 | FND-002 | fixed | fixed in cf124b62 (round 1) |
+| FND-003 | fixed | fixed in a8848c2e (round 2) |
