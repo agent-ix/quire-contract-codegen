@@ -61,7 +61,7 @@ rules. Scalar lowering parity is never a source-property refutation.
 - The `ScalarObligationIdentity` returned by
   [FR-022](../../routed/functional/FR-022-routed-generation.md), including the claimed node,
   catalogued operation identity, qualified harness name and ordered operand schema.
-- The falsified run's retained assertion playback. The scalar builder owns its decode byte
+- The falsified run's retained assertion playback, which is the witness-phase playback of FR-017's two-phase run (FR-017-AC-63); a proof-phase failure without a reproducing witness phase is not a falsified run and supplies none. The scalar builder owns its decode byte
   ceiling: the same 8 MiB per-harness ceiling owned by
   [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md) AC-14 and the Kani capture
   adapter. Before adapter parsing, the builder checks the selected single-harness playback

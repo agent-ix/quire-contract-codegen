@@ -78,7 +78,9 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     subject that never compares one leaf, a mutated `value_bearing` shared helper that the
     production subject reads independently, and one it reads through the same helper.
 21. Read the evidence of a shadow run and of a refinement run for the Kani, Rust and solver
-    versions, the unwind bound and the option vector.
+    versions, the unwind bound and the option vector of each phase the run launched; for a
+    falsified run read both the proof vector and the witness vector bound to one harness
+    identity, and for a verified run only the proof vector.
 22. Run the refinement with a stand-in subject that outruns its wall-clock ceiling and one that
     exceeds its memory ceiling; read the refinement evidence (class, cases, seed, ceilings,
     mechanism, outcome, versions) beside the shadow run's.
@@ -134,7 +136,7 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     the independently read helper mutant settles `refinement_failed` and the same-helper mutant is
     caught by the independent check; the unmutated stand-in verifies and agrees (FR-028-AC-22).
 21. Each evidence records the versions, the unwind bound and the complete option vector of the run
-    that produced it (FR-028-AC-23).
+    that produced it, and for a two-phase run of both phases (FR-028-AC-23, FR-017-AC-63).
 22. Each stopped refinement is stopped at its ceiling, records it, and yields
     `shadow_proved_refinement_inconclusive`; the refinement evidence is recorded beside the shadow
     run's (FR-028-AC-24).

@@ -319,7 +319,7 @@ assumptions, and run the installed Kani backend on the bounded harnesses.
 
 Additionally: count the covers in each generated harness and locate the
 contract cover relative to the contract call; request a postcondition without
-the precondition sharing its anchor; read the solver and the option vector out
+the precondition sharing its anchor; read the solver and both option vectors (proof and witness) out
 of each identity; regenerate from equal inputs and compare bytes; regenerate
 with a changed unwind bound and a changed subject and compare identities;
 search each harness source for a loop bound; and submit a request with no
@@ -387,7 +387,23 @@ follows its contract call. Each contract harness carries a `requires` for every
 package precondition sharing its anchor and embeds no other obligation's
 oracle; the postcondition requested without its sibling precondition is refused
 naming that precondition, with no harness. Every identity records solver
-`cadical` and the ordered option vector, and no option enables stubbing.
+`cadical` and both ordered option vectors (the proof vector with no concrete-playback
+option, and the witness vector that inserts `-Z concrete-playback` before `--harness` and ends
+with `--concrete-playback print`, byte-equal to the pre-IR-1022 vector), and no option in either
+enables stubbing (FR-015-AC-9). The expected vectors are literal argument lists written in the
+test, never recomputed with the production `adapter_options`, so a mutant planted in that builder
+cannot change both sides. For harness `m::h`, unwind 3 and solver `cadical` the literal proof
+vector is `-Z function-contracts --harness m::h --exact --unwind 3 --solver cadical
+--output-format regular` and the literal witness vector, which is also the literal pre-IR-1022
+argv, is `-Z function-contracts -Z concrete-playback --harness m::h --exact --unwind 3 --solver
+cadical --output-format regular --concrete-playback print`. Mutants, each caught by a tagged
+equality against these literals plus a refusal case that presents the mutated identity to the
+seal checks named in FR-015-AC-9 (the constrained-identity recomputation and the V2 clause and
+collection `has_valid_provenance`): leave `--concrete-playback print` in the proof vector; omit
+the witness vector; move `-Z concrete-playback` after `--harness`; emit a stubbing option in the
+witness vector only. `HarnessSpec::new_constrained` (`src/kani/generate/spec.rs`) rejects any
+other vector with `InvalidExpression` today for constrained identities only; the other kinds'
+checks are as FR-015-AC-9 states, and IR-1022 changes the code.
 Regeneration is byte-identical, while the changed unwind bound and the changed
 subject each produce a different identity. Every symbolic argument
 carries an inclusive assumption equal to its IR domain, the post-state result
@@ -486,6 +502,13 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     and restore the full sealed rust artifact after removing the appended test.
     A mutation confined to a hand-written compiled subject or a harness probe
     does not satisfy this control (FR-015-AC-40, FR-015-AC-41).
+    Each unconstrained mutant run is the two-phase run of FR-017-AC-63 (IR-1022): its witness
+    phase needs the trace mode. On the meter harness the traced refusal-order mutant peaked at
+    19,671,392,256 B on a 40 GiB probe and exhausted 16 GiB, where the healthy sliced proof
+    peaked at 8,183,332,864 B (different runs, not one harness both ways; quire-exact TC-931
+    Status and IR-844). The AC-41, AC-119 and AC-126 harnesses are unmeasured, so their mutant
+    controls may not fit 16 GiB. A witness phase stopped by the ceiling is `Inconclusive` and
+    leaves the control unmet; no ceiling raise, smaller range or weaker assertion may stand in.
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.

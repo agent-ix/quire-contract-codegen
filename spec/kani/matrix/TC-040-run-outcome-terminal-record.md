@@ -21,7 +21,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 2. Map `inconclusive` with the vacuous-proof reason, and `cover-unsatisfied`. Read each value's QSL
    category and vacuity cause.
 3. Map `inconclusive` with the timed-out, memory-exhausted and exhausted-unwind-bound reasons.
-4. Map `inconclusive` with the no-verdict reason.
+4. Map `inconclusive` with the no-verdict reason, and with the witness-disagreed reason once per cause (FR-029-AC-37, IR-1022).
 5. Map `inconclusive` with the missing-cover-summary reason, and with the failure-without-counterexample
    reason once per cause: absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`
    and `unknown`. Map the memory-exhausted reason. Map `NoVerdict` and `MissingCoverSummary` with each
@@ -71,7 +71,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
    cover or unrelated SUCCESS checks but no successful check at its bound totality line.
 3. `Incomplete(TimedOut)`, `Incomplete(ResourceExhausted)` and `Incomplete(ResourceExhausted)`
    (FR-029-AC-3).
-4. `Failed` (FR-029-AC-4).
+4. `Failed` (FR-029-AC-4); the witness-disagreed reason is `Failed` whatever the cause (FR-029-AC-37).
 5. Missing-cover-summary is `Failed` (FR-029-AC-5). The failure-without-counterexample reason is
    `Incomplete(ResourceExhausted)` for `out_of_memory` and `Incomplete(TimedOut)` for `timeout`, and
    `Failed` for the other causes and for none (FR-029-AC-32, FR-029-AC-33). The memory-exhausted

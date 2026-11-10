@@ -88,7 +88,9 @@ other.
 - The generator shall record the request's memory ceiling and wall-clock ceiling in every harness
   identity.
 - When a harness runs, the generator shall hold the backend process tree to the memory ceiling and
-  the wall-clock ceiling its identity records.
+  the wall-clock ceiling its identity records. Each launch of a two-phase run (FR-017-AC-63) is
+  held to both ceilings separately and neither is raised for the witness phase, so a two-phase run
+  may take up to twice the wall-clock ceiling end to end (IR-1022).
 - If a run exceeds its wall-clock ceiling, then the generator shall stop it and classify it
   `inconclusive` with the timed-out reason, naming the ceiling.
 - If a run exceeds its memory ceiling, then the generator shall stop it and classify it
@@ -175,7 +177,7 @@ other.
   `MemoryExhausted` reason, serialized `memory_exhausted`, which is a variant of
   `KaniInconclusiveReason` distinct from every existing reason (FR-028-AC-3, FR-028-AC-21).
 - The generator shall record in the execution evidence of every run the Kani, Rust and solver
-  versions the run used, and every option of the run's option vector (FR-028-AC-23).
+  versions the run used, and every option of each launched phase's option vector (FR-028-AC-23).
 
 ### Native refinement lifecycle ownership (planned IR-639)
 
@@ -200,7 +202,7 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-028-AC-1 | Every harness identity records the request's memory ceiling and wall-clock ceiling, and changing either ceiling changes the identity. | Test (TC-039) |
-| FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. | Test (TC-039) |
+| FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. For a two-phase run (IR-1022) the ceiling bounds each launch separately, so a run may take up to twice it, and a witness phase that exceeds it is `Inconclusive` with the same reason, with no raise and no retry (FR-017-AC-63). | Test (TC-039) |
 | FR-028-AC-3 | A backend Kani run that exceeds its memory ceiling is stopped and classified KaniRunOutcome::Inconclusive with the memory-exhausted reason naming the ceiling, distinct from timed-out and never verified or falsified. FR-029 maps it to final QSL Incomplete(ResourceExhausted); FR-028-AC-24 governs the separate refinement run. | Test (TC-039) |
 | FR-028-AC-4 | Every execution evidence records the bounds of each symbolic argument and the two ceilings the run was held to. | Test (TC-039) |
 | FR-028-AC-5 | Every harness identity, generation refusal and execution evidence names its family. | Test (TC-039) |
@@ -219,7 +221,7 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 | FR-028-AC-20 | An item whose shape lies outside its family's shadow support is refused: a missing bound as `requires_bound` naming the unbounded node, a shape no shadow covers as `unsupported` naming the family and the capability, a shape over the family's size budget as `unsupported` naming the size and the budget; none emits a harness, none invents a bound, and none falls back to a `production` harness; siblings of a refused item settle as they do alone. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-21 | The backend process tree of every run is held to the harness identity's memory ceiling by a mechanism that observes or limits the tree's memory (the choice is the code change's, Open Questions); every execution evidence records the mechanism and, where it observes memory, the tree's peak resident memory; a tree that exceeds the ceiling is killed whole and settles as FR-028-AC-3 states, with `KaniInconclusiveReason::MemoryExhausted`, serialized `memory_exhausted`, a variant distinct from every existing reason; a FR-017 batch's launcher process tree is held to the ceiling as one group, killed whole when it exceeds it and refused as memory-exhausted with no member classified (the report is written only at the end); and on a platform where the generator has no mechanism that observes or limits that memory, the run is refused with a typed reason before the backend starts. PARTIAL: current contract, scalar and state-frame execution entries; startup caller-death supervision (IR-639), refinement runs and the limit-only stand-in remain planned (IR-241; TC-039 Status). | Test (TC-039) |
 | FR-028-AC-22 | A shadow family's machinery catches each seeded mutant: a shadow harness over a mutated shadow is `Falsified` with a concrete playback, a refinement run over a mutated production subject settles `refinement_failed` naming the first disagreeing case, a mutant of a `value_bearing` shared helper that the production subject reads independently settles `refinement_failed`, one that it reads through the same helper is caught by the family's independent check of that helper (FR-018-AC-23 for the composite closure), and the unmutated family verifies with its cover satisfied and a refinement run that agrees; the mutant set of the first family is FR-015-AC-75's. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-23 | Every execution evidence records the Kani version, the Rust compiler version, the solver name and version, the unwind bound and the complete option vector the run used, for a `production` harness and a `bounded_shadow` harness alike, and a refinement evidence records the Rust compiler version and the production subject's crate version. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-23 | Every execution evidence records the Kani version, the Rust compiler version, the solver name and version, the unwind bound and the complete option vector of each phase the run launched (IR-1022: the proof vector, and the witness vector when the witness phase launched), for a `production` harness and a `bounded_shadow` harness alike, and a refinement evidence records the Rust compiler version and the production subject's crate version. A run that classified through both phases retains both phases' evidence bound to the same harness identity, so a `Falsified` or `WitnessDisagreed` verdict names the vector that produced each part of it. PLANNED (IR-241, IR-1022). | Test (TC-039) |
 | FR-028-AC-24 | The refinement run is a native process launched through one typed refinement execution entry that reuses FR-017's launcher and FR-028's ceilings: it is held to the memory and wall-clock ceilings its harness identity records, its evidence (class, case count, cases run, seed, both ceilings, mechanism, peak where observed, outcome, versions) is recorded beside the shadow run's evidence, and a run that reaches either ceiling is stopped, records the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run` or `refinement_failed`. PLANNED (IR-241). | Test (TC-039) |
 ### Mutations these criteria detect
 

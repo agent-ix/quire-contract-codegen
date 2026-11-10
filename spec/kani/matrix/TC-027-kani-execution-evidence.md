@@ -25,6 +25,36 @@ success from a process that exited unsuccessfully; a successful run with no cove
 a failed unwinding assertion with playbacks present; a report in which an
 unwinding check succeeded; and a successful run whose report lists zero successful checks.
 
+Two-phase run (FR-017-AC-5, FR-017-AC-63, IR-1022): over launcher stand-ins, pair a proof report
+that fails an assertion with a witness report that (a) fails the same check class and location and
+prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only another check
+(`Inconclusive`, `WitnessDisagreed`) and, separately, fails the same class at another location and
+the same location in another class (each `WitnessDisagreed`), fails the matching check plus one
+more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
+stopped at its wall-clock ceiling and at its memory ceiling (`TimedOut`, `MemoryExhausted`, no
+third launch), and a stand-in that would finish with a verifying report only at 1.5 times each
+ceiling. Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in and
+`MemoryExhausted` for the memory one, killed at the unchanged ceiling, with the ceilings recorded
+for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
+finishes, the outcome is `WitnessDisagreed` or another verifying outcome, and the recorded
+ceiling is larger than the proof launch's, so the case fails;
+(d) matches the check but prints no playback (`FailedWithoutCounterexample`), exits with no report
+(`NoVerdict`), is cancelled (`Cancelled`), or has its report or launch refused (typed refusal,
+proof evidence retained). Run a proof report that fails only an unwinding assertion, one that
+fails an unwinding assertion beside an assertion, a Failure entry listing no failed check, a
+verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
+and no `concrete-playback` in its argument vector. Run a three-member batch
+whose proof report fails the middle member and read that only it is relaunched, as a single
+witness run; make that run exceed the memory ceiling and read `MemoryExhausted` (not a refusal).
+Then run a four-member batch whose proof report fails the two middle members (equal witness
+vectors and ceilings), read that they form one witness group, and make the group exceed the memory
+ceiling: expected `WitnessPhaseRefused` wrapping `BatchMemoryExhausted` and both members' proof
+evidence in member order, with the outer members' results unchanged.
+Mutants: classify at the proof phase; compare only class, only location or neither; accept a
+superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
+swap the vectors; classify a proof-phase batch member as lacking a counterexample; return the raw
+group refusal, or drop the proof evidence, for a refused witness group.
+
 Report parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-report/`, the
 exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
 unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no

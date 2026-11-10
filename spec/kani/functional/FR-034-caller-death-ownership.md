@@ -40,7 +40,7 @@ research success is not executable requirement coverage.
 ## Inputs
 
 - The existing bounded execution request, original harness identity, backend command recipe and
-  recorded ceilings, including the original monotonic wall deadline.
+  recorded ceilings, including the original monotonic wall deadline of the launch (each phase launch of an FR-017-AC-63 two-phase run has its own such deadline, derived from the same identity ceilings and starting at that launch, so the witness launch is not limited to the identity wall clock minus the proof phase's time).
 - A required explicit executable path to `quire-kani-guardian`, built with the library from the same
   Cargo package source and build inputs. A library consumer deliberately builds and supplies this
   artifact; Cargo does not build or install a dependency's binary for it.
@@ -205,7 +205,7 @@ retains bounded outer cancellation, without resetting the deadline.
 - The guardian shall preserve the original backend argv, stdin, environment and cwd.
 - The guardian shall separate control and diagnostics from backend captures and reports.
 - The bounded executor shall retain existing capture, resource and verdict classifications.
-- The bounded executor shall charge all setup and execution to the original identity deadline.
+- The bounded executor shall charge all setup and execution of a launch to that launch's identity deadline; the witness launch of a two-phase run gets its own deadline from the same ceilings, never the remainder of the proof launch's.
 - If that deadline expires, then the bounded executor shall classify the run as FR-028 AC-2 states.
 - The bounded executor shall apply a finite setup cap within the remaining identity deadline.
 - If only the setup cap expires, then the bounded executor shall return a typed setup refusal.
