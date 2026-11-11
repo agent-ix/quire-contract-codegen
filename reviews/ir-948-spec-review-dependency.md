@@ -61,3 +61,4 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED: it is untagged in quire matrix, th
 | FND-001 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
 | FND-002 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
 | FND-003 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
+| FND-004 | fixed | fixed in 496eb9d3, fc51c470; verified against origin/spec/ir-948-v2-contract-input at fc51c470 |

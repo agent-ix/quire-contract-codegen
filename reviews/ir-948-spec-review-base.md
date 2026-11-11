@@ -61,6 +61,12 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | --- | --- | --- | --- |
 | FND-006 | low | Two live-status uses of IR-489 remain in files this PR edits. FR-015 line 558 still calls the V2 clause arm 'planned FR-015-AC-38 (IR-489)', although AC-38 is now PARTIAL (IR-948). Line 563 assigns an open decision, whether the contract role retires when AC-38 lands, to IR-489, which is Done, so that decision has no live owner. The spec/kani/matrix/tests.md:46 row for FR-015-AC-38 to AC-43 and AC-46 to AC-49 still gives '(IR-489, AD-004 step 4c)' as the owner of the planned and partial work. Point the status at IR-948 or IR-917, and give the retirement decision a live ticket or mark it as settled. Outside this PR's files, FR-014:593, TC-030:407 and spec.md:148 also cite IR-489 as a planned owner; that is context only, not part of this finding. | spec/kani/functional/FR-015-bounded-kani-obligations.md:558 |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The rewritten tests.md:46 owner list credits AC-40 to IR-917 ('IR-917 for AC-40/41'), but FR-015-AC-40's own status reads 'IMPLEMENTED (IR-948)'. The list also names no owner for AC-42 (PARTIAL, IR-948) or AC-47 (IMPLEMENTED, IR-948), although the row covers them. Say 'IR-948 for AC-38/39/40/42/43/46/47/49, IR-917 for AC-41' so the row agrees with the criteria it summarises. | spec/kani/matrix/tests.md:46 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -70,3 +76,4 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | FND-003 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
 | FND-004 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
 | FND-005 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
+| FND-006 | fixed | fixed in 496eb9d3, fc51c470; verified against origin/spec/ir-948-v2-contract-input at fc51c470 |
