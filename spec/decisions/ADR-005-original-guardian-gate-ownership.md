@@ -1,6 +1,6 @@
 ---
 id: ADR-005
-title: "Hold original guardian-gate activation pending a supported descriptor owner and finite reserve"
+title: "Original guardian-gate ownership: failed premises and the product architecture choice"
 type: ADR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-034
@@ -10,100 +10,178 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-017
     type: relates_to
 ---
-# ADR-005: Hold original guardian-gate activation pending a supported descriptor owner and finite reserve
+# ADR-005: Original guardian-gate ownership: failed premises and the product architecture choice
 
 ## Status
 
-Proposed. This is an architecture decision for IR-717, not an implemented gate, a conformance
-finding, or permission to activate IR-652 or IR-655. The supported owner API and complete finite
-reserve described below are **UNBACKED**. FR-034 and TC-049 remain the normative contracts.
+Proposed, awaiting a product architecture choice. This is the IR-717 decision record, not an
+implemented gate, a conformance finding, or permission to activate IR-652 or IR-655. IR-717 could
+**not** establish a supported safe descriptor owner or a finite kernel/native bound for the
+original-gate design. The exact failed premises are stated below and the choice they force is in
+[Decision required](#decision-required). [FR-034](../kani/functional/FR-034-caller-death-ownership.md)
+and [TC-049](../kani/matrix/TC-049-caller-death-ownership.md) are not amended by this record: no
+decision is established that would support an amendment, and the committed caller/group-death,
+early-release and confirmation-before-close guarantees are not narrowed.
 
 ## Context
 
-[FR-034](../kani/functional/FR-034-caller-death-ownership.md) currently gives O the exclusive
-block-gate pipe writer and M the blocking reader. C's cached phase cannot establish that O still
-holds the gate if O exits at C's reporting boundary. Main's
-`src/kani/run/namespace.rs` likewise creates the gate pipe in its namespace owner and releases it
-with a write. That source predates the planned C/L/O/M/I construction and supplies no contrary
-custody evidence. The existing requirement explicitly marks the exact fatal-prefix gate predicate
-UNBACKED.
+FR-034 gives O the exclusive block-gate pipe writer and M the blocking reader (gate reader fd4).
+Main's `src/kani/run/namespace.rs` creates the gate as a CLOEXEC `pipe_with` pair and a gate EOF
+before release aborts without dispatching the backend (its test
+`gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend`). C's cached phase
+cannot establish that O still holds the gate if O exits at C's reporting boundary, and FR-034
+already marks the exact fatal-prefix gate predicate UNBACKED.
 
-The proposed replacement would keep the original release endpoint S and the original caller lease
-under C's physical custody, transfer only blocking receiver R through the existing authenticated
-C→L and L→O Start carriers, and let C issue one checked release after O's ordinary tick and
-permission. The proposed one-way connected Unix stream permits a per-send NOSIGNAL operation;
-genuine I Ready remains a later, separately authenticated condition for Backend. This is a
-candidate operational graph, not a supported mechanism. No additional acknowledgement, controller
-pause, stored gate certificate, fixture-only authority or post-return custodian is allocated.
+The candidate replacement keeps the release endpoint S and the original caller lease in C's
+physical custody, transfers only the blocking receiver R through the existing authenticated C to L
+and L to O Start carriers, and lets C issue one checked release after O's ordinary tick and
+permission over a one-way connected Unix stream with per-send NOSIGNAL. Genuine I Ready stays a
+later authenticated condition for Backend. No new acknowledgement, pause, stored certificate,
+fixture-only authority or post-return custodian is allocated.
 
-## Decision
+## Custody walk-through (conditional on P1)
 
-Hold the strong original-gate construction **UNBACKED**. Do not amend FR-034 or TC-049 to claim
-the proposed replacement as supported, and do not activate IR-652 production or IR-655 fixture
-claims from endpoint possession, an O permission, a phase, an old receipt, a Boolean or eventual
-absence of a backend marker. An operational amendment requires an independently reviewed owner
-contract and an additive finite reserve matching the actual supported build and kernel profile.
+This is a structural argument over the candidate graph. It holds only if S and the lease have no
+alias, which is the premise that fails (P1). It is not evidence of any running mechanism.
 
-Three premises remain open:
+| Event | Owner of S | Gate predicate if S is unaliased | Gap |
+| --- | --- | --- | --- |
+| Creation before L, two Start transfers of R (C to L, L to O) | C | S open in C, R only in transit or in L, O, M. No byte written, so the gate is held. | Between socket creation and C's close of its own R copy, any fork from C's shared table also holds R. A held R alias makes a later C release succeed into the queue with no live reader, so peer loss on the NOSIGNAL send is not detected. S and the lease are not the only aliasable authorities. |
+| Fatal O before C's held-gate observation | C | S stays open in C. M, I and O's R copies are torn down by outer containment, so C's release returns EPIPE (no SIGPIPE under NOSIGNAL) and positive admission requires the identity check, not S possession. | Needs the R-alias exclusion above and an unrun control. |
+| Live early close | C | Only C closes S. A close before actual I confirmation is the AC-54 mutant. | Control unrun. |
+| Caller or group death | kernel closure of C's table | S closes, R reads EOF, backend is never dispatched (existing abort semantics). The lease closes and I cancels. | A fork child that retained S or the lease keeps the gate open and defeats FR-034-AC-83 after C is gone, and a fork child can write a release byte for a dead caller. |
+| Original-cutoff unavailable confirmation | C | AC-38 CleanupUnconfirmed; last close is abandonment with no order credit (FR-034, unavailable-confirmation fault domain). | Unchanged by this record. |
 
-| Premise | Current result | Required operational evidence |
+## Premise results
+
+| Premise | Result | Exact grounding |
 | --- | --- | --- |
-| Exclusive original S and caller lease through all supported C forks | **UNBACKED.** A shared C file table lets an unrelated embedding thread fork a child retaining S or the lease before exec. CLOEXEC does not remove that pre-exec alias. A thread-private table excludes forks from other tables but still permits a handler or callback on its own thread to fork. | Name the actual safe Rust/OS owner API and audit its complete descriptor affinity, table preparation, signal/native callback and Drop paths. Show that S and lease never enter another table, including a fork from the owner thread's signal handler, while ordinary forks from other C threads remain supported. L must finish its own fork/exec before S or lease creation in the private table, or an equally supported exclusion must be shown. |
-| C-held gate through fatal O and live close | **UNBACKED.** O's present writer can disappear before C's held-gate observation. A changed C owner could survive O exit, but its release, actual last close and original caller/group-death behavior have not been established. | Identify each real C/L/O/M/I owner and close operation across both Start transfers, queued/partial rights, setup failure, ordinary release, fatal O/C, cancellation and cleanup. Prove O's complete ordinary tick and stop precedence before permission, C's one successful bounded NOSIGNAL byte, genuine I Ready before Backend, and actual I confirmation before successful cooperative last close. Preserve the original cutoff and cause precedence. |
-| Finite simultaneous stream and native reserve | **UNBACKED.** A one-byte payload, SO_SNDBUF, sampled RSS or requested thread-stack size does not bound socket objects, queues, ancillary references, fd tables and native frames. The candidate fifth Start right exceeds the current four-right transport maximum. | For the exact supported build/kernel/runtime, enumerate and bound both gate endpoints and file/socket objects, queue/skb allocation and rounding, sender/receiver SCM rights and partial transfers, both Start phases, the private table and its preparation, native stack/TLS/runtime work, and every overlapping existing control/report/capture allocation. Reserve their checked additive maximum before L exposure, update the common ancillary maximum and both Start counts together, preserve every other message's exact count, and prove error disposal under the original cutoff. |
+| P1. S, R (C copy) and the lease are excluded from every foreign fork, including other embedding-C threads and the owner thread's signal handler, through a **safe** API | **FAILED.** No supported safe Rust or OS API upholds it. | See P1 evidence. |
+| P2. Live release and the original caller/group-death path preserve the held-gate and teardown predicates through fatal O | **Holds structurally only if P1 holds** (walk-through). Not established. | Depends on P1. |
+| P3. A finite additive stream, ancillary, kernel and native reserve is derivable from real APIs before exposure | **FAILED for the Unix-stream transport.** Partially derivable (see inventory). | See P3 evidence. |
 
-FR-034-AC-38's genuine unavailable-confirmation result remains bounded CleanupUnconfirmed without
-evidence or cleanup credit. FR-034-AC-54/87 require actual original-I confirmation before the
-successful cooperative retained-gate close; the separate original-cutoff abandonment path earns no
-operation-order credit. FR-034-AC-83 still requires an exclusive original caller lease, and
-FR-034-AC-94 still applies to pending or partial startup receipts. A permission cannot be treated
-as GateReleased, I Ready or Backend to evade that boundary. TC-049's early-close,
-omitted-confirmation, lease-alias and observation-withholding controls remain independently owed.
-No error label converts a live early close into a confirmed cooperative close.
+### P1 evidence
 
-## Evidence needed to choose a supported architecture
+Linux fork copies the forking task's descriptor table, and threads created by `pthread_create` or
+`std::thread` share one table. A fork from any embedding-C thread therefore copies S, the lease and
+C's R copy until the child execs, and CLOEXEC does not act before exec. A fork without exec
+(daemonizing, multiprocessing fork) keeps the alias indefinitely. The installed userspace headers
+here define no `O_CLOFORK`, so no per-descriptor fork exclusion exists.
 
-All controls in this table are **UNRUN**. Each must use the original C/L/O/M/I roles and actual
-descriptors, fail its own predicate before emergency cleanup, and include a restored healthy
-control. An omitted or unavailable construction earns no Test credit.
+The only per-thread isolation of the table is `unshare(CLONE_FILES)` on a dedicated owner thread.
+In the pinned `rustix 1.1.5`, the safe `thread::unshare` is `#[deprecated]` with the comment that it
+"should be unsafe", and the supported entry is `unshare_unsafe`, whose contract is that callers
+"must ensure that threads never observe file descriptors from unshared tables". `OwnedFd` carries
+no table affinity, so moving or dropping any descriptor across threads after the unshare closes or
+uses a different table's entry of the same number. This is the IO-safety unsoundness that the
+library names, not a missing wrapper. The crate sets `#![forbid(unsafe_code)]` in `src/lib.rs`, the
+workspace denies undocumented unsafe blocks, and the ticket excludes an unsafe shortcut, so this
+route is unavailable without a product decision.
 
-| Falsifying control | Predicate it must distinguish |
-| --- | --- |
-| Other C thread forks an unexeced child while S and the lease are held; an application signal handler on the actual owner thread also forks | The child cannot retain or operate either original authority; the shared-table or omitted-owner-guard mutant fails. Actual C/group death still tears down original I and its descendants. |
-| O exits fatally between original I claim and C's held-gate observation; C or O sends/shuts down the gate early | Actual C custody survives O loss, but a dead/mismatched identity cannot gain positive admission. Early gate progress fails even if no backend marker appears. |
-| Complete O tick and permission, one C release, genuine I Ready; peer disappears during C's NOSIGNAL send | Permission is neither release nor Ready. A second successful send, partial permission, premature Ready, omitted NOSIGNAL or SIGPIPE-driven C death fails independently; original stop/cutoff remains active. |
-| Live C closes early or omits actual I confirmation; observation is separately withheld to the original cutoff | Healthy cooperative I-before-last-close passes; each early-close mutant fails. Genuine unavailable confirmation yields only bounded AC-38 abandonment without order, cleanup, kernel-fault or fresh-deadline credit. |
-| One Start right is wrong, extra, truncated or left in a queued/partial transfer; one kernel/native/ancillary term is omitted from the peak | Every received or pending right is owned and disposed after refusal. The omitted charge fails the pre-exposure comparison rather than borrowing an unrelated ceiling. |
+A thread-private table still permits a fork from a handler running on the owner thread. Denying that
+needs one of: a per-thread seccomp filter (rustix 1.1.5 exposes `no_new_privs` setting but has no
+seccomp filter installation), or a signal mask. A mask is safe through `nix::sys::signal::pthread_sigmask`
+but `nix` is not a dependency, and a mask cannot exclude synchronous fault signals (SIGSEGV, SIGBUS,
+SIGFPE, SIGILL, SIGSYS), whose handlers, such as crash reporters, commonly fork. A mask is a
+narrowing, not an enforced exclusion. The seccomp route would also have to deny `clone3`
+entirely because its flags are not visible to a filter, and it makes no_new_privs and the filter
+irreversible for that thread.
 
-An architecture reviewer must inspect the safe API and source-derived bound, then the separate
-specification reviewer must evaluate the exact FR-034/TC-049 amendment before implementation. The
-former is currently unavailable: no existing safe owner boundary has been established for this
-complete operation graph, and no numerical kernel/native maximum has been derived. This is a
-product architecture choice if the owner context or supported profile cannot be provided. The
-choice is to allocate and prove that context and reserve, or retain this explicit hold; it is not
-an implicit narrowing of the current caller/group-death guarantee.
+The enabled `rustix` features are `std, event, process, time, pipe, fs`. The safe transport
+primitives themselves exist in `rustix 1.1.5` and are not the blocker: `net::socketpair`,
+`net::sendmsg` and `net::recvmsg` with `SendAncillaryBuffer` and `RecvAncillaryBuffer`,
+`SendFlags::NOSIGNAL`, `RecvFlags::CMSG_CLOEXEC` and `sockopt::socket_peercred`. Using them needs
+the `net` feature, which is a dependency change, not an unsafe one.
+
+### P3 evidence
+
+Derivable from real APIs before exposure (all UNRUN until a control reads them back):
+
+- Control-message buffer bytes: `cmsg_space!` for the exact right count (the common ancillary
+  maximum, currently four rights and five in the candidate Start).
+- Per-direction queued-byte cap: `set_socket_send_buffer_size` then `socket_send_buffer_size`
+  read-back, the stream analogue of `F_GETPIPE_SZ`.
+- Descriptor-table slots: `RLIMIT_NOFILE` and the exact count of S, R, lease and Start rights per
+  table.
+
+Not derivable from any userspace API before exposure: the kernel socket object and its slab
+rounding for both endpoints, `sk_buff` truesize and allocation rounding, the per-message in-flight
+right list the kernel allocates for each ancillary message, and the in-flight accounting for
+queued rights. `SO_MEMINFO` and cgroup `memory.stat` report these only after the objects exist.
+The in-flight right count is additionally compared with a per-user counter that C does not own,
+so a pre-exposure reservation cannot own it and its exhaustion must be a bounded refusal
+(statement from kernel source, not verified locally). A pipe gate would have a real pre-exposure
+reserve (`F_GETPIPE_SZ`, already used by `pipe_reserve`), but it cannot carry per-send NOSIGNAL,
+so SIGPIPE handling then needs a separate safe design.
+
+Native accounting terms with no derivation: owner-thread stack, TLS and runtime frames beyond the
+requested stack size, and any private-table preparation. FR-034 already forbids a requested stack
+size or RSS proxy to stand in for them.
+
+## Resource inventory at the maximum simultaneous configuration
+
+Maximum simultaneous configuration: gate endpoints S and R, two Start transfers each carrying R
+with the existing Start rights (the candidate fifth right), the lease, the existing C-L, L-O and
+report controls, and the existing pipe and memfd reservations. Status is per term.
+
+| Term | Source | Status |
+| --- | --- | --- |
+| Gate endpoint descriptors and file objects | exact counts in C, L, O, M tables | Count derivable; kernel object size not |
+| Control-message bytes per Start transfer | `cmsg_space!` for the exact right count | Derivable; five rights exceeds the four-right common maximum, so both Start counts and the common maximum change together |
+| Queued and partial rights after refusal, setup failure or cancellation | receiver-owned `RecvAncillaryBuffer` drain with `CMSG_CLOEXEC` | Ownership derivable; kernel in-flight cost not |
+| Stream queued bytes | send-buffer read-back | Derivable as a cap; per-skb overhead not |
+| Socket objects and skb/slab rounding | none before exposure | **Not derivable** (P3) |
+| Native stack, TLS, runtime, private-table preparation | none | **Not derivable** |
+| Existing `owned_RSS`, `caller_run_buffers`, `pipe_reserve`, `memfd_reserve` | FR-034 charge oracle | Unchanged; the new terms are additive and replace none of them |
+
+No chosen RSS ceiling, no unmeasured estimate and no invented reserve is substituted for the two
+non-derivable rows. No measurement was run by this record (no Cargo, native probe or kernel read).
+
+## Falsifying controls
+
+All controls are **UNRUN**. Each uses the original C/L/O/M/I roles and actual descriptors, must be
+able to fail its own predicate before emergency cleanup, and includes a restored healthy control.
+An omitted or unavailable construction earns no Test credit.
+
+| Control | Mutant that must fail | Predicate | Run state |
+| --- | --- | --- | --- |
+| Foreign-fork alias | Other C thread forks without exec while S, R and the lease are held; a handler on the owner thread forks; owner guard omitted | The child cannot retain or operate the original authorities; actual C or group death still tears down I. The shared-table mutant fails. | UNRUN; cannot be constructed safely while P1 fails |
+| Fatal O before C's held-gate observation | O exits between I claim and C's observation; O or C releases or shuts down early | C custody survives O loss, a dead or mismatched identity gains no positive admission, early gate progress fails with no backend marker | UNRUN |
+| Live early close | C closes S before actual I confirmation, or omits confirmation | Cooperative I-before-last-close passes; each mutant fails; withheld confirmation to the original cutoff yields only bounded AC-38 abandonment | UNRUN |
+| Peer loss on the NOSIGNAL release | Peer disappears during C's send; second successful send; partial permission; NOSIGNAL omitted | EPIPE with no SIGPIPE, no second release, original stop and cutoff remain active, permission is neither release nor Ready. A held R alias in C's window makes the send succeed and must fail this control. | UNRUN |
+| Omitted native or kernel charge | One socket, skb, in-flight right, stack or table term dropped from the peak, or one Start right wrong, extra or truncated | The pre-exposure comparison fails rather than borrowing another ceiling; every received or pending right is disposed after refusal | UNRUN; the two non-derivable terms have no oracle to compare against |
+
+## Decision required
+
+Product choice, not a technical default. Each option has a cost recorded here; none is selected by
+this record, and none is implemented or evaluated beyond the grounding above.
+
+| Option | What it changes | Open cost |
+| --- | --- | --- |
+| 1. Retain the hold | Original gate stays as committed (O-held writer). IR-652 production and IR-655 fixtures stay inactive. | The fatal-O held-gate predicate stays UNBACKED. This is the status quo, stated openly, not a narrowing of the guarantee. |
+| 2. Authorize an audited unsafe owner boundary | Permit a reviewed unsafe-allowing owner (dedicated thread with `unshare_unsafe(FILES)` plus a fork-denial mechanism) outside the `forbid(unsafe_code)` crate. | Revises the unsafe policy; descriptor affinity, synchronous-fault handlers, seccomp coverage and the P3 rows still open. |
+| 3. Authorize a separate release custodian process | Move S and the lease to a process with its own table. | Changes C custody and death semantics (the ticket excludes it as a hidden custodian); needs its own death and teardown contract. |
+| 4. Authorize a process-wide no-fork rule for embedding C | Embedding C must not fork while a guardian run is live. | Changes ordinary embedding behavior; the ticket forbids assuming it. |
+| 5. Authorize a non-descriptor lease and a measured gate profile | Replace the fd lease by an identity not duplicated by fork, and pin a measured kernel profile for the gate. | New caller-death mechanism and a profile-restricted support claim; the measurement is itself unrun. |
+| 6. Narrow the guarantee explicitly | Amend FR-034 AC-54/83/87 to drop the strong held-gate predicate. | Requires an explicit reviewed amendment; never done silently. |
+
+Until one is chosen, the strong original-gate construction remains **UNBACKED**.
 
 ## Consequences
 
-IR-717 remains an open prerequisite to IR-652 and the later completion audit. IR-652 owns the
-actual C/L/O/M/I and transport implementation; IR-655 owns genuine fixture evidence. The proposed
-five-right Start and stream transport do not enter the normative protocol while the premises above
-are unbacked. No compatibility route, copied dependency file, fabricated reserve or source-only
-success claim follows from this decision.
+IR-717 stays open as a prerequisite to IR-652 and the later completion audit. IR-652 owns the
+actual C/L/O/M/I and transport implementation; IR-655 owns genuine fixture evidence and stays
+downstream of an approved operational contract. The five-right Start and the stream transport do
+not enter the normative protocol. No compatibility route, copied dependency file, fabricated
+reserve, stored certificate or source-only success claim follows from this record.
 
-## Alternatives Considered
+## Not grounded by this record
 
-- **A: private descriptor table on an audited C owner thread.** This can exclude ordinary forks
-  from other C threads only if the complete owner runtime is safe and all operations stay on that
-  thread. Signal masking by itself leaves reserved native signals and callbacks; fd-affinity and
-  bounded teardown are also open. No current safe API for the whole boundary is established.
-- **A-prime: A with owner-local no-fork enforcement.** A kernel policy might also exclude handler
-  forks on the owner, while allowing other C threads to fork. It still needs a supported policy
-  installation, complete syscall coverage, descriptor affinity and all native/resource bounds.
-  It is not selected or measured.
-- **Shared-table or O-only custody.** Unrelated C forks can inherit S or the original lease in a
-  shared table. O-only release loses the live gate when O exits before C's observation. Neither
-  supports the strong held-gate predicate.
-- **A separate release custodian or a process-wide no-fork rule.** These change original C custody,
-  death semantics or ordinary embedding behavior and require an explicit product decision. They
-  are not allocated by this ADR.
+- No measurement: no Cargo build, native probe, kernel read or control was run.
+- Kernel facts (fork copying the table, the in-flight right accounting and per-message right list,
+  skb overhead, per-user counter) are stated from kernel behavior and were not verified on the
+  supported kernel here.
+- Whether any supported embedding actually forks from a signal handler, and which supported kernel
+  and build profile applies, are not established.
+- No packet existed at `/tmp/ix-handoff/ir717-operational-gate-contract.md`; the private design
+  review and feasibility report cited in the ticket were not available to this record.
