@@ -504,9 +504,8 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     does not satisfy this control (FR-015-AC-40, FR-015-AC-41).
     Each unconstrained mutant run is the two-phase run of FR-017-AC-63 (IR-1022): its witness
     phase needs the trace mode. On the meter harness the traced refusal-order mutant peaked at
-    19,671,392,256 B on a 40 GiB probe and exhausted 16 GiB, where the healthy sliced proof
-    peaked at 8,183,332,864 B (different runs, not one harness both ways; quire-exact TC-931
-    Status and IR-844). The AC-41, AC-119 and AC-126 harnesses are unmeasured, so their mutant
+    19,671,392,256 B on a Peter-authorised 40 GiB probe and exhausted 16 GiB with no verdict (quire-exact TC-931
+    Status and IR-844); no healthy-proof fit is claimed. The AC-41, AC-119 and AC-126 harnesses are unmeasured, so their mutant
     controls may not fit 16 GiB. A witness phase stopped by the ceiling is `Inconclusive` and
     leaves the control unmet; no ceiling raise, smaller range or weaker assertion may stand in.
     The package comes from QSL's facade on source, never a copied fixture
@@ -857,6 +856,24 @@ with the required author `make kani-gate`; independent review and final acceptan
     This parameter fixture does not exercise the separate IR-624 selected-model
     state-field range path (FR-015-AC-119; distinct from the scalar
     FR-015-AC-118 and arithmetic mutant of step 11).
+
+## QSL-source four-kind installed-backend run (IR-948, planned)
+
+50. Author the FR-015-AC-129 fixture: the domain package declaring `Bank`, `Account`,
+    `balance: Int[0, 100]`, `withdraw(amount: Int[0, 100])` and its frame, and the QSL unit with
+    the named `pre`, `post` and `invariant` clauses. Emit and admit its one package. Request the
+    four claims; require four harnesses with pairwise distinct identities, every drawn domain
+    equal to the package's accessor range or `bounded_domain`, and no FR-021 prepared-function
+    descriptor. With the installed backend, one job at a time at the AC-126 ceiling and unwind 8,
+    require the unmutated precondition, postcondition and invariant `Verified` with the final
+    cover satisfied (the frame's allowed effect by FR-015-AC-31). Run the two invariant mutants
+    (`balance >= 1`; the package field widened to `Int[-1, 100]`) and require each invariant
+    harness `Falsified` with counterexample `balance = 0` and `balance = -1`, replayed through
+    `qsl_replay::replay_state_clause` as a reproduced violation of the same clause; credit no
+    other kind's verdict of the widened package. Run the `amount > 100` precondition and require
+    `CoverUnsatisfied`. Record the peak and teardown of each job; `MemoryExhausted`,
+    `WitnessDisagreed`, `NoVerdict`, `MissingCoverSummary` and timeout are `Inconclusive`, the
+    control unmet, and the peak is reported (FR-015-AC-129).
 
 ## Blocked
 
