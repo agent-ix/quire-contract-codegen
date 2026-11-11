@@ -1975,6 +1975,9 @@ mod tests {
 }
 
 #[cfg(test)]
+mod two_phase_tests;
+
+#[cfg(test)]
 pub(crate) mod batch_tests {
     use ix_trace_rs::trace;
     use quire_contract_ir::kani::KaniOutcomeKind;
@@ -1994,10 +1997,8 @@ pub(crate) mod batch_tests {
         },
     };
 
-    mod two_phase;
-
     /// The request timeout T of the tests that do not vary it.
-    const T: Duration = Duration::from_secs(30);
+    pub(super) const T: Duration = Duration::from_secs(30);
 
     /// The options every harness of these tests shares once its `--harness <path> --exact`
     /// selection is taken out, written out so the test is not the code's own vector.
@@ -2075,7 +2076,7 @@ wait
         }
     }
 
-    fn memory_member(module: &str, bytes: u64) -> StateFrameHarness {
+    pub(super) fn memory_member(module: &str, bytes: u64) -> StateFrameHarness {
         let mut harness = member(module, "check", 4);
         harness.identity.ceilings.memory_bytes = std::num::NonZeroU64::new(bytes).unwrap();
         harness
@@ -2364,7 +2365,7 @@ printf '{"metadata":{"version":"1.0"},"verification_results":{"results":[%s]}}' 
 exit 0
 "#;
 
-    fn member(module: &str, harness: &str, unwind: u32) -> StateFrameHarness {
+    pub(super) fn member(module: &str, harness: &str, unwind: u32) -> StateFrameHarness {
         let mut built = named_state_frame_harness(
             module,
             harness,
@@ -2393,17 +2394,17 @@ exit 0
     }
 
     /// A launcher stand-in in a scratch crate and target directory.
-    struct StandIn {
-        directory: PathBuf,
-        crate_directory: PathBuf,
-        target_directory: PathBuf,
-        installation: KaniInstallation,
-        cancel: Cancel,
+    pub(super) struct StandIn {
+        pub(super) directory: PathBuf,
+        pub(super) crate_directory: PathBuf,
+        pub(super) target_directory: PathBuf,
+        pub(super) installation: KaniInstallation,
+        pub(super) cancel: Cancel,
     }
 
     impl StandIn {
         /// A scratch crate and target directory, and the path a launcher will be installed at.
-        fn scaffold(name: &str) -> Self {
+        pub(super) fn scaffold(name: &str) -> Self {
             let directory = discover_scratch(name);
             let crate_directory = directory.join("crate");
             let target_directory = directory.join("target");
@@ -2421,7 +2422,7 @@ exit 0
         }
 
         /// Installs the launcher: the prologue, then `body`.
-        fn install(&self, body: &str) {
+        pub(super) fn install(&self, body: &str) {
             write_launcher(
                 &self.installation.launcher,
                 &format!(
@@ -2433,7 +2434,7 @@ exit 0
 
         /// Persist the actual harness source that the public execution entry authenticates.
         #[cfg(target_os = "linux")]
-        fn containing(&self, harnesses: &[&StateFrameHarness]) {
+        pub(super) fn containing(&self, harnesses: &[&StateFrameHarness]) {
             let source = harnesses
                 .iter()
                 .map(|harness| harness.rust.contents.as_str())
@@ -2443,7 +2444,7 @@ exit 0
         }
 
         /// A stand-in running `body` after its prologue.
-        fn running(name: &str, body: &str) -> Self {
+        pub(super) fn running(name: &str, body: &str) -> Self {
             let stand_in = Self::scaffold(name);
             stand_in.install(body);
             stand_in
@@ -2451,7 +2452,7 @@ exit 0
 
         /// Timing controls wait for actual teardown readiness before the owner's one poll.
         #[cfg(target_os = "linux")]
-        fn with_preconfirmed_cleanup(mut self) -> Self {
+        pub(super) fn with_preconfirmed_cleanup(mut self) -> Self {
             use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
             self.installation = KaniInstallation::with_owners(
                 self.installation.launcher.clone(),
@@ -2491,13 +2492,18 @@ exit 0
         }
 
         /// A stand-in that verifies every harness it is asked for.
-        fn verifying(name: &str) -> Self {
+        pub(super) fn verifying(name: &str) -> Self {
             Self::running(name, VERIFY_EVERY_HARNESS)
         }
 
         /// A stand-in that exports `report` (when given), prints `console` and exits with the
         /// status `exit`.
-        fn replaying(name: &str, report: Option<&[u8]>, console: &str, exit: i32) -> Self {
+        pub(super) fn replaying(
+            name: &str,
+            report: Option<&[u8]>,
+            console: &str,
+            exit: i32,
+        ) -> Self {
             let stand_in = Self::scaffold(name);
             let mut body = String::new();
             if let Some(report) = report {
@@ -2515,7 +2521,7 @@ exit 0
         /// A stand-in that answers a launch whose vector holds `concrete-playback` (the witness
         /// phase) with `witness` and every other launch with `proof`, each a report (when given),
         /// a console and an exit status.
-        fn replaying_phases(
+        pub(super) fn replaying_phases(
             name: &str,
             proof: (Option<&[u8]>, &str, i32),
             witness: (Option<&[u8]>, &str, i32),
@@ -2542,7 +2548,7 @@ exit 0
             stand_in
         }
 
-        fn request<'a>(
+        pub(super) fn request<'a>(
             &'a self,
             harness: &'a StateFrameHarness,
             timeout: Duration,
@@ -2559,7 +2565,7 @@ exit 0
         }
 
         /// Runs `harnesses` as a batch at `timeout`.
-        fn batch(
+        pub(super) fn batch(
             &self,
             harnesses: &[StateFrameHarness],
             timeout: Duration,
@@ -2581,7 +2587,7 @@ exit 0
 
         /// Exercise actual bounded execution on Linux and shared POSIX report semantics on
         /// unsupported targets. Only the Linux result carries a memory-enforcement attestation.
-        fn reported_batch(
+        pub(super) fn reported_batch(
             &self,
             harnesses: &[StateFrameHarness],
             timeout: Duration,
@@ -2602,7 +2608,7 @@ exit 0
         }
 
         /// The argument vector of each process the stand-in ran, as it received them.
-        fn calls(&self) -> Vec<Vec<String>> {
+        pub(super) fn calls(&self) -> Vec<Vec<String>> {
             let recorded = fs::read_to_string(self.directory.join("calls")).unwrap_or_default();
             let mut calls: Vec<Vec<String>> = Vec::new();
             for line in recorded.lines() {
@@ -4365,14 +4371,14 @@ esac
     const PLAYBACK_BODY: &str = "fn from_{}() { kani::concrete_playback_run(v, h); }";
 
     /// A playback block headed for `path` that checks a `kind` property.
-    fn block(path: &str, kind: &str, name: &str) -> String {
+    pub(super) fn block(path: &str, kind: &str, name: &str) -> String {
         format!(
             "Concrete playback unit test for `{path}`:\n```\n/// Test generated for harness `{path}`\n///\n/// Check for `{kind}`: \"c\"\n\n#[test]\n{}\n```\n",
             PLAYBACK_BODY.replace("{}", name)
         )
     }
 
-    fn entry<'a>(
+    pub(super) fn entry<'a>(
         harness_id: &'a str,
         status: &'a str,
         checks: &'a [(&'a str, &'a str)],
@@ -4385,7 +4391,7 @@ esac
         }
     }
 
-    const FAILED: (&str, &str) = ("Failure", "assertion");
+    pub(super) const FAILED: (&str, &str) = ("Failure", "assertion");
 
     fn pair() -> Vec<StateFrameHarness> {
         vec![member("a", "check", 4), member("b", "check", 4)]
