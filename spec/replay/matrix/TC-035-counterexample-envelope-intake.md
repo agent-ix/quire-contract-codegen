@@ -398,10 +398,13 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     the executor uncalled and no document built, and assert the variant is not `HarnessMismatch`
     (FR-024-AC-65). Mutation controls: a `decode_falsification` that ignores the caller identity
     returns `Ok` for the differing identity and fails the `ObligationIdentityMismatch` assertion
-    of this step; one that compares only the identity's kind or name accepts the ordinal-only
+    of this step; one that compares only the identity's `node` and `model` accepts the ordinal-only
     difference and fails the same assertion; one that maps the difference to `HarnessMismatch`
-    fails the variant assertion of this step; one that replaces the caller's identity with a
-    default or the harness's own before comparing never refuses and fails the same assertion.
+    fails the variant assertion of this step; one that replaces the caller's identity with the
+    harness's own before comparing never refuses and fails the same assertion; one that
+    replaces it with a default identity refuses the matching case and fails the accept
+    assertion (FR-024-AC-66). A harness differing in both identity and field order must return
+    `ObligationIdentityMismatch`, which fails a mutant that checks field order first.
     The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`.
 
 ## Status
