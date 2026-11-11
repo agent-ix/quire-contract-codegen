@@ -443,9 +443,10 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     (supplied `7`). Mutation controls, each failing a named assertion of this step: a builder that
     ignores the supplied value and writes `0` or the range lower bound (site: the unread-field
     binding in `new_invariant`'s `bind`) fails the `audit == 7` assertion (nonzero and above the
-    lower bound); a supplied value that overrides a drawn field (site: the merge into the
-    `populations()` call writing the supplied `balance` over the playback's) turns the `balance =
-    -1` violation into `Verdicts` and fails the settlement assertion; a value attached to the
+    lower bound); a merge into the `populations()` call that lets a supplied value replace the
+    drawn field's (site: the merge; it writes the last supplied value, `3` in the `audit` plus
+    `note` repeat, over `balance`) turns the `balance = -1` violation into `Verdicts` and fails
+    the `balance == -1` and settlement assertions; a value attached to the
     wrong field (site: the zip of supplied names to values) swaps `audit` and `note` and fails
     the two-field assertion (values 7 and 3 differ); a transcript rendered from the completed
     values (site: the `render_witness` call's input) carries `audit` and fails the
@@ -459,13 +460,14 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     the two-field invariant `balance >= audit`); an undeclared name; a name supplied twice; and,
     over `audit: Int[0, 1000]`, the values `0` and `1000` (accepted) and `1001` and `-1` (each
     refused with `OutOfDomain` naming `audit`); a supplied value for an unread Boolean field and
-    for the step 32 field whose range is wider than `i64` (each `OutOfDomain`); and an omitted
+    for the `audit` field of the fixture `emitted_package_with_wide_audit_range` (range wider than
+    `i64`; each `UnreadFieldNotRanged`, not `OutOfDomain`); and an omitted
     unread field (`MissingField`). Each refusal asserts its distinct variant, no document built
     and an uncalled executor. Mutation controls: a skipped range check (site: the range test in
     `new_invariant`'s validation of `unread_values`) accepts `1001` and fails the `OutOfDomain`
     assertion; an off-by-one upper bound refuses `1000` and fails the accept assertion; a check
     that skips fields with no `i64` range writes an integer into the Boolean field and fails the
-    Boolean case; a builder accepting a supplied value for a clause-read field (site: the
+    Boolean case; a builder returning `OutOfDomain` for them fails the variant assertion; a builder accepting a supplied value for a clause-read field (site: the
     drawn-or-read membership check) fails the first two refusal assertions; a builder mapping the
     duplicate to `UndeclaredField` (site: the duplicate-name check) fails the variant assertion.
 
