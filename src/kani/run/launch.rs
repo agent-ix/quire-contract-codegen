@@ -1,5 +1,5 @@
-//! Launching the Kani launcher process: spawn, bounded capture, the wall-clock budget and the
-//! owned namespace teardown (FR-017, FR-028).
+//! Launching the Kani launcher process: spawn as the leader of its own process group, bounded
+//! capture, the wall-clock budget and the group kill (FR-017, FR-028; ADR-007).
 
 use std::{
     fmt, io,
@@ -17,8 +17,7 @@ use std::{
 };
 
 use super::{
-    memory::{MemoryObservation, MemoryObserver},
-    namespace::{BackendCommand, NamespaceOwner},
+    memory::MemoryObservation,
     owners::{LaunchOwners, PollOperation},
 };
 
@@ -29,7 +28,7 @@ use rustix::{
     event::{PollFd, PollFlags},
     fs::{fcntl_getfl, fcntl_setfl, OFlags},
     io::Errno,
-    process::{kill_process_group, waitid, Pid, Signal, WaitId, WaitIdOptions},
+    process::{waitid, Pid, WaitId, WaitIdOptions},
     time::Timespec,
 };
 
@@ -71,18 +70,10 @@ pub(crate) enum LaunchOutcome {
         streams: CapturedStreams,
     },
     /// The budget elapsed before the process exited. The launcher's whole process group has been
-    /// killed and the launcher reaped. Production bounded execution confirms teardown of
-    /// the entire owned PID namespace, including unobserved and escaped descendants.
+    /// killed and the launcher reaped.
     TimedOut,
     /// The caller-owned handle stopped the run with this retained source.
     Cancelled { source: KaniCancellationSource },
-    /// Observed aggregate resident memory exceeded the identity ceiling; the tree was killed.
-    MemoryExhausted,
-    /// The tree could no longer be observed, so the run was stopped without classifying it.
-    MemoryUnobserved {
-        /// What prevented observation.
-        detail: String,
-    },
     /// A stream carried more than `limit` bytes. The run was stopped and the launcher's whole
     /// process group killed; no text is retained, because a truncated stream is evidence nobody
     /// can vouch for (FR-017-AC-14).
@@ -158,7 +149,7 @@ const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 ///
 /// The launcher runs as the leader of its own process group, so a timeout kills CBMC and
 /// every other descendant along with it instead of leaving them running past the budget; see
-/// `kill_process_tree`. The group is no longer the terminal's foreground group, so a Ctrl-C
+/// `LaunchTeardown::signal_group`. The group is no longer the terminal's foreground group, so a Ctrl-C
 /// typed at the caller's terminal reaches the caller and not the launcher or its descendants:
 /// a caller that is interrupted and exits without returning from this function leaves them
 /// running until they finish on their own.
@@ -197,32 +188,22 @@ pub(super) fn run_launcher(
         timeout,
         harnesses,
         None,
-        None,
-        None,
         &Cancel::new(),
         &LaunchOwners::real(),
     )
 }
 
-/// A bounded launch together with the observations made by its enforcement mechanism.
+/// A bounded launch together with the peak memory the environment provided for it.
 pub(super) struct BoundedLaunch {
     pub(super) outcome: LaunchOutcome,
     pub(super) memory: MemoryObservation,
-}
-
-/// Refuse unavailable memory enforcement before starting a backend.
-pub(crate) enum BoundedLaunchError {
-    Unavailable(io::Error),
-    Io(io::Error),
 }
 
 /// The operation that failed before a complete child outcome was available.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LaunchFailurePhase {
     Spawn,
-    Ownership,
     CaptureSetup,
-    Startup,
     Wait,
 }
 
@@ -264,144 +245,77 @@ pub(crate) fn failure_phase(error: &io::Error) -> Option<LaunchFailurePhase> {
 pub(crate) struct SharedLaunch {
     pub(crate) outcome: LaunchOutcome,
     pub(crate) started: bool,
+    /// The launcher's process id when one was started.
+    pub(crate) launcher: Option<u32>,
     pub(crate) input_failure: Option<String>,
     pub(crate) partial_stdout: Option<Vec<u8>>,
     pub(crate) partial_stderr: Option<Vec<u8>>,
 }
 
-/// Run a direct selected executable through the same owned tree monitor as Kani.
+impl SharedLaunch {
+    fn not_started(outcome: LaunchOutcome) -> Self {
+        Self {
+            outcome,
+            started: false,
+            launcher: None,
+            input_failure: None,
+            partial_stdout: None,
+            partial_stderr: None,
+        }
+    }
+}
+
+/// Run a direct selected executable through the same group-owned launcher as Kani.
 pub(crate) fn run_bounded_process_internal(
     executable: &Path,
     arguments: &[std::ffi::OsString],
     input: Vec<u8>,
-    ceilings: crate::kani::identity::ProofCeilings,
+    wall_clock: Duration,
     output_limit: usize,
     deadline: Instant,
     cancel: &Cancel,
-) -> Result<SharedLaunch, BoundedLaunchError> {
-    let mut command = BackendCommand::new(executable);
-    for argument in arguments {
-        command.arg(argument);
-    }
-    run_bounded_shared_at(
+) -> io::Result<SharedLaunch> {
+    let mut command = Command::new(executable);
+    command.args(arguments);
+    run_monitored_with(
         command,
-        ceilings,
-        NonZeroUsize::MIN,
-        Path::new("/proc"),
+        wall_clock,
         Some(deadline),
         cancel,
         &LaunchOwners::real(),
         Some(input),
         output_limit,
+        NonZeroUsize::MIN,
     )
-    .map(|(run, _)| run)
 }
 
-/// Run a backend with both ceilings, retaining the actual memory observations.
+/// Run a backend within `wall_clock`, retaining the peak memory the environment provides.
 pub(super) fn run_bounded_launcher(
-    command: BackendCommand,
-    ceilings: crate::kani::identity::ProofCeilings,
+    command: Command,
+    wall_clock: Duration,
     harnesses: NonZeroUsize,
     deadline: Option<Instant>,
     cancel: &Cancel,
     owners: &LaunchOwners,
-) -> Result<BoundedLaunch, BoundedLaunchError> {
-    run_bounded_launcher_at(
+) -> io::Result<BoundedLaunch> {
+    let run = run_monitored_with(
         command,
-        ceilings,
-        harnesses,
-        std::path::Path::new("/proc"),
-        deadline,
-        cancel,
-        owners,
-    )
-}
-
-fn run_bounded_launcher_at(
-    command: BackendCommand,
-    ceilings: crate::kani::identity::ProofCeilings,
-    harnesses: NonZeroUsize,
-    procfs: &std::path::Path,
-    deadline: Option<Instant>,
-    cancel: &Cancel,
-    owners: &LaunchOwners,
-) -> Result<BoundedLaunch, BoundedLaunchError> {
-    let (run, memory) = run_bounded_shared_at(
-        command,
-        ceilings,
-        harnesses,
-        procfs,
+        wall_clock,
         deadline,
         cancel,
         owners,
         None,
         CAPTURE_LIMIT.saturating_mul(harnesses.get()),
+        harnesses,
     )?;
+    let memory = match run.launcher {
+        Some(launcher) => MemoryObservation::observe(owners.peak.as_ref(), launcher),
+        None => MemoryObservation::default(),
+    };
     Ok(BoundedLaunch {
         outcome: run.outcome,
         memory,
     })
-}
-
-#[allow(clippy::too_many_arguments)] // One launch has distinct ownership, limits and deadline inputs.
-fn run_bounded_shared_at(
-    command: BackendCommand,
-    ceilings: crate::kani::identity::ProofCeilings,
-    harnesses: NonZeroUsize,
-    procfs: &Path,
-    deadline: Option<Instant>,
-    cancel: &Cancel,
-    owners: &LaunchOwners,
-    input: Option<Vec<u8>>,
-    output_limit: usize,
-) -> Result<(SharedLaunch, MemoryObservation), BoundedLaunchError> {
-    let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
-    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        return Ok((
-            SharedLaunch {
-                outcome: LaunchOutcome::TimedOut,
-                started: false,
-                input_failure: None,
-                partial_stdout: None,
-                partial_stderr: None,
-            },
-            observer.observation(),
-        ));
-    }
-    if let Some(source) = observed_cancellation(cancel) {
-        return Ok((
-            SharedLaunch {
-                outcome: LaunchOutcome::Cancelled { source },
-                started: false,
-                input_failure: None,
-                partial_stdout: None,
-                partial_stderr: None,
-            },
-            observer.observation(),
-        ));
-    }
-    let (command, owner) = NamespaceOwner::prepare(command, Arc::clone(&owners.confirmation))
-        .map_err(BoundedLaunchError::Unavailable)?;
-    let run = run_monitored_with(
-        command,
-        ceilings.wall_clock,
-        Some((&mut observer, ceilings.memory_bytes.get())),
-        Some(owner),
-        deadline,
-        cancel,
-        owners,
-        input,
-        output_limit,
-        harnesses,
-    )
-    .map_err(|error| {
-        if error.kind() == io::ErrorKind::Unsupported || error.kind() == io::ErrorKind::NotFound {
-            BoundedLaunchError::Unavailable(error)
-        } else {
-            BoundedLaunchError::Io(error)
-        }
-    })?;
-    Ok((run, observer.observation()))
 }
 
 #[cfg(test)]
@@ -409,8 +323,6 @@ fn run_monitored(
     command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
-    memory: Option<(&mut MemoryObserver, u64)>,
-    namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
     cancel: &Cancel,
     owners: &LaunchOwners,
@@ -418,8 +330,6 @@ fn run_monitored(
     run_monitored_with(
         command,
         timeout,
-        memory,
-        namespace,
         supplied_deadline,
         cancel,
         owners,
@@ -434,8 +344,6 @@ fn run_monitored(
 fn run_monitored_with(
     mut command: Command,
     timeout: Duration,
-    mut memory: Option<(&mut MemoryObserver, u64)>,
-    mut namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
     cancel: &Cancel,
     owners: &LaunchOwners,
@@ -444,6 +352,7 @@ fn run_monitored_with(
     harnesses: NonZeroUsize,
 ) -> io::Result<SharedLaunch> {
     let shared_process = input.is_some();
+    // The launcher leads a new process group: one group signal reaches every descendant.
     command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -453,46 +362,21 @@ fn run_monitored_with(
     }
     let deadline = supplied_deadline.or_else(|| Instant::now().checked_add(timeout));
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        return Ok(SharedLaunch {
-            outcome: LaunchOutcome::TimedOut,
-            started: false,
-            input_failure: None,
-            partial_stdout: None,
-            partial_stderr: None,
-        });
+        return Ok(SharedLaunch::not_started(LaunchOutcome::TimedOut));
     }
     if let Some(source) = observed_cancellation(cancel) {
-        return Ok(SharedLaunch {
-            outcome: LaunchOutcome::Cancelled { source },
-            started: false,
-            input_failure: None,
-            partial_stdout: None,
-            partial_stderr: None,
-        });
+        return Ok(SharedLaunch::not_started(LaunchOutcome::Cancelled {
+            source,
+        }));
     }
     let mut child = command
         .spawn()
         .map_err(|error| staged_error(LaunchFailurePhase::Spawn, error, shared_process))?;
-    drop(command); // Close the parent copies of child-only control descriptors before reading EOF.
-    if let Some(owner) = &mut namespace {
-        if let Err(error) = owner.attach(&child) {
-            // The startup gate is still closed, but the wrapper is already a live child.
-            kill_process_tree(&mut child);
-            let _ = reap_stopped_launcher(&mut child);
-            return Err(staged_error(
-                LaunchFailurePhase::Ownership,
-                error,
-                shared_process,
-            ));
-        }
-    }
+    let launcher = child.id();
+    drop(command);
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
-        if let Some(owner) = &mut namespace {
-            owner.cleanup()?;
-        } else {
-            kill_process_tree(&mut child);
-        }
-        let _ = reap_stopped_launcher(&mut child);
+        owners.teardown.signal_group(&mut child);
+        let _ = owners.teardown.reap(&mut child);
         return Err(staged_error(
             LaunchFailurePhase::CaptureSetup,
             io::Error::other("a piped standard stream was not captured"),
@@ -528,35 +412,12 @@ fn run_monitored_with(
         None => (None, None),
     };
 
-    let startup = match &mut namespace {
-        Some(owner) => match &mut memory {
-            Some((observer, _)) => owner.dispatch(deadline, observer).map(Some),
-            None => Err(io::Error::other("namespace memory observer missing")),
-        },
-        None => Ok(None),
-    };
-    let exited = match &startup {
-        Ok(root) => wait_until_at(
-            &child,
-            deadline,
-            &flags.failed,
-            &mut memory,
-            *root,
-            cancel,
-            owners,
-        ),
-        Err(error) if error.kind() == io::ErrorKind::TimedOut => Ok(WaitConclusion::TimedOut),
-        Err(_) => Err(io::Error::other("namespace startup refused")), // Refusal is returned after owned cleanup.
-    };
+    let exited = wait_until(&child, deadline, &flags.failed, cancel);
     input_stop.store(true, Ordering::Release);
-    let cleanup = match &mut namespace {
-        Some(owner) => owner.cleanup(),
-        None => {
-            kill_process_tree(&mut child);
-            Ok(())
-        }
-    };
-    let reaped = reap_stopped_launcher(&mut child);
+    // The group is signalled while the launcher is still unreaped, so the unreaped launcher
+    // reserves the group id (FR-017-AC-68).
+    owners.teardown.signal_group(&mut child);
+    let reaped = owners.teardown.reap(&mut child);
     flags.stop.store(true, Ordering::Release);
     let stdout_bytes = finish_capture(stdout_reader);
     let stderr_bytes = finish_capture(stderr_reader);
@@ -586,58 +447,10 @@ fn run_monitored_with(
             Ok(Ok(_)) => {}
         }
     }
-    if let Err(error) = cleanup {
-        return Ok(SharedLaunch {
-            outcome: LaunchOutcome::MemoryUnobserved {
-                detail: format!("namespace cleanup failed: {error}"),
-            },
-            started: true,
-            input_failure,
-            partial_stdout,
-            partial_stderr,
-        });
-    }
-    if let Err(error) = startup {
-        if error.kind() != io::ErrorKind::TimedOut {
-            return Err(staged_error(
-                LaunchFailurePhase::Startup,
-                io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    format!("namespace startup refused: {error}"),
-                ),
-                shared_process,
-            ));
-        }
-    }
     let exited =
         exited.map_err(|error| staged_error(LaunchFailurePhase::Wait, error, shared_process))?;
     let reaped =
         reaped.map_err(|error| staged_error(LaunchFailurePhase::Wait, error, shared_process))?;
-
-    // A measured memory stop owns the conclusion even if a pipe failed at the same time.
-    // Neither a partial stream nor a backend report can turn this stop into a verdict.
-    match exited {
-        WaitConclusion::MemoryExhausted => {
-            return Ok(SharedLaunch {
-                outcome: LaunchOutcome::MemoryExhausted,
-                started: true,
-                input_failure,
-                partial_stdout,
-                partial_stderr,
-            })
-        }
-        WaitConclusion::MemoryUnobserved { detail } => {
-            return Ok(SharedLaunch {
-                outcome: LaunchOutcome::MemoryUnobserved { detail },
-                started: true,
-                input_failure,
-                partial_stdout,
-                partial_stderr,
-            })
-        }
-        WaitConclusion::Completed | WaitConclusion::TimedOut | WaitConclusion::Cancelled { .. } => {
-        }
-    }
 
     for (stream, failure) in [
         (CaptureStream::Stdout, stdout_failure),
@@ -647,6 +460,7 @@ fn run_monitored_with(
             return Ok(SharedLaunch {
                 outcome: capture_failure_outcome(stream, failure, limit, harnesses),
                 started: true,
+                launcher: Some(launcher),
                 input_failure,
                 partial_stdout,
                 partial_stderr,
@@ -669,39 +483,15 @@ fn run_monitored_with(
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
         WaitConclusion::Cancelled { source } => LaunchOutcome::Cancelled { source },
-        WaitConclusion::MemoryExhausted => LaunchOutcome::MemoryExhausted,
-        WaitConclusion::MemoryUnobserved { detail } => LaunchOutcome::MemoryUnobserved { detail },
     };
     Ok(SharedLaunch {
         outcome,
         started: true,
+        launcher: Some(launcher),
         input_failure,
         partial_stdout,
         partial_stderr,
     })
-}
-
-/// Reap only after observing exit; never turn unconfirmed kernel teardown into an unbounded wait.
-fn reap_stopped_launcher(child: &mut Child) -> io::Result<std::process::ExitStatus> {
-    let pid = i32::try_from(child.id())
-        .ok()
-        .and_then(Pid::from_raw)
-        .ok_or_else(|| io::Error::other("invalid launcher pid"))?;
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        match waitid(
-            WaitId::Pid(pid),
-            WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
-        ) {
-            Ok(Some(_)) => return child.wait(),
-            Ok(None) | Err(Errno::INTR) => {}
-            Err(error) => return Err(error.into()),
-        }
-        if Instant::now() >= deadline {
-            return Err(io::Error::other("launcher termination was not confirmed"));
-        }
-        thread::sleep(LAUNCHER_POLL_INTERVAL);
-    }
 }
 
 /// The bytes of `stream`, or the outcome that refuses the run because they were not all read or
@@ -746,61 +536,23 @@ enum WaitConclusion {
     Completed,
     TimedOut,
     Cancelled { source: KaniCancellationSource },
-    MemoryExhausted,
-    MemoryUnobserved { detail: String },
 }
 
-/// Polls the unreaped launcher, with memory checked before its exit or deadline is accepted.
-/// An exited launcher remains unreaped until the group has been signalled: otherwise its pid,
-/// the group id, could be recycled and a later signal could reach an unrelated group.
-#[cfg(test)]
+/// Polls the unreaped launcher until it exits, the deadline passes, a capture fails or the
+/// caller cancels. An exited launcher remains unreaped until the group has been signalled:
+/// otherwise its pid, the group id, could be recycled and a later signal could reach an
+/// unrelated group.
 fn wait_until(
     child: &Child,
     deadline: Option<Instant>,
     failed: &AtomicBool,
-    memory: &mut Option<(&mut MemoryObserver, u64)>,
-) -> io::Result<WaitConclusion> {
-    wait_until_at(
-        child,
-        deadline,
-        failed,
-        memory,
-        None,
-        &Cancel::new(),
-        &LaunchOwners::real(),
-    )
-}
-
-fn wait_until_at(
-    child: &Child,
-    deadline: Option<Instant>,
-    failed: &AtomicBool,
-    memory: &mut Option<(&mut MemoryObserver, u64)>,
-    namespace_root: Option<u32>,
     cancel: &Cancel,
-    owners: &LaunchOwners,
 ) -> io::Result<WaitConclusion> {
     let pid = i32::try_from(child.id())
         .ok()
         .and_then(Pid::from_raw)
         .ok_or_else(|| io::Error::other("the launcher's process id is not a valid pid"))?;
     loop {
-        // Observe before consulting exit: a backend that exited beside an observed overage
-        // must never turn that overage into a completed verdict.
-        if let Some((observer, ceiling)) = memory {
-            match owners
-                .memory
-                .observe(observer, namespace_root.unwrap_or_else(|| child.id()))
-            {
-                Ok(bytes) if bytes > *ceiling => return Ok(WaitConclusion::MemoryExhausted),
-                Ok(_) => {}
-                Err(error) => {
-                    return Ok(WaitConclusion::MemoryUnobserved {
-                        detail: error.to_string(),
-                    })
-                }
-            }
-        }
         // An exited launcher cannot turn an already elapsed ceiling into completion.
         if failed.load(Ordering::Acquire)
             || deadline.is_some_and(|deadline| Instant::now() >= deadline)
@@ -987,25 +739,6 @@ fn capture<R: Read + AsFd>(
     Ok(kept)
 }
 
-/// Kills the launcher and every process in its process group.
-///
-/// This exists so that a finished run, whether it timed out, was stopped or exited on its own,
-/// does not leave its descendants behind: Kani's launcher
-/// forks `kani-driver`, which forks CBMC, and CBMC is the solver a budget most needs to stop. A
-/// `child.kill()` alone would leave it running after the launcher is gone. The launcher is started
-/// as the leader of its own process group ([`run_monitored_with`]), every descendant
-/// inherits that group, and one signal to the group reaches them all, however deep, with no
-/// snapshot of the process tree that could miss a process forked a moment later.
-///
-/// A descendant that leaves the group (`setsid`, `setpgid`) is not reached. Nothing in Kani's
-/// process tree does, and this call does not wait for one either way.
-fn kill_process_tree(child: &mut Child) {
-    if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
-        let _ = kill_process_group(group, Signal::KILL);
-    }
-    let _ = child.kill();
-}
-
 /// Observe the caller's retained first event, not a clock or a meter charge.
 fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
     cancel.cause().map(|cause| match cause {
@@ -1020,7 +753,8 @@ mod tests {
     use rustix::event::poll;
     use std::{fs, io::Write};
 
-    use super::*;
+    use super::super::owners::LaunchTeardown;
+    use super::{super::owners::SystemTeardown, *};
     use crate::core::test_support::discover_scratch;
 
     #[trace("FR-028-AC-2")]
@@ -1041,9 +775,14 @@ mod tests {
         )
         .unwrap()
         .is_some());
-        let conclusion =
-            wait_until(&child, Some(deadline), &AtomicBool::new(false), &mut None).unwrap();
-        kill_process_tree(&mut child);
+        let conclusion = wait_until(
+            &child,
+            Some(deadline),
+            &AtomicBool::new(false),
+            &Cancel::new(),
+        )
+        .unwrap();
+        SystemTeardown.signal_group(&mut child);
         child.wait().unwrap();
         assert!(
             matches!(conclusion, WaitConclusion::TimedOut),
@@ -1062,8 +801,6 @@ mod tests {
             command,
             Duration::from_secs(5),
             NonZeroUsize::MIN,
-            None,
-            None,
             Some(Instant::now()),
             &Cancel::new(),
             &LaunchOwners::real(),
@@ -1073,33 +810,6 @@ mod tests {
         assert!(
             !marker.exists(),
             "expired preparation allowance must not spawn a helper"
-        );
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[trace("FR-028-AC-21")]
-    #[test]
-    fn unavailable_tree_memory_observation_refuses_before_spawn() {
-        let directory = discover_scratch("no-tree-memory-mechanism");
-        let marker = directory.join("spawned");
-        let mut command = BackendCommand::new("sh");
-        command.arg("-c").arg("touch \"$1\"").arg("sh").arg(&marker);
-        let result = run_bounded_launcher_at(
-            command,
-            crate::kani::identity::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(1024).unwrap(),
-                wall_clock: Duration::from_secs(5),
-            },
-            NonZeroUsize::MIN,
-            &directory.join("unavailable-procfs"),
-            Instant::now().checked_add(Duration::from_secs(5)),
-            &Cancel::new(),
-            &LaunchOwners::real(),
-        );
-        assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
-        assert!(
-            !marker.exists(),
-            "a backend without memory enforcement must never start"
         );
         fs::remove_dir_all(directory).unwrap();
     }
@@ -1785,58 +1495,262 @@ mod tests {
             LaunchOutcome::Completed { exit_code: Some(0), ref streams, .. } if streams.merged_text().contains("done")
         ));
     }
-    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
-    #[trace("FR-028-AC-21")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run() {
-        use std::os::unix::fs::symlink;
-        let root = crate::core::test_support::discover_scratch("memory-observation-failure");
-        let procfs = root.join("proc");
-        fs::create_dir(&procfs).unwrap();
-        symlink(
-            format!("/proc/{}", std::process::id()),
-            procfs.join(std::process::id().to_string()),
-        )
-        .unwrap();
-        let mut observer = MemoryObserver::prepare(&procfs).unwrap();
+
+    /// The return allowance past a wall-clock timeout (FR-017-AC-66): the capture drain limit
+    /// [`STOP_DRAIN_LIMIT`] (100 ms), the poll interval [`LAUNCHER_POLL_INTERVAL`] (20 ms) and
+    /// scheduling slack.
+    const RETURN_ALLOWANCE: Duration = Duration::from_secs(1);
+
+    /// A stand-in that prints its own process id and process group id.
+    fn identity_printer() -> Command {
         let mut command = Command::new("sh");
         command
             .arg("-c")
-            .arg(r#"mkdir "$1/$$"; printf malformed > "$1/$$/stat"; printf started; sleep 45"#)
-            .arg("sh")
-            .arg(&procfs);
-        let outcome = run_monitored(
-            command,
-            Duration::from_secs(5),
-            NonZeroUsize::MIN,
-            Some((&mut observer, u64::MAX)),
-            None,
-            None,
-            &Cancel::new(),
-            &LaunchOwners::real(),
+            .arg("echo $$; ps -o pgid= -p $$ | tr -d ' '");
+        command
+    }
+
+    fn printed_ids(stdout: &[u8]) -> (i32, i32) {
+        let text = String::from_utf8_lossy(stdout);
+        let mut lines = text.lines();
+        let pid = lines.next().unwrap().trim().parse().unwrap();
+        let pgid = lines.next().unwrap().trim().parse().unwrap();
+        (pid, pgid)
+    }
+
+    /// The launcher leads a new process group by a call that exists on Linux and macOS: its
+    /// group id is its own process id and differs from the caller's. A stand-in left in the
+    /// caller's group is the control and reports the caller's group id.
+    #[trace("FR-017-AC-65", "TC-043")]
+    #[test]
+    fn tc_043_the_launcher_leads_its_own_process_group() {
+        let caller_group = rustix::process::getpgrp().as_raw_nonzero().get();
+        let LaunchOutcome::Completed { streams, .. } =
+            run_launcher_with_timeout(identity_printer(), Duration::from_secs(10)).unwrap()
+        else {
+            panic!("the stand-in exits on its own");
+        };
+        let (pid, pgid) = printed_ids(&streams.stdout);
+        assert_eq!(pgid, pid, "the launcher leads its own group");
+        assert_ne!(pgid, caller_group, "the group is not the caller's");
+
+        let control = identity_printer().output().unwrap();
+        let (control_pid, control_pgid) = printed_ids(&control.stdout);
+        assert_eq!(
+            control_pgid, caller_group,
+            "the control stays in the caller's group"
+        );
+        assert_ne!(control_pgid, control_pid);
+    }
+
+    /// Heartbeat scripts: the descendant is a child of the launcher and the grandchild a child of
+    /// the descendant, all in the launcher's group, each appending a byte every 50 ms.
+    fn write_heartbeat_scripts(directory: &std::path::Path) -> (Command, [std::path::PathBuf; 2]) {
+        let grandchild = directory.join("grandchild.sh");
+        let descendant = directory.join("descendant.sh");
+        fs::write(
+            &grandchild,
+            "while :; do printf x >> \"$1\"; sleep 0.05; done\n",
         )
         .unwrap();
-        assert!(
-            matches!(&outcome, LaunchOutcome::MemoryUnobserved { .. }),
-            "lost observation must own the outcome: {outcome:?}"
-        );
-        let report = crate::kani::test_support::report(
-            "Success",
-            &[
-                crate::kani::test_support::COVER_OK,
-                crate::kani::test_support::PASSED,
-            ],
-        );
-        let refusal =
-            super::super::execute::launch_evidence(outcome, Some(&report), None).unwrap_err();
-        assert!(
-            matches!(
-                refusal,
-                super::super::execute::KaniExecutionRefusal::MemoryObservationFailed { .. }
+        fs::write(
+            &descendant,
+            format!(
+                "sh '{}' \"$2\" &\nwhile :; do printf x >> \"$1\"; sleep 0.05; done\n",
+                grandchild.display()
             ),
-            "a valid report cannot turn observation failure into a result: {refusal:?}"
+        )
+        .unwrap();
+        let heartbeats = [
+            directory.join("descendant.beat"),
+            directory.join("grandchild.beat"),
+        ];
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg("sh \"$0\" \"$1\" \"$2\" & wait")
+            .arg(&descendant)
+            .args(&heartbeats);
+        (command, heartbeats)
+    }
+
+    fn size(path: &std::path::Path) -> u64 {
+        fs::metadata(path).map_or(0, |metadata| metadata.len())
+    }
+
+    /// On a timeout the launcher, its descendant and that descendant's grandchild are all
+    /// killed, and the run returns within the timeout plus [`RETURN_ALLOWANCE`]; both heartbeat
+    /// files stop growing.
+    #[trace("FR-017-AC-66", "TC-043")]
+    #[test]
+    fn tc_043_a_timeout_kills_the_whole_group_and_returns_within_the_allowance() {
+        let directory = discover_scratch("group-kill-heartbeat");
+        let (command, heartbeats) = write_heartbeat_scripts(&directory);
+        let timeout = Duration::from_secs(1);
+        let started = Instant::now();
+        let outcome = run_launcher_with_timeout(command, timeout).unwrap();
+        let elapsed = started.elapsed();
+        assert!(matches!(outcome, LaunchOutcome::TimedOut), "{outcome:?}");
+        assert!(
+            elapsed < timeout + RETURN_ALLOWANCE,
+            "returned after {elapsed:?}"
         );
-        fs::remove_dir_all(root).unwrap();
+        let at_return = heartbeats.each_ref().map(|path| size(path));
+        assert!(
+            at_return.iter().all(|bytes| *bytes > 0),
+            "both processes were alive: {at_return:?}"
+        );
+        thread::sleep(Duration::from_millis(250));
+        let later = heartbeats.each_ref().map(|path| size(path));
+        assert_eq!(
+            later, at_return,
+            "both heartbeats stopped with the group kill"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// Control for the heartbeat reading: killing only the launcher's own process id leaves the
+    /// descendants running and both heartbeat files growing, so the group kill above is what
+    /// stops them.
+    #[trace("FR-017-AC-66", "TC-043")]
+    #[test]
+    fn tc_043_killing_only_the_launcher_leaves_the_heartbeats_growing() {
+        let directory = discover_scratch("launcher-only-kill-heartbeat");
+        let (mut command, heartbeats) = write_heartbeat_scripts(&directory);
+        command.process_group(0);
+        let mut child = command.spawn().unwrap();
+        thread::sleep(Duration::from_millis(300));
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let after_kill = heartbeats.each_ref().map(|path| size(path));
+        thread::sleep(Duration::from_millis(300));
+        let later = heartbeats.each_ref().map(|path| size(path));
+        let group = Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+        let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+        assert!(
+            later
+                .iter()
+                .zip(after_kill)
+                .all(|(now, before)| *now > before),
+            "the descendants outlive a launcher-only kill: {after_kill:?} then {later:?}"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// A descendant in the group that holds the output pipe open for five seconds does not hold
+    /// the return: the group kill closes it and the call returns inside the allowance.
+    #[trace("FR-017-AC-66", "TC-043")]
+    #[test]
+    fn tc_043_a_descendant_holding_the_output_pipe_does_not_delay_the_return() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("sleep 5 & wait");
+        let timeout = Duration::from_millis(500);
+        let started = Instant::now();
+        let outcome = run_launcher_with_timeout(command, timeout).unwrap();
+        let elapsed = started.elapsed();
+        assert!(matches!(outcome, LaunchOutcome::TimedOut), "{outcome:?}");
+        assert!(
+            elapsed < timeout + RETURN_ALLOWANCE,
+            "returned after {elapsed:?}"
+        );
+    }
+
+    /// Control: a descendant that ends its own heartbeat by exiting before the timeout stops
+    /// writing at its own exit, so the files are read after a real stop.
+    #[trace("FR-017-AC-66", "TC-043")]
+    #[test]
+    fn tc_043_a_descendant_that_exits_before_the_timeout_ends_its_own_heartbeat() {
+        let directory = discover_scratch("self-ending-heartbeat");
+        let beat = directory.join("self.beat");
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg("( for _ in 1 2 3; do printf x >> \"$0\"; sleep 0.05; done ) & sleep 30")
+            .arg(&beat);
+        let outcome = run_launcher_with_timeout(command, Duration::from_secs(1)).unwrap();
+        assert!(matches!(outcome, LaunchOutcome::TimedOut), "{outcome:?}");
+        assert_eq!(size(&beat), 3);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// Records the order of the group signal and the reap around the real operations. At the
+    /// signal it probes the launcher's own pid, which a zombie still reserves and a reaped child
+    /// does not, so the record reflects the process table and not only the call order.
+    #[derive(Debug, Default)]
+    struct RecordingTeardown {
+        events: std::sync::Mutex<Vec<&'static str>>,
+    }
+
+    impl LaunchTeardown for RecordingTeardown {
+        fn signal_group(&self, child: &mut Child) {
+            let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+            let reserved = rustix::process::test_kill_process(pid).is_ok();
+            self.events.lock().unwrap().push(if reserved {
+                "signal_group"
+            } else {
+                "signal_group_after_reap"
+            });
+            SystemTeardown.signal_group(child);
+        }
+
+        fn reap(&self, child: &mut Child) -> io::Result<std::process::ExitStatus> {
+            self.events.lock().unwrap().push("reap");
+            SystemTeardown.reap(child)
+        }
+    }
+
+    fn owners_recording(recorder: &Arc<RecordingTeardown>) -> LaunchOwners {
+        let real = LaunchOwners::real();
+        LaunchOwners {
+            stdout: Arc::clone(&real.stdout),
+            stderr: Arc::clone(&real.stderr),
+            teardown: Arc::clone(recorder) as Arc<dyn LaunchTeardown>,
+            peak: Arc::clone(&real.peak),
+        }
+    }
+
+    /// On a timeout, and on a launcher that exits on its own, the group is signalled before the
+    /// launcher is reaped (FR-017-AC-68). The recorder probes the process table at the signal,
+    /// so a reap-first order records `signal_group_after_reap` and fails this test.
+    #[trace("FR-017-AC-68", "TC-043")]
+    #[test]
+    fn tc_043_the_group_is_signalled_before_the_launcher_is_reaped() {
+        for (script, timeout) in [
+            ("sleep 30", Duration::from_millis(300)),
+            ("exit 0", Duration::from_secs(10)),
+        ] {
+            let recorder = Arc::new(RecordingTeardown::default());
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(script);
+            run_monitored(
+                command,
+                timeout,
+                NonZeroUsize::MIN,
+                None,
+                &Cancel::new(),
+                &owners_recording(&recorder),
+            )
+            .unwrap();
+            assert_eq!(
+                *recorder.events.lock().unwrap(),
+                ["signal_group", "reap"],
+                "script {script:?}"
+            );
+        }
+
+        // The control: the same recorder driven reap-first, as a mutant would, reports that the
+        // launcher was already gone when the group was signalled.
+        let recorder = RecordingTeardown::default();
+        let mut child = Command::new("sh")
+            .args(["-c", "exit 0"])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        recorder.reap(&mut child).unwrap();
+        recorder.signal_group(&mut child);
+        assert_eq!(
+            *recorder.events.lock().unwrap(),
+            ["reap", "signal_group_after_reap"]
+        );
     }
 }

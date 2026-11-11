@@ -1,8 +1,6 @@
 //! Private orchestration: reuse bounded report stand-ins without reversing kani layer imports.
 use crate::kani::{
-    classify::{KaniInconclusiveReason, KaniRunOutcome},
-    run::execute::batch_tests::no_verdict_diagnostics::failure_cause,
-    terminal::run_terminal_value,
+    run::execute::batch_tests::no_verdict_diagnostics::failure_cause, terminal::run_terminal_value,
 };
 use ix_trace_rs::trace;
 use qsl_replay::{Certification, IncompleteCause, ProofBasis, TerminalValue};
@@ -29,17 +27,9 @@ fn bounded_single_reports_project_resource_causes_and_keep_other_failures() {
         };
         assert_eq!(
             run_terminal_value(evidence, None),
-            Ok(expected.clone()),
+            Ok(expected),
             "fixture {status}"
         );
-        if status == "out_of_memory" {
-            let mut memory_stop = evidence.clone();
-            memory_stop.outcome = KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::MemoryExhausted,
-            };
-            memory_stop.failure_cause = None;
-            assert_eq!(run_terminal_value(&memory_stop, None), Ok(expected));
-        }
     });
 }
 

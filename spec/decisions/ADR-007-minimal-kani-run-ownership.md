@@ -88,9 +88,12 @@ takes `kani-driver` down, no report is written, the run is `NoVerdict` and its t
   AC-21 and AC-58; FR-028 Behavior and AC-24; FR-029-AC-34; TC-027, TC-039, TC-043).
 - The harness identity keeps recording the memory ceiling (FR-028-AC-1), now a declared value the
   environment is expected to enforce.
+- The runner no longer binds a prepared source tree read-only for the backend: it has no sandbox,
+  so a read-only mount is the caller's environment's. The staged-snapshot comparison in `scalar.rs`
+  (before and after the run) remains the guard that a run left the tree unchanged.
 - IR-1510 owns the code: AC-25 as the only memory classification; removing `MemoryExhausted`,
-  `BatchMemoryExhausted`, `MemoryObservationFailed`, `MemoryMechanismUnavailable`, the playback
-  `MemoryExhausted` outcome and `LinuxPidNamespaceProcfsTreeRss`; deleting the namespace/bubblewrap
+  `BatchMemoryExhausted`, `MemoryObservationFailed`, `MemoryMechanismUnavailable` and `LinuxPidNamespaceProcfsTreeRss`, and building no
+  `MemoryExhausted` outcome for the planned playback entry (FR-017-AC-58); deleting the namespace/bubblewrap
   path and the procfs sampler; retagging or deleting the tests tagged FR-028-AC-3, FR-028-AC-21 and
   FR-017-AC-55; and the structural scan of FR-017-AC-67 in `make ci`. IR-639, IR-652 and IR-655
   are the superseded design.

@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use super::owners::LaunchOwners;
+use super::{memory::PeakMemorySource, owners::LaunchOwners};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -61,7 +61,7 @@ impl fmt::Display for KaniToolError {
 
 impl std::error::Error for KaniToolError {}
 
-/// The Kani launcher and immutable dependencies of its bounded execution owners.
+/// The Kani launcher and immutable dependencies of its bounded execution.
 #[derive(Clone, Debug)]
 pub struct KaniInstallation {
     /// The `cargo-kani` executable that is invoked directly.
@@ -81,7 +81,7 @@ impl PartialEq for KaniInstallation {
 impl Eq for KaniInstallation {}
 
 impl KaniInstallation {
-    /// Construct an installation with the real bounded observation and teardown owners.
+    /// Construct an installation with the real bounded launch dependencies.
     pub fn new(launcher: impl Into<PathBuf>) -> Self {
         Self::with_owners(launcher.into(), LaunchOwners::real())
     }
@@ -95,14 +95,12 @@ impl KaniInstallation {
         }
     }
 
-    /// Test-only installation for the start-signalled cancellation and timeout control.
-    /// Confirmation still polls the genuine owned pidfd, with a finite host-load allowance.
-    #[cfg(test)]
-    pub(crate) fn with_test_only_patient_pidfd_confirmation(launcher: PathBuf) -> Self {
-        Self::with_owners(
-            launcher,
-            LaunchOwners::test_only_patient_pidfd_confirmation(),
-        )
+    /// This installation, reporting the peak memory of each run through `source` (FR-028-AC-21).
+    /// An installation without a source records no peak.
+    #[must_use]
+    pub fn with_peak_memory_source(mut self, source: Arc<dyn PeakMemorySource>) -> Self {
+        self.owners = self.owners.with_peak(source);
+        self
     }
 
     // The native program is an immutable dependency, separate from the proof launcher.

@@ -3,17 +3,13 @@
 use std::{
     ffi::OsString,
     fmt, io,
-    num::{NonZeroU64, NonZeroUsize},
+    num::NonZeroUsize,
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-use crate::kani::{
-    identity::ProofCeilings,
-    run::launch::{
-        failure_phase, run_bounded_process_internal, BoundedLaunchError, CaptureStream,
-        LaunchFailurePhase, LaunchOutcome,
-    },
+use crate::kani::run::launch::{
+    failure_phase, run_bounded_process_internal, CaptureStream, LaunchFailurePhase, LaunchOutcome,
 };
 use quire_contract_ir::kani::KaniCancellationSource;
 use quire_exact::{Cancel, CancelCause};
@@ -25,8 +21,6 @@ pub struct ProcessLimits {
     pub input_bytes: NonZeroUsize,
     /// Maximum elapsed execution time.
     pub wall_clock: Duration,
-    /// Maximum observed resident memory of the owned process tree.
-    pub memory_bytes: NonZeroU64,
     /// Maximum bytes retained from each of stdout and stderr.
     pub output_bytes: NonZeroUsize,
 }
@@ -62,13 +56,6 @@ pub enum ProcessOutcome {
     },
     /// The deadline was reached.
     TimedOut,
-    /// The process tree crossed the memory limit.
-    MemoryExhausted,
-    /// The process tree could not be observed or its cleanup confirmed.
-    MemoryUnobserved {
-        /// Why observation or owned cleanup could not be confirmed.
-        detail: String,
-    },
     /// One output stream exceeded its limit.
     OutputOverLimit {
         /// The stream that exceeded its limit.
@@ -119,12 +106,8 @@ pub enum ProcessFailurePhase {
     Selection,
     /// Direct child spawn failed.
     Spawn,
-    /// The owned child could not be attached to its supervisor.
-    Ownership,
     /// Captured pipes could not be acquired.
     CaptureSetup,
-    /// Owned namespace startup failed.
-    Startup,
     /// Child completion or reaping could not be confirmed.
     Wait,
     /// A process operation failed outside a named phase.
@@ -134,8 +117,6 @@ pub enum ProcessFailurePhase {
 /// A launch mechanism failure that prevents a trustworthy child outcome.
 #[derive(Debug)]
 pub enum ProcessError {
-    /// A required namespace or memory mechanism is unavailable.
-    Unavailable(io::Error),
     /// Another process operation failed before a trustworthy outcome was available.
     Io {
         /// The operation that failed.
@@ -148,9 +129,6 @@ pub enum ProcessError {
 impl fmt::Display for ProcessError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unavailable(source) => {
-                write!(formatter, "bounded process mechanism unavailable: {source}")
-            }
             Self::Io { phase, source } => {
                 write!(formatter, "bounded process {phase:?} failed: {source}")
             }
@@ -161,7 +139,7 @@ impl fmt::Display for ProcessError {
 impl std::error::Error for ProcessError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unavailable(source) | Self::Io { source, .. } => Some(source),
+            Self::Io { source, .. } => Some(source),
         }
     }
 }
@@ -227,27 +205,19 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
         &executable,
         &arguments,
         stdin,
-        ProofCeilings {
-            memory_bytes: limits.memory_bytes,
-            wall_clock: limits.wall_clock,
-        },
+        limits.wall_clock,
         limits.output_bytes.get(),
         deadline,
         &cancel,
     )
-    .map_err(|error| match error {
-        BoundedLaunchError::Unavailable(error) => ProcessError::Unavailable(error),
-        BoundedLaunchError::Io(error) => ProcessError::Io {
-            phase: match failure_phase(&error) {
-                Some(LaunchFailurePhase::Spawn) => ProcessFailurePhase::Spawn,
-                Some(LaunchFailurePhase::Ownership) => ProcessFailurePhase::Ownership,
-                Some(LaunchFailurePhase::CaptureSetup) => ProcessFailurePhase::CaptureSetup,
-                Some(LaunchFailurePhase::Startup) => ProcessFailurePhase::Startup,
-                Some(LaunchFailurePhase::Wait) => ProcessFailurePhase::Wait,
-                None => ProcessFailurePhase::Other,
-            },
-            source: error,
+    .map_err(|error| ProcessError::Io {
+        phase: match failure_phase(&error) {
+            Some(LaunchFailurePhase::Spawn) => ProcessFailurePhase::Spawn,
+            Some(LaunchFailurePhase::CaptureSetup) => ProcessFailurePhase::CaptureSetup,
+            Some(LaunchFailurePhase::Wait) => ProcessFailurePhase::Wait,
+            None => ProcessFailurePhase::Other,
         },
+        source: error,
     })?;
     let (outcome, completed_streams) = match (run.outcome, run.input_failure) {
         (
@@ -267,10 +237,6 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
             },
             Some(streams),
         ),
-        (LaunchOutcome::MemoryExhausted, _) => (ProcessOutcome::MemoryExhausted, None),
-        (LaunchOutcome::MemoryUnobserved { detail }, _) => {
-            (ProcessOutcome::MemoryUnobserved { detail }, None)
-        }
         (LaunchOutcome::OutputOverLimit { stream, .. }, _) => {
             (ProcessOutcome::OutputOverLimit { stream }, None)
         }
@@ -305,7 +271,6 @@ mod tests {
         ProcessLimits {
             input_bytes: NonZeroUsize::new(input_bytes).unwrap(),
             wall_clock: Duration::from_secs(5),
-            memory_bytes: NonZeroU64::new(128 * 1024 * 1024).unwrap(),
             output_bytes: NonZeroUsize::new(output_bytes).unwrap(),
         }
     }
@@ -527,25 +492,5 @@ mod tests {
         assert!(matches!(run.outcome, ProcessOutcome::TimedOut));
         assert_eq!(run.stdout.as_deref(), Some(b"partial".as_slice()));
         assert_eq!(run.stderr.as_deref(), Some(b"".as_slice()));
-    }
-
-    #[trace("FR-045-AC-3")]
-    #[test]
-    fn owned_child_tree_stops_when_memory_limit_is_reached() {
-        let mut bounds = limits(1, 64);
-        bounds.memory_bytes = NonZeroU64::new(32 * 1024 * 1024).unwrap();
-        let run = run_bounded_process(ProcessRequest {
-            executable: "/usr/bin/python3".into(),
-            arguments: vec![
-                "-c".into(),
-                "import time; payload = bytearray(96 * 1024 * 1024); time.sleep(10)".into(),
-            ],
-            stdin: vec![],
-            limits: bounds,
-            cancel: Cancel::new(),
-        })
-        .unwrap();
-        assert!(run.started);
-        assert!(matches!(run.outcome, ProcessOutcome::MemoryExhausted));
     }
 }

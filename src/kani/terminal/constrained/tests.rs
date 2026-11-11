@@ -5,10 +5,7 @@ use crate::kani::{
     abi::KaniSolver,
     classify::KaniInconclusiveReason,
     output::report::{KaniCheckLocation, KaniCheckResult},
-    run::{
-        execute::KaniExecutionEvidence,
-        memory::{MemoryMechanism, MemoryObservation},
-    },
+    run::{execute::KaniExecutionEvidence, memory::MemoryObservation},
 };
 use ix_trace_rs::trace;
 #[path = "../../../../tests/it/constrained_method/support.rs"]
@@ -30,10 +27,7 @@ fn evidence(method: &ConstrainedMethodIdentity) -> ConstrainedBackendEvidence {
         boundary_cover_line: method.boundary_cover_line,
         backend: KaniExecutionEvidence {
             ceilings: method.ceilings,
-            memory: MemoryObservation {
-                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
-                peak_resident_bytes: None,
-            },
+            memory: MemoryObservation::default(),
             symbolic_arguments: vec![],
             kind: None,
             harness_path: "constrained::search".into(),
@@ -114,7 +108,6 @@ fn conversion_preserves_original_causes_and_rejects_malformed_or_cross_method_ev
     }
     for reason in [
         KaniInconclusiveReason::TimedOut,
-        KaniInconclusiveReason::MemoryExhausted,
         KaniInconclusiveReason::UnwindBoundExhausted,
         KaniInconclusiveReason::MissingCoverSummary,
     ] {

@@ -24,8 +24,6 @@ pub enum ReachedLimit {
     InputBytes,
     /// The process exceeded its wall-clock deadline.
     WallClock,
-    /// The process tree exceeded its resident-memory ceiling.
-    MemoryBytes,
     /// Captured stdout or stderr exceeded its byte ceiling.
     OutputBytes,
 }
@@ -205,7 +203,6 @@ pub fn run_solver_query<Product, Item, Instance, Kind>(
         ProcessOutcome::MissingTool => SolverStatus::MissingTool,
         ProcessOutcome::InputOverLimit => SolverStatus::Stopped(ReachedLimit::InputBytes),
         ProcessOutcome::TimedOut => SolverStatus::Stopped(ReachedLimit::WallClock),
-        ProcessOutcome::MemoryExhausted => SolverStatus::Stopped(ReachedLimit::MemoryBytes),
         ProcessOutcome::OutputOverLimit { .. } => SolverStatus::Stopped(ReachedLimit::OutputBytes),
         ProcessOutcome::Cancelled { .. } => SolverStatus::Cancelled,
         ProcessOutcome::Completed { success: true, .. } => process
@@ -213,7 +210,6 @@ pub fn run_solver_query<Product, Item, Instance, Kind>(
             .as_deref()
             .map_or(SolverStatus::MalformedResponse, parse_solver_status),
         ProcessOutcome::Completed { success: false, .. }
-        | ProcessOutcome::MemoryUnobserved { .. }
         | ProcessOutcome::OutputUnread { .. }
         | ProcessOutcome::InputUnread { .. } => SolverStatus::ProcessFailed,
     };

@@ -2,7 +2,7 @@
 pub(crate) mod execute;
 // The harness of any kind this crate can run.
 pub(crate) mod harness;
-// Spawn, bounded capture, timeout and process-group kill.
+// Spawn as a process-group leader, bounded capture, timeout and process-group kill.
 pub(crate) mod launch;
 // Shared bounded direct-child process API built on the owned launcher.
 pub mod process;
@@ -13,12 +13,10 @@ pub(crate) mod scalar;
 // The backend and its location.
 pub(crate) mod tool;
 
-// Backend-tree resident-memory observation.
+// The peak memory an environment provides for a finished run.
 pub(crate) mod memory;
 
-mod namespace;
-
-// Construction-time dependencies of the existing launch owners.
+// Construction-time dependencies of a launch.
 mod owners;
 
 // Method-qualified state search shares the existing subsystem boundary.

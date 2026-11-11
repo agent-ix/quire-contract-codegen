@@ -20,11 +20,11 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 1. Map `verified` with three SUCCESS checks, and `falsified` with a reproduced replay.
 2. Map `inconclusive` with the vacuous-proof reason, and `cover-unsatisfied`. Read each value's QSL
    category and vacuity cause.
-3. Map `inconclusive` with the timed-out, memory-exhausted and exhausted-unwind-bound reasons.
+3. Map `inconclusive` with the timed-out and exhausted-unwind-bound reasons.
 4. Map `inconclusive` with the no-verdict reason, and with the witness-disagreed reason once per cause (FR-029-AC-37, IR-1022).
 5. Map `inconclusive` with the missing-cover-summary reason, and with the failure-without-counterexample
    reason once per cause: absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`
-   and `unknown`. Map the memory-exhausted reason. Map `NoVerdict` and `MissingCoverSummary` with each
+   and `unknown`. Map `NoVerdict` and `MissingCoverSummary` with each
    cause. Build the single-run and batch stand-in evidence of FR-029-AC-32 and FR-029-AC-33
    (`proofs::check`, `c::check`, `d::check`) and pass that evidence. Map `falsified` with a reproduced
    replay beside each cause.
@@ -74,8 +74,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 4. `Failed` (FR-029-AC-4); the witness-disagreed reason is `Failed` whatever the cause (FR-029-AC-37).
 5. Missing-cover-summary is `Failed` (FR-029-AC-5). The failure-without-counterexample reason is
    `Incomplete(ResourceExhausted)` for `out_of_memory` and `Incomplete(TimedOut)` for `timeout`, and
-   `Failed` for the other causes and for none (FR-029-AC-32, FR-029-AC-33). The memory-exhausted
-   reason and `out_of_memory` agree (FR-029-AC-34). `c::check` and `d::check` are both
+   `Failed` for the other causes and for none (FR-029-AC-32, FR-029-AC-33). The `out_of_memory` cause is the only memory mapping (FR-029-AC-34). `c::check` and `d::check` are both
    `Incomplete(TimedOut)`. `Refuted` appears only for the reproduced falsified run, whatever the cause, and `NoVerdict` and `MissingCoverSummary` are `Failed`
    whatever the cause (FR-029-AC-35).
 6. No ordinary source-predicate value is `Tested` (FR-029-AC-6).
@@ -121,7 +120,7 @@ Step 5 and FR-029-AC-32 to FR-029-AC-35 are covered by the literal cause matrix 
 `cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs`.
 
 Partly covered. Steps 1 to 15 are tests of `tests/it/terminal_map.rs` and the bounded report
-controls above. Step 3 includes timed-out, memory-exhausted and exhausted-unwind-bound reasons.
+controls above. Step 3 includes timed-out and exhausted-unwind-bound reasons (FR-029-AC-3).
 Step 9 (FR-029-AC-10) is covered
 by `tc_040_a_fault_in_any_replay_wrapper_is_failed`, which builds each fault wrapper from QSL's
 constructible `InternalFault` (QSL bcca433) and asserts `Failed`. Step 15 (FR-029-AC-16, IR-460)

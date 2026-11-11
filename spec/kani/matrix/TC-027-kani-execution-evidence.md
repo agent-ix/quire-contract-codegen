@@ -33,7 +33,7 @@ the same location in another class (each `WitnessDisagreed`), fails the matching
 more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
 stopped at its wall-clock ceiling (`TimedOut`, no third launch), or writes a report whose entry
 states the exit status `out_of_memory` (`FailedWithoutCounterexample` with cause `out_of_memory`,
-FR-028-AC-25; the runner-measured `MemoryExhausted` of the former control is withdrawn by ADR-007),
+FR-028-AC-25; the runner-measured `MemoryExhausted` of the former control is withdrawn by ADR-007; the case runs as `a_witness_report_stating_out_of_memory_is_failed_without_counterexample`),
 and a stand-in that would finish with a verifying report only at 1.5 times the wall-clock ceiling.
 Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in, killed at the unchanged
 ceiling, with the ceilings recorded for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
@@ -105,7 +105,7 @@ UTF-8, ANSI escapes, a stream of only line feeds and a stream at its 8 MiB limit
 directory `/h/u/ws/crate`, target directory `/h/u/ws/crate/target` and home directory `/h/u` in the
 request and print every input of FR-017-AC-35; repeat with home directory `/`, with none, under two
 process `HOME` values, and with each redacted value changed. Classify a verified,
-cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive run and serialize
+cover-unsatisfied, falsified, timed-out and other inconclusive run and serialize
 each evidence.
 
 CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40). Build reports
@@ -125,8 +125,7 @@ with no playback on the console and exit status `properties_failed`; the same re
 `error_details` member, with an entry for another harness only, with two entries for the harness,
 with a null `exit_status`, and with a result that names no `harness_id`; an `exit_code_64` entry
 beside a verified and a cover-unsatisfied report (exit 0), a falsified report with its playback and
-an unwind-bound-exhausted report (exit 1), and a success report beside exit 1; a timed-out and a
-memory-exhausted run; and a report whose `exit_status` is the number `64` and one whose
+an unwind-bound-exhausted report (exit 1), and a success report beside exit 1; a timed-out run; and a report whose `exit_status` is the number `64` and one whose
 `exit_status` is the string `"\ud800"`. Run three stand-ins with
 one `Failure` report and exit and the entries `exit_code_64`, `out_of_memory` and `cbmc_exploded`,
 each printing different stream text, and map each evidence through FR-029 with and without its
@@ -269,8 +268,7 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    as an environment memory kill. Require distinct `TimedOut`,
    `Cancelled { source, memory }`, `Completed { succeeded: false }` with the exit
    code observed (none for a stand-in whose launcher is SIGKILLed; 101 for one whose child dies and
-   whose launcher exits 101) and no `MemoryExhausted` outcome (ADR-007,
-   IR-1510), and existing typed output refusals; verify the backend tree is gone and no case is classified as a
+   whose launcher exits 101) and no `MemoryExhausted` outcome (ADR-007), and existing typed output refusals; verify the backend tree is gone and no case is classified as a
    proof outcome (FR-017-AC-58).
 5. With installed Kani, call this exact public entry for a healthy V2 clause
    playback and for the plus-one owner mutant's `amount_current = 999`
@@ -316,7 +314,7 @@ original occurrence while retaining the right assertion line: it returns
 `HarnessNotInCrate` before launch. Construct another valid-seal case whose
 original source occurs once but whose bound assertion line is wrong: it returns
 `BoundTotalityAssertionMismatch` before launch. Exercise all
-these refusals through the single-run, readonly and batch entries before
+these refusals through the single-run, library-target and batch entries before
 launch; the batch refuses the whole call. With intact source, compute the
 line offset of its sole occurrence in `src/lib.rs`. A satisfied cover and zero
 successful class-`assertion` checks at the converted `{ file: src/lib.rs, line }`
@@ -377,7 +375,7 @@ carries a `diagnostics` record of phase `unknown` whose stderr excerpt holds
 `{ kind: "properties_failed" }` and no `diagnostics` member; the runs with no entry, another
 harness's entry, two entries, a null exit status and no `harness_id` are
 `FailedWithoutCounterexample` with neither member. The verified, cover-unsatisfied, falsified,
-unwind-bound-exhausted, `NoVerdict`, timed-out and memory-exhausted runs keep their outcomes and have
+unwind-bound-exhausted, `NoVerdict` and timed-out runs keep their outcomes and have
 no `failureCause` member. The numeric `exit_status` and the lone-surrogate string are each refused as malformed with no
 evidence. The
 `compile_fail` rustdoc example that deserializes `KaniFailureCause` fails to compile while its
@@ -512,7 +510,7 @@ other.
 For the scalar error discriminant, each variant has its table code and class, the codes are distinct
 and frozen, the three refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
 property or proof verdict are `CompletionRefusal`; the five fixed fault variants, every other nested refusal and a
-`ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
+`ProofNotVerified` of a cancelled, timed-out or no-verdict run are
 `EnvironmentFault`, and no identity encoder runs in the paired runner.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an

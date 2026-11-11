@@ -33,7 +33,6 @@ fn limits(input_bytes: usize) -> ProcessLimits {
     ProcessLimits {
         input_bytes: NonZeroUsize::new(input_bytes).expect("nonzero"),
         wall_clock: Duration::from_secs(5),
-        memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("nonzero"),
         output_bytes: NonZeroUsize::new(1024).expect("nonzero"),
     }
 }

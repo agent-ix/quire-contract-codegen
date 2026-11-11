@@ -27,18 +27,12 @@ it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--
 
 ## Bounded Kani execution
 
-Today the bounded execution API requires Linux, readable procfs RSS and task `children` files
-(`CONFIG_PROC_CHILDREN`), pidfd support, and bubblewrap (`bwrap`) supporting `--unshare-user`,
-`--unshare-pid`, `--info-fd` and `--block-fd`, and the host must permit user and PID namespaces
-(AppArmor can deny this). `make tools` installs the Rust and Kani tools, not bubblewrap. Missing or
-denied support returns `MemoryMechanismUnavailable` before backend dispatch. A caller killed before
-the startup gate is armed can leave the backend running.
-
-Planned (ADR-007, IR-1510; not yet in the code): the runner will start Kani as the leader of its own
-process group, keep a wall-clock timeout that kills the group, and report peak memory only when the
-environment provides it, with any memory cap left to the caller's environment (for example
-`systemd-run -p MemoryMax=16G`). That removes the namespace, bubblewrap, procfs and pidfd
-requirements and runs on Linux and macOS (FR-017-AC-65 to AC-68, FR-028-AC-21).
+The runner (ADR-007, IR-1510) starts Kani as the leader of its own process group, keeps a wall-clock
+timeout that kills the whole group, and reports peak memory only when the environment supplies a
+source (`KaniInstallation::with_peak_memory_source`); it records none otherwise. Any memory cap is the
+caller's environment's (for example `systemd-run -p MemoryMax=16G`). There is no namespace, bubblewrap,
+procfs or pidfd requirement, so the launch path runs on Linux and macOS. A structural scan
+(`tests/it/kani_run_scan.rs`) keeps those constructs out of `src/kani/run/`.
 
 ## Safety scaffolding
 

@@ -416,7 +416,6 @@ fn step_11_pairing_requires_a_falsified_run_and_never_refutes() {
             KaniInconclusiveReason::VacuousProof,
             KaniInconclusiveReason::UnwindBoundExhausted,
             KaniInconclusiveReason::TimedOut,
-            KaniInconclusiveReason::MemoryExhausted,
             KaniInconclusiveReason::WitnessDisagreed,
         ]
         .map(|reason| KaniRunOutcome::Inconclusive { reason }),

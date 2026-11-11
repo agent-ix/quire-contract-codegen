@@ -308,7 +308,6 @@ fn a_matching_witness_without_a_playback_has_no_counterexample() {
 /// (c) A witness launch that overruns the wall-clock ceiling, and one that would finish with a
 /// verifying report only at 1.25 times it, are stopped at the unchanged ceiling.
 #[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-2")]
-#[cfg(target_os = "linux")]
 #[test]
 fn a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling() {
     let verifying = report_at(
@@ -347,47 +346,84 @@ fn a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling() {
     }
 }
 
-/// (c) The same for the memory ceiling. The "a-quarter-over" tree (a 24 MiB array plus the
-/// interpreter, about 38 MiB) is over the 32 MiB ceiling but under one and a half times it (48 MiB),
-/// so a witness launch given 1.5 times the ceiling lets it finish and the case fails.
-#[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-3")]
-#[cfg(target_os = "linux")]
+/// (c) A witness launch the environment kills with SIGKILL (as a memory cap does) exports no
+/// report: the run is `NoVerdict`, which the runner takes as it finds it and never relabels as a
+/// memory outcome (FR-028-AC-25).
+#[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-25")]
 #[test]
-fn a_witness_phase_is_stopped_at_the_unchanged_memory_ceiling() {
-    let ceiling: u64 = 32 * 1024 * 1024;
-    let verifying = report_at(
-        "a::check",
-        "Success",
-        &[("Success", "assertion", "10"), COVER],
+fn a_witness_phase_killed_by_the_environment_is_no_verdict() {
+    let harness = member("a", "check", 4);
+    let proof = report_at("a::check", "Failure", &[FAIL_10]);
+    let stand_in = StandIn::scaffold("two-phase-witness-sigkill");
+    let proof = answer(&stand_in, "proof", Some(&proof), "", 1);
+    stand_in.install(&format!(
+        "if [ \"$witness\" = yes ]; then\nkill -9 $$\nelse\n{proof}\nfi\n"
+    ));
+    let evidence = run(&stand_in, &harness);
+    assert_eq!(
+        evidence.outcome,
+        inconclusive(KaniInconclusiveReason::NoVerdict)
     );
-    for (name, megabytes, hold) in [("overrun", 128, 30), ("a-quarter-over", 24, 4)] {
-        let harness = memory_member("a", ceiling);
-        let proof = report_at("a::check", "Failure", &[FAIL_10]);
-        let stand_in = StandIn::scaffold(&format!("two-phase-memory-{name}"));
-        let proof = answer(&stand_in, "proof", Some(&proof), "", 1);
-        let exported = stand_in.directory.join("verifying.json");
-        fs::write(&exported, &verifying).unwrap();
-        let witness = format!(
-            "python3 -c 'import time; kept = bytearray({megabytes} * 1024 * 1024); time.sleep({hold})'\ncp '{}' \"$last\"\nexit 0\n",
-            exported.display()
-        );
-        stand_in.install(&format!(
-            "if [ \"$witness\" = yes ]; then\n{witness}\nelse\n{proof}\nfi\n"
-        ));
-        let evidence = run(&stand_in, &harness);
-        assert_eq!(
-            evidence.outcome,
-            inconclusive(KaniInconclusiveReason::MemoryExhausted),
-            "{name}"
-        );
-        assert_eq!(stand_in.calls().len(), 2, "{name}: no third launch");
-        assert_eq!(evidence.ceilings, harness.identity.ceilings, "{name}");
-        assert_eq!(
-            evidence.proof_phase.as_deref().unwrap().ceilings,
-            evidence.ceilings,
-            "{name}"
-        );
-    }
+    assert_eq!(evidence.exit_code, None);
+    assert_eq!(stand_in.calls().len(), 2, "no third launch");
+}
+
+/// (c) A witness whose report states the exit status `out_of_memory` lists no failed checks, yet
+/// is `FailedWithoutCounterexample` with cause `out_of_memory` (never `WitnessDisagreed`), with no
+/// third launch and ceilings equal to the proof launch's (FR-017-AC-63, FR-028-AC-25). The control
+/// is a witness with no such status and no checks, which is `WitnessDisagreed`.
+#[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-25")]
+#[test]
+fn a_witness_report_stating_out_of_memory_is_failed_without_counterexample() {
+    let harness = member("a", "check", 4);
+    let stating = |status: Option<&str>| {
+        let mut result = serde_json::json!({
+            "harness_id": "a::check", "status": "Failure", "checks": []
+        });
+        let mut document = serde_json::json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": { "results": [result.take()] }
+        });
+        if let Some(status) = status {
+            document["error_details"] = serde_json::json!([
+                { "harness_id": "a::check", "has_errors": true, "exit_status": status }
+            ]);
+        }
+        serde_json::to_vec(&document).unwrap()
+    };
+    let wire = |evidence: &KaniExecutionEvidence| serde_json::to_value(evidence).unwrap();
+
+    let stand_in = failing_then(
+        "two-phase-witness-oom",
+        &[FAIL_10],
+        (Some(&stating(Some("out_of_memory"))), "", 1),
+    );
+    let evidence = run(&stand_in, &harness);
+    assert_eq!(
+        evidence.outcome,
+        inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample)
+    );
+    assert_eq!(
+        wire(&evidence)["failureCause"],
+        serde_json::json!({ "kind": "out_of_memory" })
+    );
+    assert_eq!(stand_in.calls().len(), 2, "no third launch");
+    assert_eq!(evidence.ceilings, harness.identity.ceilings);
+    assert_eq!(
+        evidence.proof_phase.as_deref().unwrap().ceilings,
+        evidence.ceilings
+    );
+
+    let control = failing_then(
+        "two-phase-witness-no-status",
+        &[FAIL_10],
+        (Some(&stating(None)), "", 1),
+    );
+    assert_eq!(
+        run(&control, &harness).outcome,
+        inconclusive(KaniInconclusiveReason::WitnessDisagreed),
+        "a witness listing no failed checks and stating no cause still disagrees"
+    );
 }
 
 /// (c) A witness launch exiting unsuccessfully with no report is `NoVerdict`.
@@ -409,7 +445,6 @@ fn a_witness_phase_with_no_report_after_a_failed_exit_has_no_verdict() {
 
 /// (c) A witness launch cancelled by its source is `Cancelled`, and its proof evidence stays.
 #[trace("TC-027", "FR-017-AC-63", "FR-040-AC-3")]
-#[cfg(target_os = "linux")]
 #[test]
 fn a_witness_phase_cancelled_by_its_source_is_cancelled() {
     let proof = report_at("a::check", "Failure", &[FAIL_10]);
@@ -575,7 +610,6 @@ fn three_with_middle_failing() -> Vec<u8> {
 /// classified from the proof report and the middle member alone gets a witness launch, a single
 /// run; the member the proof entry holds is never classified as lacking a counterexample.
 #[trace("TC-027", "FR-017-AC-63", "FR-017-AC-21")]
-#[cfg(target_os = "linux")]
 #[test]
 fn a_batch_relaunches_only_the_failed_member_as_a_single_witness_run() {
     let witness = report_at("b::check", "Failure", &[FAIL_10, COVER]);
@@ -628,42 +662,6 @@ fn a_batch_relaunches_only_the_failed_member_as_a_single_witness_run() {
     assert_eq!(proof_phase.batch.as_ref().unwrap().members.len(), 3);
 }
 
-/// (e) The single witness run of a held batch member that exceeds the memory ceiling is
-/// `Inconclusive` with `MemoryExhausted`, not a refusal.
-#[trace("TC-027", "FR-017-AC-63", "FR-028-AC-3")]
-#[cfg(target_os = "linux")]
-#[test]
-fn a_single_witness_run_of_a_held_member_over_memory_is_inconclusive() {
-    let ceiling: u64 = 32 * 1024 * 1024;
-    let stand_in = StandIn::scaffold("two-phase-batch-single-memory");
-    let proof = answer(
-        &stand_in,
-        "proof",
-        Some(&three_with_middle_failing()),
-        "",
-        1,
-    );
-    let witness = "python3 -c 'import time; kept = bytearray(128 * 1024 * 1024); time.sleep(30)'\n";
-    stand_in.install(&format!(
-        "if [ \"$witness\" = yes ]; then\n{witness}\nelse\n{proof}\nfi\n"
-    ));
-    let harnesses = [
-        memory_member("a", ceiling),
-        memory_member("b", ceiling),
-        memory_member("c", ceiling),
-    ];
-    let runs = stand_in.batch(&harnesses, T).unwrap();
-    assert_eq!(runs[1].members, [1]);
-    let held = runs[1]
-        .evidence
-        .as_ref()
-        .expect("a single run, not a refusal");
-    assert_eq!(
-        held[0].outcome,
-        inconclusive(KaniInconclusiveReason::MemoryExhausted)
-    );
-}
-
 fn four_with_middle_two_failing() -> Vec<u8> {
     batch_report(&[
         entry("a::check", "Success", &[PASSED, COVER_OK]),
@@ -673,76 +671,9 @@ fn four_with_middle_two_failing() -> Vec<u8> {
     ])
 }
 
-/// (e) The two held members of a batch of four form one real witness group; when it exceeds the
-/// memory ceiling the result is `WitnessPhaseRefused` wrapping the group refusal and both members'
-/// proof evidence in member order, and the outer members' results are unchanged.
-#[trace("TC-027", "FR-017-AC-63", "FR-017-AC-21", "FR-028-AC-3")]
-#[cfg(target_os = "linux")]
-#[test]
-fn a_witness_group_over_memory_is_refused_with_every_members_proof_evidence() {
-    let ceiling: u64 = 32 * 1024 * 1024;
-    let stand_in = StandIn::scaffold("two-phase-batch-group-memory");
-    let proof = answer(
-        &stand_in,
-        "proof",
-        Some(&four_with_middle_two_failing()),
-        "",
-        1,
-    );
-    let witness = "python3 -c 'import time; kept = bytearray(128 * 1024 * 1024); time.sleep(30)'\n";
-    stand_in.install(&format!(
-        "if [ \"$witness\" = yes ]; then\n{witness}\nelse\n{proof}\nfi\n"
-    ));
-    let harnesses = [
-        memory_member("a", ceiling),
-        memory_member("b", ceiling),
-        memory_member("c", ceiling),
-        memory_member("d", ceiling),
-    ];
-    let runs = stand_in.batch(&harnesses, T).unwrap();
-    assert_eq!(runs.len(), 2);
-    assert_eq!(runs[0].members, [0, 3]);
-    assert!(runs[0]
-        .evidence
-        .as_ref()
-        .unwrap()
-        .iter()
-        .all(|evidence| evidence.outcome == KaniRunOutcome::Verified));
-    assert_eq!(runs[1].members, [1, 2]);
-    let Err(KaniExecutionRefusal::WitnessPhaseRefused {
-        refusal,
-        proof_evidence,
-    }) = &runs[1].evidence
-    else {
-        panic!("expected a refused witness group: {:?}", runs[1].evidence);
-    };
-    assert!(matches!(
-        **refusal,
-        KaniExecutionRefusal::BatchMemoryExhausted { members: 2, .. }
-    ));
-    assert_eq!(
-        proof_evidence
-            .iter()
-            .map(|evidence| evidence.harness_path.as_str())
-            .collect::<Vec<_>>(),
-        ["src/generated/b.rs", "src/generated/c.rs"]
-    );
-    let calls = stand_in.calls();
-    assert_eq!(calls.len(), 2, "one proof group and one witness group");
-    assert!(
-        calls[1]
-            .iter()
-            .filter(|argument| *argument == "--harness")
-            .count()
-            == 2
-    );
-    assert!(has_playback(&calls[1]));
-}
-
 /// A witness group classifies each held member from its own entry and its own playback, and the
 /// batch result gains one group run for it.
 #[trace("TC-027", "FR-017-AC-21", "FR-017-AC-63")]
-#[cfg(target_os = "linux")]
 #[test]
 fn a_witness_group_classifies_each_held_member_from_its_own_playback() {
     let witness = batch_report(&[
@@ -790,7 +721,6 @@ fn a_witness_group_classifies_each_held_member_from_its_own_playback() {
 /// FR-017-AC-21: held members whose witness vectors are equal but whose identity ceilings differ
 /// start separate witness processes, each holding only the members of its own ceilings.
 #[trace("TC-043", "FR-017-AC-21", "FR-017-AC-63")]
-#[cfg(target_os = "linux")]
 #[test]
 fn held_members_with_different_ceilings_form_separate_witness_runs() {
     let low: u64 = 64 * 1024 * 1024;
