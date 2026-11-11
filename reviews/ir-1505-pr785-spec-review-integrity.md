@@ -42,6 +42,12 @@ CHANGES REQUIRED. The exclusion is reversed in Scope only. FR-024 Behavior:368 a
 | tests.md-TC-035-row | examined | spec/replay/matrix/tests.md:49 | / TC-035 / Verify counterexample submission in QSL's counterexample envelope / ... FR-024-AC-57, FR-024-AC-58 / 🚧 Planned (IR-1505 for AC-57/58) / |
 | FR-024-AC-12 | context_only | spec/replay/functional/FR-024-counterexample-envelope-intake.md:487 | The state-clause envelope's `clause_node` equals the `ClauseSite` node ... its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. ... |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Pure wording. AC-62's opening sentence says every refusal in the set is 'returned without calling the executor', but its own `Refused` case is QSL's refusal, which exists only because the executor (replay_state_clause) was called. The Behavior bullet (line 446-454) and step 44 already keep the two apart. Fix: 'each CG-side refusal is returned without calling the executor'. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:587 |
+
 ## Dispositions
 
 | FND | outcome | reason |
