@@ -31,8 +31,9 @@ use crate::kani::{
         diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_from_blocks, playback_blocks, select_counterexample},
         report::{
-            members_in_request_order, KaniCheckClass, KaniCheckResult, KaniCheckStatus,
-            KaniFailureCause, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal,
+            members_in_request_order, KaniCheckClass, KaniCheckLocation, KaniCheckResult,
+            KaniCheckStatus, KaniFailureCause, KaniHarnessReport, KaniHarnessStatus,
+            KaniReportRefusal,
         },
     },
     run::{
@@ -159,6 +160,14 @@ pub enum KaniExecutionRefusal {
         /// The path the block is headed for.
         harness: String,
     },
+    /// The witness launch of a two-phase run, or its report, was refused (FR-017-AC-63). The run
+    /// is never classified from the proof phase alone.
+    WitnessPhaseRefused {
+        /// The refusal of the witness launch, report or witness group.
+        refusal: Box<KaniExecutionRefusal>,
+        /// The proof-phase evidence of each held member, in member order.
+        proof_evidence: Vec<KaniExecutionEvidence>,
+    },
 }
 
 impl KaniExecutionRefusal {
@@ -180,7 +189,8 @@ impl KaniExecutionRefusal {
             | Self::MemoryMechanismUnavailable { .. }
             | Self::MemoryObservationFailed { .. }
             | Self::BatchMemoryExhausted { .. }
-            | Self::PlaybackForNonMember { .. } => None,
+            | Self::PlaybackForNonMember { .. }
+            | Self::WitnessPhaseRefused { .. } => None,
         }
     }
 }
@@ -245,6 +255,9 @@ impl fmt::Display for KaniExecutionRefusal {
                 formatter,
                 "the console holds a playback headed for {harness}, which is not in the group"
             ),
+            Self::WitnessPhaseRefused { refusal, .. } => {
+                write!(formatter, "the witness phase was refused: {refusal}")
+            }
         }
     }
 }
@@ -318,6 +331,11 @@ pub struct KaniExecutionEvidence {
     /// is never an input to the outcome.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_cause: Option<KaniFailureCause>,
+    /// Present exactly when the run launched a witness phase: this evidence is then the witness
+    /// phase's (its `arguments` are the witness vector and its outcome is the run's), and this
+    /// field is the proof phase's evidence for the same harness identity (FR-028-AC-23).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_phase: Option<Box<KaniExecutionEvidence>>,
 }
 
 /// A backend report and its invocation metadata, without an attestation of resource enforcement.
@@ -360,6 +378,7 @@ impl ReportedExecution {
             batch: self.batch,
             diagnostics: self.diagnostics,
             failure_cause: self.failure_cause,
+            proof_phase: None,
         }
     }
 }
@@ -625,16 +644,133 @@ fn directories_of<'a>(request: &'a KaniExecutionRequest<'_>) -> KnownDirectories
     }
 }
 
-/// The run of one harness whose presence in the crate has been checked.
+/// Which launch of a two-phase run (FR-017-AC-63) an execution step is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Phase {
+    /// The launch under the identity's proof option vector.
+    Proof,
+    /// The launch under the identity's witness option vector.
+    Witness,
+}
+
+impl HarnessView<'_> {
+    fn phase_options(&self, phase: Phase) -> &[String] {
+        match phase {
+            Phase::Proof => self.options,
+            Phase::Witness => self.witness_options,
+        }
+    }
+}
+
+/// The failed non-unwinding checks of `checks`: their class and source location.
+fn failed_properties(checks: &[KaniCheckResult]) -> Vec<(&KaniCheckClass, &KaniCheckLocation)> {
+    checks
+        .iter()
+        .filter(|check| {
+            matches!(check.class, KaniCheckClass::Other(_))
+                && check.status == KaniCheckStatus::Failure
+        })
+        .map(|check| (&check.class, &check.location))
+        .collect()
+}
+
+/// Whether the proof phase `proof` reported a failed non-unwinding check that only a witness
+/// phase may settle. An exhausted unwind bound classifies on its own and so is never held.
+fn wants_witness(proof: &KaniExecutionEvidence) -> bool {
+    matches!(
+        proof.outcome,
+        KaniRunOutcome::Falsified { .. }
+            | KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample
+            }
+    ) && !failed_properties(&proof.checks).is_empty()
+}
+
+/// The run's evidence once its witness phase has concluded (FR-017-AC-5, FR-017-AC-63): the
+/// witness evidence, carrying the proof evidence, with the outcome the two phases agree on.
+fn conclude_witness(
+    proof: KaniExecutionEvidence,
+    mut witness: KaniExecutionEvidence,
+) -> KaniExecutionEvidence {
+    let same_failures = {
+        let (proved, witnessed) = (
+            failed_properties(&proof.checks),
+            failed_properties(&witness.checks),
+        );
+        proved.iter().all(|failure| witnessed.contains(failure))
+            && witnessed.iter().all(|failure| proved.contains(failure))
+    };
+    let agrees = match &witness.outcome {
+        KaniRunOutcome::Falsified { .. }
+        | KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::FailedWithoutCounterexample,
+        } => same_failures,
+        KaniRunOutcome::Cancelled { .. }
+        | KaniRunOutcome::Inconclusive {
+            reason:
+                KaniInconclusiveReason::TimedOut
+                | KaniInconclusiveReason::MemoryExhausted
+                | KaniInconclusiveReason::NoVerdict,
+        } => true,
+        KaniRunOutcome::Verified
+        | KaniRunOutcome::CoverUnsatisfied { .. }
+        | KaniRunOutcome::Inconclusive {
+            reason:
+                KaniInconclusiveReason::MissingCoverSummary
+                | KaniInconclusiveReason::VacuousProof
+                | KaniInconclusiveReason::UnwindBoundExhausted
+                | KaniInconclusiveReason::WitnessDisagreed,
+        } => false,
+    };
+    if !agrees {
+        witness.outcome = KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::WitnessDisagreed,
+        };
+        witness.diagnostics = None;
+        witness.failure_cause = None;
+    }
+    witness.proof_phase = Some(Box::new(proof));
+    witness
+}
+
+/// A refused witness step: the refusal, wrapped with the proof evidence it must not drop.
+fn witness_refused(
+    refusal: KaniExecutionRefusal,
+    proof_evidence: Vec<KaniExecutionEvidence>,
+) -> KaniExecutionRefusal {
+    KaniExecutionRefusal::WitnessPhaseRefused {
+        refusal: Box::new(refusal),
+        proof_evidence,
+    }
+}
+
+/// The two-phase run of one harness whose presence in the crate has been checked.
 fn run_single(
     request: &KaniExecutionRequest<'_>,
+    read_only_source: Option<&Path>,
+    totality_line: Option<u32>,
+) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    let proof = run_phase_single(request, Phase::Proof, read_only_source, totality_line)?;
+    if !wants_witness(&proof) {
+        return Ok(proof);
+    }
+    match run_phase_single(request, Phase::Witness, read_only_source, totality_line) {
+        Ok(witness) => Ok(conclude_witness(proof, witness)),
+        Err(refusal) => Err(witness_refused(refusal, vec![proof])),
+    }
+}
+
+/// One launch of one harness under the options of `phase`.
+fn run_phase_single(
+    request: &KaniExecutionRequest<'_>,
+    phase: Phase,
     read_only_source: Option<&Path>,
     totality_line: Option<u32>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
     let (arguments, mut command) =
-        launch_command(request, &report_path, read_only_source.is_some());
+        launch_command(request, phase, &report_path, read_only_source.is_some());
     if let Some(source) = read_only_source {
         command.read_only_bind(source);
     }
@@ -784,30 +920,87 @@ pub fn execute_kani_obligations(
         .iter()
         .map(require_in_crate)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(plan_groups(requests)
-        .into_iter()
-        .map(|group| KaniGroupRun {
-            members: group.iter().map(|(position, _)| *position).collect(),
-            evidence: match group.as_slice() {
-                [(position, only)] => {
-                    run_single(only, None, totality_lines[*position]).map(|evidence| vec![evidence])
+    let mut runs = Vec::new();
+    let mut held: Vec<(usize, &KaniExecutionRequest<'_>, KaniExecutionEvidence)> = Vec::new();
+    for group in plan_groups(requests.iter().enumerate(), Phase::Proof) {
+        let members: Vec<usize> = group.iter().map(|(position, _)| *position).collect();
+        let evidence = match group.as_slice() {
+            [(position, only)] => {
+                run_phase_single(only, Phase::Proof, None, totality_lines[*position])
+                    .map(|evidence| vec![evidence])
+            }
+            _ => run_group(&group, Phase::Proof, &totality_lines),
+        };
+        match evidence {
+            Ok(evidence) => {
+                let mut kept_members = Vec::new();
+                let mut classified = Vec::new();
+                for ((position, request), evidence) in group.into_iter().zip(evidence) {
+                    if wants_witness(&evidence) {
+                        held.push((position, request, evidence));
+                    } else {
+                        kept_members.push(position);
+                        classified.push(evidence);
+                    }
                 }
-                _ => run_group(&group, &totality_lines),
-            },
-        })
-        .collect())
+                if !kept_members.is_empty() {
+                    runs.push(KaniGroupRun {
+                        members: kept_members,
+                        evidence: Ok(classified),
+                    });
+                }
+            }
+            Err(refusal) => runs.push(KaniGroupRun {
+                members,
+                evidence: Err(refusal),
+            }),
+        }
+    }
+    let witness_groups = plan_groups(
+        held.iter()
+            .map(|(position, request, _)| (*position, *request)),
+        Phase::Witness,
+    );
+    for group in witness_groups {
+        let members: Vec<usize> = group.iter().map(|(position, _)| *position).collect();
+        let witnessed = match group.as_slice() {
+            [(position, only)] => {
+                run_phase_single(only, Phase::Witness, None, totality_lines[*position])
+                    .map(|evidence| vec![evidence])
+            }
+            _ => run_group(&group, Phase::Witness, &totality_lines),
+        };
+        let mut proofs = Vec::with_capacity(members.len());
+        for position in &members {
+            if let Some(at) = held.iter().position(|(held, _, _)| held == position) {
+                proofs.push(held.remove(at).2);
+            }
+        }
+        let evidence = match witnessed {
+            Ok(witnessed) => Ok(proofs
+                .into_iter()
+                .zip(witnessed)
+                .map(|(proof, witness)| conclude_witness(proof, witness))
+                .collect()),
+            Err(refusal) => Err(witness_refused(refusal, proofs)),
+        };
+        runs.push(KaniGroupRun { members, evidence });
+    }
+    Ok(runs)
 }
 
-/// Stable groups in first-member order, each retaining request order.
+/// Stable groups in first-member order, each retaining request order, of the members that can
+/// share one launch of `phase`.
 fn plan_groups<'a, 'b>(
-    requests: &'a [KaniExecutionRequest<'b>],
+    requests: impl Iterator<Item = (usize, &'a KaniExecutionRequest<'b>)>,
+    phase: Phase,
 ) -> Vec<Vec<(usize, &'a KaniExecutionRequest<'b>)>> {
     let mut groups: Vec<Vec<(usize, &KaniExecutionRequest<'_>)>> = Vec::new();
-    for member in requests.iter().enumerate() {
+    for member in requests {
         match groups.iter_mut().find(|group| {
             group
                 .first()
-                .is_some_and(|(_, first)| shares_process(first, member.1))
+                .is_some_and(|(_, first)| shares_process(first, member.1, phase))
         }) {
             Some(group) => group.push(member),
             None => groups.push(vec![member]),
@@ -819,15 +1012,19 @@ fn plan_groups<'a, 'b>(
 /// Whether two requests can be run by one launcher process: the same option vector once the
 /// harness selection is removed, the same identity ceilings, and the same launcher, crate and target
 /// directory and owner dependencies, plus identical caller-owned cancellation handles.
-fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest<'_>) -> bool {
+fn shares_process(
+    first: &KaniExecutionRequest<'_>,
+    other: &KaniExecutionRequest<'_>,
+    phase: Phase,
+) -> bool {
     first.cancel == other.cancel
         && first.harness.view().ceilings == other.harness.view().ceilings
         && first.installation == other.installation
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
         && first.home_directory == other.home_directory
-        && without_selection(first.harness.view().options)
-            == without_selection(other.harness.view().options)
+        && without_selection(first.harness.view().phase_options(phase))
+            == without_selection(other.harness.view().phase_options(phase))
 }
 
 /// `options` with every `--harness <path> --exact` selection removed.
@@ -867,6 +1064,7 @@ fn outer_bound(timeout: Duration, members: usize) -> Duration {
 fn batch_launch_command(
     first: &KaniExecutionRequest<'_>,
     selections: &[String],
+    phase: Phase,
     report_path: &Path,
 ) -> (Vec<String>, super::namespace::BackendCommand) {
     let mut arguments = vec!["kani".to_owned()];
@@ -882,7 +1080,7 @@ fn batch_launch_command(
     if let Ok(seconds) = u32::try_from(whole_seconds(first.harness.view().ceilings.wall_clock)) {
         arguments.extend(["--harness-timeout".to_owned(), seconds.to_string()]);
     }
-    arguments.extend(without_selection(first.harness.view().options));
+    arguments.extend(without_selection(first.harness.view().phase_options(phase)));
     arguments.extend([
         "-Z".to_owned(),
         "unstable-options".to_owned(),
@@ -900,6 +1098,7 @@ fn batch_launch_command(
 /// The run of a group of more than one harness, in one process.
 fn run_group(
     group: &[(usize, &KaniExecutionRequest<'_>)],
+    phase: Phase,
     totality_lines: &[Option<u32>],
 ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
     let (Some((_, first)), Some(count)) = (group.first(), NonZeroUsize::new(group.len())) else {
@@ -912,7 +1111,7 @@ fn run_group(
     let selections: Vec<String> = views.iter().map(|view| view.selection.clone()).collect();
     let report_path = fresh_report_path(first.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, command) = batch_launch_command(first, &selections, &report_path);
+    let (arguments, command) = batch_launch_command(first, &selections, phase, &report_path);
     let launch = start(
         first,
         command,
@@ -1141,16 +1340,22 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
 fn kani_launch_command(
     request: &KaniExecutionRequest<'_>,
 ) -> (Vec<String>, super::namespace::BackendCommand) {
-    launch_command(request, &fresh_report_path(request.target_directory), false)
+    launch_command(
+        request,
+        Phase::Proof,
+        &fresh_report_path(request.target_directory),
+        false,
+    )
 }
 
 fn launch_command(
     request: &KaniExecutionRequest<'_>,
+    phase: Phase,
     report_path: &Path,
     library_only: bool,
 ) -> (Vec<String>, super::namespace::BackendCommand) {
     let mut arguments = vec!["kani".to_owned()];
-    arguments.extend(request.harness.view().options.iter().cloned());
+    arguments.extend(request.harness.view().phase_options(phase).iter().cloned());
     if library_only {
         arguments.push("--lib".to_owned());
     }
@@ -1285,7 +1490,7 @@ mod report_fixture {
         require_in_crate(request)?;
         let report_path = fresh_report_path(request.target_directory);
         remove_stale_report(&report_path)?;
-        let (arguments, recipe) = launch_command(request, &report_path, false);
+        let (arguments, recipe) = launch_command(request, Phase::Proof, &report_path, false);
         let outcome = run_launcher(
             recipe.report_test_command(),
             request.harness.view().ceilings.wall_clock,
@@ -1307,7 +1512,7 @@ mod report_fixture {
         for request in requests {
             require_in_crate(request)?;
         }
-        Ok(plan_groups(requests)
+        Ok(plan_groups(requests.iter().enumerate(), Phase::Proof)
             .into_iter()
             .map(|group| ReportGroup {
                 members: group.iter().map(|(position, _)| *position).collect(),
@@ -1330,7 +1535,8 @@ mod report_fixture {
             .collect();
         let report_path = fresh_report_path(first.target_directory);
         remove_stale_report(&report_path)?;
-        let (arguments, recipe) = batch_launch_command(first, &selections, &report_path);
+        let (arguments, recipe) =
+            batch_launch_command(first, &selections, Phase::Proof, &report_path);
         let outcome = run_launcher(
             recipe.report_test_command(),
             outer_bound(first.harness.view().ceilings.wall_clock, group.len()),
@@ -1750,6 +1956,8 @@ pub(crate) mod batch_tests {
         },
     };
 
+    mod two_phase;
+
     /// The request timeout T of the tests that do not vary it.
     const T: Duration = Duration::from_secs(30);
 
@@ -1757,19 +1965,15 @@ pub(crate) mod batch_tests {
     /// selection is taken out, written out so the test is not the code's own vector.
     // Expected argv for the Linux full bounded-process count test only.
     #[cfg(target_os = "linux")]
-    const SHARED_OPTIONS: [&str; 12] = [
+    const SHARED_OPTIONS: [&str; 8] = [
         "-Z",
         "function-contracts",
-        "-Z",
-        "concrete-playback",
         "--unwind",
         "4",
         "--solver",
         "cadical",
         "--output-format",
         "regular",
-        "--concrete-playback",
-        "print",
     ];
 
     /// A small shell launcher with two children, one of which allocates resident bytes.
@@ -2073,7 +2277,7 @@ wait
             .iter()
             .map(|harness| stand_in.request(harness, T))
             .collect();
-        let groups = plan_groups(&requests);
+        let groups = plan_groups(requests.iter().enumerate(), Phase::Proof);
         assert_eq!(
             groups
                 .iter()
@@ -2086,13 +2290,14 @@ wait
         );
         for (group, expected) in groups.iter().zip(["a::check", "b::check"]) {
             let request = group[0].1;
-            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"), false);
+            let (arguments, _) =
+                launch_command(request, Phase::Proof, &PathBuf::from("report.json"), false);
             assert!(arguments
                 .windows(3)
                 .any(|selection| selection == ["--harness", expected, "--exact"]));
         }
         assert!(
-            !shares_process(&requests[0], &requests[1]),
+            !shares_process(&requests[0], &requests[1], Phase::Proof),
             "unequal memory ceilings cannot share a process"
         );
     }
@@ -2100,7 +2305,8 @@ wait
     /// What a launcher stand-in does before anything else: it records that it ran and what it was
     /// given, and finds the report path (its last argument) and the harnesses it was asked for.
     const PROLOGUE: &str = r#"printf 'RUN\n' >> "$CALLS"
-for argument; do printf '%s\n' "$argument" >> "$CALLS"; done
+witness=no
+for argument; do printf '%s\n' "$argument" >> "$CALLS"; [ "$argument" = concrete-playback ] && witness=yes; done
 last=; ids=
 while [ $# -gt 0 ]; do
   last="$1"
@@ -2268,6 +2474,36 @@ exit 0
             stand_in
         }
 
+        /// A stand-in that answers a launch whose vector holds `concrete-playback` (the witness
+        /// phase) with `witness` and every other launch with `proof`, each a report (when given),
+        /// a console and an exit status.
+        fn replaying_phases(
+            name: &str,
+            proof: (Option<&[u8]>, &str, i32),
+            witness: (Option<&[u8]>, &str, i32),
+        ) -> Self {
+            let stand_in = Self::scaffold(name);
+            let branch = |tag: &str, (report, console, exit): (Option<&[u8]>, &str, i32)| {
+                let mut body = String::new();
+                if let Some(report) = report {
+                    let exported = stand_in.directory.join(format!("{tag}-report.json"));
+                    fs::write(&exported, report).unwrap();
+                    body.push_str(&format!("cp '{}' \"$last\"\n", exported.display()));
+                }
+                let printed = stand_in.directory.join(format!("{tag}-console"));
+                fs::write(&printed, console).unwrap();
+                body.push_str(&format!("cat '{}'\nexit {exit}\n", printed.display()));
+                body
+            };
+            let body = format!(
+                "if [ \"$witness\" = yes ]; then\n{}\nelse\n{}\nfi\n",
+                branch("witness", witness),
+                branch("proof", proof)
+            );
+            stand_in.install(&body);
+            stand_in
+        }
+
         fn request<'a>(
             &'a self,
             harness: &'a StateFrameHarness,
@@ -2421,6 +2657,7 @@ exit 0
             solver: KaniSolver::Cadical,
             unwind: 8,
             options: options.clone(),
+            witness_options: crate::kani::test_support::witness_of(&options),
             module_symbol: module_symbol.clone(),
             harness_symbol: harness_symbol.clone(),
         };
@@ -2479,6 +2716,7 @@ exit 0
             harness_symbol,
             solver: KaniSolver::Cadical,
             unwind: 8,
+            witness_options: crate::kani::test_support::witness_of(&options),
             options,
         };
         KaniV2ClauseObligationHarness::generated(
@@ -3526,9 +3764,9 @@ exec sleep 45
             let request = stand_in.request(&harness, T);
             let mut other = stand_in.request(&harness, T);
             other.installation = &cloned;
-            assert!(shares_process(&request, &other));
+            assert!(shares_process(&request, &other, Phase::Proof));
             other.installation = &distinct;
-            assert!(!shares_process(&request, &other));
+            assert!(!shares_process(&request, &other, Phase::Proof));
             std::thread::scope(|scope| {
                 let worker =
                     scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
@@ -4001,14 +4239,21 @@ esac
         assert!(timed.calls().is_empty());
     }
 
-    /// The evidence of the one process of a batch that ran as one group, or its refusal.
+    /// The evidence of every member of a batch whose members share their proof process, in
+    /// request order (a member held for the witness phase is in its witness group's run), or the
+    /// first refusal.
     #[cfg(target_os = "linux")]
     fn only_group(
         runs: Result<Vec<KaniGroupRun>, KaniExecutionRefusal>,
     ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
-        let mut runs = runs.expect("no harness is missing from the crate");
-        assert_eq!(runs.len(), 1, "the harnesses share one process");
-        runs.remove(0).evidence
+        let runs = runs.expect("no harness is missing from the crate");
+        let mut placed = Vec::new();
+        for run in runs {
+            let evidence = run.evidence?;
+            placed.extend(run.members.into_iter().zip(evidence));
+        }
+        placed.sort_by_key(|(position, _)| *position);
+        Ok(placed.into_iter().map(|(_, evidence)| evidence).collect())
     }
 
     #[cfg(target_os = "linux")]
@@ -4022,9 +4267,14 @@ esac
     fn only_report_group(
         runs: Result<Vec<report_fixture::ReportGroup>, KaniExecutionRefusal>,
     ) -> Result<Vec<report_fixture::FixtureExecution>, KaniExecutionRefusal> {
-        let mut runs = runs.expect("no harness is missing from the crate");
-        assert_eq!(runs.len(), 1, "the harnesses share one process");
-        runs.remove(0).reports
+        let runs = runs.expect("no harness is missing from the crate");
+        let mut placed = Vec::new();
+        for run in runs {
+            let reports = run.reports?;
+            placed.extend(run.members.into_iter().zip(reports));
+        }
+        placed.sort_by_key(|(position, _)| *position);
+        Ok(placed.into_iter().map(|(_, report)| report).collect())
     }
 
     fn reported_outcomes(reports: &[report_fixture::FixtureExecution]) -> Vec<KaniRunOutcome> {
@@ -4247,6 +4497,7 @@ esac
             let (arguments, _) = batch_launch_command(
                 &request,
                 &["a::check".to_owned(), "b::check".to_owned()],
+                Phase::Proof,
                 Path::new("/target/report.json"),
             );
             let at = arguments
@@ -4504,13 +4755,16 @@ esac
             entry("b::check", "Failure", &[FAILED, COVER_OK]),
             entry("a::check", "Success", &[PASSED, PASSED, COVER_OK]),
         ]);
-        let console = format!(
-            "{}{}{}",
-            block("a::check", "cover", "cover_a"),
-            block("b::check", "cover", "cover_b"),
-            block("b::check", "assertion", "falsify_b")
+        let witness = batch_report(&[entry("b::check", "Failure", &[FAILED, COVER_OK])]);
+        let stand_in = StandIn::replaying_phases(
+            "by-path",
+            (Some(&report), "", 1),
+            (
+                Some(&witness),
+                &block("b::check", "assertion", "falsify_b"),
+                1,
+            ),
         );
-        let stand_in = StandIn::replaying("by-path", Some(&report), &console, 1);
         let evidence = only_report_group(stand_in.reported_batch(&pair(), T)).unwrap();
         assert_eq!(evidence[0].harness_path, "src/generated/a.rs");
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
@@ -4618,7 +4872,12 @@ esac
             entry("b::check", "Failure", &[FAILED, COVER_OK]),
         ]);
         let console = block("b::check", "assertion", "falsify_b");
-        let explained = StandIn::replaying("exit-explained", Some(&explained_report), &console, 1);
+        let witness = batch_report(&[entry("b::check", "Failure", &[FAILED, COVER_OK])]);
+        let explained = StandIn::replaying_phases(
+            "exit-explained",
+            (Some(&explained_report), "", 1),
+            (Some(&witness), &console, 1),
+        );
         let evidence = only_report_group(explained.reported_batch(&pair(), T)).unwrap();
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
         assert!(matches!(
@@ -4657,7 +4916,17 @@ esac
                 exit_status: Some("timeout"),
             },
         ]);
-        let stand_in = StandIn::replaying("timeout-entry", Some(&report), "", 1);
+        let witness = batch_report(&[BatchEntry {
+            harness_id: "d::check",
+            status: "Failure",
+            checks: &[FAILED],
+            exit_status: Some("timeout"),
+        }]);
+        let stand_in = StandIn::replaying_phases(
+            "timeout-entry",
+            (Some(&report), "", 1),
+            (Some(&witness), "", 1),
+        );
         let harnesses = [
             member("a", "check", 4),
             member("b", "check", 4),
@@ -4775,13 +5044,21 @@ esac
         ]);
         // `d` is falsified but Kani printed no block headed for it.
         let console = format!(
-            "{}{}{}{}",
+            "{}{}{}",
             block("a::check", "assertion", "falsify_a"),
-            block("b::check", "cover", "cover_b"),
             block("c::check", "cover", "cover_c"),
             block("c::check", "assertion", "falsify_c"),
         );
-        let stand_in = StandIn::replaying("own-playback", Some(&report), &console, 1);
+        let witness = batch_report(&[
+            entry("c::check", "Failure", &[FAILED, COVER_OK]),
+            entry("a::check", "Failure", &[FAILED, COVER_OK]),
+            entry("d::check", "Failure", &[FAILED, COVER_OK]),
+        ]);
+        let stand_in = StandIn::replaying_phases(
+            "own-playback",
+            (Some(&report), "", 1),
+            (Some(&witness), &console, 1),
+        );
         let harnesses = [
             member("a", "check", 4),
             member("b", "check", 4),
@@ -4899,11 +5176,11 @@ fn kani_concrete_playback_check_1077496887511954657() {
             ),
             entry("ok::check", "Success", &[PASSED, COVER_OK]),
         ]);
-        let stand_in = StandIn::replaying(
+        let witness = batch_report_single_two();
+        let stand_in = StandIn::replaying_phases(
             "two-failed-checks",
-            Some(&report),
-            TWO_FAILED_CHECKS_CONSOLE,
-            1,
+            (Some(&report), "", 1),
+            (Some(&witness), TWO_FAILED_CHECKS_CONSOLE, 1),
         );
         let harnesses = [member("two", "check", 4), member("ok", "check", 4)];
         let evidence = only_report_group(stand_in.reported_batch(&harnesses, T)).unwrap();
@@ -5649,7 +5926,12 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 entry("b::check", "Success", &[PASSED, COVER_OK]),
                 entry("c::check", "Failure", &[FAILED, COVER_OK]),
             ]);
-            let stand_in = printing("diag-group-failure", Some(&with_failure), &stdout, "", 1);
+            let witness = batch_report(&[entry("c::check", "Failure", &[FAILED, COVER_OK])]);
+            let stand_in = StandIn::replaying_phases(
+                "diag-group-failure",
+                (Some(&with_failure), &stdout, 1),
+                (Some(&witness), "", 1),
+            );
             let evidence = group_evidence(&stand_in);
             assert!(evidence.iter().all(|e| e.outcome != NO_VERDICT));
             assert!(evidence.iter().all(wire_has_no_diagnostics));
@@ -6090,8 +6372,25 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     entry_with("e::check", "Failure", &[FAILED], Some("properties_failed")),
                 ]);
                 let stdout = format!("{BANNER}CBMC failed with status 64\n");
-                let stand_in =
-                    printing("cause-batch", Some(&report), &stdout, "Unknown option\n", 1);
+                // The failed members d and e are held for a witness group that reports its own two
+                // entries.
+                let witness = batch_report(&[
+                    entry_with("d::check", "Failure", &[FAILED], Some("timeout")),
+                    entry_with("e::check", "Failure", &[FAILED], Some("properties_failed")),
+                ]);
+                let stand_in = StandIn::scaffold("cause-batch");
+                let proof_body = print_body(&stand_in, Some(&report), 1);
+                let exported = stand_in.directory.join("witness-report.json");
+                fs::write(&exported, &witness).unwrap();
+                let witness_body = print_body(&stand_in, None, 1).replacen(
+                    "cat",
+                    &format!("cp '{}' \"$last\"\ncat", exported.display()),
+                    1,
+                );
+                stand_in.install(&format!(
+                    "if [ \"$witness\" = yes ]; then\n{witness_body}\nelse\n{proof_body}\nfi\n"
+                ));
+                stand_in.set_streams(&stdout, "Unknown option\n");
                 let evidence = only_group(stand_in.batch(&members, T)).unwrap();
                 observe(&evidence);
                 let causes: Vec<_> = evidence
@@ -6226,7 +6525,12 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             target_directory: Path::new("/target"),
             home_directory: None,
         };
-        let (arguments, _) = launch_command(&request, Path::new("/target/report.json"), true);
+        let (arguments, _) = launch_command(
+            &request,
+            Phase::Proof,
+            Path::new("/target/report.json"),
+            true,
+        );
         let options = request.harness.view().options;
         assert_eq!(&arguments[1..=options.len()], options);
         assert_eq!(arguments[options.len() + 1], "--lib");

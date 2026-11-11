@@ -105,6 +105,9 @@ pub(crate) fn i64_literal(value: i64) -> String {
     }
 }
 
+/// The proof option vector of a harness: function contracts, the exact harness, the explicit unwind
+/// and solver, and the regular output format, with no concrete-playback option, so the backend
+/// keeps its formula slicing.
 pub(crate) fn adapter_options(
     harness: &str,
     unwind: u32,
@@ -116,8 +119,6 @@ pub(crate) fn adapter_options(
         options.extend(["-Z".to_owned(), "stubbing".to_owned()]);
     }
     options.extend([
-        "-Z".to_owned(),
-        "concrete-playback".to_owned(),
         "--harness".to_owned(),
         harness.to_owned(),
         "--exact".to_owned(),
@@ -127,9 +128,25 @@ pub(crate) fn adapter_options(
         solver.as_str().to_owned(),
         "--output-format".to_owned(),
         "regular".to_owned(),
-        "--concrete-playback".to_owned(),
-        "print".to_owned(),
     ]);
+    options
+}
+
+/// The witness option vector of a harness: the proof vector with `-Z concrete-playback` inserted
+/// immediately before `--harness` and `--concrete-playback print` appended last.
+pub(crate) fn witness_options(
+    harness: &str,
+    unwind: u32,
+    solver: KaniSolver,
+    uses_stubbing: bool,
+) -> Vec<String> {
+    let mut options = adapter_options(harness, unwind, solver, uses_stubbing);
+    let at = options
+        .iter()
+        .position(|option| option == "--harness")
+        .unwrap_or(options.len());
+    options.splice(at..at, ["-Z".to_owned(), "concrete-playback".to_owned()]);
+    options.extend(["--concrete-playback".to_owned(), "print".to_owned()]);
     options
 }
 

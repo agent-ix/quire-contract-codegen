@@ -805,6 +805,7 @@ pub(in crate::kani::generate) fn render_clause(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(
@@ -1065,6 +1066,7 @@ fn render_result_postcondition(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(
@@ -1320,6 +1322,7 @@ fn render_postcondition(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(

@@ -72,7 +72,10 @@ pub(super) struct HarnessView<'a> {
     pub(super) kind: Option<ObligationKind>,
     pub(super) unwind: u32,
     pub(super) solver: KaniSolver,
+    /// The proof option vector.
     pub(super) options: &'a [String],
+    /// The witness option vector.
+    pub(super) witness_options: &'a [String],
 }
 
 impl<'a> KaniExecutableHarness<'a> {
@@ -254,6 +257,7 @@ impl<'a> KaniExecutableHarness<'a> {
                 unwind: harness.identity.unwind,
                 solver: KaniSolver::Cadical,
                 options: &harness.identity.options,
+                witness_options: &harness.identity.witness_options,
             },
             Self::Contract(harness) => {
                 let identity = &harness.identity;
@@ -265,6 +269,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
+                    witness_options: &identity.witness_options,
                 }
             }
             Self::Scalar(harness) => {
@@ -277,6 +282,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
+                    witness_options: &identity.witness_options,
                 }
             }
             Self::StateFrame(harness) => {
@@ -292,6 +298,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
+                    witness_options: &identity.witness_options,
                 }
             }
             Self::Collection(harness) => {
@@ -304,6 +311,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
+                    witness_options: &identity.witness_options,
                 }
             }
             Self::V2Clause(harness) => {
@@ -316,6 +324,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
+                    witness_options: &identity.witness_options,
                 }
             }
         }

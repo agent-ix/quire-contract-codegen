@@ -142,6 +142,9 @@ pub struct KaniObligationIdentity {
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
 }
 
 /// One generated harness.
@@ -250,6 +253,9 @@ pub struct V2ClauseObligationIdentity {
     pub unwind: u32,
     /// Exact backend options.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
 }
 
 /// The source-backed collection field and assertion that make a precondition proof nonvacuous.
@@ -491,6 +497,9 @@ pub struct ScalarObligationIdentity {
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
 }
 
 /// Exact predicate forms the bounded-collection Kani renderer preserves from an admitted QSL
@@ -582,6 +591,9 @@ pub struct CollectionObligationIdentity {
     pub unwind: u32,
     /// Every Kani flag passed after `cargo kani`.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
     /// Harness module symbol.
     pub module_symbol: ModuleSymbol,
     /// Harness function symbol.
@@ -971,6 +983,9 @@ pub struct StateFrameIdentity {
     pub unwind: u32,
     /// The exact Kani option vector.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
 }
 
 /// A present state field whose model type does not provide an `i64` range.

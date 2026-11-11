@@ -16,7 +16,7 @@ use std::{borrow::Borrow, collections::BTreeMap};
 use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
-        abi::{adapter_options, readable_component, KaniSolver},
+        abi::{adapter_options, readable_component, witness_options, KaniSolver},
         generate::{
             outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -441,6 +441,12 @@ fn prepare_collection(
         KaniSolver::Cadical,
         false,
     );
+    let witness_options = witness_options(
+        &path.to_string(),
+        request.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
     let item_name = format!("selected_{}", readable_component(&field.field_name));
     let length_name = format!("{item_name}_len");
     let identity = CollectionObligationIdentity {
@@ -463,6 +469,7 @@ fn prepare_collection(
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
+        witness_options,
         module_symbol: path.module.clone(),
         harness_symbol: path.harness.clone(),
     };
@@ -600,6 +607,7 @@ pub(super) fn render_collection_operation(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&spec.path().module.to_string(), &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(

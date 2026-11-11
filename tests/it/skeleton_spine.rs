@@ -937,6 +937,7 @@ fn identity_fixture(kind: ObligationKind, clause: &str, line: u32) -> KaniObliga
         solver: KaniSolver::Cadical,
         unwind: 4,
         options: Vec::new(),
+        witness_options: Vec::new(),
     }
 }
 

@@ -9,7 +9,7 @@ use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
 #[cfg(test)]
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    kani::abi::adapter_options,
+    kani::abi::{adapter_options, witness_options},
 };
 
 use crate::{
@@ -703,6 +703,7 @@ pub(super) fn render_scalar(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
@@ -819,6 +820,7 @@ fn render_boolean_implies(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
@@ -882,6 +884,12 @@ fn render_scalar_reference(
 ) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let options = adapter_options(
+        &path.to_string(),
+        request.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
+    let witness_options = witness_options(
         &path.to_string(),
         request.unwind,
         KaniSolver::Cadical,
@@ -970,6 +978,7 @@ mod {module} {{\n\
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
+        witness_options,
     };
     let mut source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\

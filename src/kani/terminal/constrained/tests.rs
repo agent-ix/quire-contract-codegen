@@ -67,6 +67,7 @@ fn evidence(method: &ConstrainedMethodIdentity) -> ConstrainedBackendEvidence {
             batch: None,
             diagnostics: None,
             failure_cause: None,
+            proof_phase: None,
         },
     }
 }

@@ -151,6 +151,9 @@ pub struct ConstrainedMethodIdentity {
     pub module_symbol: String,
     /// Exact backend options.
     pub options: Vec<String>,
+    /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
+    /// `--concrete-playback print` last.
+    pub witness_options: Vec<String>,
     /// Source-bound safety assertion whose success must appear in complete evidence.
     pub safety_assertion_line: u32,
     /// Ordinary non-vacuity cover line, identified separately from the boundary cover.

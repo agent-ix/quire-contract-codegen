@@ -145,7 +145,7 @@ pub fn run_terminal_value(
         ) => TerminalValue::Incomplete(IncompleteCause::ResourceExhausted),
         (
             Inconclusive {
-                reason: Reason::NoVerdict | Reason::MissingCoverSummary,
+                reason: Reason::NoVerdict | Reason::MissingCoverSummary | Reason::WitnessDisagreed,
             },
             None,
         ) => TerminalValue::Failed,

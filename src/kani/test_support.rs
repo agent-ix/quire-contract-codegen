@@ -13,6 +13,19 @@ use crate::{
     },
 };
 
+/// The witness vector of a proof vector: `-Z concrete-playback` before `--harness` and
+/// `--concrete-playback print` last.
+pub(crate) fn witness_of(options: &[String]) -> Vec<String> {
+    let mut witness = options.to_vec();
+    let at = witness
+        .iter()
+        .position(|option| option == "--harness")
+        .unwrap_or(witness.len());
+    witness.splice(at..at, ["-Z".to_owned(), "concrete-playback".to_owned()]);
+    witness.extend(["--concrete-playback".to_owned(), "print".to_owned()]);
+    witness
+}
+
 pub(crate) fn state_frame_harness(
     property: StateFrameProperty,
     options: Vec<String>,
@@ -70,6 +83,7 @@ pub(crate) fn named_state_frame_harness(
             harness_symbol: HarnessSymbol::try_from(harness).unwrap(),
             solver: KaniSolver::Cadical,
             unwind: 4,
+            witness_options: witness_of(&options),
             options,
         },
         rust: Artifact::new(format!("src/generated/{module}.rs"), String::new()),
@@ -250,6 +264,16 @@ pub(crate) fn scalar_source_fixture(
             "host_scalar::check".into(),
             "--unwind".into(),
             "3".into(),
+        ],
+        witness_options: vec![
+            "-Z".into(),
+            "concrete-playback".into(),
+            "--harness".into(),
+            "host_scalar::check".into(),
+            "--unwind".into(),
+            "3".into(),
+            "--concrete-playback".into(),
+            "print".into(),
         ],
     };
     let source = "pub fn oracle(left: i64, right: i64, meter: &mut ()) -> i64 { let _ = meter; left + right }\n";

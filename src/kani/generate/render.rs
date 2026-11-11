@@ -617,6 +617,7 @@ pub(super) mod tests {
             module_symbol: spec.path().module.clone(), harness_symbol: spec.path().harness.clone(),
             arguments: vec![ScalarObligationArgument { identifier: "x".into(), minimum: -1, maximum: 1 }],
             inferred_operands: vec![], solver: spec.solver(), unwind: spec.unwind(), options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
         };
         let record =
             super::super::record::record(spec.path().module.as_str(), &identity, &rust).unwrap();

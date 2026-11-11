@@ -336,6 +336,7 @@ impl KaniScalarNativeError {
                 | KaniExecutionRefusal::BatchTimedOut { .. }
                 | KaniExecutionRefusal::BatchCancelled { .. }
                 | KaniExecutionRefusal::OutputUnread { .. }
+                | KaniExecutionRefusal::WitnessPhaseRefused { .. }
                 | KaniExecutionRefusal::Report(_) => EnvironmentFault,
             },
             Self::ProofNotVerified(evidence) => {
@@ -361,7 +362,8 @@ fn proof_failure_class(
             | KaniInconclusiveReason::UnwindBoundExhausted => CompletionRefusal,
             KaniInconclusiveReason::TimedOut
             | KaniInconclusiveReason::MemoryExhausted
-            | KaniInconclusiveReason::NoVerdict => EnvironmentFault,
+            | KaniInconclusiveReason::NoVerdict
+            | KaniInconclusiveReason::WitnessDisagreed => EnvironmentFault,
             KaniInconclusiveReason::FailedWithoutCounterexample => match cause {
                 None | Some(KaniFailureCause::PropertiesFailed) => CompletionRefusal,
                 Some(
@@ -2143,6 +2145,7 @@ mod tests {
             batch: None,
             diagnostics: None,
             failure_cause,
+            proof_phase: None,
         }
     }
 
@@ -2195,6 +2198,7 @@ mod tests {
             KaniInconclusiveReason::UnwindBoundExhausted => R,
             KaniInconclusiveReason::TimedOut => F,
             KaniInconclusiveReason::MemoryExhausted => F,
+            KaniInconclusiveReason::WitnessDisagreed => F,
         }
     }
 
@@ -2225,6 +2229,7 @@ mod tests {
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
             KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
+            KaniExecutionRefusal::WitnessPhaseRefused { .. } => (F, None),
             KaniExecutionRefusal::OutputOverLimit { .. } => (R, Some("kani_output_over_limit")),
             KaniExecutionRefusal::OutputUnread { .. } => (F, Some("kani_output_unread")),
             KaniExecutionRefusal::BatchTimedOut { .. } => (F, None),

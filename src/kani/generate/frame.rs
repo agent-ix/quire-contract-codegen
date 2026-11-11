@@ -1074,6 +1074,7 @@ fn render(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let mut record = serde_json::to_string(&RecordView {
         identity: &identity,

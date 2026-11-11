@@ -1116,6 +1116,7 @@ mod tests {
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),
+                witness_options: Vec::new(),
             },
             Artifact::new(format!("src/generated/{module}.rs"), String::new()),
             Artifact::new(format!("kani-obligations/{module}.json"), String::new()),
