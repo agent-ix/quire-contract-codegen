@@ -300,6 +300,7 @@ pub use replay::function::{
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::scalar::{decode_scalar_falsification, SCALAR_PLAYBACK_BYTES};
+pub use replay::state_clause::invariant::{InvariantReplayInputs, StateClauseHarness};
 pub use replay::state_clause::{
     DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseHarnessMember,
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
