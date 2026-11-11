@@ -56,3 +56,12 @@ AC-133 is tagged and most of its cases fail under the matching mutant, but one r
 | FR-015-AC-133 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:948 | A claim whose record gives a one-level sequence-valued field of a whole-object collection clause a cardinality range or an element domain that differs from the independently selected one is refused with V2ClauseClaimMismatch naming StateReads before harness generation. |
 | FR-015-AC-134 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:949 | A claim whose record lists a set of state-field reads ... that differs from the set of fields the whole-object collection clause draws is refused with V2ClauseClaimMismatch naming StateReads before harness generation. |
 | TC-025 step 52 | examined | spec/kani/matrix/TC-025-bounded-kani-obligations.md:910 | Whole-object collection clause, FR-015-AC-133 ... cases (a)-(f), mutants M1-M3 |
+
+## Dispositions
+
+Round 1, fix head 488e61d8.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | element_document() gives z_items elements Int[1, 9] (nonzero minimum), and case (b) asserts the selected element Some(1..=9). Reviewer re-run at 488e61d8: the 'selected element minimum hard-coded 0' mutant now fails sequence_field_read_domain_is_cardinality_range_plus_element_domain at control (a), :1315. |
+| FND-002 | fixed | Cardinality 0..=3 and element 1..=9 are now distinct, and case (g) refuses the cardinality range recorded as the element. Reviewer re-run: the copy-cardinality-into-element mutant now fails the Int test at :1315, as well as the Boolean test. |

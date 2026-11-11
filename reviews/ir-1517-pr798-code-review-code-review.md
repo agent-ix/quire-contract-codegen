@@ -44,3 +44,11 @@ The code change is correct and minimal. The one finding is a low API-compatibili
 | src/kani/generate/collection.rs | examined | src/kani/generate/collection.rs:656-694 | operation_selected_reads and element_domain |
 | src/kani/identity.rs | examined | src/kani/identity.rs:387-411 | V2ClauseElementDomain and V2ClauseRead.element |
 | src/kani/generate/clause/v2.rs | examined | src/kani/generate/clause/v2.rs:652-658 | scalar route writes element: None |
+
+## Dispositions
+
+Round 1, fix head 488e61d8.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | accepted-no-change | No #[non_exhaustive] added, consistent with the repo's other caller-built claim structs. At 488e61d8 the breaking addition is accepted explicitly in the FR-015-AC-48 note ('a breaking addition for struct-literal callers that is accepted: the crate is 0.1.0 with no outside users') and in the PR body. The reviewer finds that acceptable. |

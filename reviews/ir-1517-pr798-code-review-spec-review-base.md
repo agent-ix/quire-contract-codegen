@@ -53,3 +53,13 @@ The status edits are accurate, but TC-025 step 52 now describes a fixture, case 
 | TC-025 step 14 | examined | spec/kani/matrix/TC-025-bounded-kani-obligations.md:574 | steps 52 (implemented, IR-1517) and 53 (implemented, IR-1518) |
 | tests.md AC-38..49 row | examined | spec/kani/matrix/tests.md:46 | AC-133 (IR-1517), AC-134 (IR-1507) and AC-135 and AC-136 (IR-1518) are all implemented |
 | FR-024-AC-65 | context_only | spec/replay/functional/FR-024-counterexample-envelope-intake.md:606 | Delivered (IR-1519) |
+
+## Dispositions
+
+Round 1, fix head 488e61d8.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-025 step 52 is rewritten to the executed fixture (element_document, z_items an ordered set 0..=3 of Int[1, 9]) and to cases (a)-(h), (e) and (e2) as the tests run them. No old items/Int[0, 9]/a_unread Int[0, 5] or 'what the code does today' text remains. M3 is attributed to the AC-134 test. The reviewer re-ran M5 and M6 and both fail 52(a) as stated. |
+| FND-002 | fixed | The FR-015-AC-48 row now reads 'What keeps FR-015-AC-48 PARTIAL is closure condition (4) below: the replay identity checks owned by IR-1520 (the postcondition and frame paths).' |
+| FND-003 | fixed | The closure paragraph now says the invariant path (FR-024-AC-65, AC-66) is delivered by IR-1519 and that IR-1520 closes only the postcondition path (FR-015-AC-137..142 with FR-024-AC-71, AC-72) and the frame path (FR-024-AC-73..75). This matches FR-024's statuses. |
