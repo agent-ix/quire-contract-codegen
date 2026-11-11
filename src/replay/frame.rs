@@ -231,7 +231,7 @@ pub enum PreStateFault {
     InvocationUnreadable,
     /// The pre snapshot the invocation names is not among the provided documents.
     PreNotProvided {
-        /// The four labels the invocation names.
+        /// The two labels (authority, identity) the invocation names.
         reference: DocumentRef,
     },
     /// The pre snapshot is not JSON.
@@ -580,7 +580,7 @@ fn decoded_state(
     }
 }
 
-/// The provided document declaring the requested four identity labels.
+/// The provided document declaring the requested two identity labels (authority, identity).
 fn provided<'a>(documents: &'a [ProvidedDocument], reference: &DocumentRef) -> Option<&'a [u8]> {
     documents
         .iter()
