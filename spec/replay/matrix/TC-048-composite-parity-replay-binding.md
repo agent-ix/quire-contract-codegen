@@ -51,13 +51,13 @@ and never replace positive QSL evaluation with a verdict double.
    Retain the actual generated harness, native refinement, original limits and proved artifact bytes;
    authenticate the native observation against that retained artifact and original context under
    FR-033-AC-19. Assert the original nodes, operand declarations and literal singleton
-   values. For the Ne forms still PLANNED under IR-814 (FR-033-AC-14 literal/literal and
-   FR-033-AC-15 self-comparison), require NotEqual and two positional arguments, then
+   values. For the Ne forms (FR-033-AC-14 literal/literal and
+   FR-033-AC-15 self-comparison, delivered under IR-814), require NotEqual and two positional arguments, then
    apply the AC-20 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
    admitted one-field `Integer` records; IR-691 bounded-field narrowing literals and
    collection-constructor literals stay gated. For inline operands (FR-033-AC-16, FR-033-AC-17),
    require the owning projection's `InlineInteger` or `InlineNonInteger` refusal to surface as
-   `CompositeBuildError::Operands` with no report. Only the non-integer case is testable; the integer case (AC-16) is verified by Inspection of the shared `Operands` conversion. Record public builder inputs and the QSL request; change source, package, selected node,
+   `CompositeBuildError::Operands` with no report. The non-integer case (AC-17) is tested with an inline `none` literal of an Option type that IR's reader admits, against a graph-`none` control whose refusal is a different cause; the integer case (AC-16) is verified by Inspection of the shared `Operands` conversion. Record public builder inputs and the QSL request; change source, package, selected node,
    operation and operand declaration individually and require refusal. No hand-built source/package
    replacement or enclosing Boolean function satisfies selection.
 2. Assert FR-025 AC-9's persisted bindings against actual draw order and reconstruct the selected
@@ -236,7 +236,7 @@ delivered API must establish their actual Rust representation before positive te
 IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
 rows through the CG converter. IR-635 adds the Eq-only verified constructor controls described
 above. Falsified construction, same-artifact native observation, backend/refinement strength
-production and generated-family controls remain planned under IR-806; Ne literal/literal, Ne self-comparison and inline operands (FR-033-AC-14 to AC-17) remain planned under IR-814. Real Text-leaf profile
+production and generated-family controls remain planned under IR-806; Ne literal/literal, Ne self-comparison and the non-integer inline refusal (FR-033-AC-14, AC-15, AC-17) are delivered under IR-814; the integer inline refusal (AC-16) is delivered by Inspection of the `Operands` conversion in `selected_claim`. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
