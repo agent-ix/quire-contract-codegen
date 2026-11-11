@@ -286,9 +286,8 @@ Text-admission identity rather than claiming a checked node or contract role.
   FR-015-AC-132), the enumeration control shall record `evidence_kind` `exhaustive_concrete_enumeration`,
   `symbolic_proof` `false`, the domain, `domain_size`, whether the visited sequence is exactly the domain in
   ascending order, `checked`, `passed` and `failing_inputs` (FR-017-AC-64).
-- Where an exhaustive concrete enumeration stands in for a symbolic proof run, the enumeration control shall
-  construct no `KaniRunOutcome` and no terminal value, and the printed record and the status of its matrix rows
-  shall contain none of the tokens listed in FR-017-AC-64.
+- Where an exhaustive concrete enumeration stands in for a symbolic proof run, the enumeration control shall construct no `KaniRunOutcome` and no terminal value.
+- Where an exhaustive concrete enumeration stands in for a symbolic proof run, the enumeration control shall print a record containing none of the tokens listed in FR-017-AC-64.
 - If the process exited successfully and the backend reported success with zero successful
   checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason;
   for a non-collection precondition harness, which has no assertion, the generator shall
