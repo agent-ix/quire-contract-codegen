@@ -887,8 +887,8 @@ with the required author `make kani-gate`; independent review and final acceptan
     subject source, the consequent `amount + 2 <= 1000` gives {999}, `amount + 1 < 1000` gives {999}
     and the antecedent `amount <= 1000` gives {1000}; in an isolated quire-contract-runtime
     checkout, the body of `implies_short_circuit` returning `false` gives all 1001 values; in an
-    isolated quire-exact checkout, `left.0.checked_add(right.0)` rewritten to `left + right + 1`
-    and, separately, to `left` each fail through the generated probe with 0 in the set. Run an
+    isolated quire-exact checkout, `left.0.checked_add(right.0)` rewritten to
+    `left.0.checked_add(right.0)?.checked_add(1)` and, separately, to `Some(left.0)` each fail through the generated probe with 0 in the set. Run an
     enumeration that omits 999 and one that visits 998 twice and omits 999, and require each to
     fail the sequence check. Check the printed record and the status column of the FR-015-AC-132
     and FR-017-AC-64 rows of `tests.md` for the tokens listed in FR-017-AC-64 (none may appear)

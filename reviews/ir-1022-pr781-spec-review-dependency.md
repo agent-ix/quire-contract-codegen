@@ -54,3 +54,10 @@ PASS WITH LOW FINDINGS. No new relationships: edges. The enumeration is enableme
 | src/kani/terminal.rs#run_terminal_value | context_only | src/kani/terminal.rs:108 | (Verified, None) => Proved{Checks{success_checks}}; (CoverUnsatisfied, None) => Proved{0}; (Inconclusive VacuousProof, None) => Proved{0}; (Inconclusive TimedOut, None) => Incomplete(IncompleteCause::TimedOut) |
 | src/kani/generate/clause/v2.rs#append_arithmetic_probes | context_only | src/kani/generate/clause/v2.rs:1184 | let outcome = format!("arithmetic_outcome_{index}"); ... "nx::evaluate_native_integer_arithmetic({admitted}, &mut {meter})" ... message: "arithmetic subterm agrees with independent i128 expectation" |
 | src/oracle/clause/native.rs#scalar_k | context_only | src/oracle/clause/native.rs:203 | pub fn scalar_{index}(...) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> { let plan = nx::NativeIntegerPlan::new({native_source}, {domain_source})...; let operation = plan.admit({payloads})...; Ok(nx::evaluate_native_integer_arithmetic(operation, meter)) } |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at aa64da56. Verified in the fix commit: Depends on FR-015-AC-119's result-postcondition generation, on isolated owner checkouts of quire-exact (kernel `+` mutants) and quire-contract-runtime (helper mutant) built as the installed IR-917 controls of open PR #583 build them, and on regeneration from QSL source for the sealed artifact. |
+| FND-002 | fixed | Round 1 at aa64da56. Verified in the fix commit: IR-1509 comment 78936801: 'IR-1509's acceptance must cover EVERY control the IR-1022 enumeration stands in for, not only the healthy clause and the exact-999 mutant: also FR-015-AC-41's two '+' mutants and FR-015-AC-119's helper mutant ...'; FR-015-AC-41: 'Their upgrade path is IR-1509, which covers these `+` mutants and the AC-119 helper mutant as well.' |

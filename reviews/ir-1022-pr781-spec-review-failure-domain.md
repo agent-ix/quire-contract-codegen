@@ -55,3 +55,17 @@ CHANGES REQUIRED. Checked: what is visited (0..=1000 in order, no sampling, no e
 | src/kani/terminal.rs#run_terminal_value | context_only | src/kani/terminal.rs:108 | (Verified, None) => Proved{Checks{success_checks}}; (CoverUnsatisfied, None) => Proved{0}; (Inconclusive VacuousProof, None) => Proved{0}; (Inconclusive TimedOut, None) => Incomplete(IncompleteCause::TimedOut) |
 | src/kani/generate/clause/v2.rs#append_arithmetic_probes | context_only | src/kani/generate/clause/v2.rs:1184 | let outcome = format!("arithmetic_outcome_{index}"); ... "nx::evaluate_native_integer_arithmetic({admitted}, &mut {meter})" ... message: "arithmetic subterm agrees with independent i128 expectation" |
 | src/oracle/clause/native.rs#scalar_k | context_only | src/oracle/clause/native.rs:203 | pub fn scalar_{index}(...) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> { let plan = nx::NativeIntegerPlan::new({native_source}, {domain_source})...; let operation = plan.admit({payloads})...; Ok(nx::evaluate_native_integer_arithmetic(operation, meter)) } |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | 'As the IR-917 controls of #583 do' overstates what #583 does, and 'assumption ... and cover run unchanged' depends on a host kani shim the spec does not define. #583's pattern (tests/it/kani_obligations_state_frame.rs:952-990 on #583) only runs `cargo check` on the bodies, with a stub in which `any` returns `Default`, `assume` is a no-op and `cover!` discards its condition; it does not execute them. On the host, then, the assumption is not checked and the cover is not evaluated unless the shim makes `assume` assert its condition and `cover!` record that it was reached. This is buildable (the same stub with the draw replaced and `cargo test`) but needs one sentence. Fix: state the host shim semantics (assume asserts, cover is recorded and must be reached at each passing value), or say that assume and cover are no-ops on the host. | spec/kani/functional/FR-015-bounded-kani-obligations.md:938 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at aa64da56. Verified in the fix commit: At each value it (a) runs the sealed generated harness body as a host test (the `kani::proof` attribute replaced and the symbolic draw replaced by the value, as the IR-917 controls of #583 do), so the harness's own assumption, subject-result comparison, arithmetic probes, clause-oracle assertion and cover run unchanged and any assertion failure is a failure at that value; and (b) compares the result `r` that the compiled subject returns ... with an independent native expectation ... |
+| FND-002 | fixed | Round 1 at aa64da56. Verified in the fix commit: That restored artifact, its identity record, oracle bytes, clause identity and native expectation are those generation produces for the mutant, which exist with no Kani launch (when an unconstrained Kani run of the mutant is also made, they are unchanged from it). |
+| FND-003 | fixed | Round 1 at aa64da56. Verified in the fix commit: The symbolic runs stay unmet: only the healthy clause and the exact-999 mutant were measured, each `Inconclusive` with `TimedOut`, and the other mutant runs are unmeasured; no fit is claimed. Their upgrade path is IR-1509, which covers these `+` mutants and the AC-119 helper mutant as well. |

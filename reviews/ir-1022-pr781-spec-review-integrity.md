@@ -57,3 +57,19 @@ CHANGES REQUIRED (minor). IDs: FR-015-AC-132 and FR-017-AC-64 are unused on base
 | src/kani/terminal.rs#run_terminal_value | context_only | src/kani/terminal.rs:108 | (Verified, None) => Proved{Checks{success_checks}}; (CoverUnsatisfied, None) => Proved{0}; (Inconclusive VacuousProof, None) => Proved{0}; (Inconclusive TimedOut, None) => Incomplete(IncompleteCause::TimedOut) |
 | src/kani/generate/clause/v2.rs#append_arithmetic_probes | context_only | src/kani/generate/clause/v2.rs:1184 | let outcome = format!("arithmetic_outcome_{index}"); ... "nx::evaluate_native_integer_arithmetic({admitted}, &mut {meter})" ... message: "arithmetic subterm agrees with independent i128 expectation" |
 | src/oracle/clause/native.rs#scalar_k | context_only | src/oracle/clause/native.rs:203 | pub fn scalar_{index}(...) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> { let plan = nx::NativeIntegerPlan::new({native_source}, {domain_source})...; let operation = plan.admit({payloads})...; Ok(nx::evaluate_native_integer_arithmetic(operation, meter)) } |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Stale after the fix round: AC-119's crediting sentence says the helper mutant fails 'at input 0', while AC-132 and step 51 now say it gives all 1001 values (lowest 0). The two do not contradict each other, because 0 is the lowest, but AC-119 should match AC-132's exact-set rule. Fix: 'failing the enumeration at every value (failing_inputs = all 1001)'. | spec/kani/functional/FR-015-bounded-kani-obligations.md:927 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at aa64da56. Verified in the fix commit: 51. Build the FR-015-AC-119 clause crate from QSL source as in step 49, with no Kani launch, and run the host enumeration of FR-015-AC-132 ... |
+| FND-002 | fixed | Round 1 at aa64da56. Verified in the fix commit: so it yields no terminal value and in particular never `Proved`, `Refuted` or `Tested`: every FR-029 `Proved` row needs a Kani run outcome (`Verified`, the vacuous-proof reason or `cover-unsatisfied`), and the ordinary map returns no `Tested` (FR-029-AC-6). [matches src/kani/terminal.rs:115-133: Verified, CoverUnsatisfied and Inconclusive VacuousProof are the only Proved arms] |
+| FND-003 | fixed | Round 1 at aa64da56. Verified in the fix commit: they remain unmet as symbolic runs, and for the `Int[0, 1000]` clause the accepted evidence is enumeration evidence, the exhaustive concrete enumeration of FR-015-AC-132, which is not a proof (FR-017-AC-64; upgrade IR-1509). |
+| FND-004 | fixed | Round 1 at aa64da56. Verified in the fix commit: For the one clause fixture of FR-015-AC-119 (`result = (amount < 1000 implies amount + 1 <= 1000)` over `amount: Int[0, 1000]`) ... |
+| FND-005 | fixed | Round 1 at aa64da56. Verified in the fix commit: IR-1022 comment 24647834: 'Ruling recorded (planner titan:IR:plan 2026-11-11, decision delegated by Peter): take the spec change. Amend FR-017-AC-60 / FR-015-AC-41 / FR-015-AC-119 so an exhaustive concrete enumeration over the 1001-point Int[0,1000] domain ... is accepted evidence ... contracts with stub_verified is the later upgrade ticket IR-1509.' |

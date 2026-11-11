@@ -53,3 +53,9 @@ PASS WITH ONE LOW FINDING. quire validate on base dbb88103 and on head 9c35b4fb 
 | src/kani/terminal.rs#run_terminal_value | context_only | src/kani/terminal.rs:108 | (Verified, None) => Proved{Checks{success_checks}}; (CoverUnsatisfied, None) => Proved{0}; (Inconclusive VacuousProof, None) => Proved{0}; (Inconclusive TimedOut, None) => Incomplete(IncompleteCause::TimedOut) |
 | src/kani/generate/clause/v2.rs#append_arithmetic_probes | context_only | src/kani/generate/clause/v2.rs:1184 | let outcome = format!("arithmetic_outcome_{index}"); ... "nx::evaluate_native_integer_arithmetic({admitted}, &mut {meter})" ... message: "arithmetic subterm agrees with independent i128 expectation" |
 | src/oracle/clause/native.rs#scalar_k | context_only | src/oracle/clause/native.rs:203 | pub fn scalar_{index}(...) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> { let plan = nx::NativeIntegerPlan::new({native_source}, {domain_source})...; let operation = plan.admit({payloads})...; Ok(nx::evaluate_native_integer_arithmetic(operation, meter)) } |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at aa64da56. Verified in the fix commit: - Where an exhaustive concrete enumeration stands in for a symbolic proof run over a finite domain (IR-1022, FR-015-AC-132), the enumeration control shall record `evidence_kind` ... `failing_inputs` (FR-017-AC-64). - Where an exhaustive concrete enumeration stands in for a symbolic proof run, the enumeration control shall construct no `KaniRunOutcome` and no terminal value. - Where an exhaustive concrete enumeration stands in for a symbolic proof run, the enumeration control shall print a record containing none of the tokens listed in FR-017-AC-64. [no new quire grammar warning vs base 24ac11d8; placed after the two-phase bullets] |
