@@ -86,3 +86,9 @@ Rust lane:
 | FR-029-AC-16 | context_only | spec/kani/functional/FR-029-run-outcome-terminal-record.md:393 | The state-clause replay path (FR-024) settles as the other replay paths do |
 | src/replay/state_clause/invariant.rs decode_falsification | examined | src/replay/state_clause/invariant.rs:110-195 | if harness.obligation != self.obligation_identity { return Err(StateClauseReplayError::ObligationIdentityMismatch); } |
 | src/kani/identity.rs has_valid_provenance | context_only | src/kani/identity.rs:521-526 | self.identity == self.generated_identity && self.obligation == self.generated_obligation |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head 6a195566. Checked by reading, with no cargo run during the quiet period. Commit 6a195566 adds a V2 postcondition harness (BalanceNeverDrops, native) and a V2 precondition harness (OtherBelowLimit) to the AC-65-tagged test, each with a wrong identity (`ordinal_only`) and each asserting `NotInvariantHarness` (tests/it/state_clause_invariant_replay.rs:1207-1231). Both harnesses pass the `V2Clause` let-else, so a check placed before the V2 kind check would return `ObligationIdentityMismatch` and fail. The coder reports that mutant now fails this test. src/ is unchanged between 48e18b45 and 6a195566. |

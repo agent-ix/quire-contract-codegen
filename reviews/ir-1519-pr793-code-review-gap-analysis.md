@@ -72,3 +72,9 @@ FND-001 is a medium coverage gap. It is caused by test claims carrying arbitrary
 | FR-015-AC-48 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:866 | Until those land, the code compares a sequence field's inclusive cardinality range only and does not check the `NodeKey`. |
 | FR-015-AC-135 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:947 | A V2 clause claim whose `ObligationIdentity` `NodeKey` is not equal ... to the `NodeKey` CG resolves for the selected clause node ... is refused with `UnsupportedObligation::V2ClauseNodeKeyMismatch` |
 | TC-035 step 46 | examined | spec/replay/matrix/TC-035-counterexample-envelope-intake.md:394-408 | Over the step 45 invariant harness, supply a caller `obligation_identity` equal to the harness's `obligation` and assert `decode_falsification` accepts it |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | Round 1, head 6a195566. Deferred to IR-1518, which owns it in comment f49a6b22. Once #794 gives V2 claims resolved NodeKeys, restore the QSL call-site identity, or assert it equals `harness.obligation`, at the six sites in tests/it/state_clause_invariant_replay.rs, after #793 merges. |
