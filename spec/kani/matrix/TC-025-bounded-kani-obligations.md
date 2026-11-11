@@ -942,6 +942,15 @@ with the required author `make kani-gate`; independent review and final acceptan
     (here B), fails 53(a) and 53(b); M6, resolving the key from the claim itself, fails 53(b);
     M7, comparing path only and not the node ordinal, fails 53(c); M8, running the record
     comparison first, fails 53(d) (FR-015-AC-135, FR-015-AC-136).
+54. (PLANNED, IR-1520.) State-frame identity member, FR-015-AC-137. Build one `StateFrameRequest`
+    for a postcondition clause with `obligation_identities` I_c (contract) and I_f (frame) that
+    differ in node, model and ordinal, taken from hand-written literals. Generate both roles:
+    each harness's `obligation` equals its role's identity member for member, and its record
+    serialises it. Regenerate with I_c and I_f swapped: the harness sources are byte-identical
+    and the records differ. Parse a record with the member removed: `StateFrameRecordError`.
+    Mutants: a generator that stores I_c on both harnesses fails the `frame` equality; one that
+    swaps the roles fails both; one that omits the member from the record fails the parse
+    assertion; one that folds the identity into the harness source fails byte-identity.
 
 ## Blocked
 

@@ -406,6 +406,27 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     assertion (FR-024-AC-66). A harness differing in both identity and field order must return
     `ObligationIdentityMismatch`, which fails a mutant that checks field order first.
     The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`.
+47. (PLANNED, IR-1520.) Generate, for one postcondition clause, the `contract` and `frame`
+    harnesses of one `StateFrameRequest` whose `obligation_identities` hold two identities I_c and
+    I_f that differ in ordinal and in node. Assert each harness's `obligation` equals its role's
+    identity and a persisted record without the member is refused with `StateFrameRecordError`
+    (FR-015-AC-137). Replay the falsified `contract` harness with I_c: `decode_falsification`
+    accepts and the packet and request carry I_c member for member (FR-024-AC-68). Then supply
+    I_c with only the ordinal changed, I_c with only the node changed, I_c with only the model
+    changed, and I_f: each returns `ObligationIdentityMismatch` with the executor uncalled and
+    no document built, and none returns `HarnessMismatch` (FR-024-AC-67). Repeat for the
+    `frame` harness with I_f accepted and I_c refused (FR-024-AC-68). A harness differing in both
+    identity and a state field returns `ObligationIdentityMismatch`. Mutation controls: a
+    `decode_falsification` that ignores the caller identity accepts the changed identities and
+    fails the refusal assertions; one comparing only `node` and `model` accepts the ordinal-only
+    change and fails it; one that maps the difference to `HarnessMismatch` fails the variant
+    assertion; one that replaces the caller identity with the harness's own never refuses; one
+    that replaces it with a default identity refuses the matching case and fails the accept
+    assertion; one that checks the state fields first fails the both-differ case; one that
+    stores a single identity for both roles fails the I_f-on-`contract` and I_c-on-`frame`
+    cases. A generator that drops the identity from the record fails the record assertion
+    (FR-015-AC-137, FR-024-AC-67, FR-024-AC-68). The refusal site is the identity comparison in
+    `StateClauseReplayInputs::decode_falsification`.
 
 ## Status
 
@@ -447,7 +468,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 47 (FR-024-AC-67 and FR-024-AC-68, FR-015-AC-137) is planned for IR-1520 and claims no CG implementation or tagged test yet. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)
