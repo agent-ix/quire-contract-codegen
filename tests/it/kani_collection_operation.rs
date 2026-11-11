@@ -1084,12 +1084,7 @@ fn hand_written_claim(
     };
     V2ClauseObligationClaim {
         obligation: qsl_replay::ObligationIdentity::new(
-            quire_exact::NodeKey::new(
-                "producer-issued",
-                vec![quire_exact::PathSegment::Text("collection".to_owned())],
-                0,
-            )
-            .unwrap(),
+            crate::common::v2_claim::resolved_key(package, clause),
             None,
             0,
         ),

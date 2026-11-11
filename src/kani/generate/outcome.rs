@@ -240,6 +240,13 @@ pub enum UnsupportedObligation {
         /// claim, and a caller that copies it back proves nothing about its own selection.
         selected: Option<V2ClauseSelection>,
     },
+    /// The claim's obligation `NodeKey` is not the key CG resolves for the selected clause node
+    /// from the admitted package (FR-015-AC-135); refused before any record comparison
+    /// (FR-015-AC-136). It names the clause node only: neither key and no selection.
+    V2ClauseNodeKeyMismatch {
+        /// Selected clause node.
+        node_id: CheckedNodeId,
+    },
     /// This V2 clause cannot be represented by the bounded clause renderer.
     V2ClauseConditionNotRendered {
         /// Selected clause node.

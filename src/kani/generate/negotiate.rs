@@ -940,16 +940,23 @@ fn classify_v2_clause<'a>(
                 semantic_form: node.semantic_form.to_string(),
             })
         }
-        Some(_)
-            if kind != Some(ObligationKind::Precondition)
-                && kind != Some(ObligationKind::Postcondition)
-                && kind != Some(ObligationKind::Invariant) =>
-        {
-            Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
-                node_id: clause.clone(),
-            })
-        }
         Some(_) => match kind {
+            // The binding of the claim's NodeKey to the clause node (FR-015-AC-135) precedes
+            // lowering and every record comparison (FR-015-AC-136). The spec fixes only that
+            // order; running before a lowering or collection-domain refusal is also pinned by
+            // `a_key_mismatch_precedes_a_lowering_refusal`. The record holds no NodeKey, so it
+            // cannot bind the identity.
+            Some(_)
+                if package
+                    .structural_key(clause)
+                    .and_then(crate::core::ir::node_key::checked_node_key)
+                    .as_ref()
+                    != Some(claim.obligation.node()) =>
+            {
+                Outcome::Unsupported(UnsupportedObligation::V2ClauseNodeKeyMismatch {
+                    node_id: clause.clone(),
+                })
+            }
             Some(kind) => match lower_v2_clause(view, clause, kind, claim) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
                 Err(reason) if !native => {
@@ -960,6 +967,7 @@ fn classify_v2_clause<'a>(
                 }
                 Err(reason) => Outcome::Unsupported(reason),
             },
+            // Not a precondition, postcondition or invariant.
             None => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
             }),
@@ -1645,7 +1653,7 @@ mod tests {
             _ => ObligationKind::Precondition,
         };
         let mut claim = V2ClauseObligationClaim {
-            obligation: crate::kani::test_support::fixture_obligation(),
+            obligation: crate::kani::test_support::clause_obligation(package, clause),
             record: V2ClauseObligationRecord {
                 occurrence,
                 kind,
