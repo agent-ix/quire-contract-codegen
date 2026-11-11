@@ -1,52 +1,138 @@
 ---
-id: SR-17940486709564847047613
-title: "IR-717 PR #775 ADR-005 integrity analysis"
+id: SR-5183
+title: "IR-717 PR342 integrity review"
 type: SpecReview
 analysis: integrity
-date: 2026-11-11
-scope: "agent-ix/quire-contract-codegen; PR #775 @ 141760f0; IR-717; spec/decisions/ADR-005-original-guardian-gate-ownership.md"
+scope: "agent-ix/quire-contract-codegen@02a98dd3d7fadbc8284785a4ea3e7629c7d1f9ef; IR-717; spec/kani/functional/FR-034-caller-death-ownership.md; spec/kani/matrix/TC-049-caller-death-ownership.md"
 review_set: subset
-relationships:
-  - target: ix://agent-ix/quire-contract-codegen/ADR-005
-    type: reviews
 ---
 
 ## Summary
 
-Ticket: IR-717. Spec-only PR #775 (head 141760f0, one commit): rewrites spec/decisions/ADR-005-original-guardian-gate-ownership.md from the #345 hold into a decision record (P1 safe alias exclusion FAILED, P2 conditional on P1, P3 finite bound FAILED for the Unix-stream transport, five UNRUN controls, six product options with none selected; FR-034/TC-049 unamended). Checked against: rustix 1.1.5 and 1.1.6 vendored source (src/thread/setns.rs unshare/unshare_unsafe, src/thread/prctl.rs seccomp/no_new_privs, src/net send_recv/msg.rs cmsg_space/sendmsg/recvmsg, sockopt.rs send buffer and peercred, socketpair.rs, io/read_write.rs pwritev2, backend io/types.rs ReadWriteFlags); nix 0.31.3 signal.rs; /usr/include and linux-headers-7.0.0-38 uapi (no O_CLOFORK; RWF_NOSIGNAL present); Cargo.toml/Cargo.lock (rustix 1.1.6 locked, nix via command-fds); src/lib.rs forbid(unsafe_code); src/kani/run/namespace.rs gate pipe and abort test; FR-034 Behavior and AC-38/54/83/87/94; TC-049; the #345 ADR on origin/main; IR-717 ticket acceptance and comments. quire validate and quire matrix pass. No Cargo, build, probe or kernel read was run.
+Cross-clause integrity: confirmation-before-close is a successful cooperative predicate; bounded refusal is a separate exceptional predicate, not a successful order substitute. The two revised ACs and all changed TC tables/procedures agree. The amendment explicitly preserves current O topology and rights and allocates no C release mechanism, Start widening or replacement transport.
 
 ## Verdict
 
-CHANGES REQUIRED. Status, premise table, controls and consequences are consistent with committed FR-034 (AC-38/54/83/87/94 text unchanged, stack/RSS-proxy prohibition at FR-034:1468, exact fatal-prefix predicate already UNBACKED at FR-034:237) and with the #345 hold. The option table conflates P1 and P3 (FND-001), understates the status quo for AC-83 (FND-002), and drops the amendment path (FND-003).
+**PASS** — no new defect found in this confined normative diff. This is specification review, not source activation, runtime acceptance or merge authorization.
+
+## Reviewed Units
+
+```json
+[
+  {
+    "id": "FR-034-AC-54",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "PLANNED/UNRUN. On the independently grounded supported cooperative cancellation path, the actual original O gate owner retains the gate through actual I confirmation before actual close; early-close and omitted-confirmation controls fail without marker, stage or refusal-label proof. Genuine unavailable confirmation at the original cutoff follows AC-38 CleanupUnconfirmed with explicit actual-owner abandonment/right disposal and no ordering or cleanup credit, never a renamed fatal close or diagnosis of kernel fault. Healthy restored order and unavailable-confirmation refusal are separate control"
+  },
+  {
+    "id": "FR-034-AC-87",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal. On AC-54's independently grounded supported cooperative path, actual I confirmation precedes retained-gate close; late-operation/early-close mutants fail. AC-38 unavailable-confirmation abandonment at the original cutoff grants no seal, order or cleanup credit; a skipped poll, lost pin or owner defect is not a kernel-fault diagnosis. Producer ordinal certificates are retired."
+  },
+  {
+    "id": "FR-034-AC-38",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "context_only",
+    "excerpt": "PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement"
+  },
+  {
+    "id": "FR-034-AC-27",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "context_only",
+    "excerpt": "guardian-test-support is off by default, absent from default features, and exposes exactly one documented fixture operation only when explicitly enabled. A feature-off consumer cannot use that operation. No public lease, process-ownership handle, cancellation entry or cleanup-deferring callback is exported. The private initialized death witness transfers exactly one actual owned monitor or validated INIT pin, with its typed authority; BeforeMonitor transfers none. Reporter startup stdout is safely duplicated into a non-stdio CLOEXEC OwnedFd and itself marked CLOEXEC before any spawn; every chi"
+  },
+  {
+    "id": "FR-034",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "For supported cooperative retained-gate cancellation, the actual original O gate owner shall retain\nthe gate through actual owned I termination confirmation and only then perform actual gate close.\nThis operation-order claim is conditional on the independently established signal/namespace and\nconfirmation-availability fault premises below. Early-close and omitted-confirmation mutants remain\nindependent and shall not pass from marker absence, later teardown or a CleanupUnconfirmed label.\nA cached C phase or serialized gate-retained flag cannot establish either operation. Genuine bounded\nproduct",
+    "unit": "FR-034 cooperative-order behavior"
+  },
+  {
+    "id": "FR-034",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "actual SIGKILL delivery and PID-namespace teardown permit owned settlement confirmation by the\napplicable original settlement deadline. Its signal/namespace and observation premises shall be\nestablished independently from the actual supported kernel/runtime/owner paths and genuine restored\ncontrols, not defined as “the confirmation happened.” The actual original validated I pin shall remain\nowned, and the required bounded signal/confirmation attempts and due ordinary observations shall run\nunder that deadline. Source Analysis shall identify the concrete signal, namespace, retained-pin and\nobse",
+    "unit": "FR-034 fault premises"
+  },
+  {
+    "id": "FR-034",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "required actual bounded attempts and retained original authority, execution shall follow AC-38's\nCleanupUnconfirmed return with no evidence, verdict, outcome, confirmed cleanup or operation-order\ncredit. There shall be no deadline reset, post-return custodian, leaked ownership or unbounded Drop.\nThis is an explicit live unavailable-confirmation abandonment case, not fatal-owner cancellation\nand not successful cooperative close. Remaining original O gate references shall be disposed by\ntheir actual owned cleanup/Drop or, on actual O exit, by kernel descriptor-table closure; the\nlast-reference c",
+    "unit": "FR-034 unavailable-confirmation behavior"
+  },
+  {
+    "id": "FR-034",
+    "path": "spec/kani/functional/FR-034-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "not AC-54/87's successful ordering. Fatal C/group or O kernel closure remains a distinct abrupt-death\ncase and grants neither claim. Original caller/group-death, early-release and whole-chain obligations\nremain owed. Gate/lease alias exclusion, a safe C-owned release API, a five-right Start/ancillary\nallocation and finite additive stream/kernel/native reservation are not established or allocated by\nthis fault-domain amendment; current O gate topology and exact production rights remain unchanged.\nThe ignored-inner-EOF mutant shall remain separate and unrescued by outer cancellation. AC-77's\npos",
+    "unit": "FR-034 preserved boundaries"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "    d. AC-54: on the independently grounded supported cooperative path, retain the real original O\n       gate during I cancellation; require actual I-positive confirmation before its actual owner\n       closes it. Independently close early or omit actual confirmation with independent checks\n       unchanged. Both must fail actual order despite no backend marker or CleanupUnconfirmed label;\n       restored healthy order passes. Ground the signal/namespace/retained-pin and observation fault\n       premises through actual supported source/runtime paths and genuine controls, not by defining",
+    "unit": "step28d supported path"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "       Separately use only the already permitted private settlement-observation boundary in step25\n       to withhold positive confirmation from the actual owner until its applicable original cutoff,\n       while retaining the genuine original I pin and required bounded attempts/due observations.\n       Do not manufacture kernel D-state or an unkillable task. Require only bounded AC-38\n       CleanupUnconfirmed, no evidence/verdict/outcome, no order/cleanup credit and no fresh cutoff,\n       leak or post-return custodian. Identify the actual original O gate reference disposal by owned",
+    "unit": "step28d unavailable confirmation"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "    j. AC-87: Independently observe actual I/M-before-report-seal and, on AC-54's supported cooperative path, I-before-original-owner-gate-close. Move real operations after seal or close gate before actual I confirmation and require failure. The distinct step28d original-cutoff unavailable-confirmation abandonment grants no report-seal, order or cleanup credit and never excuses a cooperative early-close mutant. Stored ordinal/receipt time cannot repair order; unavailable construction is UNBACKED.\n    k. AC-88: Inspect and exercise every due complete ordinary accounting sample, control/cutoff t",
+    "unit": "step29j order"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "| FR-034-AC-54 | PLANNED/UNRUN: Supported cooperative retained-gate I confirmation before actual original-owner close; separate original-cutoff unavailable-confirmation abandonment/refusal (step28d). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority, independently grounded fault premises and bounded integrated schedule remain owed; abandonment supplies no successful order or cleanup. |",
+    "unit": "matrix entry line 121"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "| FR-034-AC-54 | Supported cooperative actual I confirmation while original O gate is owned precedes its actual owner's close. Original-cutoff unavailable confirmation gives only AC-38 CleanupUnconfirmed and honest abandonment. | Early close/omitted confirmation fail independently; marker or refusal category gives no order. Withheld observation supplies no kernel-fault diagnosis or order/cleanup credit; restored healthy confirmation-before-close passes. |",
+    "unit": "matrix entry line 1277"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "| FR-034-AC-87 | PLANNED/UNRUN: step 29, independent AC-87 check below. | Actual I confirmation/M consuming reap precede report seal; on AC-54's supported cooperative path actual I confirmation precedes retained-gate close. Independent late-operation/early-close mutants fail; original-cutoff unavailable-confirmation abandonment supplies no order/cleanup credit. Producer ordinal certificates are retired. No prior Test or matrix row supplies completion. |",
+    "unit": "matrix entry line 204"
+  },
+  {
+    "id": "TC-049",
+    "path": "spec/kani/matrix/TC-049-caller-death-ownership.md",
+    "role": "examined",
+    "excerpt": "| FR-034-AC-87 | Actual I confirmation/M consuming reap precede report seal; supported cooperative I confirmation precedes actual retained-gate-owner close. Independent late-operation/early-close mutants fail; original-cutoff unavailable-confirmation abandonment supplies no seal/order/cleanup credit. Producer ordinal certificates are retired. | Independently observe actual I/M-before-report-seal and supported cooperative I-before-gate-close. Move real operations after seal or close gate before actual I confirmation and require failure; a refusal label cannot rescue that mutant. Separate withho",
+    "unit": "matrix entry line 1299"
+  }
+]
+```
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | medium | The six options mix two independent failed premises. P1 (alias exclusion) and P3 (finite stream bound) each need a resolution, but only option 5 (measured profile) and implicitly option 6 address P3. Option 2 lists 'the P3 rows still open'; options 3 and 4 resolve only P1 and do not say P3 stays failed, so choosing either would leave the strong construction UNBACKED without saying so. Option 6 names AC-83 (the exclusive lease) as part of dropping 'the strong held-gate predicate', but AC-83 is the lease predicate, not the gate predicate. Split the choice into a P1 choice and a P3/transport choice (or state for each option which premise it resolves and which stays failed), and state exactly which AC each narrowing touches. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:156-168 |
-| FND-002 | medium | Option 1's cost says only that 'the fatal-O held-gate predicate stays UNBACKED'. P1 failed for the caller lease as well as for S: the lease sits in C's shared table today, so a foreign fork retains it and defeats committed FR-034-AC-83 ('a leaked alias cannot preserve authorization after actual caller death') whatever gate design is chosen. Retaining the hold therefore also leaves AC-83 unbacked. The cost must say so, or the status quo reads as narrower than it is. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:161 |
-| FND-003 | medium | Options 2-5 do not say that adopting them still requires an explicit, reviewed FR-034/TC-049 amendment. Every C-custody option contradicts committed FR-034-AC-54 ('the actual original O gate owner retains the gate') and the O-held writer in FR-034 Behavior (fd3/fd4 lines 126-127), and the five-right Start changes the common ancillary maximum. The #345 ADR stated that path ('the separate specification reviewer must evaluate the exact FR-034/TC-049 amendment before implementation'); this rewrite drops it. A reader can take a product choice of option 2-5 as authority to implement. Add the required amendment and review as a cost of each option that changes custody or protocol. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:162 |
-| FND-004 | low | The rewrite drops the '## Decision' and '## Alternatives Considered' headings. The other ADRs in spec/decisions (ADR-001, -002, -004, -006) use Status/Context/Decision/Consequences. quire validate passes (the ADR archetype asserts no sections), but the hold now has no Decision section, and the #345 alternatives (shared-table or O-only custody: O-only release loses the gate when O exits) no longer appear as rejected alternatives. Keep a '## Decision' heading (for example 'Hold UNBACKED; product choice required') and keep the O-only rejection. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:17-24 |
-| FND-005 | low | 'the common ancillary maximum, currently four rights' has no citation. No FR-034 or src/ text states a four-right maximum (grep for four/MAX rights found none), and the #345 ADR asserted it without a source too. Cite the clause or constant that sets the current maximum, or mark it as an assumption. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:98-105 |
+| FND-001 | low | No findings (placeholder) | - |
 
-## Scope
+## Evidence and Limits
 
-| Unit | Role | Location | Excerpt |
-| --- | --- | --- | --- |
-| ADR-005-status | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:17-24 | Proposed, awaiting a product architecture choice. This is the IR-717 decision record, not an implemented gate, a conformance finding, or permission to activate IR-652 or IR-655. IR-717 could **not** establish a supported safe descriptor owner or a finite kernel/native bound for the original-gate design. The exact failed premises are stated below and the choice they force is in [Decision required](#decision-required). [FR-034](../kani/functional/FR-034-caller-death-ownership.md) and [TC-049](../kani/matrix/TC-049-caller-death-ownership.md) are not amended by this record: no decision is establis |
-| ADR-005-premise-P1 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:59 | \| P1. S, R (C copy) and the lease are excluded from every foreign fork, including other embedding-C threads and the owner thread's signal handler, through a **safe** API \| **FAILED.** No supported safe Rust or OS API upholds it. \| See P1 evidence. \| |
-| ADR-005-premise-P2 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:60 | \| P2. Live release and the original caller/group-death path preserve the held-gate and teardown predicates through fatal O \| **Holds structurally only if P1 holds** (walk-through). Not established. \| Depends on P1. \| |
-| ADR-005-premise-P3 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:61 | \| P3. A finite additive stream, ancillary, kernel and native reserve is derivable from real APIs before exposure \| **FAILED for the Unix-stream transport.** Partially derivable (see inventory). \| See P3 evidence. \| |
-| ADR-005-P3-derivable | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:98-105 | Derivable from real APIs before exposure (all UNRUN until a control reads them back):  - Control-message buffer bytes: `cmsg_space!` for the exact right count (the common ancillary   maximum, currently four rights and five in the candidate Start). - Per-direction queued-byte cap: `set_socket_send_buffer_size` then `socket_send_buffer_size`   read-back, the stream analogue of `F_GETPIPE_SZ`. - Descriptor-table slots: `RLIMIT_NOFILE` and the exact count of S, R, lease and Start rights per   table. |
-| ADR-005-inventory | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:127-135 | \| Term \| Source \| Status \| \| --- \| --- \| --- \| \| Gate endpoint descriptors and file objects \| exact counts in C, L, O, M tables \| Count derivable; kernel object size not \| \| Control-message bytes per Start transfer \| `cmsg_space!` for the exact right count \| Derivable; five rights exceeds the four-right common maximum, so both Start counts and the common maximum change together \| \| Queued and partial rights after refusal, setup failure or cancellation \| receiver-owned `RecvAncillaryBuffer` drain with `CMSG_CLOEXEC` \| Ownership derivable; kernel in-flight cost not \| \| Stream queued bytes \| send |
-| ADR-005-decision-required | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:156-168 | Product choice, not a technical default. Each option has a cost recorded here; none is selected by this record, and none is implemented or evaluated beyond the grounding above.  \| Option \| What it changes \| Open cost \| \| --- \| --- \| --- \| \| 1. Retain the hold \| Original gate stays as committed (O-held writer). IR-652 production and IR-655 fixtures stay inactive. \| The fatal-O held-gate predicate stays UNBACKED. This is the status quo, stated openly, not a narrowing of the guarantee. \| \| 2. Authorize an audited unsafe owner boundary \| Permit a reviewed unsafe-allowing owner (dedicated thread wi |
-| ADR-005-option-1 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:161 | \| 1. Retain the hold \| Original gate stays as committed (O-held writer). IR-652 production and IR-655 fixtures stay inactive. \| The fatal-O held-gate predicate stays UNBACKED. This is the status quo, stated openly, not a narrowing of the guarantee. \| |
-| ADR-005-option-2 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:162 | \| 2. Authorize an audited unsafe owner boundary \| Permit a reviewed unsafe-allowing owner (dedicated thread with `unshare_unsafe(FILES)` plus a fork-denial mechanism) outside the `forbid(unsafe_code)` crate. \| Revises the unsafe policy; descriptor affinity, synchronous-fault handlers, seccomp coverage and the P3 rows still open. \| |
-| ADR-005-option-3 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:163 | \| 3. Authorize a separate release custodian process \| Move S and the lease to a process with its own table. \| Changes C custody and death semantics (the ticket excludes it as a hidden custodian); needs its own death and teardown contract. \| |
-| ADR-005-option-4 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:164 | \| 4. Authorize a process-wide no-fork rule for embedding C \| Embedding C must not fork while a guardian run is live. \| Changes ordinary embedding behavior; the ticket forbids assuming it. \| |
-| ADR-005-option-5 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:165 | \| 5. Authorize a non-descriptor lease and a measured gate profile \| Replace the fd lease by an identity not duplicated by fork, and pin a measured kernel profile for the gate. \| New caller-death mechanism and a profile-restricted support claim; the measurement is itself unrun. \| |
-| ADR-005-option-6 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:166 | \| 6. Narrow the guarantee explicitly \| Amend FR-034 AC-54/83/87 to drop the strong held-gate predicate. \| Requires an explicit reviewed amendment; never done silently. \| |
-| ADR-005-consequences | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:172-176 | IR-717 stays open as a prerequisite to IR-652 and the later completion audit. IR-652 owns the actual C/L/O/M/I and transport implementation; IR-655 owns genuine fixture evidence and stays downstream of an approved operational contract. The five-right Start and the stream transport do not enter the normative protocol. No compatibility route, copied dependency file, fabricated reserve, stored certificate or source-only success claim follows from this record. |
-| FR-034-AC-54 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1897 | \| FR-034-AC-54 \| PLANNED/UNRUN. On the independently grounded supported cooperative cancellation path, the actual original O gate owner retains the gate through actual I confirmation before actual close; early-close and omitted-confirmation controls fail without marker, stage or refusal-label proof. Genuine unavailable confirmation at the original cutoff follows AC-38 CleanupUnconfirmed with explicit actual-owner abandonment/right disposal and no ordering or cleanup credit, never a renamed fatal close or diagnosis of kernel fault. Healthy restored order and unavailable-confirmation refusal are |
-| FR-034-AC-83 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1926 | \| FR-034-AC-83 \| PLANNED/UNRUN. The original exclusive caller lease closes independently of retained monitor/INIT ownership and does not leak into children; a leaked alias cannot preserve authorization after actual caller death. \| Test \| |
-| FR-034-AC-87 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1930 | \| FR-034-AC-87 \| PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal. On AC-54's independently grounded supported cooperative path, actual I confirmation precedes retained-gate close; late-operation/early-close mutants fail. AC-38 unavailable-confirmation abandonment at the original cutoff grants no seal, order or cleanup credit; a skipped poll, lost pin or owner defect is not a kernel-fault diagnosis. Producer ordinal certificates are retired. \| Test \| |
+Exact local head and complete two-path diff inspected. Prospective Linear custody faa7e403-5acd-49ec-bd04-641d7dd1aff7 was read in full on IR-717. Scoped Quire document validation exit0: 2/2 grammar-clean, zero grammar findings. No applicable AssuranceProfile/review_selection was found in the scoped repository scan. GitHub published-head readback was unavailable to this reviewer (HTTP401); root must verify publication/head separately. Installed Quoin 0.28.3, Quire0.36.2/engine0.50.2; module discovery printed duplicate-archetype/inverse-edge and inline-schema advisories without document failure. No Rust/source/CI delta, Cargo/Kani/native probe, lock, full spec sweep or computed matrix claim. Production gap analysis does not apply to a Markdown-only diff; all existing PLANNED/UNRUN controls remain owed. Earlier GATE-DESIGN-001..004 are preserved as unresolved implementation/design duties; this PR claims no mechanism fix. Model id and native harness id are not exposed to this reviewer and are recorded unavailable, not guessed.
+
+## Dispositions
+
+No real findings; no disposition round required.
