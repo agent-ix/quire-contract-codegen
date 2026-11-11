@@ -57,3 +57,20 @@ PASS WITH ONE MEDIUM. The new criteria AC-20 to AC-25 are consistent with the Se
 | TC-047 trailer | examined | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:221 | All checks are planned; completed-route observations have the same explicit remaining CODE gates as [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never produces a source-property `Refuted` or `Verified` terminal. The scalar absent-settlement check is FR-032-AC-23; ordinary [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15 is unchanged and still governs `run_terminal_value`. Missing upstream types/causes must be reported as a gate, not implemented as local QSL lookalikes. |
 | tests.md row FR-032 partial | examined | spec/replay/matrix/tests.md:28 | \| FR-032 \| FR-032-AC-1 through FR-032-AC-6, FR-032-AC-15 through FR-032-AC-18 \| TC-047 \| 🚧 Partial native evidence (IR-1184, #702, #741, #757, #481): checked original-body/limits retention, decode and operand-domain controls, native driver authentication, full-claim and sent-context report binding and genuine QSL operator calls are exercised without a Kani run. Each criterion's own row names what stays Planned (IR-631): refusal precedence ordering (AC-2), observation of a really proved artifact (AC-4), a QSL `Diverged` result from a changed artifact (AC-5), individual member mutations (AC-6... |
 | tests.md TC-047 row | examined | spec/replay/matrix/tests.md:49 | \| TC-047 \| Check public routed scalar lowering replay and staged-content binding \| Integration \| P0 \| FR-032-AC-1, FR-032-AC-2, FR-032-AC-3, FR-032-AC-4, FR-032-AC-5, FR-032-AC-6, FR-032-AC-7, FR-032-AC-8, FR-032-AC-9, FR-032-AC-10, FR-032-AC-11, FR-032-AC-12, FR-032-AC-13, FR-032-AC-14, FR-032-AC-15, FR-032-AC-16, FR-032-AC-17, FR-032-AC-18, FR-032-AC-19, FR-032-AC-20, FR-032-AC-21, FR-032-AC-22, FR-032-AC-23, FR-032-AC-24, FR-032-AC-25 \| 🚧 Partial native evidence (IR-1184): original reader/generator positional bodies, all current integer operators, actual driver observations and QSL repor... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | FR-032-AC-18's status credits #757 and #481, but both tests it cites were added by #702 (4f399237): absent_or_ambiguous_scalar_authority_never_invents_an_occurrence in core/scalar_authority.rs, and the scalar_replay_binding.rs plan refusals tagged AC-18. #757 only edited them, and #481 retained renderer limits. Cite #702 (and #757 if its edits matter). | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:409, src/core/scalar_authority.rs:124, tests/it/scalar_replay_binding.rs:291 |
+| FND-007 | low | FR-032-AC-15's status says 'tagged scalar_replay_binding.rs asserts ... a changed package, path or producer ordinal refuses'. That loop is in scalar_actual_sent_context_and_every_driver_tie_are_independently_checked, which is tagged AC-6, AC-17 and AC-18, not AC-15. The AC-15-tagged test asserts the reader body and the two distinct draws. Mark the structural-member refusal as untagged AC-15 evidence (to tag in the code slice), as is done for the source-span clause. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:406, tests/it/scalar_replay_binding.rs:178-186, tests/it/scalar_replay_binding.rs:291, tests/it/scalar_replay_binding.rs:454-480 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-004 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-005 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |

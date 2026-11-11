@@ -52,3 +52,13 @@ FAIL ON ONE HIGH. The non-fault Refused input of step 10 cannot be built as writ
 | TC-047 mutation FR-032-AC-23 | examined | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:217 | \| FR-032-AC-23 \| Step 12: omitted settlement gives `MissingSettlement` from both entries, also after a converter refusal \| Map falsified-with-`None` to `Failed` (fails the omitted-settlement input); drop the report-claim comparison in `settlement` (fails the other-run report) \| |
 | TC-047 mutation FR-032-AC-24 | examined | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:218 | \| FR-032-AC-24 \| Step 13: only `Playback` yields `CgDefect`; every other variant yields `None` \| Return `None` for `Playback` (fails the four-byte operand input, whose pair result becomes `MissingSettlement`); return `Some(CgDefect)` for `Observation` (fails the mutated-observation input) \| |
 | TC-047 mutation FR-032-AC-25 | examined | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:219 | \| FR-032-AC-25 \| Step 14: the flow compiles and the scan finds nothing \| Add a `KaniObligationIdentity` parameter to `plan` (fails the compile of the step 1 call); reintroduce `settle` (fails the scan) \| |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-004 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-005 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |

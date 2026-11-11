@@ -43,3 +43,17 @@ PASS WITH TWO MEDIUMS. Using a distinct ScalarSettlement correctly makes Reprodu
 | FR-032 setup step 5 | examined | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:376 | An otherwise valid request reaches unsupported-capability at step 5 only when at least one named capability is unavailable; all are available today (IR-648, IR-940 Done), so `ScalarBuildError` has no such variant and step 5 is vacuous. Once those capabilities are available and the prior setup checks succeed, the builder shall return an admitted replay plan; completion with authenticated |
 | FR-029 scalar sentence | context_only | spec/kani/functional/FR-029-run-outcome-terminal-record.md:311 | The routed scalar route (FR-032-AC-20 to FR-032-AC-24, Planned under IR-631) likewise uses a distinct typed `ScalarSettlement` and its own pair entry points, which return the same `TerminalPairError`; `ReplaySettlement` and its six readings are unchanged. |
 | FR-032-AC-6 | context_only | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:395 | \| FR-032-AC-6 \| PARTIAL (#702, #741): tagged `scalar_replay_binding.rs` asserts that an absent report, an equal-claim report for another function, byte provision or replay budget, and a single changed native outcome, operand value, limit, occurrence or result range each refuse; the obligation, node, kind (other than via the first control), operator and operand-identity members are not individually mutated (PLANNED). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained ... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The revised FR-032-AC-24 returns CgDefect (Failed) for Authority caused by Unavailable and for ScalarBuildError::Operation. On origin/main, scalar_replay_body returns ScalarAuthorityError::Unavailable for the routed Implies scalar family, which has no operator-parity route (generate/scalar.rs:347-349). Operation's own doc says the generated family 'has no integer operator-parity observation route'. Both are unavailable capabilities, and FR-032:119-121 requires a typed refusal with no settlement that 'is not relabelled a CG defect'. A falsified Implies run would get a Failed record. Read these two causes as None. TC-047 step 13 also wrongly calls Unavailable unreachable: a routed Implies harness reaches it through generate_routed. (The round-0 FND-001 text wrongly listed Unavailable as a CG defect; this corrects it.) | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:415, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:119-121, src/kani/generate/scalar.rs:347-349, src/replay/scalar_builder.rs:40-41, spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:187 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |

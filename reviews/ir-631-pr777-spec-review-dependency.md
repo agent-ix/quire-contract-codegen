@@ -43,3 +43,11 @@ PASS WITH LOWS. The new criteria depend only on merged CG and QSL items. Three l
 | tests.md row FR-032-AC-19 | examined | spec/replay/matrix/tests.md:31 | \| FR-032 \| FR-032-AC-19 \| TC-047 \| 🚧 Planned (IR-304 slice b): guard-input playback decoding for guarded routed scalar harnesses awaits code \| |
 | FR-029 scalar sentence | examined | spec/kani/functional/FR-029-run-outcome-terminal-record.md:311 | The routed scalar route (FR-032-AC-20 to FR-032-AC-24, Planned under IR-631) likewise uses a distinct typed `ScalarSettlement` and its own pair entry points, which return the same `TerminalPairError`; `ReplaySettlement` and its six readings are unchanged. |
 | FR-032-AC-22 | context_only | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:411 | \| FR-032-AC-22 \| PLANNED (IR-631). `scalar_run_terminal_value(&KaniExecutionEvidence, Option<ScalarSettlement>)` and `scalar_ir_outcome_terminal_value(&KaniOutcome, Option<ScalarSettlement>)` pair the settlement with the Kani outcome. A `Falsified` run or a `Counterexample` outcome with a settlement gives the AC-21 value; an outcome of any other kind with a settlement returns `TerminalPairError::UnexpectedSettlement` and no value; an outcome with no settlement gives the same value as the ordinary entry point. `ReplaySettlement` and the ordinary map are unchanged. \| Test \| |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
