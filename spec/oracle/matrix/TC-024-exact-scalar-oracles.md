@@ -531,3 +531,72 @@ Expected result: both genuine producer forms generate and execute with the
 owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
 forms retain their prior refusal boundaries. Until those tests run, this
 section records planned qualification and grants no execution credit.
+
+## IEEE square root and fused multiply-add (IR-1502, planned)
+
+This extension verifies FR-014-AC-72 through FR-014-AC-80. It supplies native
+CG-to-owner agreement evidence only; the Kani row for these identities is
+FR-053 and TC-067, and agreement with the QSL value authority stays with
+quire-integration IR-842.
+
+1. Through the public QSL facade, emit `quire::value::ieee::sqrt` and `fma`
+   calls at `Float32[r]` and `Float64[r]`, pass the bytes unchanged to Contract
+   IR's strict reader, select the actual admitted node ids and derive their
+   items; also derive reader-admitted fixtures with the catalogued call
+   operator. Assert each item is derived and `ir_confirmed`, and that each
+   identity round-trips identity, descriptor, identity (AC-72..74). A red run
+   of this step on the preceding code is recorded in the PR; it is not a
+   test assertion.
+2. Compile the generated crate and call each oracle with independently
+   prepared `IeeeValue` operands and `Meter`s. Compare the complete owner
+   outcome, flags, ordered admitted charges and consumed counters against a
+   direct `evaluate_ieee` call, including a charge-denial case at every
+   next-charge boundary (AC-75, AC-76). Vectors:
+   - `float32` `sqrt(2.0)` (`0x40000000`): `nearest-even` is `0x3FB504F3`,
+     `toward-positive` is `0x3FB504F4`; `sqrt(4.0)` is `2.0` exactly;
+     `sqrt(-1.0)` and a NaN operand follow the owner's invalid and NaN outcome.
+   - `float64` `sqrt(2.0)` (`0x4000000000000000`): `nearest-even` is
+     `0x3FF6A09E667F3BCD`; `toward-negative` and `toward-zero` are
+     `0x3FF6A09E667F3BCC`.
+   - `float32` `fma(0x3F800001, 0x3F800001, 0xBF800002)` under `nearest-even` is
+     `0x28800000` (2^-46); a multiply-then-add oracle yields `0x00000000`.
+   - `float64` `fma(0x3FF0000000000001, 0x3FF0000000000001, 0xBFF0000000000002)`
+     under `nearest-even` is `0x3970000000000000` (2^-104); multiply-then-add
+     yields `0x0000000000000000`.
+   - `fma(2.0, 3.0, 1.0)` is `7.0` at both widths (`0x40E00000`,
+     `0x401C000000000000`); an oracle that swaps the addend and a factor yields `5.0`.
+3. Call the `float64` oracles with a `float32` `IeeeValue` and the reverse.
+   Assert the generated oracle's `OracleStop::OperandWidth` stop occurs before any charge with every consumed counter
+   unchanged (AC-77).
+4. Present an admitted node whose mode differs from the rounding bound, and
+   nodes with a missing, repeated and unreadable `float_rounding` bound. Assert
+   `mode_not_derivable` and the `add`-equivalent bound refusals, no oracle, and
+   unchanged sibling items (AC-78). At CG's defensive seam, present a `sqrt` or
+   `fma` descriptor against nodes with the wrong semantic form (an `add` `binary` node), the wrong body operator, the wrong
+   operand count, a different width or non-float operand, and a wrong result
+   type; assert `FormMismatch`, `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`
+   (AC-79). The strict reader's own refusals of wrong arity, cross-width and
+   non-float operands and a wrong `fma` result family are tested at the
+   Contract IR boundary and not claimed here. Assert `from_exact`,
+   `to_rational` and both `negate` identities remain `OperationNotDerivable`
+   (AC-80).
+5. Mutation controls, each of which must fail the named step:
+   (a) remove the `sqrt`/`fma` arms from derivation's identity match: step 1 fails;
+   (b) render `fma` as a multiply then an add in the generated oracle: the
+   `0x28800000` and `0x3970000000000000` vectors of step 2 fail;
+   (c) swap the second and third `fma` call arguments in the renderer: the
+   `7.0` vector fails;
+   (d) ignore the descriptor rounding in the renderer: the `float32`
+   `0x3FB504F4` vector and the `float64` `0x3FF6A09E667F3BCC` vector fail;
+   (e) drop the rendered `expect_width` prelude for `sqrt` and `fma`: the
+   step 3 call passing a `float32` value to the `float64` oracle no longer
+   stops before any charge and fails;
+   (f) reuse `add`'s binary shape for the call form: step 1's genuine QSL
+   source is refused and fails.
+6. Bind runnable tests to FR-014-AC-72 through FR-014-AC-80 in the existing
+   `it` binary and inspect the computed matrix. Do not use spec-text
+   assertions or a copied owner catalog.
+
+Expected result: the four identities derive, generate and agree with the owner;
+unrelated identities keep their refusals. Until those tests run, this section
+grants no execution credit.
