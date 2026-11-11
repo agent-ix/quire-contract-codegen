@@ -77,3 +77,4 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | FND-004 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
 | FND-005 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
 | FND-006 | fixed | fixed in 496eb9d3, fc51c470; verified against origin/spec/ir-948-v2-contract-input at fc51c470 |
+| FND-007 | fixed | fixed in 0cbdce0d; verified against origin/spec/ir-948-v2-contract-input at 0cbdce0d |
