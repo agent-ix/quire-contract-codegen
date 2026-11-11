@@ -3,10 +3,8 @@ id: ADR-005
 title: "Original guardian-gate ownership: failed premises and the product architecture choice"
 type: ADR
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-034
-    type: relates_to
-  - target: ix://agent-ix/quire-contract-codegen/TC-049
-    type: relates_to
+  - target: ix://agent-ix/quire-contract-codegen/ADR-007
+    type: superseded_by
   - target: ix://agent-ix/quire-contract-codegen/FR-028
     type: relates_to
   - target: ix://agent-ix/quire-contract-codegen/FR-017
@@ -16,15 +14,17 @@ relationships:
 
 ## Status
 
-Proposed, awaiting a product architecture choice. This is the IR-717 decision record, not an
-implemented gate, a conformance finding, or permission to activate IR-652 or IR-655. IR-717 could
-**not** establish a supported safe descriptor owner or a finite kernel/native bound for the
-original-gate design. The exact failed premises are stated in [Decision](#decision) and the choice
-they force is in [Product architecture choice](#product-architecture-choice).
-[FR-034](../kani/functional/FR-034-caller-death-ownership.md) and
-[TC-049](../kani/matrix/TC-049-caller-death-ownership.md) are not amended by this record: no
-decision is established that would support an amendment, and the committed caller/group-death,
-early-release and confirmation-before-close guarantees are not narrowed.
+Superseded by [ADR-007](./ADR-007-minimal-kani-run-ownership.md). The owner chose no guardian: the
+runner keeps a process group and a wall-clock timeout and leaves the memory cap to the caller's
+environment, so none of the options below is taken. FR-034 and TC-049, which this record names, are
+retired; their mentions below are history. The rest of this record is kept as written while the
+choice was open, when its status was "Proposed, awaiting a product architecture choice".
+
+This is the IR-717 decision record, not an implemented gate, a conformance finding, or permission to
+activate IR-652 or IR-655. IR-717 could **not** establish a supported safe descriptor owner or a
+finite kernel/native bound for the original-gate design. The exact failed premises are stated in
+[Decision](#decision) and the choice they forced is in the option table there. FR-034 and TC-049 were
+not amended by this record: no decision was established that would support an amendment.
 
 ## Context
 

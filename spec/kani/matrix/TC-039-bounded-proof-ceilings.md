@@ -22,7 +22,8 @@ must catch.
 
 1. Generate one harness at two memory ceilings and at two wall-clock ceilings.
 2. Run a harness whose run cannot finish inside a small wall-clock ceiling.
-3. Run a harness whose run exceeds a small memory ceiling.
+3. Run a harness whose backend the caller's environment ends for exceeding a small memory
+   ceiling (step 23).
 4. Read the evidence of a verified run and of each run above.
 5. Read the family named in a harness identity, a generation refusal and an execution evidence.
 6. Generate a family with no supplied shadow.
@@ -69,11 +70,9 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 17. Request a refinement domain narrower than the shadow's drawn domain on one argument.
 18. Request items whose shape is unbounded, has no shadow, or exceeds the size budget, beside a
     supported item.
-19. Run the launcher stand-in of step 3 as a process tree whose child, not the launcher, exceeds the
-    memory ceiling, under each stand-in mechanism (one that observes resident memory, one that
-    only limits it); read the evidence of a run that finishes under the ceiling for the mechanism
-    and, where observed, the peak; run on a stand-in platform with no mechanism; run a batch
-    whose launcher's child exceeds the ceiling.
+19. SUPERSEDED by steps 23 to 26 (ADR-007). It drove a runner-side memory mechanism (a resident-
+    memory observer, a limit-only mechanism, a platform with none and a batch killed by the
+    runner), which the minimal design removes.
 20. Run the seeded mutants of the stand-in: a shadow that always answers `true`, a production
     subject that never compares one leaf, a mutated `value_bearing` shared helper that the
     production subject reads independently, and one it reads through the same helper.
@@ -85,13 +84,28 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     exceeds its memory ceiling; read the refinement evidence (class, cases, seed, ceilings,
     mechanism, outcome, versions) beside the shadow run's.
 
+### The environment-owned memory cap (planned, IR-1510, ADR-007)
+
+23. Run a launcher stand-in whose report states the harness entry with exit status `out_of_memory`
+    (the shape Kani writes when CBMC is killed by SIGKILL), and a stand-in that is killed by SIGKILL
+    and writes no report. Read each run's outcome.
+24. Run a launcher stand-in that allocates and exits, with a peak-memory source that returns
+    123456789 bytes named `test_peak_source`, and read the evidence. Run it again with a source that
+    returns nothing, and read the evidence and the outcome.
+25. Run a launcher stand-in whose memory use would exceed the identity's memory ceiling if a runner
+    sampled it (it allocates twice the ceiling and exits successfully with a verified report) and
+    read the outcome. Run a run on a stand-in environment that offers no memory interface at all,
+    and read that it is not refused.
+26. Build the crate for `aarch64-apple-darwin` (`cargo check --target aarch64-apple-darwin --lib`)
+    and search the memory-evidence path for `/proc/`, `pidfd`, `rustix` and `cgroup`.
+
 ## Expected Results
 
 1. Each ceiling change changes the identity (FR-028-AC-1).
 2. The run is stopped and is `inconclusive` with the timed-out reason naming the ceiling, never
    verified or falsified (FR-028-AC-2).
-3. The run is stopped and is `inconclusive` with the memory-exhausted reason naming the ceiling
-   (FR-028-AC-3).
+3. See step 23: the environment's memory stop is classified from the backend's report, naming the
+   ceiling, and never as `timed_out` or as a verdict (FR-028-AC-3, FR-028-AC-25).
 4. Each evidence records every argument's bounds and both ceilings (FR-028-AC-4).
 5. Each names the family (FR-028-AC-5).
 6. The harness records proof subject `production` (FR-028-AC-6).
@@ -127,11 +141,7 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 17. The narrower refinement domain is refused naming the argument, with no harness (FR-028-AC-19).
 18. Each of the three shapes is refused with its disposition and reason, none emits a harness or a
     `production` fallback, and the supported item settles as it does alone (FR-028-AC-20).
-19. The child's excess kills the whole tree and settles `inconclusive` `memory_exhausted` naming the
-    ceiling, distinct from `timed_out`; each evidence names the mechanism and, where observed, the
-    peak;
-    the platform with no means refuses the run before the backend starts; the batch is killed
-    whole and refused as memory-exhausted with no member classified (FR-028-AC-21).
+19. SUPERSEDED by steps 23 to 26 (ADR-007); nothing to read.
 20. The always-true shadow is `Falsified`, the never-comparing subject settles `refinement_failed`,
     the independently read helper mutant settles `refinement_failed` and the same-helper mutant is
     caught by the independent check; the unmutated stand-in verifies and agrees (FR-028-AC-22).
@@ -140,6 +150,22 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 22. Each stopped refinement is stopped at its ceiling, records it, and yields
     `shadow_proved_refinement_inconclusive`; the refinement evidence is recorded beside the shadow
     run's (FR-028-AC-24).
+
+23. The run with the `out_of_memory` report is `FailedWithoutCounterexample` with `failureCause`
+    `out_of_memory`, and its terminal value is `Incomplete(ResourceExhausted)`; it is not `TimedOut`
+    and not a verdict. The SIGKILLed run with no report is `NoVerdict` (FR-028-AC-25).
+24. With the source returning 123456789, the evidence records exactly 123456789 and the name
+    `test_peak_source`. With the source returning nothing, the evidence records no peak (the member
+    is absent or null, not zero), and the run is not refused and classifies as it otherwise would.
+    A peak taken from the launcher process's own resident size, an estimate, or a zero fails
+    this step (FR-028-AC-21).
+25. The over-allocating stand-in is `Verified`: the runner measured nothing and killed nothing, so
+    the environment, not the runner, is the only thing that could stop it. The stand-in environment
+    with no memory interface runs and is not refused with `MemoryMechanismUnavailable`
+    (FR-028-AC-21). Both fail on main as of this specification.
+26. The crate compiles for the macOS target and the memory-evidence path contains none of the four
+    tokens. On main as of this specification the search finds `/proc/`, `pidfd` and `rustix` in
+    `memory.rs`, so the step fails until IR-1510 lands (FR-028-AC-21, FR-017-AC-67).
 
 ## Status
 
@@ -179,37 +205,14 @@ Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), 
 `tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and
 wall-clock ceilings.
 
-The process-tree part of step 19 (FR-028-AC-21) is implemented for the current execution entries
-with mandatory Linux PID-namespace ownership and a procfs resident-memory observer. Bubblewrap,
-permission to create the namespaces, and readable owned-process procfs observations are required;
-an unavailable mechanism refuses before backend dispatch. Gated startup claims the namespace init
-by pidfd and start identity. Startup abort kills the owned, still-pinned process group before the
-gate closes. Every run conclusion kills and confirms namespace-init teardown, including a completed
-backend whose orphaned descendants remain alive. The focused fixtures exercise double-forked and
-session-escaped children, and a descendant forked after the final memory sample.
-
-The observer follows the owned processes' task-child lists rather than scanning every host process
-on each sample. Evidence names `linux_pid_namespace_procfs_tree_rss` and records the largest observed
-sum of per-process RSS. Shared resident pages can appear in more than one process's RSS, so this is
-a conservative aggregate metric, not an instantaneous physical-memory footprint. Memory between
-samples is not claimed. A released thread-group leader's address space uses a live worker's RSS
-when available; ambiguous live-worker observation is refused rather than recorded as zero.
-
-AC-21's obligation to hold every run to its ceiling continues throughout execution. Losing memory
-observation or descendant ownership therefore stops the owned run and yields the typed
-`MemoryObservationFailed` refusal, even beside a valid success report. The real procfs-failure
-fixture backs this interpretation of the existing criterion; it adds no new normative obligation.
-The namespace startup allowance is a separate setup bound: its expiry refuses setup rather than
-attributing a timeout to an identity wall-clock ceiling that has not elapsed. All threads having
-released their address spaces permits an observed zero RSS; a live mm without readable RSS still
-refuses observation. Missing task `children` support is refused before dispatch, and a missing
-live task's `children` file is refused during execution.
-
-The ownership/teardown claim covers in-process conclusions and startup error/unwind paths.
-Abrupt caller SIGKILL, abort or OOM before the gate/PDEATH chain is fully armed can close the
-gate and release an unowned backend. That startup caller-death guarantee remains deferred to
-IR-639; it is not claimed by this partial delivery. No limit-only mechanism or bounded
-native-refinement execution is implemented or claimed here.
+The process-tree part of step 19 (the former FR-028-AC-21) is implemented in the current code with
+mandatory Linux PID-namespace ownership and a procfs resident-memory observer; bubblewrap,
+permission to create the namespaces and readable procfs observations are required, and an
+unavailable mechanism refuses before backend dispatch. ADR-007 withdraws that design: FR-028-AC-21
+is now environmental, and the memory-overage, observer, procfs, ancestry and gated-startup fixtures
+listed above test the runner-side mechanism that IR-1510 removes, so they are not evidence for the
+reworded criterion. The identity-ceiling and expired-deadline fixtures above are unaffected. Steps 23 to 26 are PLANNED/UNRUN under
+IR-1510.
 
 Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
 refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In

@@ -3,6 +3,8 @@ id: FR-017
 title: "Run bounded Kani obligations, singly or in a batch, and retain their evidence"
 type: FR
 relationships:
+  - target: ix://agent-ix/quire-contract-codegen/ADR-007
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-015
@@ -306,34 +308,21 @@ Text-admission identity rather than claiming a checked node or contract role.
   preceding crate-source lines. A satisfied cover classifies as verified only when a successful
   report check has class `assertion` and location `{ file: src/lib.rs, line: converted_line }`.
   A report with only an unrelated successful check is inconclusive, not verified.
-- The generator shall append `-Z`, `unstable-options`, `--export-json`, and `/proc/self/fd/N`, in
-  that exact order after the launched phase's unchanged identity option vector. `N` is the actual child-only mapped
-  anonymous report-pipe writer descriptor, at least 5. Evidence records these actual argument bytes,
-  not a synthetic target-directory pathname. All other argument bytes, stdin, environment and cwd
-  remain unchanged.
-- The generator shall use per-run unnamed kernel report storage and the collector obligations in
-  FR-034 AC-32 and AC-33. The generator shall create no target-directory report, pathname reader or
-  named fallback. This explicitly replaces the internal named-report allocation.
-- When actual pipe EOF contains zero bytes, the generator shall treat the run as exporting no
-  report: successful exit refuses as missing report; unsuccessful exit is `NoVerdict`, except an
-  independently established resource/deadline stop retains its existing resource classification.
-- When nonempty bytes end at actual EOF, the generator shall parse the complete bytes under the
-  existing schema rules. An independently established memory/resource or deadline stop takes
-  precedence over partial/malformed content, preserving the single-run resource outcome and
-  existing whole-batch resource/deadline refusal with no member classified. Otherwise, an
-  incomplete/malformed partial write refuses regardless of process exit; a valid full report
-  retains existing exit/report classification rules. EOF alone neither proves Completed nor
-  authorizes classification before confirmed owned cleanup.
-- When the live collector observes report-limit overflow, the generator shall cancel owned execution
-  and classify a single run as `KaniRunOutcome::Inconclusive` with
-  `KaniInconclusiveReason::MemoryExhausted` (`memory_exhausted`). Evidence shall name the 16 MiB
-  report-allocation cap separately from the original whole-run memory ceiling; no tree peak is
-  fabricated. A batch shall retain whole-batch memory-exhausted refusal with no member classified.
-  FR-029 maps this source reason to QSL `Incomplete(ResourceExhausted)`, never `Failed`. This is an
-  explicit outcome delta from the superseded named-reader `TooLarge` refusal, not a reinterpretation
-  of the unchanged legacy reader's current behavior.
-- When Completed is authenticated, the generator shall follow FR-034 AC-33's ordered final handoff,
-  verified immutable descriptor read and cleanup under the original deadline before classification.
+- The generator shall append `-Z`, `unstable-options`, `--export-json` and a report path, in that
+  exact order, after the launched phase's unchanged identity option vector. The path is in the
+  request's target directory and unique to the launch (the process id and a per-process sequence),
+  so launches sharing a directory never share a file. Evidence records these actual argument bytes.
+  All other argument bytes, stdin, environment and cwd remain unchanged.
+- When a launch starts, the generator shall remove any file left under that launch's own report
+  name, so a run that exports nothing is never read as an earlier one.
+- The generator shall never touch another launch's report file.
+- The generator shall read the exported report to at most 16 MiB and, if the file is larger, refuse
+  it with the typed `TooLarge` report refusal rather than truncate it, because a truncated report is
+  not a verdict. A report that was never written is a run that exported none: a successful exit
+  refuses as a missing report and an unsuccessful exit is `NoVerdict`.
+- When an independently established memory or deadline stop and a partial or malformed report meet,
+  the generator shall keep the existing single-run resource outcome and the existing whole-batch
+  resource or deadline refusal with no member classified.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
@@ -352,6 +341,23 @@ Text-admission identity rather than claiming a checked node or contract role.
   outcome, because an unread stream is not an empty one.
 - The generator shall leave no process the launcher started in its process group running when a
   run concludes, whether it timed out or the launcher exited on its own.
+- The generator shall start the launcher as the leader of a new process group of its own, never in
+  the caller's group, using only process-group and wall-clock facilities that Linux and macOS both
+  provide (FR-017-AC-65; PLANNED IR-1510, ADR-007).
+- When the wall-clock timeout elapses, the generator shall kill the launcher's whole process group,
+  descendants included, and return within the timeout plus a small fixed constant (FR-017-AC-66;
+  PLANNED IR-1510, ADR-007).
+- The generator shall use no namespace, bubblewrap, procfs, pidfd or cgroup facility to launch,
+  bound or clean up a run (FR-017-AC-67; PLANNED IR-1510, ADR-007).
+- The generator shall not claim to tear down a backend when its own caller is killed. The caller's
+  environment owns that cleanup and the memory cap ([ADR-007](../../decisions/ADR-007-minimal-kani-run-ownership.md),
+  [FR-028](./FR-028-bounded-proof-ceilings.md) AC-21).
+- Where this requirement reads a run stopped on its memory ceiling, the stop is the one FR-028-AC-21
+  and FR-028-AC-25 describe: the caller's environment ends the backend and the generator recognises
+  it only from the backend's own report. The runner-measured memory stop and its `MemoryExhausted`
+  evidence, the `MemoryMechanismUnavailable`, `MemoryObservationFailed` and `BatchMemoryExhausted`
+  refusals, and the `LinuxPidNamespaceProcfsTreeRss` mechanism name are PLANNED for removal under
+  IR-1510; this specification amendment changes none of them in the code.
 - Where harnesses are run as a batch, the generator shall group them by equal proof option vector (the
   harness selection removed) and equal identity `ProofCeilings` (both `wall_clock` T and
   `memory_bytes`), and start one launcher process per group.
@@ -489,32 +495,6 @@ Text-admission identity rather than claiming a checked node or contract role.
   witness phase's console as a payload only, after the witness report names a failed property check, and pass it
   through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is
   never the counterexample.
-
-### Owned namespace nonconfirmation observations
-
-When the existing confirmation poll on a claimed init pidfd succeeds but its returned readiness
-lacks `IN`, the namespace owner SHALL retain the observed return count, raw readiness bits and
-monotonic elapsed duration of that single poll in its cleanup error detail. The owner SHALL also
-retain its already captured init host PID and start ticks, captured wrapper PID or explicit absence,
-init-handle presence, gate presence and cleaned state at that failure. Field labels SHALL distinguish
-poll duration from the duration of the whole cleanup. These are observations of the failed attempt,
-not a diagnosis of why readiness was absent; later `Drop` cleanup cannot replace them.
-
-The diagnostic SHALL propagate through the existing `namespace cleanup failed:` detail of public
-`MemoryObservationFailed`, retaining the `namespace teardown was not confirmed` prefix of the
-nested cleanup error. It introduces no verdict, receipt field or new refusal discriminant. The
-owner SHALL derive identity and state fields only from its existing owned values, without reopening
-a PID, rescanning procfs/cgroups, replacing the claimed pidfd, or inventing wrapper start ticks,
-namespace identity or failure-time host state.
-
-The owner SHALL preserve the existing init-pidfd KILL then wrapper-group KILL order, the single
-confirmation poll with timeout `(5 seconds, 0 nanoseconds)` per cleanup invocation, and the existing
-signal-error, poll-error and missing-readiness precedence. A syscall error SHALL retain its existing
-error kind and errno. Only successful confirmed cleanup may close the gate and mark the owner
-cleaned; failure retains the existing state and `Drop` behavior, including its cleanup retry. Public
-refusal over competing cancellation remains as specified by
-[FR-040](./FR-040-cancellation-producer.md) AC-4. This diagnostic adds no wait, retry, skip or timeout
-adjustment, and does not deliver the caller-death supervisor or establish the cause of IR-877.
 
 ### NoVerdict diagnostics
 
@@ -875,7 +855,7 @@ The private observer is an isolated, unpublished resolver-2 package. Its explici
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has the whole group the launcher leads killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result in a single run, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
-| FR-017-AC-19 | The generator appends `-Z unstable-options --export-json /proc/self/fd/N` after each launched phase's unchanged identity option vector (proof or witness), with actual child-only anonymous pipe writer N >= 5, and records the actual argv bytes. It uses per-run unnamed report authority, never a named target-directory report or fallback. FR-034 AC-32/33 own collector bounds, resource-stop classification, kernel lifetime and immutable final handoff. Zero-byte EOF means no exported report; nonempty partial/malformed content is refused under AC-18 unless an independently established resource/deadline stop takes precedence with the existing single-run or whole-batch classification. | Test (TC-027) |
+| FR-017-AC-19 | The generator appends `-Z unstable-options --export-json <path>` after each launched phase's unchanged identity option vector (proof or witness), where `<path>` is a launch-unique file in the request's target directory, and records the actual argv bytes. It removes a stale file under that exact name before the launch, never touches another launch's file, reads the report to at most 16 MiB and refuses a larger one as `TooLarge` rather than truncating it. A report never written is a missing report on a successful exit and `NoVerdict` on an unsuccessful one; nonempty partial or malformed content is refused under AC-18 unless an independently established resource or deadline stop takes precedence with the existing single-run or whole-batch classification. This is the current code; the unnamed `/proc/self/fd/N` storage once planned for it (the guardian design) is withdrawn under ADR-007. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 | FR-017-AC-21 | Proof-phase grouping is covered, and the witness-phase grouping is covered over launcher stand-ins (IR-1022, #776). N harnesses with equal option vectors for the phase launched (proof vectors for the proof phase, witness vectors for a witness phase; the harness selection removed) and equal identity `ProofCeilings` (`wall_clock` T and `memory_bytes` M) start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. Requests whose wall-clock or memory ceilings differ start separate processes. The group's process tree is held to one aggregate M; memory exhaustion kills and refuses the whole group with no member classified. The group's outer wall-clock bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` identity ceiling) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
 | FR-017-AC-22 | Over a real or captured batch report, members are matched by `module::harness` path (two members with the bare symbol `check` stay distinct), and each member's outcome, checks and SUCCESS count come from its own entry: a member held for its witness phase beside a verified member leaves the verified member verified, and a witness-group falsified member beside a verified one leaves it verified (witness grouping, IR-1022); a Success member in a non-zero exit with no Failure entry is inconclusive, and with one Failure entry is verified; a Failure entry with no checks and exit status `timeout` is inconclusive timed-out naming T while the others keep their results; a Failure entry with no checks and no timeout is inconclusive with no counterexample (a proof-phase Failure entry that lists a failed property check is held for its witness phase instead, IR-1022); each member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and checks plus the group's argument vector, the member list, a statement that it was a batch, and the exit code. | Test (TC-043) |
@@ -910,9 +890,12 @@ The private observer is an isolated, unpublished resolver-2 package. Its explici
 | FR-017-AC-51 | A consumer compile test names and constructs `quire_contract_codegen::ScalarLimits` using only codegen crate paths, a typed accessor to `KaniScalarNativeRequest::scalar_limits` compiles with that same return type, and assignment to the owning `quire_exact::ScalarLimits` compiles without conversion, wrapper or compatibility shim. The CG public name and field shape remain unchanged. Planned with IR-17 kernel adoption. | Test |
 | FR-017-AC-52 | Production emitted bytes and feature-free exact dependency remain unchanged. The isolated private observer uses resolver 2 and its sole example compiles the single canonical adapter in place through `../src/bin/ir791_native.rs`, with runtime `exact` and kernel `test-support` exposed only by dev-dependencies; no wrapper, copied source, symlink, normal/build logging edge or CLI feature override is allowed. Native invocation explicitly names `observer/Cargo.toml` and the example; the real production proof retains its harness, ordered options, claims, covers, bounds and backend gates. A control removing the dev feature fails observer compilation; production library/proof target validation succeeds without it. Actual meter output supplies limits, counters and ordered charges. | Test |
 | FR-017-AC-53 | RETIRED WITH REPLACEMENT FR-017-AC-62. The source-identity comparison is withdrawn; the independently resolved package, repository and version checks, typed refusal and complete staged-byte custody are specified by AC-62. This identifier remains in trace history without active coverage credit. | Inspection |
-| FR-017-AC-54 | A successful claimed-init confirmation poll with no `IN` yields public `MemoryObservationFailed` with the existing outer and nested prefixes and labelled observations of that attempt: returned poll count, raw revents bits, monotonic poll elapsed duration with its unit, captured init PID/start ticks, captured wrapper PID or explicit absence, init-handle presence, gate presence and cleaned state. Test controls through the existing `PollOperation` seam delegate first to real poll on the real owned pidfd, record its positive count and `IN`, then clear revents and return either zero or that genuine positive count. For both controlled omissions the diagnostic matches the returned count and cleared bits, the captured identities and failure state; elapsed is measured without a timing lower-bound assertion. The original failed-attempt diagnostic survives a subsequent successful real `Drop` confirmation. These controls are labelled injected observation omissions, not naturally reproduced timeouts. | Test |
-| FR-017-AC-55 | Through the real public execution entry and real owned namespace, an unchanged real-poll control retains its original public result and confirmed cleanup; each AC-54 omission refuses even when cancellation is submitted before or after the cleanup barrier. The confirmation seam sees the same claimed pidfd and exactly one poll with timeout `(5, 0)` per cleanup invocation. Failure retains gate/cleaned state and the existing `Drop` retry, and actual backend processes/namespace are gone after return. The existing real-poll-delegating errno control retains its public refusal rather than cancellation evidence. | Test |
-| FR-017-AC-56 | Inspection of the cleanup change shows that init-pidfd KILL still precedes wrapper-group KILL, the single confirmation poll retains its `(5, 0)` timeout, signal-error/poll-error/missing-readiness precedence is unchanged, syscall errors retain their original kind and errno, and only successful cleanup closes the gate and marks cleaned. Existing `Drop` behavior is unchanged. Diagnostic observations come only from that poll and existing owned fields; no added wait, retry, skip, PID reopen, procfs/cgroup rescan or invented host-state field is introduced. | Inspection |
+| FR-017-AC-54 | RETIRED, no replacement (ADR-007). It specified diagnostics of the namespace owner's init-pidfd confirmation poll; the namespace owner is removed by IR-1510, so there is nothing left to observe. The code and the two tests tagged FR-017-AC-55 (in `namespace.rs` and `execute.rs`) are deleted with it by IR-1510; until that slice lands they remain in the code. | Not applicable |
+| FR-017-AC-55 | RETIRED, no replacement (ADR-007). It specified diagnostics of the namespace owner's init-pidfd confirmation poll; the namespace owner is removed by IR-1510, so there is nothing left to observe. The code and the two tests tagged FR-017-AC-55 (in `namespace.rs` and `execute.rs`) are deleted with it by IR-1510; until that slice lands they remain in the code. | Not applicable |
+| FR-017-AC-56 | RETIRED, no replacement (ADR-007). It specified diagnostics of the namespace owner's init-pidfd confirmation poll; the namespace owner is removed by IR-1510, so there is nothing left to observe. The code and the two tests tagged FR-017-AC-55 (in `namespace.rs` and `execute.rs`) are deleted with it by IR-1510; until that slice lands they remain in the code. | Not applicable |
+| FR-017-AC-65 | PLANNED (IR-1510; ADR-007). The launcher is started as the leader of a new process group, so its process group id equals its process id and differs from the caller's, by a call that exists on Linux and macOS. A launcher stand-in that reports its own process group id shows it is not the caller's. Killing the launcher's group never signals the caller: the calling test process is still running afterward. | Test (TC-043) |
+| FR-017-AC-66 | PLANNED (IR-1510; ADR-007). When the wall-clock timeout elapses, a launcher stand-in that has started a descendant in its group (and a grandchild of that descendant) and does not exit is killed together with every one of them, the run returns `TimedOut` within the timeout plus a fixed constant, and a descendant that wrote a heartbeat file stops writing it. Signalling only the launcher's own process id leaves the descendant running and fails the control. FR-017-AC-14 and FR-017-AC-24 state the same kill for the output limit and for a launcher that exits on its own. | Test (TC-043) |
+| FR-017-AC-67 | PLANNED (IR-1510; ADR-007). The launch, timeout and cleanup path in `src/kani/run/` names no bubblewrap, `unshare`, user or PID namespace, `/proc` path, pidfd or cgroup facility (the portable `poll` of the output capture is not one), and the crate checks for a macOS target (`cargo check --target aarch64-apple-darwin`) with no Linux-only item in that path. Today's `namespace.rs`, the pidfd confirmation in `owners.rs` and the `memory.rs` procfs sampler fail this control. | Analysis (TC-043) |
 | FR-017-AC-57 | PLANNED (IR-917). The public `execute_kani_concrete_playback(&KaniExecutionRequest, &KaniConcretePlayback) -> Result<KaniConcretePlaybackOutcome, KaniExecutionRefusal>` accepts only a seal-validated V2 clause harness; a Contract, Scalar, StateFrame or Collection harness refuses before launch as `ConcretePlaybackUnsupportedHarness { harness_path }`. For an accepted harness, `test_name` is the exact libtest `module::function` path and `appended_test` is one complete parseable `#[test]` function. Invalid retained V2 harness provenance refuses as `HarnessProvenanceMismatch`; a missing, duplicated, malformed, wrong-module or wrong-function appended test, an absent or unreadable `src/lib.rs`, or source from which removing the one exact appended byte span does not restore the unique full sealed rust artifact (header, oracle source and module) byte for byte refuses as `ConcretePlaybackSourceMismatch`. That span sits immediately before the generated module's closing brace, outside the proof function, and includes the complete test attributes, signature, body and separators; altering oracle bytes outside the module also refuses. Each refusal precedes backend launch and confers no proof credit. | Test (TC-027) |
 | FR-017-AC-58 | PLANNED (IR-917). For admitted concrete playback CG runs `kani playback --lib -Z function-contracts -Z concrete-playback -- <test_name> --exact --nocapture` through the existing owned bounded launcher with the request's installation, target directory, cancellation handle and harness-identity wall-clock/memory ceilings; `--lib` selects one library test target, and `-Z function-contracts` repeats the proof compilation option as Kani requires for playback. Stdout and stderr retain the existing one-harness limits and over-limit/unread typed refusals. A concluded process that passes AC-59's successful-exit guard, or that exits unsuccessfully, returns `Completed { succeeded, exit_code, stdout, stderr, memory }` with the observed values; timeout, cancellation and memory exhaustion return distinct `TimedOut { memory }`, `Cancelled { source, memory }` and `MemoryExhausted { memory }` outcomes with owned teardown. No result is a Kani proof verdict or changes the prior sealed proof identity. | Test (TC-027) |
 | FR-017-AC-59 | PLANNED (IR-917). A successfully exited concrete-playback process yields `Completed { succeeded: true, .. }` only if its bounded stdout has one intact exact libtest pass line for the selected test (plain `test <name> ... ok` or expected-panic `test <name> - should panic ... ok`) and exactly one compatible summary `test result: ok. 1 passed; 0 failed;` from the selected library target. A zero-match success, another or duplicate summary, another test name, or `--nocapture` text interleaved through the selected pass line refuses as `ConcretePlaybackTestNotObserved { test_name }`; the parser fails closed rather than inferring a pass from partial text. An unsuccessfully exited process remains `Completed { succeeded: false, .. }` with its actual exit code and bounded streams, but that outcome alone never attributes a generated assertion failure: build/dependency failure, another failing test and pre-test crash are possible, and a caller must independently identify the selected generated check before claiming its failure. Neither outcome is a proof `Falsified` verdict. | Test (TC-027) |

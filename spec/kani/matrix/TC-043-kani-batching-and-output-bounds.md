@@ -16,9 +16,11 @@ truncated, that a capture failure is refused, and that no launcher descendant ou
 (IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
 `NoVerdict` group never feeds classification (FR-017-AC-36), and that a batch member's CBMC failure
 cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
-FR-028-AC-12, verified by TC-039. The planned IR-877 observational slice checks owned namespace
-nonconfirmation diagnostics and unchanged cleanup/refusal semantics (FR-017-AC-54/55); it does not
-claim a natural recurrence or causal fix for the intermittent failure.
+FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 17, planned
+under IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
+with its descendants, and that the launch path has no Linux-only dependency. The former
+namespace-confirmation diagnostics (FR-017-AC-54 to FR-017-AC-56) are retired with the namespace
+owner.
 
 ## Test Procedure
 
@@ -66,17 +68,20 @@ claim a natural recurrence or causal fix for the intermittent failure.
     same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
 13. (FR-029-AC-33, planned under IR-848.) Pass the evidence of `c::check` and of `d::check` from
     step 12 to `run_terminal_value`.
-14. (FR-017-AC-54/55, planned under IR-877.) Drive the real public execution entry with a
-    launcher stand-in and a genuine owned namespace, using the existing confirmation
-    `PollOperation` seam. First run an unchanged control delegating to real poll. In two adverse
-    modes, delegate the first confirmation to real poll on the supplied pidfd and timeout, record
-    its positive count and `IN`, then clear revents and return respectively zero or the genuine
-    positive count. These modes are injected observation omissions. Delegate the subsequent
-    `Drop` confirmation unchanged to real poll. For each adverse mode submit cancellation both
-    before and after the cleanup barrier, retaining the first failed observation. Keep the existing
-    real-poll-delegating errno control as a regression. Record supplied timeout, owned identities
-    and state and actual backend disappearance; do not sleep for five seconds, alter the allowance,
-    reopen a PID or rescan host state to fill fields.
+15. (FR-017-AC-65, planned under IR-1510.) Launch a launcher stand-in that prints its own process
+    id and process group id, and one that sleeps. Read the process group id of each and of the
+    test process. Kill the sleeping stand-in's group through the run's group kill and read that the
+    test process is still running.
+16. (FR-017-AC-66, planned under IR-1510.) Under a 1 s wall-clock ceiling, launch a stand-in that
+    starts a descendant in its group, which starts a grandchild in the same group, each appending one
+    byte to its own heartbeat file every 50 ms, and then waits. Read the outcome and the elapsed time
+    of the call, then the sizes of both heartbeat files and, after three heartbeat intervals, the sizes
+    again. Repeat with a stand-in whose descendant ends its own heartbeat by exiting before the
+    timeout, as a control that the files are read after a real stop.
+17. (FR-017-AC-67, planned under IR-1510.) Search `src/kani/run/` for `bwrap`, `unshare`,
+    `pidfd`, `rustix::process::pidfd`, `CLONE_NEW`, `/proc/` and `cgroup`, and run
+    `cargo check --target aarch64-apple-darwin --lib`. Then copy the directory to scratch, add each
+    of those tokens in turn as a use or literal in the launch path, and repeat both reads.
 
 ## Expected Results
 
@@ -134,23 +139,18 @@ claim a natural recurrence or causal fix for the intermittent failure.
     `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
 13. Both are `Incomplete(TimedOut)`: `c::check` through the timed-out row, `d::check` through its
     cause `timeout` (FR-029-AC-33).
-14. The normal control preserves its original public result and real confirmed cleanup. Both
-    controlled omissions return typed `MemoryObservationFailed`, including when cancellation
-    competes on either side of the barrier. The detail retains `namespace cleanup failed:` and
-    `namespace teardown was not confirmed` and decodable labelled fields for count, raw revents,
-    poll elapsed duration/unit, captured init PID/start ticks, wrapper PID or explicit absence,
-    init-handle presence, gate presence and cleaned state. The fields match the exact first failed
-    attempt: count zero or the recorded real positive count respectively, missing `IN`, existing
-    captured identities, handle present, gate unchanged and cleaned false. Assert a nonnegative
-    measured elapsed duration without a wall-clock lower bound. The seam independently observes
-    real positive readiness before injection and real confirmation on the next `Drop` attempt;
-    the later success does not overwrite the returned failure detail. The same claimed pidfd,
-    one `(5, 0)` poll per cleanup invocation and original public errno refusal remain unchanged.
-    Actual backend processes and namespace are gone when the call returns. No proof is accepted
-    after nonconfirmation. This
-    establishes diagnostic plumbing and unchanged refusal semantics only, not a kernel timeout,
-    host-state diagnosis, causal fix or completion of IR-877 (FR-017-AC-54/55;
-    [FR-040](../functional/FR-040-cancellation-producer.md) AC-4).
+15. Each stand-in's process group id equals its own process id and differs from the test
+    process's; the test process is still running after the group kill. A launcher left in the
+    caller's group (its group id equals the test process's) fails this step (FR-017-AC-65).
+16. The call returns `TimedOut` within the 1 s ceiling plus the fixed constant. Both heartbeat
+    files stop growing: their sizes after three further intervals equal their sizes at return. The
+    control's files stop at its descendant's own exit. Killing only the launcher's process id leaves
+    both heartbeat files growing and fails this step (FR-017-AC-66).
+17. The search finds none of the tokens and the macOS-target check compiles. Each of the seven
+    injected tokens makes the search find it, and the injected pidfd use makes the macOS-target check
+    fail. On main as of this specification, the search finds `bwrap`, `unshare` and `pidfd` in
+    `namespace.rs`, `owners.rs` and `memory.rs`, so the step fails until IR-1510 lands
+    (FR-017-AC-67).
 
 ## Implementation
 
@@ -204,14 +204,20 @@ Step 12 (FR-017-AC-39) is covered by
 `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
 `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
-Step 14 is planned under IR-877; its new observation criteria are not implemented or qualified by
-this specification amendment. Existing cleanup and cancellation controls remain regressions, not
-evidence that the new successful-poll/no-`IN` branch is already covered.
+Steps 15 to 17 are planned under IR-1510 and are not written. The shell-script launcher stand-ins
+of `batch_tests` and the `tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` test
+(step 3) are the models: step 16 is the same stand-in with a wall-clock ceiling in place of the
+launcher's own exit, and its heartbeat files are read through the filesystem, never by a PID reopen.
+Step 17 is an Analysis control: a `scripts/` check run by `make ci` with the scratch-copy mutants
+beside it. The macOS-target check needs the target's standard library installed
+(`rustup target add aarch64-apple-darwin`); it compiles and links nothing, so it needs no macOS host.
 
 ## Status
 
 Implemented for FR-017 batching and output bounds (IR-277). Identity memory-ceiling separation is
 covered by `unequal_identity_memory_ceilings_run_in_separate_backend_processes` and
 `unequal_memory_ceilings_plan_separate_groups_with_their_own_selections` in
-`src/kani/run/execute.rs`; grouped aggregate memory exhaustion is covered under TC-039
-(FR-028-AC-21).
+`src/kani/run/execute.rs`. The runner-measured grouped memory exhaustion once covered under TC-039
+(FR-028-AC-21) is withdrawn with the runner-side mechanism (ADR-007).
+
+Steps 15 to 17 (FR-017-AC-65 to FR-017-AC-67, ADR-007) are PLANNED/UNRUN under IR-1510.

@@ -55,7 +55,8 @@ FR-031 and FR-041 by gating a change that can alter what real Kani proves on the
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
 generators, the input model, the backend adapter, Kani tractability and the generated subject ABI.
-ADR-005 records the open original guardian-gate architecture decision and its activation hold.
+ADR-005 records the original guardian-gate analysis and is superseded by ADR-007, the minimal Kani
+run ownership decision (process group, wall-clock timeout, environment-owned memory cap).
 ADR-006 proposes the distinct caller Text-admission route and scopes ADR-001's checked-package
 input decision to expression and contract claims.
 The planned direct-owner migration in
@@ -87,7 +88,7 @@ scalar proof qualification are distinct, both still required.
 | Production ContractPackage consumption | [FR-039](core/functional/FR-039-contract-package-consumption.md) one admitted FR-330 package for negotiation and generation | [TC-053](core/matrix/TC-053-contract-package-consumption.md) planned production integration checks |
 | Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
-| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) live caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) tagged cancellation path |
+| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-040](kani/functional/FR-040-cancellation-producer.md) live caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-055](kani/matrix/TC-055-cancellation-producer.md) tagged cancellation path |
 | Finite rational function predicates | [FR-046](kani/functional/FR-046-rational-function-predicate-harnesses.md) planned whole-function proof and canonical finite encoding | [TC-060](kani/matrix/TC-060-rational-function-predicate-harnesses.md) planned generated-proof and replay controls |
 | IEEE float scalar operation harnesses | [FR-053](kani/functional/FR-053-float-scalar-harnesses.md) planned float comparison and arithmetic proof row (conditional on IR-1446 and IR-69; `sqrt` and `fma` also on IR-1502) | [TC-067](kani/matrix/TC-067-float-scalar-harnesses.md) planned proof and mutant controls |
 | Text scalar comparison harnesses | [FR-052](kani/functional/FR-052-text-scalar-harnesses.md) planned text comparison proof row with a payload-byte bound (conditional on IR-1445, IR-1499 and, for normalizing profiles, IR-1500 and IR-1501) | [TC-066](kani/matrix/TC-066-text-scalar-harnesses.md) planned proof and mutant controls |
@@ -106,6 +107,8 @@ scalar proof qualification are distinct, both still required.
 FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
 FR-021's.
+The numbers FR-034 and TC-049 (caller-death guardian ownership, IR-639) are retired under
+[ADR-007](decisions/ADR-007-minimal-kani-run-ownership.md) and are not reused.
 The formerly reserved `FR-020` number is retired as a separate temporal or
 protocol semantic-oracle owner ([AD-001](assurance/AD-001-codegen-architecture.md)).
 QSL owns temporal meaning and monitor-plan derivation; RT's monitor execution
@@ -152,7 +155,7 @@ source tree and crate-root re-exports, is:
 | `kani/generate/corpus/{mod.rs,bounded_kani_corpus.rs}`; `generate_bounded_kani_corpus_case` and its public request/result types | FR-015-AC-51 to AC-58, AC-90 to AC-95, AC-109 to AC-111 and AC-123 until AC-111 | Live graph/collection finite-input corpus. Arithmetic retired at AC-109; collection AC-110 and graph/final API AC-111 remain planned, gated as those criteria state. Corpus replay and the API's AC-123 direct-result obligation persist until AC-111. |
 | `kani/generate/lower/{mod.rs,bounded_kani_profile.rs,finite_reference_graphs.rs,bounded_collections.rs}`; `classify_bounded_kani_profile`, `prepare_finite_graph_reaches`, `prepare_bounded_collection_query` and public types | FR-015-AC-82 to AC-89, AC-109 to AC-111 and AC-123 while each operation remains | Remaining finite-input auxiliaries are live. The collection lowerer and its AC-123 direct-result obligation retire at AC-110; graph/profile lowerers and module entry retire at AC-111, ending the graph operation's AC-123 direct-result obligation. |
 | `kani/{abi,identity}.rs` and the public Kani ABI, identity and harness types | FR-015 proof identity; FR-025 generated subject ABI; FR-028 ceilings | Live support vocabulary. Composite leaf ABI remains planned. |
-| `kani/run/{execute,harness,launch,memory,namespace,owners,process,report_file,scalar,tool,mod.rs}` and the public execution, native scalar, process, tool and memory operations/types | FR-017 execution/evidence; FR-028 ceilings; FR-034 caller-death ownership; FR-040 cancellation producer; NFR-006 lane | Live bounded run and report handling. FR-040 caller cancellation is live through `KaniExecutionRequest.cancel`, bounded launcher observation and typed cancellation results (IR-701, CG #383). FR-034 original-caller guardian remains planned; existing launch ownership does not complete it. |
+| `kani/run/{execute,harness,launch,memory,namespace,owners,process,report_file,scalar,tool,mod.rs}` and the public execution, native scalar, process, tool and memory operations/types | FR-017 execution/evidence; FR-028 ceilings; FR-040 cancellation producer; NFR-006 lane | Live bounded run and report handling. FR-040 caller cancellation is live through `KaniExecutionRequest.cancel`, bounded launcher observation and typed cancellation results (IR-701, CG #383). The namespace owner (`namespace.rs`, `owners.rs`), its procfs resident-memory sampler (`memory.rs`) and the bubblewrap launch are PLANNED for removal under ADR-007 and IR-1510; until that code slice lands they remain the live path. |
 | `kani/output/{diagnostics,playback,report,mod.rs}`, `kani/classify.rs` and the public parse/classification/report types | FR-017 output and verdict classification; FR-016 playback decode; FR-024 state-clause replay intake through `parse_state_clause_falsification` | Live output processing, playback extraction and the public FR-024 parser added by CG #605. |
 | `kani/terminal.rs` and public terminal-map operations | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned under FR-026. |
 | `kani/generate/role_parity_tests.rs` and `kani/test_support.rs` | FR-014-AC-38 and FR-015-AC-60/68; FR-015/FR-017 tests using shared helpers | Test-only role parity and fixture helpers. |
@@ -169,8 +172,7 @@ AC-1 to AC-7. FR-041's module discharge and mutation controls remain Open:
 the fixed V1 claim inventory, its held row, and its coupled test were retired.
 `scripts/cg_gates.rs` and `tests/it/kani_gate.rs` retain the separate NFR-006
 real-Kani lane controls. FR-041's V2 implication and historical FR-003@4
-claims (AC-6 to AC-10) remain planned. FR-034 and
-FR-046 and FR-050 retain planned obligations without a completed implementation claim here.
+claims (AC-6 to AC-10) remain planned. FR-046 and FR-050 retain planned obligations without a completed implementation claim here.
 FR-015's V2 contract/invariant, composite and graph obligations remain planned
 or partial where their individual criteria say so.
 The computed matrix supplies trace-tag status, not a proof verdict: a tagged

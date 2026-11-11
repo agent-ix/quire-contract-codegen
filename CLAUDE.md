@@ -25,17 +25,16 @@ make ci               # every local gate above except build and clean
 targets that resolve dependencies (`lint`, `test`, `build`, `msrv`, `kani`, `rustdoc`); override
 it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--locked` wrong.
 
-## Bounded Kani execution prerequisites
+## Bounded Kani execution
 
-The bounded execution API requires Linux, readable procfs RSS and task `children` files
-(`CONFIG_PROC_CHILDREN`), pidfd support, and bubblewrap (`bwrap`) supporting `--unshare-user`,
-`--unshare-pid`, `--info-fd` and `--block-fd`. The host must permit creation of user and PID
-namespaces; AppArmor restrictions can deny this even when bubblewrap is present. `make tools`
-installs the Rust/Kani tools; it does not install bubblewrap or alter host namespace policy.
-Missing or denied support returns `MemoryMechanismUnavailable` before backend dispatch;
-unsupported setup never dispatches the backend. In-process conclusions and startup errors
-confirm owned teardown. Caller SIGKILL/abort/OOM before the startup gate/PDEATH chain is fully
-armed can still release an unowned backend; IR-639 owns the deferred caller-death supervisor.
+The bounded execution API starts Kani as the leader of its own process group, keeps a wall-clock
+timeout and kills the group on timeout, and reports peak memory only when the environment provides
+it (ADR-007; FR-017-AC-65 to AC-67, FR-028-AC-21). The caller's environment owns any memory cap, for
+example `systemd-run -p MemoryMax=16G`; the runner does no cap check. It needs no namespace,
+bubblewrap, procfs or pidfd support and runs on Linux and macOS. `make tools` installs the Rust and
+Kani tools. IR-1510 removes the earlier bubblewrap/namespace path; until it lands, the code still
+requires Linux, bubblewrap and permission to create user and PID namespaces, and a run killed with
+its caller can leave the backend running.
 
 ## Safety scaffolding
 
