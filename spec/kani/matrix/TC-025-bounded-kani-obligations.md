@@ -573,8 +573,8 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     harness generates other identifiers; and a changed occurrence, kind, parameter name or domain,
     or state-field read declaring node, field name or domain refuses with the named record member
     and no harness, on the scalar route and on the whole-object collection route, including ahead
-    of a render refusal. The sequence-field read domain and the NodeKey binding are open under
-    IR-1515.
+    of a render refusal. The sequence-field read domain, the unread drawn fields and the NodeKey
+    binding are specified by steps 52 and 53 below (planned).
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
@@ -904,6 +904,45 @@ with the required author `make kani-gate`; independent review and final acceptan
     and FR-017-AC-64 rows of `tests.md` for the tokens listed in FR-017-AC-64 (none may appear)
     and for the phrase `enumeration evidence`; a record renderer printing `Proved` must fail. The
     symbolic proof remains IR-1509.
+
+## AC-48 obligation-record gaps (planned, IR-1515 spec; code IR-1517, IR-1518)
+
+52. Whole-object collection clause, FR-015-AC-133 and FR-015-AC-134. Author a fixture whose
+    object declares three fields: `items`, a sequence of 0 to 3 elements each `Int[0, 9]`, read by
+    the clause; `grid`, a sequence of 0 to 3 elements each a sequence of 0 to 2 elements each
+    `Int[0, 9]`, not read by the clause; and `count`, `Int[0, 5]`, not read. Write every claim record
+    by hand from the fixture source (never copied from a `V2ClauseClaimMismatch` the generator
+    returned), and assert before each case that the hand-written record lists the fields the case
+    intends, so an empty or partial record cannot pass. Cases, each against the same independently
+    selected clause: (a) control, the record with all three reads at their declared domains is
+    admitted and a harness is generated; (b) `items` element maximum 9 changed to 8, cardinality
+    unchanged: refuses `V2ClauseClaimMismatch` naming `StateReads`, no harness; (c) `grid` inner
+    element maximum 9 changed to 8, both cardinalities unchanged: same refusal; (d) `items`
+    cardinality maximum 3 changed to 2, element domain unchanged: same refusal; (e) the record
+    without the `count` read: same refusal; (f) the record with an extra `ghost` read the object
+    does not declare: same refusal. Mutants, each applied alone to `operation_selected_reads` in
+    `src/kani/generate/collection.rs`: M1, the `SymbolicBounds::Sequence` arm discarding `element`
+    (what the code does today), fails 52(b) and 52(c); M2, comparing only the outermost element and
+    treating a nested sequence's inner element as equal, fails 52(c) while 52(b) stays green; M3,
+    selecting only the fields the clause reads, fails 52(a) (the control is refused) and so
+    cannot hide behind 52(e); M4, adding a field the object does not declare to the selection,
+    fails 52(a) and 52(f) (FR-015-AC-133, FR-015-AC-134).
+53. NodeKey binding, FR-015-AC-135. Author a package with two clauses A and B on different
+    operations, request both with B listed first, each supplied with its own issued `NodeKey`
+    (the keys written by hand in the test, not derived from the node ids by production code),
+    and write each claim's record by hand. Cases: (a) control, A's claim carrying
+    `ObligationIdentity(NodeKey_A, no model, ordinal 0)` with A's record is admitted and the
+    carried identity equals the supplied one; (b) A's record with the identity of B
+    (`NodeKey_B`): refuses `UnsupportedObligation::V2ClauseNodeKeyMismatch` naming A, no harness,
+    and the refusal value holds neither key nor a selection; (c) A's record with `NodeKey_A`,
+    ordinal 1 and a different owning model: admitted, identity carried unchanged; (d) A's claim
+    with `NodeKey_B` and also a changed parameter domain: refuses `V2ClauseNodeKeyMismatch`, not
+    `V2ClauseClaimMismatch`, so the binding check runs first. Mutants at the new comparison in
+    `classify_v2_clause` (`src/kani/generate/negotiate.rs`): M5, skipping the comparison, fails
+    53(b) and 53(d); M6, comparing against the first requested clause's key instead of the
+    selected clause's, fails 53(a) (A is second) and 53(b); M7, comparing the whole
+    `ObligationIdentity` instead of the `NodeKey`, fails 53(c); M8, running the record comparison
+    first, fails 53(d) (FR-015-AC-135).
 
 ## Blocked
 
