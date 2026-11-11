@@ -60,3 +60,30 @@ CHANGES REQUIRED. What is right:
 | FND-005 | low | Public docs are stale for two-phase. The module doc, `execute_kani_obligation` and `execute_kani_obligations` do not mention the witness phase. `execute_kani_obligations` still says "each process has its own result, in order of its first member", but witness group runs are appended after the proof groups. `KaniGroupRun` still says "What one launcher process (one group) of a batch yielded", but a witness group's run now spans the proof process and the witness process, and a proof group's run may omit held members. | src/kani/run/execute.rs:875-912 |
 | FND-006 | low | The PR body says the proof vector "keeps `--slice-formula`". Neither vector contains a `--slice-formula` option: formula slicing is the backend default that concrete playback disables. The abi.rs doc comment states this correctly. The body also reports only the healthy proof's TimedOut and omits that the exact-999 mutant also timed out at about 600 s (13.4 GB), which the ticket comment does record. | PR #776 body |
 | FND-007 | medium | Merging can close IR-1022 with its acceptance unmet. The PR title is "IR-1022: ..." and the branch is `code/ir-1022-two-phase-run`. Linear's GitHub link moved IR-1022 to done when spec PR #771 merged, which is why the "Correction: reopened" ticket comment exists. The ticket's acceptance is installed Kani Verified for the healthy clause and Falsified with in-domain playback for the mutant. The PR's own measurement shows both TimedOut, so that acceptance is unmet. Fix: unlink or mark the PR as "Refs IR-1022" so merging does not complete the ticket, or have the lead reopen it immediately and record the unmet acceptance. | PR #776 title/branch |
+
+## Dispositions
+
+Round 1, verified at head 7e0d82b3, which is fix commit 7e0d82b3 on 2a793499, rebased onto origin/main f38f8024.
+
+**Test runs:**
+
+- **Baseline.** One focused cargo job with the mutants dormant. All of `kani::run`, `kani::terminal`, `kani::generate::spec`, `kani::abi` and `kani::classify` passed, except one failure caused by my own mutant scaffold. I fixed the scaffold and re-ran that test plus `batch_tests::two_phase` and `kani::run::scalar`: 33 of 33 passed.
+- **Mutants.** I selected each mutant at runtime with `MUT` in the same test binary. Patch at scratchpad `ir1022-review-mutants-round1.patch`, since reverted.
+
+**Mutant results:**
+
+- `mem_rec` (witness memory raised 1.5 times, recorded and enforced): caught by the recorded-ceiling assertions in (a) and (c).
+- `mem_enf` (witness memory raised 1.5 times, enforced only): caught by the "a-quarter-over" stand-in.
+- `wall_rec` (wall clock raised 1.5 times, recorded and enforced): caught.
+- `wall_enf` (wall clock raised 1.5 times, enforced only): caught by the "one-and-a-quarter" stand-in.
+- `merge` (witness grouping ignores ceilings): caught by `held_members_with_different_ceilings_form_separate_witness_runs`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The "a-quarter-over" stand-in is now a 24 MiB array, about 38 MiB as a tree, against a 32 MiB ceiling. The enforced-only 1.5 times memory mutant now fails it. |
+| FND-002 | fixed | `start()` now returns the ceilings it gave the launcher, and `with_launch` records them in the evidence. The recorded-and-enforced raise mutants fail the recorded-ceiling assertions. |
+| FND-003 | fixed | `code()` now delegates to the wrapped refusal, and the scalar table test covers OutputOverLimit, OutputUnread and PlaybackForNonMember. The class staying EnvironmentFault is correct under the spec: FR-017-AC-42 makes every nested refusal not listed an EnvironmentFault, and the FR-017 Behavior bullet for WitnessPhaseRefused states that class explicitly. |
+| FND-004 | fixed | The six report-fixture tests that expect a witness are now `#[cfg(target_os = "linux")]`. They are the only six `replaying_phases` users. |
+| FND-005 | fixed | The module, `execute_kani_obligation`, `execute_kani_obligations` and `KaniGroupRun` docs now describe the two phases and the order of the runs. |
+| FND-006 | fixed | The PR body no longer mentions `--slice-formula`. It now reports both TimedOut runs with their peaks. |
+| FND-007 | accepted-no-change | The title, body and commits now only reference the ticket ("refs IR-1022"), with no closing word. The branch `code/ir-1022-two-phase-run` still links the ticket. PR #771 (branch `spec/ir-1022-...`, no closing word) moved IR-1022 to done on merge, so a close on merge is still likely. The lead has accepted this and will reopen the ticket on merge. |

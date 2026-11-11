@@ -3095,6 +3095,46 @@ exit 0
         assert_eq!(evidence[1].outcome, vacuous);
     }
 
+    /// A V2 clause harness whose recorded witness vector, and only that, differs from the one its
+    /// generator sealed is refused before launch by every entry point (FR-015-AC-9).
+    #[trace("FR-015-AC-9", "TC-025")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_tampered_witness_vector_of_a_clause_harness_is_a_provenance_mismatch() {
+        let harness = runner_precondition_fixture("quire.op.collection.forall");
+        assert!(KaniExecutableHarness::from(&harness).has_valid_provenance());
+        let mut tampered = harness.clone();
+        tampered.identity.witness_options.push("--extra".to_owned());
+        assert_eq!(tampered.identity.options, harness.identity.options);
+        let stand_in = StandIn::scaffold("clause-tampered-witness-vector");
+        fs::write(
+            stand_in.crate_directory.join("src/lib.rs"),
+            &tampered.rust.contents,
+        )
+        .unwrap();
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&tampered).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(stand_in.calls().is_empty(), "nothing launched");
+    }
+
     /// Incomplete capture refuses the real public run even when a cancellation follows its bytes.
     #[trace("FR-040-AC-3", "FR-040-AC-4")]
     #[cfg(target_os = "linux")]
