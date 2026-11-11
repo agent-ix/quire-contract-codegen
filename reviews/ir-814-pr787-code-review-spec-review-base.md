@@ -88,3 +88,16 @@ satisfied by that Inspection. The new row text does not parse, however (FND-004)
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-004 | high | The FR-033-AC-16 row quotes `.map_err(|cause| ...)` inside a Markdown table cell; the unescaped pipes split the row, so `quire matrix --format json` reads statement "DELIVERED (IR-814; verified by Inspection of the single `.map_err(", method "cause", status untagged (was method-without-symbol / Inspection). `make spec` still exits 0, so the gate does not catch it | spec/replay/functional/FR-033-composite-parity-replay-binding.md:374 |
+
+## Dispositions (round 3)
+
+Round 3, head 0c6bfc8e. The diff a0e6976d..0c6bfc8e touches only the FR-033 AC-16 row and this
+review file. `make spec` exit 0. `quire matrix --format json` reads FR-033-AC-16 as method
+Inspection, status method-without-symbol, with the full statement. It reads AC-14, AC-15 and AC-17
+as method Test, tagged. Every table row the PR adds has the expected cell count: 3 in FR-033, and 4 and 6 in tests.md.
+No closure pipes remain.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-003 | fixed | AC-16 DELIVERED (Inspection) now parses as an Inspection criterion |
+| FND-004 | fixed | Row reworded without the closure; matrix reads method Inspection |
