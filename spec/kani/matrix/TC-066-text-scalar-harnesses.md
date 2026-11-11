@@ -136,7 +136,7 @@ Execute generated proofs only with the authorized runner and budget.
     `unicode-scalars`, `nfd` and `nfkd`, and that for `nfc` and `nfkc` the L_b unit is
     the first stable scalar in scalar order with the longest shorter decomposition
     that has an admitted final-byte variant. Assert the final-byte pair is found at L
-    and at L_b for every supported profile, the first-byte pair is found at L and at
+    and, when L_b is greater than 0, at L_b for every supported profile, the first-byte pair is found at L and, when L_b is greater than 0, at
     L_b for `binary-utf8`, `unicode-scalars`, `nfd` and `nfkd`, the length pair is
     built, and an absent first-byte pair for `nfc` or `nfkc` is recorded as absent.
     At `max` of 0 assert the family is the empty payload only. For `binary-utf8` at `max` of 1 assert L_b is 0, the empty payload is admitted by `Text[0, 1]`, only the length pair is built at L_b, and the final-byte and first-byte pairs are required at L only (a search that demands them at the empty L_b is a defect and fails the step). Run the mutants: L_b as
