@@ -53,10 +53,10 @@ that TC-030's IEEE-float scalar row settles today as `OperationNotRendered`, and
 specification part of the row that IR-260 implements. It is a planned row, not a new
 IR schema, a new oracle or a claim of current Rust support.
 
-Three prerequisites are named, and none is delivered. Every criterion that describes a
+Three prerequisites are named; P3 (IR-1502) is delivered and P1 and P2 are not. Every criterion that describes a
 supported harness is conditional on P1, the criteria about unbounded operands are
-conditional on P2, and the `sqrt` and `fma` parts of every criterion are conditional on
-P3.
+conditional on P2, and the `sqrt` and `fma` parts of every criterion were conditional on
+P3, which is delivered.
 
 - P1 (ticket IR-1446) is the quire-exact float carrier: a symbolic IEEE operand, and a
   native expression for the comparisons and for add, sub, mul, div, sqrt and fma at
@@ -77,13 +77,11 @@ P3.
   CG's own defensive check and nothing upstream backs it.
 - P3 (ticket IR-1502) is the FR-014 extension that derives and generates an oracle
   for `quire.op.ieee.float32.sqrt`, `.float64.sqrt`, `.float32.fma` and `.float64.fma`.
-  FR-014's code refuses these four identities as `OperationNotDerivable` today (FR-014-AC-72..80
-  specify the derivation and are planned), so no oracle
-  exists to prove. The owner supports both (`IeeeOperation::SquareRoot`,
+  Delivered under IR-1502: FR-014 derives and generates these four identities
+  (FR-014-AC-72..80, tagged and run under TC-024). The owner supports both (`IeeeOperation::SquareRoot`,
   `IeeeOperation::FusedMultiplyAdd`), and Contract IR catalogues both identities, so
-  the missing piece is CG's descriptor, derivation and renderer. Without P3 the `sqrt`
-  and `fma` items keep FR-014's `OperationNotDerivable` and this row proves nothing
-  about them.
+  CG's descriptor, derivation and renderer are those of FR-014. This row's proof of
+  them still depends on P1.
 
 The CG float ABI, the decoder and the replay grouping are IR-260's own implementation
 work under this requirement, not prerequisites. The IR-1436 review orders the Meter
@@ -343,7 +341,7 @@ or occurrence key.
 
 All supported-harness criteria are conditional on P1 (IR-1446). The unpinned-operand
 refusal of AC-3 is conditional on P2 (IR-69) for its upstream half. The `sqrt` and `fma`
-parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are conditional on P3 (IR-1502).
+parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are were conditional on P3 (IR-1502), which is delivered; they remain conditional on P1.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
@@ -352,7 +350,7 @@ parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are conditional on P3 (I
 | FR-053-AC-3 | An arithmetic node whose result is not typed by exactly one reachable `float_rounding` equal to the descriptor's rounding yields source-associated `requires-bound` (`RequiresBound` per FR-014-AC-25) or `MissingBound` (FR-014-AC-21, AC-23), `AmbiguousBound` (AC-22) or `BoundMismatch`, with no harness. A comparison or arithmetic operand whose type reaches no `float_rounding` yields source-associated `requires-bound` naming the operand's type node with no harness; upstream this is the `requires_bound` Contract IR raises once IR-69 lands, and until then it is CG's own check. A `float_rounding` that is unreadable yields named `unsupported` retaining its cause (FR-014-AC-16). No result bound is required, read or reported for a comparison, because a comparison has none. A `float_rounding` pin narrows no operand domain. | Test |
 | FR-053-AC-4 | For every supported operation the oracle and native expression agree on the typed outcome, the completed value's bits, flags and provenance (arithmetic) or Boolean (comparison), ordered charges, the denied next charge and consumed counters, at zero, exact and short budgets at each charge point the operation reaches on that input: `ieee.operands`, `ieee.exact-intermediate`, `ieee.round` and `ieee.result-retain` as the Behavior list orders them, with the arity of `sqrt` and `fma`. Classification-decided inputs (NaN, infinity, invalid operation, division by zero) charge only `ieee.operands` and `ieee.result-retain`. The reference neither runs the generated oracle twice nor bridges through Runtime. | Test |
 | FR-053-AC-5 | The reachable noncompletions are asserted as the agreed typed outcome and never assumed away: `Incomplete` at each charge point an input reaches, with a short budget for each limit kind that point charges (including `work_units`), and under `exact` `Refused(IeeeNotExact)` with the would-be flags for an inexact, overflowing or tiny-and-inexact finite result (`T1`, `MAXF + MAXF`, `SUBMIN x HALF`, `SQ1`), charging no `ieee.result-retain`. A division by zero and an invalid operation under `exact` are `Completed` with their flag and are not refused. No `Undefined` or comparison `Refused` control is drawn, because the owner produces none, and `DistinctIeeeWidths` is not a harness control. No cause is relabelled and a stopped outcome is never proved completed. The generated harness contains no assumption that depends on the outcome (inspected, as FR-046-AC-4). | Test |
-| FR-053-AC-6 | When P1 (IR-1446) is unavailable the item remains settled as TC-030's IEEE-float scalar row states, `OperationNotRendered` (`NoRenderer`), carrying no prerequisite name, with no harness and no Verified claim. A `sqrt` or `fma` item without P3 keeps `OperationNotDerivable`. An unsupported operand form, an absent native expression and a float leaf of a composite each keep their own named disposition, with total per-item accounting under FR-039 and an unchanged supported sibling. | Test |
+| FR-053-AC-6 | When P1 (IR-1446) is unavailable the item remains settled as TC-030's IEEE-float scalar row states, `OperationNotRendered` (`NoRenderer`), carrying no prerequisite name, with no harness and no Verified claim. A `sqrt` or `fma` item derives under FR-014 (P3 delivered) and, without P1, settles as TC-030's IEEE-float scalar row states. An unsupported operand form, an absent native expression and a float leaf of a composite each keep their own named disposition, with total per-item accounting under FR-039 and an unchanged supported sibling. | Test |
 | FR-053-AC-7 | A healthy float operation receives `Verified` only from an actual successful proof with all checks and exactly one final completion cover satisfied. Unsatisfied cover, failed unwind (including an unwind at or below the carrier's division or root loop bound), timeout, memory exhaustion or missing verdict cannot yield `Verified`, and FR-017 and FR-029 classifications are retained. A width, operation and rounding mode whose recorded run exceeds the request's memory or wall-clock ceiling settles `inconclusive` under FR-028, and none is reported verified by a run at a larger ceiling than the request's. | Test |
 | FR-053-AC-8 | Each comparison mutant below fails with actual solver playback of an in-domain input, caught by the listed operators at a point stated in the Behavior control points. (a) `numeric_equal` as bit equality: `numeric_equal`, over (`Z+`, `Z-`), expected true. (b) NaN reflexive in `numeric_equal`: `numeric_equal`, over (`QN0`, `QN0`), expected false. (c) `numeric_equal` ignoring the sign of a nonzero value: `numeric_equal`, over (`ONE`, `MONE`), expected false. (d) `bit_identical` as numeric equality: `bit_identical`, over (`Z+`, `Z-`), expected false, and over (`QN0`, `QN0`), expected true. (e) `bit_identical` canonicalizing a NaN: `bit_identical`, over (`QN1`, `QN2`). (f) `total_order` as signed integer comparison of the raw bits: `total_order`, over (`MONE`, `MTWO`), expected false. (g) `total_order` as unsigned comparison of the raw bits: `total_order`, over (`MONE`, `ONE`), expected true. (h) `total_order` equating the zeros: `total_order`, over (`Z+`, `Z-`), expected false. (i) `total_order` strict instead of precedes-or-equal: `total_order`, over (`ONE`, `ONE`) and (`QN0`, `QN0`), expected true. (j) `total_order` leaving NaN unordered: `total_order`, over (`INF+`, `QN0`) and (`NQN0`, `INF-`), expected true. (k) `total_order` equating all NaNs: `total_order`, over (`QN0`, `SN1`) expected false, and (`NSN1`, `NQN0`) expected false. (l) Operand swap: `total_order` over (`ONE`, `TWO`); a swap in `numeric_equal` and `bit_identical` is equivalent for a symmetric operation and is not claimed. (m) `total_order` key built with the `binary64` sign position at `binary32`: `total_order`, `float32`, over (`MONE`, `ONE`), expected true. | Test |
 | FR-053-AC-9 | Each arithmetic mutant below fails with actual solver playback of an in-domain input, caught by the listed operators at the stated points. (a) One of the four operations in place of another: `add`, `sub`, `mul`, `div`, over (`THREE`, `TWO`), whose four results are 5, 1, 6 and 1.5. (b) Operand swap: `sub` and `div` over (`THREE`, `TWO`); `add` and `mul` only over (`QN1`, `QN2`), where the leftmost NaN payload decides, because their values are symmetric; for `fma`, `(a, c)` and `(b, c)` swaps over (`THREE`, `TWO`, `ONE`) and the `(a, b)` swap only over (`QN1`, `QN2`, `ONE`). (c) A rounding mode in place of another, at the per-operation points of the Behavior list and only for the pairs each separates: `add` over `T1` through `T4` and `sub` over `S1` through `S4` (and `fma` over `T1` through `T4` with the addend as `c`) for every pair of the five modes; `mul` over `M1` and `M1n` for every pair except nearest-even against toward-zero; `div` over `D1`, `Q1` and `Q1n` for every pair; `sqrt` over `SQ1` and `SQ2` for the pairs nearest, toward-zero and toward-positive, with nearest-even against nearest-away and toward-zero against toward-negative not claimed for `sqrt` because each pair is equivalent on every input; and `exact` rounding like a nearest mode instead of refusing, over the operator's inexact point. (d) The `exact` refusal reported without its would-be flags, or reported as a rounded value: over `T1` for `add` and `fma`, `S1` for `sub`, `M1` for `mul`, `Q1` for `div` and `SQ1` for `sqrt`. (e) Zero sign: a zero sum fixed to `Z+`, over `add(ONE, MONE)` and `sub(ONE, ONE)` under toward-negative where `Z-` is expected; the sign of a zero product, quotient or root dropped, over `mul(Z+, MONE)`, `div(Z+, MONE)` and `sqrt(Z-)`. (f) Division by zero reported as `Undefined`, as a NaN, with the wrong sign or without `divide_by_zero`: `div`, over (`ONE`, `Z+`), (`ONE`, `Z-`) and (`Z+`, `Z+`). (g) An invalid operation yielding a payload-preserving or infinite result or no `invalid`: `add(INF+, INF-)`, `mul(INF+, Z+)`, `div(INF+, INF+)`, `sqrt(MONE)`, `sqrt(INF-)`, `fma(INF+, Z+, ONE)`, `fma(INF+, ONE, INF-)`. (h) NaN propagation, for `add`, `sub`, `mul`, `div` and `fma` (with the NaN in each operand position) and for `sqrt` over `SN1` and `NQN0`: the canonical NaN returned instead of the operand's payload, over (`SN1`, `QN2`), expected `0x7FC00001` with `invalid`; `invalid` raised only when the leftmost NaN is signaling, over (`QN2`, `SN1`), expected `QN2` with `invalid`; quieting dropped, over (`SN1`, `ONE`), expected `0x7FC00001`; sign dropped, over (`NQN0`, `ONE`), expected `NQN0` with no flag; the invalid-operation test run before the NaN test, over `fma(INF+, Z+, QN2)`, expected `QN2` with no flag. (i) Overflow: always rounding to infinity, over `add(MAXF, MAXF)` under toward-zero and toward-negative (expected `MAXF`) and over its negated operands under toward-zero and toward-positive (expected the negated `MAXF`); the `overflow` flag missing, over `add(MAXF, MAXF)` in any mode; a completed value under `exact`, over the same input. (j) Underflow and subnormals: flush-to-zero, over `add(SUBMIN, Z+)` (expected `SUBMIN`, no flags); the `underflow` flag missing, over `mul(SUBMIN, HALF)` (an exact tie between `Z+` and `SUBMIN`: `Z+` under nearest-even, toward-zero and toward-negative, `SUBMIN` under nearest-away and toward-positive, flags `underflow` and `inexact` in each); the subnormal-to-normal carry mis-encoded, over `add(SUBMAX, SUBMIN)` (expected `NORMMIN`, no flags). (k) `fma` computed as a `mul` followed by an `add` (two roundings): `fma`, over (`0x3F800800`, `0x3F800800`, `0xBF801000`) at `float32` and (`0x3FF0000002000000`, `0x3FF0000002000000`, `0xBFF0000004000000`) at `float64`, whose single-rounding result is exactly 2^-24 (`0x33800000`) and 2^-54 (`0x3C90000000000000`) in every mode, with the two-rounding result differing in every mode. (l) `sqrt` reporting every result inexact, or none: `sqrt(FOUR)` (expected `TWO`, no flags, `Completed` under `exact`) and `SQ1`. (m) The wrong width or rounding mode in the result provenance: every operator. | Test |
@@ -366,10 +364,9 @@ parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are conditional on P3 (I
 
 - [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) owns the IEEE
   oracle semantics and the derivable operation list (add, sub, mul, div, the three
-  comparisons, the two width conversions and, planned under IR-1502, `sqrt` and `fma`); its oracle agreement is not this proof.
-  FR-014 lists `sqrt` and `fma` as derivable (FR-014-AC-72..80, planned under
-  IR-1502), but CG's code still refuses them as `OperationNotDerivable` until
-  IR-1502 delivers, which is why P3 is needed.
+  comparisons, the two width conversions, `sqrt` and `fma`); its oracle agreement is not this proof.
+  FR-014 derives `sqrt` and `fma` (FR-014-AC-72..80, delivered under IR-1502, which was
+  P3).
 - The float carrier (IR-1446) is prerequisite P1, the Contract IR float
   `requires_bound` ruling (IR-69) is P2, and the FR-014 `sqrt` and `fma` derivation
   (IR-1502) is P3. The IR-1436 design review (D4) fixes the carrier contract and gates the
@@ -388,9 +385,9 @@ parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are conditional on P3 (I
 
 PLANNED (IR-1442). This specification supplies no implementation or generated-proof
 credit. All fourteen criteria remain planned and untagged until P1 is delivered with the
-IR-269 float harness. P2 (IR-69) and P3 (IR-1502) are undelivered. The public Float32
+IR-269 float harness. P2 (IR-69) is undelivered; P3 (IR-1502) is delivered. The public Float32
 and Float64 replay values exist in `qsl_replay`; the CG decoder grouping and the carrier's
 physical bindings do not. Oracle agreement under FR-014 is not Kani credit. No width,
 operation or rounding mode is known to verify within the request's ceilings (an open
-IR-1446 obligation), and the `sqrt` and `fma` items have no CG oracle at all; these are
+IR-1446 obligation), and the `sqrt` and `fma` CG oracle now exists (IR-1502) but is unproved; these are
 open obligations, not waived gaps.

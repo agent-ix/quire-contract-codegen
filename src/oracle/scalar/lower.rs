@@ -1592,6 +1592,19 @@ impl Shape {
         }
     }
 
+    /// `quire::value::ieee::sqrt` and `fma`: the catalogued `call` body operator with the
+    /// `call` semantic form only. IEEE `add`'s binary shape is not reused.
+    fn call(operands: &'static [ScalarForm], result: ScalarForm) -> Self {
+        Self {
+            form: "call",
+            alternate_form: None,
+            carried_operand: false,
+            body_operator: "call",
+            operands,
+            result,
+        }
+    }
+
     fn quantity_conversion(result: ScalarForm) -> Self {
         Self {
             carried_operand: true,
@@ -1671,6 +1684,26 @@ impl Shape {
                 | DecimalOperator::Subtract
                 | DecimalOperator::Multiply
                 | DecimalOperator::Divide => Self::binary(&[F::Decimal, F::Decimal], F::Decimal),
+            },
+            ExactScalarOperation::IeeeArithmetic {
+                operator: IeeeArithmeticOperator::SquareRoot,
+                width,
+                ..
+            } => match width {
+                IeeeWidth::Binary32 => Self::call(&[F::Float32], F::Float32),
+                IeeeWidth::Binary64 => Self::call(&[F::Float64], F::Float64),
+            },
+            ExactScalarOperation::IeeeArithmetic {
+                operator: IeeeArithmeticOperator::FusedMultiplyAdd,
+                width,
+                ..
+            } => match width {
+                IeeeWidth::Binary32 => {
+                    Self::call(&[F::Float32, F::Float32, F::Float32], F::Float32)
+                }
+                IeeeWidth::Binary64 => {
+                    Self::call(&[F::Float64, F::Float64, F::Float64], F::Float64)
+                }
             },
             ExactScalarOperation::IeeeArithmetic { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary(&[F::Float32, F::Float32], F::Float32),
@@ -1884,6 +1917,18 @@ pub(super) fn catalogued_operation(
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::SquareRoot) => {
+                    "quire.op.ieee.float32.sqrt"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::SquareRoot) => {
+                    "quire.op.ieee.float64.sqrt"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::FusedMultiplyAdd) => {
+                    "quire.op.ieee.float32.fma"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::FusedMultiplyAdd) => {
+                    "quire.op.ieee.float64.fma"
                 }
             };
             with_rounding(identity, *rounding)
@@ -2166,6 +2211,8 @@ pub(super) fn operation_identity(
                 IeeeArithmeticOperator::Subtract => "subtract",
                 IeeeArithmeticOperator::Multiply => "multiply",
                 IeeeArithmeticOperator::Divide => "divide",
+                IeeeArithmeticOperator::SquareRoot => "sqrt",
+                IeeeArithmeticOperator::FusedMultiplyAdd => "fma",
             };
             format!(
                 "ieee.{name} width={} rounding={}",

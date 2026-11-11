@@ -532,7 +532,7 @@ owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
 forms retain their prior refusal boundaries. Until those tests run, this
 section records planned qualification and grants no execution credit.
 
-## IEEE square root and fused multiply-add (IR-1502, planned)
+## IEEE square root and fused multiply-add (IR-1502)
 
 This extension verifies FR-014-AC-72 through FR-014-AC-80. It supplies native
 CG-to-owner agreement evidence only; the Kani row for these identities is
@@ -598,5 +598,5 @@ quire-integration IR-842.
    assertions or a copied owner catalog.
 
 Expected result: the four identities derive, generate and agree with the owner;
-unrelated identities keep their refusals. Until those tests run, this section
-grants no execution credit.
+unrelated identities keep their refusals. The tests are `tests/it/ieee_sqrt_fma.rs` and
+the sqrt/fma controls of `src/oracle/scalar/derive/tests.rs`.

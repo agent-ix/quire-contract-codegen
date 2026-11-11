@@ -462,23 +462,29 @@ impl SourceBuilder {
                 rounding,
             } => {
                 self.needs_width = true;
-                let operator = match operator {
-                    IeeeArithmeticOperator::Add => "Add",
-                    IeeeArithmeticOperator::Subtract => "Subtract",
-                    IeeeArithmeticOperator::Multiply => "Multiply",
-                    IeeeArithmeticOperator::Divide => "Divide",
-                };
                 let width = width_path(*width)?;
+                let rounding = rounding_path(*rounding)?;
+                let (parameters, names, operator) = match operator {
+                    IeeeArithmeticOperator::Add => (binary("rt::IeeeValue"), &["left", "right"][..], "Add(left, right)"),
+                    IeeeArithmeticOperator::Subtract => (binary("rt::IeeeValue"), &["left", "right"][..], "Subtract(left, right)"),
+                    IeeeArithmeticOperator::Multiply => (binary("rt::IeeeValue"), &["left", "right"][..], "Multiply(left, right)"),
+                    IeeeArithmeticOperator::Divide => (binary("rt::IeeeValue"), &["left", "right"][..], "Divide(left, right)"),
+                    IeeeArithmeticOperator::SquareRoot => (unary("rt::IeeeValue"), &["operand"][..], "SquareRoot(operand)"),
+                    IeeeArithmeticOperator::FusedMultiplyAdd => (
+                        vec![("a", "rt::IeeeValue"), ("b", "rt::IeeeValue"), ("c", "rt::IeeeValue")],
+                        &["a", "b", "c"][..],
+                        "FusedMultiplyAdd(a, b, c)",
+                    ),
+                };
                 Body {
-                    parameters: binary("rt::IeeeValue"),
+                    parameters,
                     output: OracleOutput::Value("rt::IeeeResult"),
-                    prelude: vec![
-                        format!("let left = expect_width(left, {width})?;"),
-                        format!("let right = expect_width(right, {width})?;"),
-                    ],
+                    prelude: names
+                        .iter()
+                        .map(|name| format!("let {name} = expect_width({name}, {width})?;"))
+                        .collect(),
                     call: format!(
-                        "rt::evaluate_ieee(rt::IeeeOperation::{operator}(left, right), {}, meter).map_err(OracleStop::IllTyped)",
-                        rounding_path(*rounding)?
+                        "rt::evaluate_ieee(rt::IeeeOperation::{operator}, {rounding}, meter).map_err(OracleStop::IllTyped)"
                     ),
                 }
             }

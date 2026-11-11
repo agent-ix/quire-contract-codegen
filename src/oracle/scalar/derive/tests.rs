@@ -4,7 +4,7 @@
 //! Scalar descriptor derivation controls.
 
 use super::super::lower::tests::{node_id, v2_node};
-use super::super::lower::{catalogued_operation, operation_confirmed};
+use super::super::lower::{catalogued_operation, check_operand, operation_confirmed, Shape};
 use super::super::*;
 use super::*;
 use crate::oracle::checked_graph::fixture::Node as FixtureNode;
@@ -112,6 +112,8 @@ fn every_operation() -> Vec<ExactScalarOperation> {
             IeeeArithmeticOperator::Subtract,
             IeeeArithmeticOperator::Multiply,
             IeeeArithmeticOperator::Divide,
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeArithmeticOperator::FusedMultiplyAdd,
         ] {
             all.push(Op::IeeeArithmetic {
                 operator,
@@ -208,7 +210,7 @@ fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
 /// identity inverts to the family that descriptor belongs to, no two families share an
 /// identity, and `every_operation` covers every `ExactScalarOperation` variant. A catalogued
 /// identity added to one map and not the other fails here.
-#[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
+#[trace("FR-014-AC-18", "FR-014-AC-19", "FR-014-AC-74", "TC-024")]
 #[test]
 fn tc_024_the_identity_inverse_matches_the_forward_catalogue_for_every_descriptor() {
     let operations = every_operation();
@@ -517,8 +519,9 @@ fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
 }
 
 /// Catalogued identities derivation refuses (checked against the operation catalog): every
-/// one is outside `family_of_identity`, so it is `OperationNotDerivable`.
-#[trace("FR-014-AC-18", "TC-024")]
+/// one is outside `family_of_identity`, so it is `OperationNotDerivable`. `from_exact`,
+/// `to_rational` and both `negate` identities stay refused after IR-1502 (FR-014-AC-80).
+#[trace("FR-014-AC-18", "FR-014-AC-80", "TC-024")]
 #[test]
 fn tc_024_the_refused_catalogue_identities_have_no_family() {
     for identity in [
@@ -527,12 +530,10 @@ fn tc_024_the_refused_catalogue_identities_have_no_family() {
         "quire.op.decimal.eq",
         "quire.op.decimal.ne",
         "quire.op.integer.rem",
-        "quire.op.ieee.float32.sqrt",
-        "quire.op.ieee.float64.sqrt",
-        "quire.op.ieee.float32.fma",
-        "quire.op.ieee.float64.fma",
         "quire.op.ieee.from_exact",
         "quire.op.ieee.to_rational",
+        "quire.op.ieee.float32.negate",
+        "quire.op.ieee.float64.negate",
         "quire.op.numeric.narrow",
         "quire.op.rational.narrow",
         "quire.op.text.size",
@@ -658,4 +659,216 @@ fn carried_conversion_private_mismatches_preserve_valid_sibling() {
             operation_identity: QUANTITY_CONVERT_IDENTITY.to_owned()
         }))
     );
+}
+
+/// `sqrt` and `fma` derive from the identity (width), the `float_rounding` bound and the mode, and
+/// every bound or mode defect is refused exactly as IEEE `add` refuses it (FR-014-AC-78). The
+/// reader refuses a non-exact mode over a bare float and a mode unequal to the result rounding,
+/// so these defensive branches are driven at the private seam.
+#[trace("FR-014-AC-78", "TC-024")]
+#[test]
+fn tc_024_sqrt_and_fma_refuse_mode_and_bound_defects_like_add() {
+    fn binding(name: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Binding {
+            name: name.into(),
+            value: Box::new(CheckedTerm::Literal {
+                type_id: node_id('1'),
+                value_kind: LiteralKind::Text,
+                value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!(
+                    value
+                ))
+                .expect("checked json literal"),
+            }),
+        }
+    }
+    let rounding_bound = |digit: char, rounding: &str| {
+        v2_node(
+            digit,
+            "bounded_domain",
+            "float_rounding",
+            '1',
+            CheckedTerm::aggregate(vec![binding("rounding", rounding)]),
+        )
+    };
+    let derive = |identity: &str, mode: Option<&str>, bounds: &[FixtureNode]| {
+        let (id, node) =
+            application_node(fixture_application(CheckedApplicationOperationFixture {
+                identity: Some(identity.into()),
+                mode: mode.map(|mode| (OperationModeKind::Rounding, mode.into())),
+                ..Default::default()
+            }));
+        let graph: Graph<'_> = std::iter::once((&id, &node))
+            .chain(bounds.iter().map(|bound| (&bound.node_id, bound)))
+            .collect();
+        let record = CompleteLoweringRecordV2::Lowered {
+            node: Box::new(CompleteContractNodeV2 {
+                bounds: bounds.iter().map(|bound| bound.node_id.clone()).collect(),
+                ..lowered_node(&node)
+            }),
+        };
+        derive_operation(&graph, &id, &record)
+    };
+    let nearest = [rounding_bound('c', "nearest-even")];
+    for (identity, add, operator, width) in [
+        (
+            "quire.op.ieee.float32.sqrt",
+            "quire.op.ieee.float32.add",
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeWidth::Binary32,
+        ),
+        (
+            "quire.op.ieee.float64.sqrt",
+            "quire.op.ieee.float64.add",
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeWidth::Binary64,
+        ),
+        (
+            "quire.op.ieee.float32.fma",
+            "quire.op.ieee.float32.add",
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary32,
+        ),
+        (
+            "quire.op.ieee.float64.fma",
+            "quire.op.ieee.float64.add",
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary64,
+        ),
+    ] {
+        assert_eq!(
+            derive(identity, Some("nearest-even"), &nearest),
+            Ok(ExactScalarOperation::IeeeArithmetic {
+                operator,
+                width,
+                rounding: RoundingMode::NearestEven,
+            }),
+            "{identity}"
+        );
+        let mode_refusal = |identity: &str| {
+            Err(no_claim(ClaimDerivationRefusal::ModeNotDerivable {
+                operation_identity: identity.to_owned(),
+            }))
+        };
+        assert_eq!(
+            derive(identity, Some("toward-zero"), &nearest),
+            mode_refusal(identity),
+            "{identity}: mode unequal to the bound rounding"
+        );
+        assert_eq!(derive(identity, None, &nearest), mode_refusal(identity));
+        let unreadable = [rounding_bound('c', "not-a-rounding")];
+        let ambiguous = [
+            rounding_bound('c', "nearest-even"),
+            rounding_bound('d', "toward-zero"),
+        ];
+        for (label, bounds, expected) in [
+            (
+                "missing",
+                &[][..],
+                matches!(
+                    derive(add, Some("nearest-even"), &[]),
+                    Err(ExactScalarRefusal::MissingBound { .. })
+                ),
+            ),
+            (
+                "ambiguous",
+                &ambiguous[..],
+                matches!(
+                    derive(add, Some("nearest-even"), &ambiguous),
+                    Err(ExactScalarRefusal::AmbiguousBound { .. })
+                ),
+            ),
+            (
+                "unreadable",
+                &unreadable[..],
+                matches!(
+                    derive(add, Some("nearest-even"), &unreadable),
+                    Err(ExactScalarRefusal::UnreadableBound { .. })
+                ),
+            ),
+        ] {
+            assert!(expected, "{label}: IEEE add refuses with the bound refusal");
+            assert_eq!(
+                derive(identity, Some("nearest-even"), bounds),
+                derive(add, Some("nearest-even"), bounds),
+                "{identity}: {label} bound is refused as add refuses it"
+            );
+        }
+    }
+}
+
+/// A non-float operand, or one of the other width, is `OperandTypeMismatch` at the defensive
+/// seam for every `sqrt` and `fma` operand position (FR-014-AC-79). The strict reader refuses
+/// such a package before CG, so the operand check is driven directly.
+#[trace("FR-014-AC-79", "TC-024")]
+#[test]
+fn tc_024_sqrt_and_fma_operands_are_checked_for_float_type_and_width() {
+    for (operator, width, positions, form) in [
+        (
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeWidth::Binary32,
+            1,
+            ScalarForm::Float32,
+        ),
+        (
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeWidth::Binary64,
+            1,
+            ScalarForm::Float64,
+        ),
+        (
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary32,
+            3,
+            ScalarForm::Float32,
+        ),
+        (
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary64,
+            3,
+            ScalarForm::Float64,
+        ),
+    ] {
+        let shape = Shape::of(&ExactScalarOperation::IeeeArithmetic {
+            operator,
+            width,
+            rounding: RoundingMode::NearestEven,
+        })
+        .expect("shape");
+        assert_eq!(shape.operands.len(), positions);
+        let graph: Graph<'_> = std::iter::empty().collect();
+        let float_literal = |kind| CheckedTerm::Literal {
+            type_id: node_id('1'),
+            value_kind: kind,
+            value: quire_contract_model::CheckedJson::from_serializable(&serde_json::json!("0"))
+                .expect("checked json literal"),
+        };
+        let other_width = if form == ScalarForm::Float32 {
+            LiteralKind::Float64Bits
+        } else {
+            LiteralKind::Float32Bits
+        };
+        for position in 0..positions {
+            for (term, found) in [
+                (zero_literal(), "integer"),
+                (
+                    float_literal(other_width),
+                    if form == ScalarForm::Float32 {
+                        "float64"
+                    } else {
+                        "float32"
+                    },
+                ),
+            ] {
+                assert_eq!(
+                    check_operand(&graph, position, &term, shape.operands[position]),
+                    Err(ExactScalarRefusal::OperandTypeMismatch {
+                        position,
+                        expected: form,
+                        found: Some(found.to_owned()),
+                    }),
+                    "{operator:?} {width:?} position {position}"
+                );
+            }
+        }
+    }
 }

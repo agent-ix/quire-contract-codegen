@@ -16,7 +16,7 @@ use quire_contract_model::{
     CheckedTerm,
 };
 
-fn emitted(declarations: &str) -> Vec<u8> {
+pub(crate) fn emitted(declarations: &str) -> Vec<u8> {
     let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{declarations}\n");
     let emitted = compile_package(
         CompileUnit {
@@ -34,11 +34,11 @@ fn emitted(declarations: &str) -> Vec<u8> {
     emitted.bytes().to_vec()
 }
 
-fn compiled(declarations: &str) -> CheckedPackageV2 {
+pub(crate) fn compiled(declarations: &str) -> CheckedPackageV2 {
     admit(&emitted(declarations))
 }
 
-fn admit(bytes: &[u8]) -> CheckedPackageV2 {
+pub(crate) fn admit(bytes: &[u8]) -> CheckedPackageV2 {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     match CheckedPackageV2::read(bytes, CheckedPackageReadLimits::bounded(), &evidence) {
@@ -62,7 +62,10 @@ fn bound_member<'a>(term: &'a CheckedTerm, expected: &str) -> &'a CheckedTerm {
         .unwrap_or_else(|| panic!("owner-admitted {expected} member"))
 }
 
-fn generated(package: &CheckedPackageV2, identity: &str) -> (ExactScalarOracles, String) {
+pub(crate) fn generated(
+    package: &CheckedPackageV2,
+    identity: &str,
+) -> (ExactScalarOracles, String) {
     let nodes = package.resolved_graph().nodes.iter().filter(|node| matches!(&node.body, CheckedTerm::Application { operation, .. } if operation.identity() == Some(identity))).collect::<Vec<_>>();
     let [node] = nodes.as_slice() else {
         panic!("one genuine {identity} application: {nodes:?}");
@@ -225,7 +228,7 @@ fn genuine_carried_quantity_u01_conversion_generates() {
     run_native("quantity-source-forms", manifest, &native, "qsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n");
 }
 
-fn run_native(label: &str, manifest: &str, source: &str, dependencies: &str) {
+pub(crate) fn run_native(label: &str, manifest: &str, source: &str, dependencies: &str) {
     use std::{fs, process::Command};
     let scratch = crate::scratch_crate::TemporaryDirectory::new(label);
     fs::create_dir_all(scratch.path.join("src")).unwrap();

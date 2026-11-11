@@ -256,6 +256,20 @@ pub(super) fn family_of_identity(identity: &str) -> Option<Family> {
         "quire.op.ieee.float64.div" => {
             Family::IeeeArithmetic(IeeeArithmeticOperator::Divide, IeeeWidth::Binary64)
         }
+        "quire.op.ieee.float32.sqrt" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::SquareRoot, IeeeWidth::Binary32)
+        }
+        "quire.op.ieee.float64.sqrt" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::SquareRoot, IeeeWidth::Binary64)
+        }
+        "quire.op.ieee.float32.fma" => Family::IeeeArithmetic(
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary32,
+        ),
+        "quire.op.ieee.float64.fma" => Family::IeeeArithmetic(
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary64,
+        ),
         "quire.op.ieee.numeric_equal" => Family::IeeeComparison(IeeeComparison::NumericEqual),
         "quire.op.ieee.total_order" => Family::IeeeComparison(IeeeComparison::TotalOrder),
         "quire.op.ieee.bit_identical" => Family::IeeeComparison(IeeeComparison::BitIdentical),
