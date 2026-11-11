@@ -1196,7 +1196,7 @@ fn tc_035_a_different_obligation_identity_is_refused_before_the_harness_members(
     })
     .expect("state-frame harnesses generate");
     let error = refuse(
-        ordinal_only,
+        ordinal_only.clone(),
         &["balance"],
         StateClauseHarness::StateFrame(&frames.frame.identity),
     );
@@ -1204,4 +1204,29 @@ fn tc_035_a_different_obligation_identity_is_refused_before_the_harness_members(
         matches!(error, StateClauseReplayError::NotInvariantHarness),
         "{error}"
     );
+    // A V2 postcondition and a V2 precondition harness pass the `V2Clause` destructuring, so only
+    // the V2 kind check separates them from the identity check: the identity check must follow it.
+    for (other, name, native) in [
+        (
+            Twin::with_bounded_amount_implication(),
+            "BalanceNeverDrops",
+            true,
+        ),
+        (
+            Twin::with_bounded_other_precondition(),
+            "OtherBelowLimit",
+            false,
+        ),
+    ] {
+        let other_fixture = generate_with(&other, name, native);
+        let error = refuse(
+            ordinal_only.clone(),
+            &["balance"],
+            StateClauseHarness::V2Clause(&other_fixture.harness),
+        );
+        assert!(
+            matches!(error, StateClauseReplayError::NotInvariantHarness),
+            "{name}: {error}"
+        );
+    }
 }
