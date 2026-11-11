@@ -50,6 +50,12 @@ PASS WITH TWO MEDIUMS. Using a distinct ScalarSettlement correctly makes Reprodu
 | --- | --- | --- | --- |
 | FND-004 | high | The revised FR-032-AC-24 returns CgDefect (Failed) for Authority caused by Unavailable and for ScalarBuildError::Operation. On origin/main, scalar_replay_body returns ScalarAuthorityError::Unavailable for the routed Implies scalar family, which has no operator-parity route (generate/scalar.rs:347-349). Operation's own doc says the generated family 'has no integer operator-parity observation route'. Both are unavailable capabilities, and FR-032:119-121 requires a typed refusal with no settlement that 'is not relabelled a CG defect'. A falsified Implies run would get a Failed record. Read these two causes as None. TC-047 step 13 also wrongly calls Unavailable unreachable: a routed Implies harness reaches it through generate_routed. (The round-0 FND-001 text wrongly listed Unavailable as a CG defect; this corrects it.) | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:415, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:119-121, src/kani/generate/scalar.rs:347-349, src/replay/scalar_builder.rs:40-41, spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:187 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | FR-032-AC-24 now reads Authority caused by Operation as a named unavailable capability (None). On origin/main that cause fires in two places. In ScalarReplayBody::admitted (scalar_authority.rs:85-91) the generated node is not an Application or has no operation identity. In generate/scalar.rs:358-360 the operation CG generated the harness for differs from the admitted node's operation. Both are internal CG/IR inconsistencies on a supported add/sub/mul/negate family. Neither is one of the capabilities step 5 names (FR-032:374-376). FR-029 defines CgDefect as 'a failure this repository raised ... the replay could not be built'. As None, a falsified run of a supported family silently loses its terminal record. Read Authority(Operation) as CgDefect and move it to the CgDefect side of step 13's local match. Unavailable (Implies, unbound path), Occurrence (FR-032:253-257 multi-occurrence gate and the AC-18 setup refusal), Operands (FR-032:300 typed setup refusal for unrecoverable provenance) and ScalarBuildError::Operation (its doc: no route) are correctly None. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:415, src/core/scalar_authority.rs:85-91, src/kani/generate/scalar.rs:358-360, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:374-376 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -57,3 +63,4 @@ PASS WITH TWO MEDIUMS. Using a distinct ScalarSettlement correctly makes Reprodu
 | FND-001 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-004 | fixed | fixed in 7b082acf; verified at 7b082acf |

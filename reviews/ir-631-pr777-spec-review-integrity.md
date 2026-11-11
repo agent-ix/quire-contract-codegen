@@ -65,6 +65,12 @@ PASS WITH ONE MEDIUM. The new criteria AC-20 to AC-25 are consistent with the Se
 | FND-006 | low | FR-032-AC-18's status credits #757 and #481, but both tests it cites were added by #702 (4f399237): absent_or_ambiguous_scalar_authority_never_invents_an_occurrence in core/scalar_authority.rs, and the scalar_replay_binding.rs plan refusals tagged AC-18. #757 only edited them, and #481 retained renderer limits. Cite #702 (and #757 if its edits matter). | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:409, src/core/scalar_authority.rs:124, tests/it/scalar_replay_binding.rs:291 |
 | FND-007 | low | FR-032-AC-15's status says 'tagged scalar_replay_binding.rs asserts ... a changed package, path or producer ordinal refuses'. That loop is in scalar_actual_sent_context_and_every_driver_tie_are_independently_checked, which is tagged AC-6, AC-17 and AC-18, not AC-15. The AC-15-tagged test asserts the reader body and the two distinct draws. Mark the structural-member refusal as untagged AC-15 evidence (to tag in the code slice), as is done for the source-span clause. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:406, tests/it/scalar_replay_binding.rs:178-186, tests/it/scalar_replay_binding.rs:291, tests/it/scalar_replay_binding.rs:454-480 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | medium | FR-032's precedence prose still says 'all are available today (IR-648, IR-940 Done), so ScalarBuildError has no such variant and step 5 is vacuous', and FR-032-AC-1's status repeats that no unsupported-capability refusal exists. The revised FR-032-AC-24 classifies Authority caused by Unavailable, Occurrence and Operands, and ScalarBuildError::Operation, as named unavailable capabilities, and a routed Implies scalar reaches Authority(Unavailable) today (generate/scalar.rs:347-349). Restate step 5: the capabilities are reported through these Authority causes and ScalarBuildError::Operation, and the Implies family has no operator-parity route. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:378, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:392, src/kani/generate/scalar.rs:347-349 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -74,3 +80,5 @@ PASS WITH ONE MEDIUM. The new criteria AC-20 to AC-25 are consistent with the Se
 | FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-004 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-005 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
+| FND-006 | fixed | fixed in 7b082acf; verified at 7b082acf |
+| FND-007 | fixed | fixed in 7b082acf; verified at 7b082acf |

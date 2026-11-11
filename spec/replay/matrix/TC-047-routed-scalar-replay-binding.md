@@ -50,7 +50,7 @@ passing proof-driven replay is claimed.
    limits context. Check setup precedence with one defect at a time: context/identity/schema,
    selected playback bytes above 8 MiB, adapter block/harness/arity/width, then operand domain.
    Those distinct refusals occur before an absent-capability check. Only an otherwise valid
-   request reaches unsupported-capability; conversion of it returns no settlement.
+   request reaches the unsupported-capability refusals of FR-032-AC-24; conversion of any of them returns no settlement.
    Try missing limits context and replay limits altered from the original retained context;
    no current `ScalarObligationIdentity.limits` member or default is assumed. The original
    context is recorded by the scalar generation authority alongside the proved source.
@@ -198,9 +198,13 @@ passing proof-driven replay is claimed.
     `MissingSettlement` and `Failed` respectively, so a falsified `Implies` run yields no
     terminal record. A test-local exhaustive `match` over `ScalarBuildError` and over
     `ScalarAuthorityError` asserts the classification for the causes no public input reaches
-    (`Staging`, `Identity`, `ScalarBuildError::Operation` and the `Occurrence`, `Operation`,
-    `Operands` authority causes, which are `None`, and the `Ranges` and `Record` authority
-    causes, which are `CgDefect`), so a new variant fails the build.
+    (`Staging`, `Identity`, `ScalarBuildError::Operation` and the `Occurrence` and `Operands`
+    authority causes; `Staging`, `Identity`, and the `Operation`, `Ranges` and `Record` authority
+    causes are `CgDefect`, the rest `None`), so a new variant fails the build. Neither cause site
+    of `Authority(Operation)` (a non-application generated node, or a harness operation that
+    differs from the admitted node's) can be driven through the public API, because the harness
+    fields are sealed after generation; it is tested only by this local match, which pins the
+    `CgDefect` reading, and by Inspection of the two sites.
 14. Typed seam (FR-032-AC-25). Compile the full flow of steps 1 and 10 to 12 using only
     `ScalarObligationIdentity`. Scan `src/replay/scalar_builder.rs` and `src/lib.rs` re-exports
     for `KaniObligationIdentity`, CG's `ReplayPackage` (not `qsl_replay::ReplayPackage`) and a
@@ -229,7 +233,7 @@ passing proof-driven replay is claimed.
 | FR-032-AC-21 | Step 10: the six result classes read as the table; equal to `report.terminal_value()` | Map `Diverged` to `Refuted` (fails the `Completed(7)` input); map `Agrees` to `Failed` (fails the unchanged observation); map `RefusedInput` to `Failed` (fails the out-of-range operand report); map `Incomplete` to `Incomplete(TimedOut)` (fails the `work_units = 0` report); read every `Refused` as `Failed` (fails the changed-occurrence report, which must carry a catalog code); replace a `result.terminal_value()` arm with a wildcard (fails the lint and the inspection) |
 | FR-032-AC-22 | Step 11: settlement pairs only with falsified or counterexample outcomes | Return `Refuted` for any `Parity` (fails the `Agrees` report); return a value for `Verified` plus a settlement (fails the `UnexpectedSettlement` input); ignore the settlement for a `Counterexample` IR outcome (fails equality with the run entry point) |
 | FR-032-AC-23 | Step 12: omitted settlement gives `MissingSettlement` from both entries, also after a converter refusal | Map falsified-with-`None` to `Failed` (fails the omitted-settlement input); drop the report-claim comparison in `settlement` (fails the other-run report, whose `.ok()` result is then `Some` and pairs to a value) |
-| FR-032-AC-24 | Step 13: CG-raised causes on a supported family yield `CgDefect`; unavailable capabilities and binding mismatches yield `None` | Return `None` for `Playback` (fails the four-byte operand input, whose pair result becomes `MissingSettlement`); return `Some(CgDefect)` for `Observation` or for `GeneratedArtifactChanged` (fails the mutated-observation and changed-`harness.rust` inputs); return `Some(CgDefect)` for `Unavailable` (fails the routed `Implies` input, which would write `Failed` for a family with no operator-parity route) |
+| FR-032-AC-24 | Step 13: CG-raised causes on a supported family yield `CgDefect`; unavailable capabilities and binding mismatches yield `None` | Return `None` for `Playback` (fails the four-byte operand input, whose pair result becomes `MissingSettlement`); return `Some(CgDefect)` for `Observation` or for `GeneratedArtifactChanged` (fails the mutated-observation and changed-`harness.rust` inputs); return `Some(CgDefect)` for `Unavailable` (fails the routed `Implies` input, which would write `Failed` for a family with no operator-parity route); read `Authority(Operation)` as `None` (fails the local exhaustive match, the only input that reaches it, and leaves a supported-family run with no terminal record) |
 | FR-032-AC-25 | Step 14: the flow compiles and the scan finds nothing | Add a `KaniObligationIdentity` parameter to `plan` (fails the compile of the step 1 call); reintroduce `settle` (fails the scan) |
 
 Checks other than the Partial criteria listed in the replay matrix are planned; completed-route observations have the remaining whole-route gates (the driver's E9 run, IR-610, and a real falsified Kani run, the IR-631 code slice) stated in
