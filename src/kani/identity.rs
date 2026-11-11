@@ -359,6 +359,10 @@ pub struct CollectionOperationIdentity {
 pub(crate) const COLLECTION_PRECONDITION_TOTALITY_MESSAGE: &str =
     "the selected precondition completes a Boolean";
 
+/// The one message identifying a scalar V2 invariant harness's assertion in Kani output.
+pub(crate) const V2_INVARIANT_ASSERTION_MESSAGE: &str =
+    "the V2 invariant holds for every admitted state";
+
 /// Exact generated assertion bound to a collection precondition's Kani check location.
 pub(crate) fn collection_precondition_totality_assertion() -> String {
     format!(

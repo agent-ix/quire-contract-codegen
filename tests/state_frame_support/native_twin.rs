@@ -13,15 +13,17 @@
 use super::model;
 
 use qsl_replay::{
-    call_site, compile_package_with_execution_points, CallSiteRefusal, ClaimedChange, ClauseName,
-    ClauseSite, DependencyInput, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
-    SourceIdentity, StageLimits, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
+    call_site, compile_package_with_execution_points, AnchorKind, CallSiteRefusal, ClaimedChange,
+    ClauseName, ClauseSite, DependencyInput, DocumentRef, FrameReplayResult, Identifier,
+    OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits,
+    SelectedAnchor, SelectedObject, SourceIdentity, StageLimits, WitnessEnvelope,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
-    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, SelectedFrameItem,
-    SelectedFrameTarget, StateClauseReplayInputs, StateFrameIdentity, StateObjectAddress,
+    FrameReplayInputs, InvariantReplayInputs, LockedSource, ProvidedDocument, ReplayInputs,
+    SelectedFrameItem, SelectedFrameTarget, StateClauseReplayInputs, StateFrameIdentity,
+    StateObjectAddress,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedNodePathSegment, CheckedOccurrenceRole, CheckedPackageEvidence,
@@ -269,6 +271,11 @@ pub struct Run {
 /// comment before its bytes. Built here for the default lane; the `kani` lane replays the real
 /// text.
 pub fn playback_text(harness: &StateFrameIdentity, check: &str, values: &[i64]) -> String {
+    playback_text_for_path(&harness.harness_path().to_string(), check, values)
+}
+
+/// [`playback_text`] for a harness named by its qualified `module::harness` path.
+pub fn playback_text_for_path(path: &str, check: &str, values: &[i64]) -> String {
     let entries = values
         .iter()
         .map(|value| {
@@ -291,7 +298,6 @@ pub fn playback_text(harness: &StateFrameIdentity, check: &str, values: &[i64]) 
          \x20   ];\n\
          \x20   kani::concrete_playback_run(concrete_vals, check);\n\
          }}\n",
-        path = harness.harness_path(),
     )
 }
 
@@ -426,6 +432,89 @@ impl Twin {
             .replace("self.balance >= pre(self.balance)", "self.balance >= other")
             .into_bytes();
         twin
+    }
+
+    /// A `Bank` whose `Account` declares only `balance`, typed `Int[range]`, and a unit of the
+    /// named `(name, condition)` invariants over it, in that order. The invariant fixtures of
+    /// FR-024-AC-59 and FR-024-AC-64.
+    pub fn with_bank_invariants(invariants: &[(&str, &str)], range: (i64, i64)) -> Self {
+        let mut twin = Self::build(&["balance"], &[], 0);
+        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let types = document["types"].as_array_mut().expect("types");
+        let value_type = types
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("balance value type");
+        for (keyword, value) in [("min", range.0), ("max", range.1)] {
+            let bound = value_type["constraints"]
+                .as_array_mut()
+                .expect("constraints")
+                .iter_mut()
+                .find(|constraint| constraint["keyword"] == keyword)
+                .expect("bound");
+            bound["operands"]["value"] = json!(value.to_string());
+        }
+        let account = types
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        account["fields"]
+            .as_array_mut()
+            .expect("fields")
+            .retain(|field| field["name"] != "audit");
+        twin.domain = document.to_string().into_bytes();
+        let mut unit = unit_source(&[], 0);
+        for (name, condition) in invariants {
+            unit.push_str(&format!(
+                "invariant {name} using v on Bank::Account at current {{ {condition} }}\n"
+            ));
+        }
+        twin.unit = unit.into_bytes();
+        twin
+    }
+
+    /// The invariant replay inputs for the clause `clause` over the drawn `state_fields` of the
+    /// object declaration `object_node`, the snapshot anchored at the handler `deposit`. The
+    /// playback is empty: the test decodes it from a harness.
+    pub fn invariant_inputs<'a>(
+        &self,
+        package: &'a CheckedPackageV2,
+        clause_node: &'a CheckedNodeId,
+        object_node: &'a CheckedNodeId,
+        clause: &str,
+        state_fields: &[&str],
+    ) -> InvariantReplayInputs<'a> {
+        InvariantReplayInputs {
+            run: self.run(),
+            packages: self.packages(),
+            package,
+            clause_node,
+            object_node,
+            state_fields: state_fields.iter().map(|name| (*name).to_owned()).collect(),
+            clause: ClauseName(Identifier::new(clause).expect("identifier")),
+            object: StateObjectAddress {
+                population: population(),
+                key: "account".to_owned(),
+                object_type: account_type(),
+            },
+            anchor: SelectedAnchor {
+                kind: AnchorKind::Handler,
+                name: "deposit".to_owned(),
+            },
+            snapshot_label: DocumentLabel {
+                authority: "test".to_owned(),
+                identity: "twin-current".to_owned(),
+            },
+            playback: Vec::new(),
+            obligation_identity: {
+                let site = self.clause_site(clause).expect("QSL clause site");
+                qsl_replay::ObligationIdentity::new(
+                    site.node,
+                    None,
+                    u32::try_from(site.occurrence.origin().ordinal()).expect("claim ordinal"),
+                )
+            },
+        }
     }
 
     /// A QSL invariant over the selected model object's bounded `balance` field.

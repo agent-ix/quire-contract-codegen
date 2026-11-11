@@ -21,6 +21,8 @@
 //! against the admitted model table. An `IntRange` fitting `i64` is checked and becomes a
 //! `DeclaredDomain`; a present field without one remains an integer without an assumption.
 
+pub mod invariant;
+
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
@@ -243,6 +245,8 @@ pub enum StateClauseReplayError {
     RawPackage(ReadError),
     /// The supplied harness is not an operation-contract postcondition harness.
     NotPostconditionHarness,
+    /// The supplied harness is not a V2 object-type invariant harness.
+    NotInvariantHarness,
     /// The harness and the selected replay inputs name different obligations or field order.
     HarnessMismatch {
         /// The member that differs.
@@ -319,6 +323,7 @@ impl fmt::Display for StateClauseReplayError {
         match self {
             Self::RawPackage(cause) => cause.fmt(f),
             Self::NotPostconditionHarness => f.write_str("the harness is not a postcondition"),
+            Self::NotInvariantHarness => f.write_str("the harness is not a V2 invariant"),
             Self::HarnessMismatch { member } => write!(f, "the harness's {member} differs"),
             Self::PlaybackAlreadySupplied => f.write_str("playback values were already supplied"),
             Self::Decode(cause) => write!(f, "the Kani playback did not decode: {}", cause.code),
@@ -375,6 +380,7 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
     fn from(error: &'a StateClauseReplayError) -> Self {
         match error {
             StateClauseReplayError::NotPostconditionHarness
+            | StateClauseReplayError::NotInvariantHarness
             | StateClauseReplayError::HarnessMismatch { .. }
             | StateClauseReplayError::PlaybackAlreadySupplied
             | StateClauseReplayError::Decode(_)
@@ -628,7 +634,7 @@ impl StateClauseReplay {
                 declaration,
             });
         }
-        let fields = state_fields(&graph, &shape, &requested_fields)?;
+        let fields = state_fields(&graph, &shape.scope.object, &requested_fields)?;
         let pre = bind(&fields, &playback, Side::Playback)?;
         let post = bind(&fields, &post_state, Side::PostState)?;
         let domains = declared_domains(package, &shape, &fields)?;
@@ -910,6 +916,29 @@ impl Snapshot {
     }
 }
 
+/// The one `complete` population holding `object`, every declared field an integer.
+fn populations(object: &StateObjectAddress, values: &[(String, i64)]) -> Vec<SnapshotPopulation> {
+    vec![SnapshotPopulation {
+        population: object.population.clone(),
+        complete: true,
+        objects: vec![SnapshotObject {
+            key: object.key.clone(),
+            object_type: object.object_type.clone(),
+            fields: values
+                .iter()
+                .map(|(field, value)| {
+                    (
+                        field.clone(),
+                        IntegerValue {
+                            integer: value.to_string(),
+                        },
+                    )
+                })
+                .collect(),
+        }],
+    }]
+}
+
 /// The snapshot of `object` with `values` in `observation`'s role: one `complete` population
 /// holding the one object, every declared field an integer.
 fn snapshot(
@@ -924,25 +953,7 @@ fn snapshot(
         identity: label.into(),
         observation,
         model: model.clone(),
-        populations: vec![SnapshotPopulation {
-            population: object.population.clone(),
-            complete: true,
-            objects: vec![SnapshotObject {
-                key: object.key.clone(),
-                object_type: object.object_type.clone(),
-                fields: values
-                    .iter()
-                    .map(|(field, value)| {
-                        (
-                            field.clone(),
-                            IntegerValue {
-                                integer: value.to_string(),
-                            },
-                        )
-                    })
-                    .collect(),
-            }],
-        }],
+        populations: populations(object, values),
     };
     let EncodedDocument { bytes } = encode_document(&document).map_err(DocumentError::Encode)?;
     Ok(Snapshot { bytes })
@@ -1020,10 +1031,9 @@ enum Side {
 /// table. A present field without a representable `i64` range remains unranged.
 fn state_fields(
     graph: &ClauseGraphView<'_>,
-    shape: &ClauseShape,
+    object: &CheckedNodeId,
     requested: &[String],
 ) -> Result<Vec<StateField>, StateClauseReplayError> {
-    let object = &shape.scope.object;
     let fields = graph
         .package()
         .model_object_fields(object)

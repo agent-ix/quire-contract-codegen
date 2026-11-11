@@ -40,7 +40,7 @@ use crate::{
         identity::{
             KaniV2ClauseObligationHarness, ObligationKind, ScalarObligationArgument,
             V2ClauseObligationClaim, V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead,
-            V2ClauseSelection, V2ClauseStateField,
+            V2ClauseSelection, V2ClauseStateField, V2_INVARIANT_ASSERTION_MESSAGE,
         },
     },
     oracle::clause::{
@@ -793,7 +793,7 @@ pub(in crate::kani::generate) fn render_clause(
             } else {
                 "matches!(&outcome, Ok(rt::Outcome::Completed(true)))"
             })?,
-            message: "the V2 invariant holds for every admitted state".to_owned(),
+            message: V2_INVARIANT_ASSERTION_MESSAGE.to_owned(),
         });
     }
     let (label, cover) = if invariant {
