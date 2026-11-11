@@ -104,10 +104,10 @@ fn each_integer_operator_and_literal_keep_the_public_reader_body_and_real_route(
             "genuine QSL route: {:?}",
             report.result()
         );
-        assert_eq!(
-            completed.settle(&sent, Some(&report)).unwrap(),
-            report.terminal_value()
-        );
+        assert!(matches!(
+            completed.settlement(&sent, Some(&report)).unwrap(),
+            quire_contract_codegen::ScalarSettlement::Parity(result) if std::ptr::eq(result, report.result())
+        ));
     }
 }
 

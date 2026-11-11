@@ -97,6 +97,7 @@ mod scalar_literal_operands;
 mod scalar_playback;
 mod scalar_replay_binding;
 mod scalar_replay_residuals;
+mod scalar_settlement;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;

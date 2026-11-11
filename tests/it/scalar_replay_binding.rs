@@ -230,10 +230,10 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
         "real QSL result: {:?}",
         report.result()
     );
-    assert_eq!(
-        completed.settle(&sent, Some(&report)).unwrap(),
-        report.terminal_value()
-    );
+    assert!(matches!(
+        completed.settlement(&sent, Some(&report)).unwrap(),
+        quire_contract_codegen::ScalarSettlement::Parity(result) if std::ptr::eq(result, report.result())
+    ));
 
     // Both are otherwise genuine membership-valid QSL claims. Structural
     // identity alone cannot authenticate the original range or opaque kind.
@@ -248,7 +248,7 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
         OperatorParityResult::Agrees { .. }
     ));
     assert!(matches!(
-        completed.settle(&sent, Some(&range_report)),
+        completed.settlement(&sent, Some(&range_report)),
         Err(ScalarBuildError::Report)
     ));
     let mut kind = claim.clone();
@@ -259,7 +259,7 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
         OperatorParityResult::Agrees { .. }
     ));
     assert!(matches!(
-        completed.settle(&sent, Some(&kind_report)),
+        completed.settlement(&sent, Some(&kind_report)),
         Err(ScalarBuildError::Report)
     ));
 
@@ -313,7 +313,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
         replay_limits: limits,
     };
     assert!(
-        completed.settle(&sent, None).is_err(),
+        completed.settlement(&sent, None).is_err(),
         "absent report supplies no settlement"
     );
     let mut other_wire = wire.clone();
@@ -330,7 +330,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
     let other_report = qsl_replay::replay_operator_parity(other_wire, claim.clone(), limits);
     assert_eq!(other_report.claim(), report.claim(), "the actual equal-claim/different-function report exposes why claim equality is insufficient");
     assert!(matches!(
-        completed.settle(&other_sent, Some(&other_report)),
+        completed.settlement(&other_sent, Some(&other_report)),
         Err(ScalarBuildError::SentContext)
     ));
     let smaller_limits = limits.with_input_bytes(limits.input_bytes - 1);
@@ -343,7 +343,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
     };
     assert_eq!(changed_budget_report.claim(), report.claim());
     assert!(matches!(
-        completed.settle(&changed_budget, Some(&changed_budget_report)),
+        completed.settlement(&changed_budget, Some(&changed_budget_report)),
         Err(ScalarBuildError::SentContext)
     ));
     let mut changed_bytes = wire.clone();
@@ -352,7 +352,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
         qsl_replay::replay_operator_parity(changed_bytes.clone(), claim.clone(), limits);
     assert_eq!(changed_bytes_report.claim(), report.claim());
     assert!(matches!(
-        completed.settle(
+        completed.settlement(
             &ScalarSentRequest {
                 wire: changed_bytes,
                 claim: claim.clone(),
@@ -421,7 +421,7 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
         }
         assert!(
             matches!(
-                completed.settle(&actual, Some(&changed_report)),
+                completed.settlement(&actual, Some(&changed_report)),
                 Err(ScalarBuildError::Report)
             ),
             "full actual-sent/report member {member}"
@@ -490,8 +490,8 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
         ),
         Err(ScalarBuildError::Artifacts)
     ));
-    assert_eq!(
-        completed.settle(&sent, Some(&report)).unwrap(),
-        report.terminal_value()
-    );
+    assert!(matches!(
+        completed.settlement(&sent, Some(&report)).unwrap(),
+        quire_contract_codegen::ScalarSettlement::Parity(result) if std::ptr::eq(result, report.result())
+    ));
 }

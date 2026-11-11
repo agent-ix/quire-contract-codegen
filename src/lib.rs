@@ -201,7 +201,8 @@ pub use kani::run::scalar::{
 };
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
-    ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
+    ir_outcome_terminal_value, run_terminal_value, scalar_ir_outcome_terminal_value,
+    scalar_run_terminal_value, ReplaySettlement, ScalarSettlement, TerminalPairError,
 };
 pub use quire_exact::ScalarLimits;
 pub use routed::capability::{

@@ -372,7 +372,7 @@ pub(super) fn boolean_implies_scalars_from(
     (harnesses, manifest, oracle_crate)
 }
 
-fn boolean_implies_scalar() -> (
+pub(super) fn boolean_implies_scalar() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
     String,
@@ -679,6 +679,75 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
             .collect::<Vec<_>>(),
         [(-1000, 1000), (-1000, 1000)]
     );
+}
+
+/// FR-032-AC-8, bounded-addition half: the descriptor with both operands and the result in
+/// `[-1000,1000]` admits an operand pair whose exact sum is outside the result range, and the
+/// decoded retained playback, not an assumed solver choice, gives the expected exact result.
+/// The native observation and QSL parity of this fixture stay gated: QSL's checker refuses the
+/// source `function subject(x: Int[-1000, 1000], y: Int[-1000, 1000]): Int[-1000, 1000]
+/// { x + y }` (`Unproved(Range)`), so no QSL-emitted package carries these checked ranges.
+#[trace("TC-047", "FR-032-AC-8")]
+#[test]
+fn tc_047_bounded_addition_playback_derives_an_out_of_result_range_exact_value() {
+    let (scalar, claim_map, ids) = scalar_package();
+    let node_1001 = ids.resolve(&code_id(1001));
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
+        source: &scalar,
+        package: &admitted,
+        claim_map: &claim_map,
+        node_id: &node_1001,
+        claim_index: claim_index(&claim_map, &node_1001),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    }];
+    let (_, scalar_harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let harness = &scalar_harnesses[0];
+    // The fixture ranges are asserted before any witness is read.
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|argument| (argument.minimum, argument.maximum))
+            .collect::<Vec<_>>(),
+        [(-1000, 1000), (-1000, 1000)]
+    );
+    assert!(harness.rust.contents.contains(
+        "let admitted = exact >= i128::from(-1000_i64) && exact <= i128::from(1000_i64);"
+    ));
+    let transcript = |values: &[i64]| {
+        let entries = values
+            .iter()
+            .map(|value| format!("// {value}\nvec!{:?},\n", value.to_le_bytes()))
+            .collect::<String>();
+        format!(
+            "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"scalar parity\"\nfn playback() {{\nlet concrete_vals: Vec<Vec<u8>> = vec![\n{entries}];\nkani::concrete_playback_run(concrete_vals, harness);\n}}",
+            harness.identity.module_symbol, harness.identity.harness_symbol,
+        )
+    };
+    let decode = |values: &[i64]| {
+        let text = transcript(values);
+        let parsed = quire_contract_codegen::parse_assertion_playback(
+            &text,
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            quire_contract_codegen::SCALAR_PLAYBACK_BYTES,
+            usize::MAX,
+        )
+        .expect("the retained playback parses");
+        quire_contract_codegen::decode_scalar_falsification(&harness.identity, &parsed)
+    };
+    // The illustrative pair; the expected exact result is derived from the decoded operands.
+    let operands = decode(&[600, 600]).expect("both operands are admitted");
+    assert_eq!(operands, [600, 600]);
+    let exact: i128 = operands.iter().map(|value| i128::from(*value)).sum();
+    assert_eq!(exact, 1200);
+    assert!(!(-1000..=1000).contains(&exact), "outside the result range");
+    // The adjacent operand is outside its own domain and is refused before any replay.
+    assert!(decode(&[1001, 600]).is_err());
 }
 
 /// The scalar harness states a property the oracle does not itself guarantee: the outcome agrees
