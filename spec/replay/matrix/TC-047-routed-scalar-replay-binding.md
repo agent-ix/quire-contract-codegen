@@ -198,8 +198,8 @@ passing proof-driven replay is claimed.
     `MissingSettlement` and `Failed` respectively, so a falsified `Implies` run yields no
     terminal record. A test-local exhaustive `match` over `ScalarBuildError` and over
     `ScalarAuthorityError` asserts the classification for the causes no public input reaches
-    (`Staging`, `Identity`, `ScalarBuildError::Operation` and the `Occurrence` and `Operands`
-    authority causes; `Staging`, `Identity`, and the `Operation`, `Ranges` and `Record` authority
+    (`Staging`, `Identity`, `ScalarBuildError::Operation` and the `Occurrence`, `Operands`,
+    `Operation`, `Ranges` and `Record` authority causes; `Staging`, `Identity`, and the `Operation`, `Ranges` and `Record` authority
     causes are `CgDefect`, the rest `None`), so a new variant fails the build. Neither cause site
     of `Authority(Operation)` (a non-application generated node, or a harness operation that
     differs from the admitted node's) can be driven through the public API, because the harness

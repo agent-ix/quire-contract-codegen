@@ -64,3 +64,4 @@ PASS WITH TWO MEDIUMS. Using a distinct ScalarSettlement correctly makes Reprodu
 | FND-002 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-003 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-004 | fixed | fixed in 7b082acf; verified at 7b082acf |
+| FND-005 | fixed | fixed in 0fd8a73a; verified at 0fd8a73a |

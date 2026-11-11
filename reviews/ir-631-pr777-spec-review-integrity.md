@@ -71,6 +71,12 @@ PASS WITH ONE MEDIUM. The new criteria AC-20 to AC-25 are consistent with the Se
 | --- | --- | --- | --- |
 | FND-008 | medium | FR-032's precedence prose still says 'all are available today (IR-648, IR-940 Done), so ScalarBuildError has no such variant and step 5 is vacuous', and FR-032-AC-1's status repeats that no unsupported-capability refusal exists. The revised FR-032-AC-24 classifies Authority caused by Unavailable, Occurrence and Operands, and ScalarBuildError::Operation, as named unavailable capabilities, and a routed Implies scalar reaches Authority(Unavailable) today (generate/scalar.rs:347-349). Restate step 5: the capabilities are reported through these Authority causes and ScalarBuildError::Operation, and the Implies family has no operator-parity route. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:378, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:392, src/kani/generate/scalar.rs:347-349 |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | Wording only. TC-047 step 13's parenthesis lists the causes no public input reaches as 'Staging, Identity, ScalarBuildError::Operation and the Occurrence and Operands authority causes'. The same sentence then classifies the Operation, Ranges and Record authority causes, and goes on to say Authority(Operation) can only be reached by the local match. Add Operation, Ranges and Record to the unreachable list so the list and the classification agree. The control itself is sound: ScalarAuthorityError is re-exported (lib.rs:321), so the local match can build ScalarBuildError::Authority(ScalarAuthorityError::Operation) and assert Some(CgDefect), and the None mutant fails it. | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:187 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -82,3 +88,4 @@ PASS WITH ONE MEDIUM. The new criteria AC-20 to AC-25 are consistent with the Se
 | FND-005 | fixed | fixed in 22d49b1e; verified at fa59e8a6 |
 | FND-006 | fixed | fixed in 7b082acf; verified at 7b082acf |
 | FND-007 | fixed | fixed in 7b082acf; verified at 7b082acf |
+| FND-008 | fixed | fixed in 0fd8a73a; verified at 0fd8a73a |
