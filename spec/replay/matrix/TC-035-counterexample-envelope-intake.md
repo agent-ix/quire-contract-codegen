@@ -354,11 +354,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     invocation document and post snapshot, and the snapshot anchor against the selection's
     (FR-024-AC-57). Mutation control: building `Invocation` instead of `Current` fails the
     observation-form assertion of this step.
-40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback
-    (FR-024-AC-58). The result is `StateClauseReplayError::Refused` holding QSL's `missing-member`
-    refusal for `audit`, and CG supplied no value for it. Mutation controls: a builder that binds
-    every declared field returns `MissingField` for `audit` and fails; a builder that invents a
-    value for `audit` settles a result instead of `Refused` and fails.
+40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback with
+    no `unread_values` (FR-024-AC-58, FR-024-AC-70). The result is the CG-typed `MissingField`
+    naming `audit`, the executor is uncalled and no document is built, so QSL's `missing-member`
+    refusal is not reached. Mutation controls: a builder that omits an unread field from the
+    snapshot returns `Refused` and fails the variant assertion; a builder that invents a value
+    for `audit` settles a result instead of `MissingField` and fails.
 41. Over the two-invariant `Positive`/`Capped` unit, replay `balance = 0` for each clause
     (FR-024-AC-59). The two settle differently (`violation`; `inconclusive`/`Verdicts`) with their
     own nodes and occurrences. Mutation control: a builder selecting the first declared invariant
@@ -432,6 +433,33 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     comparison against the harness's own identity never refuses and fails them; mapping the new
     variant to a non-defect settlement fails FR-024-AC-75; mapping it to `ClaimMismatch` fails the
     variant assertion.
+48. Over the `balance`/`audit` twin (`Account.balance: Int[-1, 1000]`, unread `audit: Int[0, 1000]`,
+    invariant `balance >= 0`, FR-024-AC-69), replay the playback `balance = -1` with `unread_values`
+    `audit = 7` through `replay_through`, decode the snapshot document from the captured request,
+    and assert `balance == -1`, `audit == 7` in declared order, the transcript holding only
+    `balance`, and a result equal to a direct `replay_state_clause` call that settles
+    `reproduced-with-evaluated-witness`, `violation`. Repeat with `audit = 9` and with a second
+    unread field `note` (supplied `3`) beside `audit` (supplied `7`). Mutation controls, each
+    failing a named assertion of this step: a builder that ignores the supplied value and writes
+    `0` or the range lower bound fails the `audit == 7` snapshot assertion (the value is nonzero
+    and above the lower bound); a supplied unread value that overrides a drawn field (`balance`
+    written as the supplied value) turns the `balance = -1` violation into `Verdicts` and fails
+    the settlement assertion; populations built in the wrong order, or a value attached to the
+    wrong field, swap `audit` and `note` and fail the two-field snapshot assertion (different
+    values 7 and 3); the declared-order assertion fails a builder emitting supplied fields before
+    drawn ones. Over a fixture whose `audit` accessor range is narrowed to `Int[0, 5]`, `audit =
+    7` returns `OutOfDomain`: a check reading `i64` or the unmutated package's range accepts it
+    and fails.
+49. Refuse the unread values (FR-024-AC-70): a name supplied that the harness draws (`balance`); a
+    name supplied that the clause reads, over a clause reading two fields where only one is drawn
+    by the playback, the other supplied; an undeclared name; a name supplied twice; and, over
+    `audit: Int[0, 1000]`, the values `0` and `1000` (accepted) and `1001` (and `-1`, refused with
+    `OutOfDomain` naming `audit`). Each refusal asserts its distinct variant, no document built
+    and an uncalled executor. Mutation controls: a skipped range check accepts `1001` and fails the
+    `OutOfDomain` assertion; an off-by-one upper bound refuses `1000` and fails the accept
+    assertion; a builder accepting a supplied value for a clause-read field fails the first two
+    refusal assertions; a builder mapping the duplicate to `UndeclaredField` fails the variant
+    assertion.
 
 ## Status
 
@@ -473,7 +501,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142) is planned for IR-1520 and claims no CG implementation or tagged test yet. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142) is planned for IR-1520 and claims no CG implementation or tagged test yet. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its Steps 40, 48 and 49 (FR-024-AC-58, FR-024-AC-69 and FR-024-AC-70, IR-1512) are planned: the `unread_values` completion of the invariant snapshot is not implemented yet. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)
