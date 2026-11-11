@@ -77,6 +77,8 @@ use quire_contract_model::{
     CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
 };
 
+use qsl_replay::ObligationIdentity;
+
 use crate::{
     core::contract_package::ContractDriverResultSelection,
     core::identity::HarnessSymbol,
@@ -888,6 +890,7 @@ fn classify<'a>(
             package,
             clause,
             role,
+            obligation,
             state_path,
             state_fields,
             subject_path,
@@ -902,6 +905,7 @@ fn classify<'a>(
                 unwind,
             },
             role,
+            obligation,
             checked_lookup(checked_lookups, package),
         ),
     }
@@ -1144,9 +1148,10 @@ fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReas
 fn classify_state_frame<'a>(
     request: &StateFrameRequest<'a>,
     role: StateFrameRole,
+    obligation: &ObligationIdentity,
     lookup: &CheckedLookup<'a>,
 ) -> ItemState {
-    let outcome = match generate_state_frame_role(request, role) {
+    let outcome = match generate_state_frame_role(request, role, obligation) {
         Ok(harness) => Outcome::StateFrame(Box::new(harness)),
         Err(refusal) => Outcome::StateFrameRefused(refusal),
     };

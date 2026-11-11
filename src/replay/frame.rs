@@ -362,6 +362,9 @@ pub enum FrameReplayError {
     Identity(ObligationIdentityError),
     /// A request or packet member no longer names QSL's selected frame claim.
     ClaimMismatch(FrameClaimMember),
+    /// The harness's QSL `ObligationIdentity` (node, model and ordinal) differs from the identity
+    /// minted from QSL's selected operation site (FR-024-AC-73).
+    ObligationIdentityMismatch,
 }
 
 impl fmt::Display for FrameReplayError {
@@ -414,6 +417,9 @@ impl fmt::Display for FrameReplayError {
             Self::ClaimMismatch(member) => {
                 write!(f, "the {member} differs from QSL's selected frame claim")
             }
+            Self::ObligationIdentityMismatch => f.write_str(
+                "the harness's obligation identity differs from the one QSL's selected site mints",
+            ),
         }
     }
 }
@@ -440,7 +446,8 @@ impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
             | FrameReplayError::PreState(_)
             | FrameReplayError::ScopeMismatch { .. }
             | FrameReplayError::Identity(_)
-            | FrameReplayError::ClaimMismatch(_) => Self::CgDefect,
+            | FrameReplayError::ClaimMismatch(_)
+            | FrameReplayError::ObligationIdentityMismatch => Self::CgDefect,
             FrameReplayError::Refused { refusal, .. } => Self::Refused(refusal),
         }
     }
@@ -794,6 +801,9 @@ impl FrameReplay {
             &site.frame,
         )?;
         let obligation = frame_identity(&site, kind).map_err(FrameReplayError::Identity)?;
+        if harness.obligation != obligation {
+            return Err(FrameReplayError::ObligationIdentityMismatch);
+        }
         let selected = SelectedFrameClaim {
             identity: obligation.clone(),
             frame: site.frame.clone(),

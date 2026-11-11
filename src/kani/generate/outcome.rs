@@ -2,6 +2,7 @@
 //! request names, the records it returns and the reasons an item has no harness. A leaf inside
 //! `generate/`: it imports no family.
 
+use qsl_replay::ObligationIdentity;
 use quire_contract_model::{
     CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
@@ -101,6 +102,10 @@ pub enum ObligationItem<'a> {
         clause: &'a CheckedNodeId,
         /// The harness asked for.
         role: StateFrameRole,
+        /// QSL's producer-issued identity of this item's own role, carried unchanged into the
+        /// harness (FR-015-AC-141). Negotiation compares no identity across items and
+        /// classification does not read it.
+        obligation: &'a ObligationIdentity,
         /// Rust path of the state struct.
         state_path: &'a str,
         /// Every field of the state struct, in declaration order.

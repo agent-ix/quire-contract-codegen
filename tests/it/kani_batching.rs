@@ -97,6 +97,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
                 granted: Vec::new(),
                 checked: Vec::new(),
             },
+            obligation: crate::common::state_frame_identities::contract(),
             state_fields: Vec::new(),
             domains: Vec::new(),
             unranged: Vec::new(),

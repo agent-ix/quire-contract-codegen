@@ -74,6 +74,7 @@ pub(crate) fn named_state_frame_harness(
                 frame: id("4"),
             },
             property,
+            obligation: fixture_obligation(),
             state_fields: Vec::new(),
             domains: Vec::new(),
             unranged: Vec::new(),

@@ -971,7 +971,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     (here B), fails 53(a) and 53(b); M6, resolving the key from the claim itself, fails 53(b);
     M7, comparing path only and not the node ordinal, fails 53(c); M8, running the record
     comparison first, fails 53(d) (FR-015-AC-135, FR-015-AC-136).
-54. (PLANNED, IR-1520.) State-frame identity member, FR-015-AC-137 to FR-015-AC-142. Take two
+54. (Implemented, IR-1520.) State-frame identity member, FR-015-AC-137 to FR-015-AC-142. Take two
     hand-written identities I_c and I_f that differ in node, model and ordinal, and a third I_c2
     that equals I_c except for its ordinal. Cases: (a) `generate_state_frame_role` for each role
     with its identity: the harness's `obligation` equals it member for member; and
@@ -1002,7 +1002,22 @@ with the required author `make kani-gate`; independent review and final acceptan
     record writer's segment encoder), fails the I_n round trip of (b); M12, negotiate refusing or
     deduplicating equal identities across items (site: the `ObligationItem::StateFrame` arm), fails
     the same-identity case of (e); M10, the pair constructor comparing
-    only `node`, refuses I_c2 and fails (f), and one accepting equal identities fails (f).
+    only `node`, refuses I_c2 and fails (f), and one accepting equal identities fails (f). Evidence: the tagged tests of `tests/it/state_frame_obligation_identity.rs`
+    (`tc_025_each_role_harness_carries_its_own_identity` for (a),
+    `tc_025_the_record_wire_form_round_trips_including_nested_node_segments` for (b),
+    `tc_025_a_record_lacking_the_obligation_or_its_members_is_refused` for (c),
+    `tc_025_the_identity_is_not_an_input_to_the_harness_source_or_symbols` for (d),
+    `tc_025_negotiation_carries_each_items_identity_and_compares_none` for (e),
+    `tc_025_the_pair_constructor_refuses_only_an_equal_pair` for (f), and
+    `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` for the writer's depth
+    bound). Mutants M1 to M8, M10 and M11 to M12 were each applied at the named site and each fails
+    the named test; M9 is not expressible, since `classify_state_frame_role` (the routed preflight's call) takes no
+    identity parameter, so it cannot read one; negotiate's disposition is rendering, which can
+    depend on the identity only through the 32-level node depth bound (FR-015-AC-137), pinned
+    by `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` (exactly 32 levels
+    accepted and round trips, 33 refused as `RecordSerialization`) and
+    `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (the reader refuses 33). The
+    bound mutants 32 to 40 and 32 to 31 each fail one of them.
 
 ## Blocked
 

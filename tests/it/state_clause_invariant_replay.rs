@@ -552,8 +552,8 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
     }
     let frame_twin = Twin::new();
     let (frame_package, frame_clause) = frame_twin.emitted_package("BalanceNeverDrops");
-    let frames: StateFrameObligations =
-        quire_contract_codegen::generate_state_frame_obligations(&StateFrameRequest {
+    let frames: StateFrameObligations = quire_contract_codegen::generate_state_frame_obligations(
+        &StateFrameRequest {
             ceilings: crate::common::proof_ceilings::proof_ceilings(),
             package: &frame_package,
             clause: &frame_clause,
@@ -561,8 +561,10 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
             state_fields: &["balance", "audit"],
             subject_path: "crate::subject::deposit_debiting_within_range",
             unwind: 4,
-        })
-        .expect("state-frame harnesses generate");
+        },
+        crate::common::state_frame_identities::roles(),
+    )
+    .expect("state-frame harnesses generate");
     for harness in [&frames.postcondition.identity, &frames.frame.identity] {
         let error = fixture
             .decoded(
@@ -1186,15 +1188,18 @@ fn tc_035_a_different_obligation_identity_is_refused_before_the_harness_members(
     // `NotInvariantHarness`.
     let frame_twin = Twin::new();
     let (frame_package, frame_clause) = frame_twin.emitted_package("BalanceNeverDrops");
-    let frames = quire_contract_codegen::generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings(),
-        package: &frame_package,
-        clause: &frame_clause,
-        state_path: "crate::subject::Account",
-        state_fields: &["balance", "audit"],
-        subject_path: "crate::subject::deposit_debiting_within_range",
-        unwind: 4,
-    })
+    let frames = quire_contract_codegen::generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            package: &frame_package,
+            clause: &frame_clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting_within_range",
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("state-frame harnesses generate");
     let error = refuse(
         ordinal_only.clone(),

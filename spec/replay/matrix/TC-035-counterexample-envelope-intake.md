@@ -407,7 +407,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     assertion (FR-024-AC-66). A harness differing in both identity and field order must return
     `ObligationIdentityMismatch`, which fails a mutant that checks field order first.
     The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`.
-47. (PLANNED, IR-1520.) With I_c, I_f and I_c2 as in TC-025 step 54 and the `contract` and
+47. (Implemented, IR-1520.) With I_c, I_f and I_c2 as in TC-025 step 54 and the `contract` and
     `frame` harnesses of one clause generated with I_c and I_f: replay the falsified `contract`
     (postcondition) harness through `StateClauseReplayInputs::decode_falsification` with I_c:
     accepted, and the packet and the request `StateClauseReplay::new` builds carry I_c member for
@@ -432,7 +432,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     fails the refusal cases; comparing before the minted identity exists is not expressible, so a
     comparison against the harness's own identity never refuses and fails them; mapping the new
     variant to a non-defect settlement fails FR-024-AC-75; mapping it to `ClaimMismatch` fails the
-    variant assertion.
+    variant assertion. Evidence: `tc_035_postcondition_decode_cross_checks_the_identity`,
+    `tc_035_frame_replay_cross_checks_the_minted_identity` and
+    `tc_035_the_frame_identity_mismatch_settles_as_a_cg_defect` (`tests/it/state_frame_obligation_identity.rs`). Every mutant named
+    above was applied at its site and fails the named assertion; the controls use the identities
+    QSL's selected sites mint (`Twin::minted_role_identities`) for the replay accept cases and
+    hand-written literals for the refusals.
 48. Over the `balance`/`audit` twin (`Account.balance: Int[-1, 1000]`, unread `audit: Int[0, 1000]`,
     invariant `balance >= 0`, FR-024-AC-69), replay the playback `balance = -1` with `unread_values`
     `[("audit", 7)]` through `replay_through`, decode the snapshot document from the captured
@@ -511,7 +516,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142) is planned for IR-1520 and claims no CG implementation or tagged test yet. Steps 40, 48 and 49 (FR-024-AC-58, FR-024-AC-69 and FR-024-AC-70, IR-1512) are planned: the `unread_values` completion of the invariant snapshot is not implemented, and the existing test `tc_035_unread_declared_field_ends_refused_with_missing_member` (tagged FR-024-AC-58) asserts the superseded `Refused`/`missing-member` behaviour, which the IR-1512 code change must replace. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 and 41 to 45 (FR-024-AC-57 and FR-024-AC-59 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142, IR-1520) is implemented by the identity comparisons in `StateClauseReplayInputs::decode_falsification` and `FrameReplay::new` and covered by the tagged tests of `tests/it/state_frame_obligation_identity.rs`. Steps 40, 48 and 49 (FR-024-AC-58, FR-024-AC-69 and FR-024-AC-70, IR-1512) are planned: the `unread_values` completion of the invariant snapshot is not implemented, and the existing test `tc_035_unread_declared_field_ends_refused_with_missing_member` (tagged FR-024-AC-58) asserts the superseded `Refused`/`missing-member` behaviour, which the IR-1512 code change must replace. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 and 41 to 45 (FR-024-AC-57 and FR-024-AC-59 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)

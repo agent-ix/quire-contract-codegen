@@ -253,7 +253,7 @@ pub enum StateClauseReplayError {
         member: StateClauseHarnessMember,
     },
     /// The harness's QSL `ObligationIdentity` (node, model and ordinal) differs from the identity
-    /// the caller supplied (FR-024-AC-65).
+    /// the caller supplied (FR-024-AC-65 and FR-024-AC-71).
     ObligationIdentityMismatch,
     /// The input already carries playback values; the Kani adapter requires an empty slot.
     PlaybackAlreadySupplied,
@@ -481,6 +481,9 @@ impl StateClauseReplayInputs<'_> {
         else {
             return Err(StateClauseReplayError::NotPostconditionHarness);
         };
+        if harness.obligation != self.obligation_identity {
+            return Err(StateClauseReplayError::ObligationIdentityMismatch);
+        }
         let graph = ClauseGraphView::new(self.package);
         let shape = ClauseShape::read(&graph, self.clause_node).map_err(|refusal| {
             StateClauseReplayError::Document(DocumentError::Clause { refusal })

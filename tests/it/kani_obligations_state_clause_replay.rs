@@ -89,6 +89,7 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
             subject_path: "crate::subject::deposit_debiting_within_range",
             unwind: 4,
         },
+        twin.minted_role_identities(BALANCE),
     )
     .expect("postcondition harness generates");
     let harness = &generated.postcondition.identity;
@@ -252,6 +253,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             subject_path: "crate::subject::deposit_debiting_within_range",
             unwind: 4,
         },
+        twin.minted_role_identities(BALANCE),
     )
     .expect("postcondition harness generates");
     let harness = &generated.postcondition.identity;
@@ -1402,6 +1404,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
             subject_path: "crate::subject::deposit_debiting_within_range",
             unwind: 4,
         },
+        twin.minted_role_identities(BALANCE),
     )
     .expect("emitted package generates");
     let outcome = prove(&generated.postcondition);
@@ -1515,6 +1518,7 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
             subject_path: "crate::subject::deposit_debiting",
             unwind: 4,
         },
+        twin.minted_role_identities(BALANCE),
     )
     .expect("emitted package generates");
     let evidence = super::kani_obligations_state_frame::prove_evidence(&generated.postcondition);
