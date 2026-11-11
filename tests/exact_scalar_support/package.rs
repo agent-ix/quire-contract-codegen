@@ -2438,9 +2438,28 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
                 }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::SquareRoot) => {
+                    "quire.op.ieee.float32.sqrt"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::SquareRoot) => {
+                    "quire.op.ieee.float64.sqrt"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::FusedMultiplyAdd) => {
+                    "quire.op.ieee.float32.fma"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::FusedMultiplyAdd) => {
+                    "quire.op.ieee.float64.fma"
+                }
+            };
+            // `sqrt` and `fma` are catalogued `call` operators (FR-014-AC-72).
+            let operator = match operator {
+                IeeeArithmeticOperator::SquareRoot | IeeeArithmeticOperator::FusedMultiplyAdd => {
+                    "call"
+                }
+                _ => expr.operator,
             };
             (
-                expr.operator,
+                operator,
                 op_full(
                     identity,
                     vec![law("ieee_profile", ieee_profile_definition())],

@@ -13,7 +13,7 @@ relationships:
 Verify [FR-053](../functional/FR-053-float-scalar-harnesses.md) through admitted float
 packages (conditional on the quire-exact float carrier, IR-1446; the Contract IR float
 `requires_bound` ruling, IR-69, for the upstream half of the unpinned-operand refusal;
-and, for `sqrt` and `fma`, the FR-014 derivation of IR-1502; none is delivered),
+and, for `sqrt` and `fma`, the FR-014 derivation of IR-1502, which is delivered; the first two are not),
 public CG generation, installed proof execution and owner replay. This case is planned;
 FR-014 oracle agreement does not establish Kani acceptance. Execute generated proofs only
 with the authorized runner and budget. The control points named in FR-053's Behavior
@@ -28,8 +28,8 @@ used by name below.
    assert the operation, width, operand forms and, for arithmetic, the result bound are
    the admitted node's, that no result bound is read for a comparison, and that the
    expected side is not a second call of the generated oracle. Request `sqrt` and `fma`
-   and assert `OperationNotDerivable` and no harness while the FR-014 extension
-   (IR-1502) is absent. Request `to_float32`, `to_float64`, `from_exact`, `to_rational`,
+   and assert the FR-014 derivation (IR-1502, delivered) yields the descriptor, and no
+   harness while P1 is absent. Request `to_float32`, `to_float64`, `from_exact`, `to_rational`,
    `float32.negate` and `float64.negate` and assert no harness and the existing dispositions. Request a float literal operand
    and assert `unsupported` naming `FloatLiteralOperand`, and a non-parameter operand and
    assert `unsupported` naming `OperandNotSupported`, each with the node (AC-1).
@@ -143,5 +143,5 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 
 PLANNED: all fourteen FR-053 criteria are unimplemented and untagged. No missing carrier
 capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation
-(IR-1502), replay route or generated-proof result is waived. No width, operation or rounding
+(IR-1502, now delivered), replay route or generated-proof result is waived. No width, operation or rounding
 mode is known to verify within a request's ceilings.

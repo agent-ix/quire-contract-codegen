@@ -75,6 +75,7 @@ mod exact_scalar_generation;
 mod frame_claim_gap;
 mod generated_headers;
 mod harness_generation;
+mod ieee_sqrt_fma;
 mod inline_integer_equality;
 mod integer_division_bounds;
 mod kani_batching;

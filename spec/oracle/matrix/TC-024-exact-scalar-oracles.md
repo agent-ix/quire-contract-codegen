@@ -532,7 +532,7 @@ owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
 forms retain their prior refusal boundaries. Until those tests run, this
 section records planned qualification and grants no execution credit.
 
-## IEEE square root and fused multiply-add (IR-1502, planned)
+## IEEE square root and fused multiply-add (IR-1502)
 
 This extension verifies FR-014-AC-72 through FR-014-AC-80. It supplies native
 CG-to-owner agreement evidence only; the Kani row for these identities is
@@ -542,8 +542,7 @@ quire-integration IR-842.
 1. Through the public QSL facade, emit `quire::value::ieee::sqrt` and `fma`
    calls at `Float32[r]` and `Float64[r]`, pass the bytes unchanged to Contract
    IR's strict reader, select the actual admitted node ids and derive their
-   items; also derive reader-admitted fixtures with the catalogued call
-   operator. Assert each item is derived and `ir_confirmed`, and that each
+   items. Assert each item is derived and `ir_confirmed`, and that each
    identity round-trips identity, descriptor, identity (AC-72..74). A red run
    of this step on the preceding code is recorded in the PR; it is not a
    test assertion.
@@ -570,8 +569,7 @@ quire-integration IR-842.
    unchanged (AC-77).
 4. Present an admitted node whose mode differs from the rounding bound, and
    nodes with a missing, repeated and unreadable `float_rounding` bound. Assert
-   `mode_not_derivable` and the `add`-equivalent bound refusals, no oracle, and
-   unchanged sibling items (AC-78). At CG's defensive seam, present a `sqrt` or
+   `mode_not_derivable` and the `add`-equivalent bound refusals (AC-78). At CG's defensive seam, present a `sqrt` or
    `fma` descriptor against nodes with the wrong semantic form (an `add` `binary` node), the wrong body operator, the wrong
    operand count, a different width or non-float operand, and a wrong result
    type; assert `FormMismatch`, `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`
@@ -598,5 +596,5 @@ quire-integration IR-842.
    assertions or a copied owner catalog.
 
 Expected result: the four identities derive, generate and agree with the owner;
-unrelated identities keep their refusals. Until those tests run, this section
-grants no execution credit.
+unrelated identities keep their refusals. The tests are `tests/it/ieee_sqrt_fma.rs` and
+the sqrt/fma controls of `src/oracle/scalar/derive/tests.rs`.
