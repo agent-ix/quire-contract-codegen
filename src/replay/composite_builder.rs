@@ -83,7 +83,8 @@ pub enum CompositeBuildError {
         /// The operator carried by the original node.
         actual: EqualityOperator,
     },
-    /// The selected node has no supported structural equality operation.
+    /// No single generated origin entry matches the selected node, operator and operand types.
+    /// Produced by the composite artifact selection, not by operator reading.
     UnsupportedNodeOperation,
     /// The accessor returned a shape outside this graph-child constructor.
     OperandShape,

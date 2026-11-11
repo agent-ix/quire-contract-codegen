@@ -599,22 +599,18 @@ fn original_operator_mismatch_refuses_with_typed_operators() {
     }
 }
 
-/// A non-equality operation, a comparison here, is refused by the checked package's operand
-/// projection as an ineligible operator, whichever operator the caller requests, with no request.
-#[trace("FR-014-AC-2", "FR-033-AC-1", "TC-024", "TC-048")]
-#[test]
-fn a_non_equality_operation_refuses_as_an_ineligible_operator() {
-    let source = format!(
-        "{SOURCE}function k using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure {{ a < b }}\n"
-    );
+/// A non-equality operation is refused by the checked package's operand projection as an
+/// ineligible operator, whichever operator the caller requests, with no request.
+fn assert_ineligible_operator(extra: &str, function: &str, identity: &str) {
+    let source = format!("{SOURCE}{extra}\n");
     let package = checked(&source);
-    let (node, occurrence) = application_with_operator(&package, "k", "quire.op.integer.lt");
+    let (node, occurrence) = application_with_operator(&package, function, identity);
     let context = package
         .clone()
         .into_context(
             &inputs(&source).source,
             inputs(&source),
-            "k",
+            function,
             CheckedPackageReadLimits::bounded(),
         )
         .unwrap();
@@ -625,6 +621,28 @@ fn a_non_equality_operation_refuses_as_an_ineligible_operator() {
                 if matches!(*cause, CheckedCompositeOperandError::IneligibleOperator { .. })
         ));
     }
+}
+
+/// A comparison is not an equality operation.
+#[trace("FR-014-AC-2", "FR-033-AC-1", "TC-024", "TC-048")]
+#[test]
+fn a_non_equality_operation_refuses_as_an_ineligible_operator() {
+    assert_ineligible_operator(
+        "function k using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a < b }",
+        "k",
+        "quire.op.integer.lt",
+    );
+}
+
+/// A quantity conversion is not an equality operation.
+#[trace("FR-014-AC-2", "FR-033-AC-1", "TC-024", "TC-048")]
+#[test]
+fn a_quantity_conversion_refuses_as_an_ineligible_operator() {
+    assert_ineligible_operator(
+        "dimension Length;\nunit m : Length = rational(1, 1);\nunit cm : Length = rational(1, 100) * m;\nfunction c using v(a: Quantity<cm, Int[0, 1000]>): Quantity<m> pure { convert<Quantity<m>>(a) }",
+        "c",
+        "quire.op.quantity.convert",
+    );
 }
 
 /// One retained context resolves distinct operation nodes across repeated requests.
