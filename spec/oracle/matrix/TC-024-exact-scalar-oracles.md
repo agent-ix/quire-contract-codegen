@@ -531,3 +531,47 @@ Expected result: both genuine producer forms generate and execute with the
 owner operation's value, identity, rounding, NaN and budget behavior. Unrelated
 forms retain their prior refusal boundaries. Until those tests run, this
 section records planned qualification and grants no execution credit.
+
+## IEEE square root and fused multiply-add (IR-1502, planned)
+
+This extension verifies FR-014-AC-72 through FR-014-AC-74. It supplies native
+CG-to-owner agreement evidence only; the Kani row for these identities is
+FR-053 and TC-067, and agreement with the QSL value authority stays with
+quire-integration IR-842.
+
+1. Build admitted fixtures for the four identities (`sqrt` over one operand and
+   `fma` over three, at `float32` and `float64`) with a `float_rounding` bound
+   and a matching mode. Derive their items and generate. Assert each item is
+   derived, `ir_confirmed`, and that before this change the same fixtures were
+   `OperationNotDerivable` (record that as the failing step, then require it to pass).
+2. Compile the generated crate and call each oracle with independently
+   prepared `IeeeValue` operands and `Meter`s. Compare the complete owner
+   outcome, flags, ordered admitted charges and consumed counters against a
+   direct `evaluate_ieee` call, including a charge-denial case at every next-charge
+   boundary. Vectors:
+   - `sqrt`: `float32` `sqrt(2.0)` (`0x40000000`) under `nearest-even` is `0x3FB504F3`
+     and under `toward-positive` is `0x3FB504F4`; `sqrt(4.0)` is `2.0` exactly; `sqrt(-1.0)`
+     and a NaN operand follow the owner's invalid and NaN outcome.
+   - `fma`: `float32` `fma(0x3F800001, 0x3F800001, 0xBF800002)` under `nearest-even` is
+     `0x28800000` (2^-46); a multiply-then-add oracle yields `0x00000000`, so it
+     cannot pass. `fma(2.0, 3.0, 1.0)` is `7.0` (`0x40E00000`); an oracle that
+     reorders the addend and a factor yields `5.0` and cannot pass.
+   - the same two shapes at `float64`, with operands chosen by the same construction.
+3. Mutation controls, each of which must fail the named step: (a) remove the
+   `sqrt`/`fma` arms from derivation: step 1 fails; (b) render `fma` as a
+   multiply then an add: the `0x28800000` vector in step 2 fails; (c) swap the
+   second and third `fma` arguments: the `7.0` vector fails; (d) ignore the
+   descriptor rounding: the `0x3FB504F4` vector fails; (e) accept an operand of
+   the other width: the step 4 width control fails.
+4. Present wrong operand count, a `float32` operand to a `float64` identity, a
+   mode unequal to the rounding bound, and a missing rounding bound. Assert the
+   typed refusals of FR-014-AC-74, no oracle for the refused item, an
+   unchanged sibling item, and that `from_exact`, `to_rational` and `negate`
+   remain `OperationNotDerivable`.
+5. Bind runnable tests to FR-014-AC-72 through FR-014-AC-74 in the existing
+   `it` binary and inspect the computed matrix. Do not use spec-text
+   assertions or a copied owner catalog.
+
+Expected result: the four identities derive, generate and agree with the owner;
+unrelated identities keep their refusals. Until those tests run, this section
+grants no execution credit.

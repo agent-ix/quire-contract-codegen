@@ -289,15 +289,14 @@ rational `add`, `sub`, `mul`, `negate` and `div` (both operands
 integers, or both rationals); `lt`, `le`, `gt` and `ge` over integers,
 rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
 `numeric.convert_rounding` to a decimal; IEEE `float32` and `float64` `add`,
-`sub`, `mul` and `div`, `numeric_equal`, `total_order`, `bit_identical`,
+`sub`, `mul`, `div`, `sqrt` and `fma`, `numeric_equal`, `total_order`, `bit_identical`,
 `to_float32` and `to_float64`; every `text` and `enum` comparison;
 `quantity` `add`, `sub`, `mul`, `div`, `pow` and every comparison; and
 `quire.op.quantity.convert`, whose `type_argument` retains either an exact
 unit target or a bounded carried quantity target with its placement mode
 (FR-014-AC-48 and FR-014-AC-62..65). Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
 are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
-`ieee.float32.sqrt`, `ieee.float64.sqrt`, `ieee.float32.fma`,
-`ieee.float64.fma`, `ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
+`ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
 `rational.narrow` and `text.size` (each read against the operation catalog).
 
 On the derived path the descriptor is built from the node's own identity, laws
@@ -349,6 +348,19 @@ otherwise.
   failure — see `ExactScalarRefusal` for the closed set of checks and their
   reasons — and emit no code for it, without changing any other item's
   output.
+- For `quire.op.ieee.float32.sqrt`, `quire.op.ieee.float64.sqrt`,
+  `quire.op.ieee.float32.fma` and `quire.op.ieee.float64.fma` (IR-1502), the
+  generator shall derive the descriptor and generate the oracle exactly as for
+  IEEE `add`, with these differences. `sqrt` takes one operand and `fma` takes three,
+  and every operand and the result shall have the identity's float width; any
+  other operand count, operand form or width is `operand_forms_not_derivable`.
+  The rounding bound, mode and result-bound rules are those of IEEE `add`. The
+  oracle takes the operands in argument order and calls
+  `evaluate_ieee(IeeeOperation::SquareRoot(a))` or
+  `evaluate_ieee(IeeeOperation::FusedMultiplyAdd(a, b, c))`, the owner's single
+  rounding of `a * b + c`, never a multiplication followed by an addition. The
+  owner's value, flags, charges, consumed counters and typed stops are returned
+  unchanged. The Kani harness for these identities is FR-053's.
 - Generated quantity oracles shall receive each quantity operand as QSV
   `UnitQuantity<'_>`, obtained by the caller through `UnitTable::resolve` or
   `UnitScope::resolve` over the kernel `Quantity`'s own unit id. CG shall not
@@ -710,6 +722,9 @@ otherwise.
 
 | FR-014-AC-70 | Each generated lazy And, Or and Implies scalar oracle accepts its right operand as a function of the caller's mutable exact Meter. A reached right operand runs exactly once on that same meter after any admitted caller prefix and before the single parent boolean result-retention charge. A left-decided result skips the right operand and retains only the parent result. A right Refused or Incomplete outcome propagates unchanged without parent result retention; parent-retention denial preserves the complete owner Incomplete record. No replacement meter, charge subtraction, replay or duplicate charge occurs. Eager decided-operand oracles are unchanged. | Test (TC-024) |
 | FR-014-AC-71 | A compiled generated crate exercises lazy And, Or and Implies with both left values, actual metered owner Boolean equality on the right, and a nonempty admitted caller-meter prefix. Compared with an independently sequenced owner reference, it checks values or complete typed stops, ordered admitted charges and every consumed counter at generous limits and every denied next-charge boundary, including right-evaluation denial and parent-retention denial. Skipped right closures have zero invocations and charges; reached closures have exactly one invocation. The controls fail for the old no-meter right signature, a fresh right meter, eager skipped evaluation or omitted parent retention. These controls qualify CG owner agreement, while IR-842 owns QSL source-backed agreement. | Test (TC-024) |
+| FR-014-AC-72 | When a strict-reader-admitted application node carries `operation.identity` `quire.op.ieee.float32.sqrt` or `quire.op.ieee.float64.sqrt` over one operand, or `quire.op.ieee.float32.fma` or `quire.op.ieee.float64.fma` over three operands, each operand and the result of the identity's width, and a `float_rounding` bound whose rounding equals `operation.mode`, then `derive_exact_scalar_items` shall return an item for it and its descriptor shall name the identity's operation and width, and `generate_exact_scalar_oracles` shall mark its operation `ir_confirmed`. The exhaustive identity matches of derivation and of the descriptor check shall cover all four identities and the round-trip test shall walk them. | Test (TC-024) |
+| FR-014-AC-73 | The generated oracle for each of the four identities of FR-014-AC-72 shall call `evaluate_ieee` with `IeeeOperation::SquareRoot(a)` or `IeeeOperation::FusedMultiplyAdd(a, b, c)` in argument order under the descriptor's rounding and the caller's `Meter`, and shall return the owner's result, ordered admitted charges, consumed counters and typed stops unchanged. | Test (TC-024) |
+| FR-014-AC-74 | If a `sqrt` or `fma` node of FR-014-AC-72 has the wrong operand count, an operand of a different float width or of a non-float form, a mode unequal to its rounding bound, or no reachable `float_rounding` bound, then derivation shall return the same typed refusal IEEE `add` returns for that defect (`operand_forms_not_derivable`, `mode_not_derivable` or `RequiresBound`), and generation shall emit no oracle for it and leave every other item unchanged. A descriptor naming a different catalogued operation for the node is not `ir_confirmed` (FR-014-AC-12). `quire.op.ieee.from_exact`, `quire.op.ieee.to_rational`, `quire.op.ieee.float32.negate` and `quire.op.ieee.float64.negate` remain `OperationNotDerivable`. | Test (TC-024) |
 
 ## Dependencies
 
