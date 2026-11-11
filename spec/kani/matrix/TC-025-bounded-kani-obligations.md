@@ -918,9 +918,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     generated; (b) `items` element maximum 9 changed to 8, cardinality unchanged: refuses
     `V2ClauseClaimMismatch` naming `StateReads`, no harness; (c) `items` element changed from
     `Int[0, 9]` to the Boolean pair, cardinality unchanged: same refusal; (d) `items` cardinality
-    maximum 3 changed to 2, element domain unchanged: same refusal; (e) a second fixture whose
-    `items` element is itself a sequence: refused as `CollectionClaimNotRendered` with
-    `UnsupportedObjectState` ahead of any record comparison, whatever its record; (f) `items` element minimum 0 changed to 1, maximum unchanged: same refusal as (b). Mutants, each
+    maximum 3 changed to 2, element domain unchanged: same refusal; (e) a second fixture adding a drawn field `grid` whose element is itself a sequence, beside the one-level `items`: refused as `CollectionClaimNotRendered` with `UnsupportedObjectState` ahead of any record comparison, whatever its record; (e2) a third fixture whose quantified `items` has a sequence element: refused with `UnsupportedFieldType`, likewise; (f) `items` element minimum 0 changed to 1, maximum unchanged: same refusal as (b). Mutants, each
     applied alone to `operation_selected_reads` in `src/kani/generate/collection.rs`: M1, the
     `SymbolicBounds::Sequence` arm discarding `element` (what the code does today), fails 52(b)
     and 52(c) and leaves 52(a) and 52(d) green; M2, comparing the element's maximum only, fails 52(f) and leaves 52(b) green; M3, selecting only the fields the clause reads, fails 52(a), the
@@ -935,7 +933,10 @@ with the required author `make kani-gate`; independent review and final acceptan
     the refusal holds neither key nor a selection; (c) A's record with A's key but a different
     node ordinal in the `NodeKey`: refuses `V2ClauseNodeKeyMismatch`; (d) A's claim with B's key
     and also a changed parameter domain: refuses `V2ClauseNodeKeyMismatch`, not
-    `V2ClauseClaimMismatch`. Mutants at the new comparison in `classify_v2_clause`
+    `V2ClauseClaimMismatch`; (e) the resolver-returns-none branch has no hand-built fixture that
+    reaches classification (a clause node without a structural key fails admission earlier), so
+    it is evidenced by the same comparison form `resolved.as_ref() != Some(&claim_key)` read in
+    review, not by a runtime case. Mutants at the new comparison in `classify_v2_clause`
     (`src/kani/generate/negotiate.rs`): M4, skipping the comparison, fails 53(b), 53(c) and
     53(d); M5, resolving the key of the first requested clause instead of the selected clause
     (here B), fails 53(a) and 53(b); M6, resolving the key from the claim itself, fails 53(b);

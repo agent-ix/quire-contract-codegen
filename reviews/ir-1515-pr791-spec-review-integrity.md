@@ -36,3 +36,15 @@ Ticket: IR-1515. PR #791 (spec only, one commit 995a89f7 on origin/main a52a000e
 | FR-015-AC-48 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:866 | [...] PARTIAL (specified by IR-489; code IR-1507): [...] Two gaps stay open and are specified by FR-015-AC-133 and FR-015-AC-134 (read domain of a sequence-valued state field, and which drawn fields count as reads; code IR-1517) and FR-015-AC-135 (the carried `NodeKey` must be the clause node's issued key; code IR-1518). Until those land, the code compares a sequence field's inclusive cardinality range only and does not check the `NodeKey`. |
 | TC-025-step-14-tail | examined | spec/kani/matrix/TC-025-bounded-kani-obligations.md:576-577 | The sequence-field read domain, the unread drawn fields and the NodeKey binding are specified by steps 52 and 53 below (planned). |
 | tests.md-FR-015-V2 | examined | spec/kani/matrix/tests.md:46 | AC-48 is implemented by IR-1507 for both routes and stays partial under IR-1515, which specifies AC-133 and AC-134 (code IR-1517) and AC-135 (code IR-1518) as planned |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | IR-1517 is the code ticket for AC-133. Its title still reads '... sequence element domain in whole-object collection reads (FR-015-AC-133)'; that part is fine. Its description still says 'carry the element domain (recursively for nested sequences), keep every drawn field, read or not, as a read'. AC-133 now covers one-level sequences only, says nested sequences stay refused, and treats AC-134 as implemented. Comments 2d784625 and 7feea176 correct the scope, but a coder reading the description builds the recursive variant. Fix: edit the IR-1517 description. This is a tracker edit. | spec/kani/functional/FR-015-bounded-kani-obligations.md:945 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | still-open | Round 1, head e6e8dfa7: IR-1518's title now reads (FR-015-AC-135, AC-136), but its description still says 'Code ticket for the planned criterion FR-015-AC-134'. It also still says 'The request carries the QSL-issued NodeKey ... CG derives no key from a CheckedNodeId', which contradicts the rewritten AC-135. Only comment 89393a00 corrects it. Fix: edit the IR-1518 description. This is a tracker edit; no spec change is needed. |

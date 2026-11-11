@@ -39,3 +39,18 @@ Ticket: IR-1515. PR #791 (spec only, one commit 995a89f7 on origin/main a52a000e
 | FR-015-AC-48 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:866 | [...] PARTIAL (specified by IR-489; code IR-1507): [...] Two gaps stay open and are specified by FR-015-AC-133 and FR-015-AC-134 (read domain of a sequence-valued state field, and which drawn fields count as reads; code IR-1517) and FR-015-AC-135 (the carried `NodeKey` must be the clause node's issued key; code IR-1518). Until those land, the code compares a sequence field's inclusive cardinality range only and does not check the `NodeKey`. |
 | FR-015-bullets | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:508-513 | The generator shall refuse a V2 clause claim whose carried `NodeKey` is not the key the request supplies for the selected clause node (FR-015-AC-135). / The generator shall compare a sequence-valued field's cardinality range and element domain against the independently selected claim (FR-015-AC-133). / The generator shall compare the full set of fields a whole-object collection clause draws, read or not, against the claim's state-field reads (FR-015-AC-134). |
 | TC-025-step-53 | context_only | spec/kani/matrix/TC-025-bounded-kani-obligations.md:930-945 | 53. NodeKey binding, FR-015-AC-135. Author a package with two clauses A and B on different operations, request both with B listed first, each supplied with its own issued `NodeKey` (the keys written by hand in the test, not derived from the node ids by production code) [...] (c) A's record with `NodeKey_A`, ordinal 1 and a different owning model: admitted, identity carried unchanged; (d) [...] M5 [...] M6 [...] M7, comparing the whole `ObligationIdentity` instead of the `NodeKey`, fails 53(c); M8, running the record comparison first, fails 53(d) |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | AC-135 relies on `package.structural_key(clause)` and then `checked_node_key`. Both return `Option`: `checked_node_key` returns None for a path with an Index, Operand or Dependency segment (src/core/ir/node_key.rs:36-38). The AC does not say what an unresolvable selected clause key does: refuse with `V2ClauseNodeKeyMismatch`, refuse with another reason, or admit. The replay seam treats it as a mismatch (`ClauseSelectionMismatch`, src/replay/state_clause.rs:617-623). One clause, 'a key that cannot be resolved is refused as V2ClauseNodeKeyMismatch', closes it. It is unlikely to occur for an admitted state clause, so this is low. | spec/kani/functional/FR-015-bounded-kani-obligations.md:947 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
+| FND-002 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
+| FND-003 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
+| FND-004 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |

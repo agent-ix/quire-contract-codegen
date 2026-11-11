@@ -35,3 +35,9 @@ Ticket: IR-1515. PR #791 (spec only, one commit 995a89f7 on origin/main a52a000e
 | FR-015-AC-135 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:947 | PLANNED (IR-1518; spec IR-1515; refs FR-015-AC-48 and AD-003 E-1). A V2 clause claim whose `ObligationIdentity` `NodeKey` differs from the `NodeKey` the request supplies for the selected clause node is refused with `UnsupportedObligation::V2ClauseNodeKeyMismatch`, which names the selected clause node and carries neither key nor CG's selection, before any record comparison and before harness generation. [...] CG derives no `NodeKey` from a `CheckedNodeId` (AD-003 E-1); the request supplies QSL's issued key with each selected clause node. Only the `NodeKey` is compared: a differing model or producer-assigned ordinal alone is admitted and carried unchanged |
 | FR-015-AC-48 | examined | spec/kani/functional/FR-015-bounded-kani-obligations.md:866 | [...] PARTIAL (specified by IR-489; code IR-1507): [...] Two gaps stay open and are specified by FR-015-AC-133 and FR-015-AC-134 (read domain of a sequence-valued state field, and which drawn fields count as reads; code IR-1517) and FR-015-AC-135 (the carried `NodeKey` must be the clause node's issued key; code IR-1518). Until those land, the code compares a sequence field's inclusive cardinality range only and does not check the `NodeKey`. |
 | tests.md-FR-015-V2 | examined | spec/kani/matrix/tests.md:46 | AC-48 is implemented by IR-1507 for both routes and stays partial under IR-1515, which specifies AC-133 and AC-134 (code IR-1517) and AC-135 (code IR-1518) as planned |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
