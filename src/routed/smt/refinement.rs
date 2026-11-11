@@ -644,18 +644,28 @@ mod tests {
     #[trace("TC-059", "FR-045-AC-7")]
     #[test]
     fn non_proof_solver_outcomes_refuse_refinement_handoff() {
+        // Each script drains stdin first; one that exits unread races the runner's
+        // query write and reports InputUnread (ProcessFailed) instead of its outcome.
         for (script, output_limit, expected_status) in [
-            ("printf 'sat\\n'", 1024, SolverStatus::Sat),
-            ("printf 'unknown\\n'", 1024, SolverStatus::Unknown),
+            ("cat >/dev/null; printf 'sat\\n'", 1024, SolverStatus::Sat),
             (
-                "printf 'unsat\\n'; exit 3",
+                "cat >/dev/null; printf 'unknown\\n'",
+                1024,
+                SolverStatus::Unknown,
+            ),
+            (
+                "cat >/dev/null; printf 'unsat\\n'; exit 3",
                 1024,
                 SolverStatus::ProcessFailed,
             ),
-            (":", 1024, SolverStatus::MalformedResponse),
-            ("printf 'invalid\\n'", 1024, SolverStatus::MalformedResponse),
+            ("cat >/dev/null", 1024, SolverStatus::MalformedResponse),
             (
-                "printf 'unsat\\n(extra)'",
+                "cat >/dev/null; printf 'invalid\\n'",
+                1024,
+                SolverStatus::MalformedResponse,
+            ),
+            (
+                "cat >/dev/null; printf 'unsat\\n(extra)'",
                 2,
                 SolverStatus::Stopped(ReachedLimit::OutputBytes),
             ),
