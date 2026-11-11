@@ -15,7 +15,8 @@ use crate::{
     core::requirement::{RequirementGuard, RequirementOccurrence},
     kani::identity::{
         KaniCollectionObligationHarness, KaniScalarObligationHarness,
-        KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness,
+        KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness, V2ClauseClaimField,
+        V2ClauseObligationClaim, V2ClauseSelectedReads,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
@@ -83,6 +84,9 @@ pub enum ObligationItem<'a> {
         package: &'a CheckedPackageV2,
         /// The selected state clause.
         clause: &'a CheckedNodeId,
+        /// QSL's producer-issued identity and the separately selected obligation record
+        /// (FR-015-AC-48).
+        claim: &'a V2ClauseObligationClaim,
         /// Optional caller-declared proof-dependency census for this clause.
         dependencies: Option<&'a [crate::kani::census::ProofDependencyRequest<'a>]>,
     },
@@ -223,6 +227,17 @@ pub enum UnsupportedObligation {
         operation_identity: String,
         /// Complete original operand intervals.
         operands: Vec<crate::core::native_integer::NativeIntegerIntervalDecision>,
+    },
+    /// The independently selected claim's record disagrees with the selected clause; refused
+    /// before any harness is generated, whatever the structural identity (FR-015-AC-48).
+    V2ClauseClaimMismatch {
+        /// Selected clause node.
+        node_id: CheckedNodeId,
+        /// The record member that differs.
+        field: V2ClauseClaimField,
+        /// The selected clause's own parameters and state reads, named when the difference is
+        /// in one of them.
+        selected: Option<V2ClauseSelectedReads>,
     },
     /// This V2 clause cannot be represented by the bounded clause renderer.
     V2ClauseConditionNotRendered {

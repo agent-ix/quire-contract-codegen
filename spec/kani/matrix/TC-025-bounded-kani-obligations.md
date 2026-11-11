@@ -564,7 +564,11 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     whole-object collection postcondition in
     `whole_object_identity_regenerates_and_changes_with_unread_domains` has the same repeatability
     and request-variation results. These controls do not claim AC-46 non-vacuity or AC-48 producer
-    identity evidence.
+    identity evidence. AC-48 evidence is `tests/it/v2_clause_obligation_identity.rs`: the carried
+    identity equals the supplied one for a changed node, model and ordinal; unwind and
+    subject changes leave it unchanged while the harness identity changes; and a changed
+    occurrence, kind, parameter identity or domain, or state-field read identity or domain
+    refuses with the named record member and no harness, while the matching control is admitted.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).

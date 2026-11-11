@@ -107,11 +107,14 @@ fn negotiate_with_request(
     subject_path: &str,
     unwind: u32,
 ) -> KaniObligationOutcome {
+    let claims = crate::common::v2_claim::claims_for(package, ids);
     let items = ids
         .iter()
-        .map(|clause| ObligationItem::V2Clause {
+        .zip(&claims)
+        .map(|(clause, claim)| ObligationItem::V2Clause {
             package,
             clause,
+            claim,
             dependencies: None,
         })
         .collect::<Vec<_>>();

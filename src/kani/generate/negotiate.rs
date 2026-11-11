@@ -106,7 +106,10 @@ use crate::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
     },
-    kani::identity::{ObligationKind, ProofDependencySnapshot, StateFrameHarness},
+    kani::identity::{
+        ObligationKind, ProofDependencySnapshot, StateFrameHarness, V2ClauseClaimField,
+        V2ClauseObligationClaim,
+    },
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -841,10 +844,12 @@ fn classify<'a>(
         ObligationItem::V2Clause {
             package,
             clause,
+            claim,
             dependencies,
         } => classify_v2_clause(
             checked_lookup(checked_lookups, package),
             clause,
+            claim,
             dependencies,
             native,
         ),
@@ -905,6 +910,7 @@ fn classify<'a>(
 fn classify_v2_clause<'a>(
     lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
+    claim: &V2ClauseObligationClaim,
     dependencies: Option<&[ProofDependencyRequest<'_>]>,
     native: bool,
 ) -> ItemState {
@@ -944,10 +950,10 @@ fn classify_v2_clause<'a>(
             })
         }
         Some(_) => match kind {
-            Some(kind) => match lower_v2_clause(view, clause, kind) {
+            Some(kind) => match lower_v2_clause(view, clause, kind, claim) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
                 Err(reason) if !native => {
-                    match lower_collection_operation(lookup.collection(), clause) {
+                    match lower_collection_operation(lookup.collection(), clause, claim) {
                         Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
                         Err(refusal) => collection_domain_refusal(clause, refusal, Some(reason)),
                     }
@@ -959,6 +965,31 @@ fn classify_v2_clause<'a>(
             }),
         },
     };
+    if matches!(
+        outcome,
+        Outcome::LoweredV2Clause(_) | Outcome::LoweredCollectionOperation(_)
+    ) {
+        let kind_selected = kind == Some(claim.record.kind);
+        let occurrence_selected = lookup.occurrences(clause).iter().any(|entry| {
+            entry.node_id == claim.record.occurrence.node_id
+                && entry.role == claim.record.occurrence.role
+                && entry.ordinal == claim.record.occurrence.ordinal
+        });
+        let mismatch = if !occurrence_selected {
+            Some(V2ClauseClaimField::Occurrence)
+        } else if !kind_selected {
+            Some(V2ClauseClaimField::Kind)
+        } else {
+            None
+        };
+        if let Some(field) = mismatch {
+            outcome = Outcome::Unsupported(UnsupportedObligation::V2ClauseClaimMismatch {
+                node_id: clause.clone(),
+                field,
+                selected: None,
+            });
+        }
+    }
     if let Some(dependencies) = dependencies {
         match validate_v2_dependencies(dependencies) {
             Ok(edges) => {
@@ -1562,6 +1593,77 @@ mod tests {
 
     use super::*;
 
+    /// A claim that matches `clause`: its true occurrence and kind, with the selected clause's own
+    /// parameters and state reads read back from the generator's refusal when it names them.
+    fn claim_for(
+        package: &quire_contract_model::CheckedPackageV2,
+        clause: &quire_contract_model::CheckedNodeId,
+    ) -> V2ClauseObligationClaim {
+        use crate::kani::identity::V2ClauseObligationRecord;
+        let occurrence = package
+            .source_map()
+            .iter()
+            .find(|entry| &entry.node_id == clause)
+            .map_or_else(
+                || crate::core::requirement::RequirementOccurrence {
+                    node_id: clause.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                |entry| crate::core::requirement::RequirementOccurrence {
+                    node_id: entry.node_id.clone(),
+                    role: entry.role.clone(),
+                    ordinal: entry.ordinal,
+                },
+            );
+        let kind = match package.term(clause) {
+            Some(CheckedTerm::Application { operation, .. }) => {
+                match operation.state_clause_kind().ok().flatten() {
+                    Some(StateClauseKind::Postcondition) => ObligationKind::Postcondition,
+                    Some(StateClauseKind::Invariant) => ObligationKind::Invariant,
+                    _ => ObligationKind::Precondition,
+                }
+            }
+            _ => ObligationKind::Precondition,
+        };
+        let mut claim = V2ClauseObligationClaim {
+            obligation: crate::kani::test_support::fixture_obligation(),
+            record: V2ClauseObligationRecord {
+                occurrence,
+                kind,
+                arguments: Vec::new(),
+                state_reads: Vec::new(),
+            },
+        };
+        let probe = ObligationItem::V2Clause {
+            package,
+            clause,
+            claim: &claim,
+            dependencies: None,
+        };
+        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            items: std::slice::from_ref(&probe),
+            subject_path: "crate::request::unrelated",
+            unwind: 8,
+        });
+        if let Ok(outcome) = outcome {
+            if let ObligationDisposition::Unsupported {
+                reason:
+                    UnsupportedObligation::V2ClauseClaimMismatch {
+                        selected: Some(selected),
+                        ..
+                    },
+            } = &outcome.records()[0].disposition
+            {
+                let selected = selected.clone();
+                claim.record.arguments = selected.arguments;
+                claim.record.state_reads = selected.state_reads;
+            }
+        }
+        claim
+    }
+
     /// A postcondition cannot produce a harness when the request omits an admitted
     /// precondition of the same operation, even when the post body itself lowers.
     #[trace("FR-015-AC-43", "TC-025")]
@@ -1575,11 +1677,13 @@ mod tests {
             ObligationItem::V2Clause {
                 package: &package,
                 clause: &postcondition,
+                claim: &claim_for(&package, &postcondition),
                 dependencies: None,
             },
             ObligationItem::V2Clause {
                 package: &package,
                 clause: &first,
+                claim: &claim_for(&package, &first),
                 dependencies: None,
             },
         ];
@@ -1620,16 +1724,19 @@ mod tests {
                 ObligationItem::V2Clause {
                     package: &package,
                     clause: &postcondition,
+                    claim: &claim_for(&package, &postcondition),
                     dependencies: None,
                 },
                 ObligationItem::V2Clause {
                     package: &package,
                     clause: &first,
+                    claim: &claim_for(&package, &first),
                     dependencies: None,
                 },
                 ObligationItem::V2Clause {
                     package: &package,
                     clause: &second,
+                    claim: &claim_for(&package, &second),
                     dependencies: None,
                 },
             ];
@@ -1749,11 +1856,13 @@ mod tests {
         let good = ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &claim_for(&package, &clause),
             dependencies: None,
         };
         let refused = ObligationItem::V2Clause {
             package: &package,
             clause: non_clause,
+            claim: &claim_for(&package, non_clause),
             dependencies: None,
         };
         let evaluate = |items: &[ObligationItem<'_>]| {
@@ -1878,12 +1987,19 @@ mod tests {
                 "actual admitted authored population"
             );
             for count in [2, 4, 8] {
+                let claims = clauses
+                    .iter()
+                    .take(count)
+                    .map(|clause| claim_for(&package, clause))
+                    .collect::<Vec<_>>();
                 let items = clauses
                     .iter()
                     .take(count)
-                    .map(|clause| ObligationItem::V2Clause {
+                    .zip(&claims)
+                    .map(|(clause, claim)| ObligationItem::V2Clause {
                         package: &package,
                         clause,
+                        claim,
                         dependencies: None,
                     })
                     .collect::<Vec<_>>();

@@ -2447,6 +2447,7 @@ exit 0
         };
         KaniV2ClauseObligationHarness::generated(
             identity,
+            crate::kani::test_support::fixture_obligation(),
             Artifact::new(format!("src/generated/{module}.rs"), source),
             Artifact::new(format!("kani-obligations/{module}.json"), "{}"),
         )
@@ -2592,6 +2593,7 @@ exit 0
         shifted_source.contents.insert(0, '\n');
         let bad = KaniV2ClauseObligationHarness::generated(
             harness.identity.clone(),
+            harness.obligation.clone(),
             shifted_source,
             harness.record.clone(),
         );
@@ -2630,6 +2632,7 @@ exit 0
             .totality_assertion_line += 1;
         let bad = KaniV2ClauseObligationHarness::generated(
             bad_identity,
+            harness.obligation.clone(),
             harness.rust.clone(),
             harness.record.clone(),
         );

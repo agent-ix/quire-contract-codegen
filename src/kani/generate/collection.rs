@@ -30,7 +30,8 @@ use crate::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
             CollectionPreconditionIdentity, CollectionPredicateIdentity,
             KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
-            ProofDependencySnapshot, ScalarIntegerRepresentation, V2ClauseObligationIdentity,
+            ProofDependencySnapshot, ScalarIntegerRepresentation, ScalarObligationArgument,
+            SymbolicBounds, V2ClauseObligationIdentity, V2ClauseStateField,
         },
     },
 };
@@ -276,6 +277,7 @@ pub(super) fn lower_collection_claim(
 pub(super) fn lower_collection_operation(
     graph: &CollectionGraph<'_>,
     clause_id: &CheckedNodeId,
+    obligation: &crate::kani::identity::V2ClauseObligationClaim,
 ) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
     let claim = graph
         .index
@@ -291,7 +293,7 @@ pub(super) fn lower_collection_operation(
     let quantifier = operation::first_quantifier(graph, &body)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field = resolve_collection_field(graph.package, &graph.index, clause_id, quantifier, role)?;
-    let operation = operation::lower(graph, clause_id, &field)?;
+    let operation = operation::lower(graph, clause_id, &field, obligation)?;
     Ok(LoweredCollectionClaim {
         dependencies: ProofDependencySnapshot::default(),
         package: ContractSourceV1 {
@@ -610,9 +612,54 @@ pub(super) fn render_collection_operation(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&spec.path().module.to_string(), &identity, &rust)?;
-    Ok(KaniV2ClauseObligationHarness::generated(
-        identity, rust, record,
-    ))
+    let selected = operation_selected_reads(context);
+    super::clause::v2::seal_with_selected(&operation.claim, identity, Some(selected), rust, record)
+}
+
+/// The parameters and state reads a whole-object collection clause draws, in the record shape
+/// of a claim. A sequence-valued field's domain is its inclusive cardinality range.
+fn operation_selected_reads(
+    context: &crate::kani::identity::CollectionOperationIdentity,
+) -> (Vec<ScalarObligationArgument>, Vec<V2ClauseStateField>) {
+    let domain = |element: &CollectionElementIdentity| match element {
+        CollectionElementIdentity::Boolean => (0, 1),
+        CollectionElementIdentity::Integer { minimum, maximum } => (*minimum, *maximum),
+    };
+    let arguments = context
+        .parameters
+        .iter()
+        .map(|parameter| {
+            let (minimum, maximum) = domain(&parameter.domain);
+            ScalarObligationArgument {
+                identifier: parameter.name.clone(),
+                minimum,
+                maximum,
+            }
+        })
+        .collect();
+    let reads = context
+        .fields
+        .iter()
+        .map(|field| {
+            let (minimum, maximum) = match &field.bounds {
+                SymbolicBounds::Boolean => (0, 1),
+                SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum),
+                SymbolicBounds::Sequence {
+                    minimum_length,
+                    maximum_length,
+                    ..
+                } => (*minimum_length, *maximum_length),
+            };
+            V2ClauseStateField {
+                declaring_node_id: field.declaring_node_id.clone(),
+                field_name: field.field_name.clone(),
+                identifier: field.slot.clone(),
+                minimum,
+                maximum,
+            }
+        })
+        .collect();
+    (arguments, reads)
 }
 
 fn unique_element_capacity(element: CollectionElement) -> u128 {

@@ -333,6 +333,7 @@ fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() 
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {

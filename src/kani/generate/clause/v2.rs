@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use crate::{
+    core::artifact::Artifact,
     core::ir::{
         checked_term::{application, bound_members, literal, reference},
         clause::{read_clause, ClauseGraphView, ClauseInputSide, ClauseTerm, MAX_CONDITION_TERMS},
@@ -37,7 +38,8 @@ use crate::{
         },
         identity::{
             KaniV2ClauseObligationHarness, ObligationKind, ScalarObligationArgument,
-            V2ClauseObligationIdentity, V2ClauseStateField,
+            V2ClauseObligationClaim, V2ClauseObligationIdentity, V2ClauseSelectedReads,
+            V2ClauseStateField,
         },
     },
     oracle::clause::{
@@ -56,6 +58,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     arithmetic: Vec<ArithmeticProbe>,
     symbolic_name: Option<String>,
     result_postcondition: Option<ResultPostcondition>,
+    claim: V2ClauseObligationClaim,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
 }
@@ -99,8 +102,9 @@ pub(in crate::kani::generate) fn lower(
     view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,
     kind: ObligationKind,
+    claim: &V2ClauseObligationClaim,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
-    lower_with_census(view, clause, kind, |package, context| {
+    lower_with_census(view, clause, kind, claim, |package, context| {
         package.model_operations(context, 65_536)
     })
 }
@@ -109,6 +113,7 @@ fn lower_with_census<'a>(
     view: &ClauseGraphView<'a>,
     clause: &CheckedNodeId,
     kind: ObligationKind,
+    claim: &V2ClauseObligationClaim,
     census: impl FnOnce(
         &'a CheckedPackageV2,
         &CheckedNodeId,
@@ -283,6 +288,7 @@ fn lower_with_census<'a>(
         arithmetic,
         symbolic_name,
         result_postcondition,
+        claim: claim.clone(),
         module_symbol,
         harness_symbol: if kind == ObligationKind::Postcondition {
             "prove_clause"
@@ -636,6 +642,47 @@ impl LoweredV2Clause {
     }
 }
 
+/// Compare the claim's separate obligation record with the generated clause identity and, only
+/// when every member agrees, carry QSL's structural identity unchanged on the sealed harness
+/// (FR-015-AC-48). A mismatch refuses and no harness leaves this function.
+pub(in crate::kani::generate) fn seal_claimed_harness(
+    claim: &V2ClauseObligationClaim,
+    identity: V2ClauseObligationIdentity,
+    rust: Artifact,
+    record: Artifact,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    seal_with_selected(claim, identity, None, rust, record)
+}
+
+/// As [`seal_claimed_harness`], comparing the claim with `selected` arguments and state reads
+/// when the harness identity does not record them itself (the whole-object collection route).
+pub(in crate::kani::generate) fn seal_with_selected(
+    claim: &V2ClauseObligationClaim,
+    identity: V2ClauseObligationIdentity,
+    selected: Option<(Vec<ScalarObligationArgument>, Vec<V2ClauseStateField>)>,
+    rust: Artifact,
+    record: Artifact,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let (arguments, state_reads) =
+        selected.unwrap_or_else(|| (identity.arguments.clone(), identity.state_fields.clone()));
+    if let Some(field) = claim.mismatch(identity.kind, &arguments, &state_reads) {
+        return Err(UnsupportedObligation::V2ClauseClaimMismatch {
+            node_id: identity.clause.clone(),
+            field,
+            selected: Some(V2ClauseSelectedReads {
+                arguments,
+                state_reads,
+            }),
+        });
+    }
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        claim.obligation.clone(),
+        rust,
+        record,
+    ))
+}
+
 pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
@@ -808,9 +855,7 @@ pub(in crate::kani::generate) fn render_clause(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniV2ClauseObligationHarness::generated(
-        identity, rust, record,
-    ))
+    seal_claimed_harness(&lowered.claim, identity, rust, record)
 }
 
 fn expression(text: impl Into<String>) -> Result<ExprText, UnsupportedObligation> {
@@ -1069,9 +1114,7 @@ fn render_result_postcondition(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniV2ClauseObligationHarness::generated(
-        identity, rust, record,
-    ))
+    seal_claimed_harness(&lowered.claim, identity, rust, record)
 }
 
 fn append_arithmetic_probes(
@@ -1325,9 +1368,7 @@ fn render_postcondition(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniV2ClauseObligationHarness::generated(
-        identity, rust, record,
-    ))
+    seal_claimed_harness(&lowered.claim, identity, rust, record)
 }
 enum NativeTerm {
     Integer {
@@ -1688,13 +1729,28 @@ mod postcondition_signature_tests {
         let (package, clause) =
             native_twin::Twin::with_bounded_result_postcondition().emitted_package("DepositResult");
         let view = ClauseGraphView::new(&package);
-        let refusal =
-            match lower_with_census(&view, &clause, ObligationKind::Postcondition, |p, c| {
-                p.model_operations(c, 0)
-            }) {
-                Err(refusal) => refusal,
-                Ok(_) => panic!("a refused complete read cannot expose a lowerable harness"),
-            };
+        let refusal = match lower_with_census(
+            &view,
+            &clause,
+            ObligationKind::Postcondition,
+            &V2ClauseObligationClaim {
+                obligation: crate::kani::test_support::fixture_obligation(),
+                record: crate::kani::identity::V2ClauseObligationRecord {
+                    occurrence: crate::core::requirement::RequirementOccurrence {
+                        node_id: clause.clone(),
+                        role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                        ordinal: 0,
+                    },
+                    kind: ObligationKind::Postcondition,
+                    arguments: Vec::new(),
+                    state_reads: Vec::new(),
+                },
+            },
+            |p, c| p.model_operations(c, 0),
+        ) {
+            Err(refusal) => refusal,
+            Ok(_) => panic!("a refused complete read cannot expose a lowerable harness"),
+        };
         let UnsupportedObligation::V2ClauseOperationRead { node_id, source } = refusal else {
             panic!("the original typed read refusal is retained: {refusal:?}");
         };
