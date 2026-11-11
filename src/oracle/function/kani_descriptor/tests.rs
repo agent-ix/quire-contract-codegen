@@ -179,7 +179,8 @@ fn rebuilt_debug(name: &str, expressions: &[String]) -> String {
     std::fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"kani-descriptor-roundtrip\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            "[package]\nname = \"kani-descriptor-roundtrip-{}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            name,
             crate::core::profile::EXACT_DEPENDENCY_SOURCE
         ),
     )
@@ -197,8 +198,20 @@ fn rebuilt_debug(name: &str, expressions: &[String]) -> String {
         ),
     )
     .expect("scratch main");
+    // Adapt the seeded lock to the scratch package offline, then require it unchanged.
+    let adapted = Command::new(env!("CARGO"))
+        .args(["metadata", "--offline", "--format-version", "1"])
+        .env("CARGO_TARGET_DIR", &base)
+        .current_dir(&directory)
+        .output()
+        .expect("adapt the seeded lock");
+    assert!(
+        adapted.status.success(),
+        "lock adaptation failed:\n{}",
+        String::from_utf8_lossy(&adapted.stderr)
+    );
     let output = Command::new(env!("CARGO"))
-        .args(["run", "--offline", "--quiet"])
+        .args(["run", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", &base)
         .current_dir(&directory)
         .output()

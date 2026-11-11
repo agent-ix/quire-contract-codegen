@@ -158,12 +158,29 @@ pub enum OracleGenerationError {
         /// The stable category of the owner-path failure.
         code: crate::oracle::function::owner_path::CheckedFunctionErrorCode,
     },
+    /// The requested function's body, name or source index is outside what the Kani harness can
+    /// drive; no harness is emitted.
+    KaniUnsupportedBody {
+        /// Which of the three supported-shape checks failed.
+        reason: KaniUnsupportedReason,
+    },
     /// The requested function's selected body is a nested call, which is outside the
     /// Kani obligation; no harness, data or differential is emitted for it.
     KaniNestedCallBody {
         /// The requested function node.
         function: quire_contract_model::CheckedNodeId,
     },
+}
+
+/// Why the Kani harness cannot drive a requested function.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KaniUnsupportedReason {
+    /// The body is not a two-operand supported integer scalar operator or equality.
+    BodyShape,
+    /// The function's qualified name does not have exactly one segment.
+    QualifiedName,
+    /// The function has no body index in the package's source order.
+    SourceIndex,
 }
 
 impl OracleGenerationError {

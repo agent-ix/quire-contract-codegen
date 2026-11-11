@@ -85,7 +85,9 @@ pub use kani::generate::lower::bounded_kani_profile::{
 pub use kani::generate::lower::finite_reference_graphs::{
     prepare_finite_graph_reaches, GraphLowering, GraphRequest,
 };
-pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+pub use oracle::claim::{
+    ClaimDisposition, ClaimMap, KaniUnsupportedReason, OracleGenerationError, UpstreamBlocker,
+};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles,
     render_exact_scalar_plan, BooleanOperator, BoundForm, ClaimDerivationRefusal,

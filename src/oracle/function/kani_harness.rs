@@ -27,7 +27,7 @@ use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::ir::frame::application_identity;
 use crate::core::naming::bounded_readable_component;
 use crate::core::profile::function_oracle_crate_manifest;
-use crate::oracle::claim::OracleGenerationError;
+use crate::oracle::claim::{KaniUnsupportedReason, OracleGenerationError};
 
 /// Everything the Kani-harness entry needs to derive one function's pre-decoded data.
 pub struct KaniFunctionRequest<'a> {
@@ -79,6 +79,10 @@ fn equality_operator(identity: &str) -> Option<EqualityOperatorKind> {
     }
 }
 
+fn unsupported(reason: KaniUnsupportedReason) -> OracleGenerationError {
+    OracleGenerationError::KaniUnsupportedBody { reason }
+}
+
 /// Classify the selected function's body from the reader's admitted graph alone.
 fn classify_selected_body(
     package: &CheckedPackageV2,
@@ -90,7 +94,7 @@ fn classify_selected_body(
         .and_then(|term| binding_value(term, "body"))
         .and_then(|term| reference_in_graph(term, &graph))
         .and_then(|body| graph.term(body))
-        .ok_or(OracleGenerationError::InvalidPlanState)?;
+        .ok_or(unsupported(KaniUnsupportedReason::BodyShape))?;
     if matches!(
         body,
         CheckedTerm::Application {
@@ -100,14 +104,15 @@ fn classify_selected_body(
     ) {
         return Ok(SelectedBody::Call);
     }
-    let identity = application_identity(body).ok_or(OracleGenerationError::InvalidPlanState)?;
+    let identity =
+        application_identity(body).ok_or(unsupported(KaniUnsupportedReason::BodyShape))?;
     if !application_arguments(body).is_some_and(|arguments| arguments.len() == 2) {
-        return Err(OracleGenerationError::InvalidPlanState);
+        return Err(unsupported(KaniUnsupportedReason::BodyShape));
     }
     scalar_operator(identity)
         .map(SelectedBody::Scalar)
         .or_else(|| equality_operator(identity).map(SelectedBody::Equality))
-        .ok_or(OracleGenerationError::InvalidPlanState)
+        .ok_or(unsupported(KaniUnsupportedReason::BodyShape))
 }
 
 fn presence(value: Presence) -> &'static str {
@@ -185,6 +190,27 @@ fn declaration_descriptor(view: &NominalDeclaration) -> Result<String, OracleGen
     ))
 }
 
+fn single_segment_name(qualified: &[Box<str>]) -> Option<String> {
+    match qualified {
+        [only] => Some(only.to_string()),
+        _ => None,
+    }
+}
+
+fn body_index(
+    indices: &std::collections::BTreeMap<&CheckedNodeId, usize>,
+    function: &CheckedNodeId,
+) -> Result<usize, OracleGenerationError> {
+    indices
+        .get(function)
+        .copied()
+        .ok_or(unsupported(KaniUnsupportedReason::SourceIndex))
+}
+
+/// Render the generation-time `Cancel` as a fresh `Cancel::new()`, cancelled with the same cause
+/// when it already is. A `Cancel::observing` link to a caller's cancel cannot be recovered from
+/// the value and is not rendered: the emitted source is then an uncancelled `Cancel::new()`, so
+/// the proof models only the uncancelled and the already-cancelled states.
 fn cancel_source(cancel: &quire_exact::Cancel) -> String {
     let cause = cancel.cause().map(|cause| match cause {
         quire_exact::CancelCause::Requested => "Requested",
@@ -221,9 +247,13 @@ fn admitted_package(
 /// descriptors beside the generated body module.
 ///
 /// # Errors
-/// Each of the five AC-46 causes is its own typed refusal and emits nothing: a refused,
-/// incomplete or catalog-unavailable read; any owner-path failure (acquisition, selection,
-/// declaration reading or prepared-function construction); and a nested-call body.
+/// Each of the six AC-46 causes is its own typed refusal and emits nothing: a refused,
+/// incomplete or catalog-unavailable read; any owner-path failure (acquisition, selection or
+/// nominal-declaration reading, including the view-to-declaration conversion
+/// `checked_composite_declarations` shared with the emitted `PreparedFunction::new`); a nested-call
+/// body; and a body or name the harness cannot drive (`KaniUnsupportedBody`). The entry does not
+/// run the emitted `PreparedFunction::new` on the host; that genuine construction is the
+/// host differential of FR-021-AC-45.
 pub fn generate_kani_function_harness(
     request: &KaniFunctionRequest<'_>,
 ) -> Result<KaniFunctionHarness, OracleGenerationError> {
@@ -240,6 +270,11 @@ pub fn generate_kani_function_harness(
     let selection = select_checked_callable(package, package, &request.function, &acquired)
         .map_err(owner_path)?;
     let body = classify_selected_body(package, &request.function)?;
+    if matches!(body, SelectedBody::Call) {
+        return Err(OracleGenerationError::KaniNestedCallBody {
+            function: request.function.clone(),
+        });
+    }
     let owner =
         checked_function_declarations(package, &acquired, &selection).map_err(owner_path)?;
     checked_composite_declarations(&owner).map_err(owner_path)?;
@@ -248,12 +283,9 @@ pub fn generate_kani_function_harness(
     let name = graph
         .node(&request.function)
         .and_then(|node| node.declaration.as_ref())
-        .filter(|declaration| declaration.qualified_name.len() == 1)
-        .map(|declaration| declaration.qualified_name[0].to_string())
-        .ok_or(OracleGenerationError::InvalidPlanState)?;
-    let index = *source_body_indices(package)
-        .get(&request.function)
-        .ok_or(OracleGenerationError::InvalidPlanState)?;
+        .and_then(|declaration| single_segment_name(&declaration.qualified_name))
+        .ok_or(unsupported(KaniUnsupportedReason::QualifiedName))?;
+    let index = body_index(&source_body_indices(package), &request.function)?;
     let json_name =
         serde_json::to_string(&name).map_err(|_| OracleGenerationError::InvalidPlanState)?;
     let origin = format!(

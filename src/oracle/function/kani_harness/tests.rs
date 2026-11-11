@@ -404,7 +404,6 @@ fn owner_path_failures_carry_their_checked_function_error_code() {
         generate_kani_function_harness(&request),
         Err(OracleGenerationError::KaniOwnerPathRefused {
             code: CheckedFunctionErrorCode::FacadeLookup
-                | CheckedFunctionErrorCode::InvalidIdentity
         })
     ));
 }
@@ -467,4 +466,181 @@ fn the_entry_signature_takes_no_admitted_package_or_body_classification() {
         source: _,
         function: _,
     } = fixture.request(fixture.function("same"), &fixture.bytes, SAME.as_bytes());
+}
+
+const UNSUPPORTED: &str = concat!(
+    "language \"ix:native\" edition \"1-draft\";\n",
+    "profile v = \"quire.value.complete/v1\";\n",
+    "function less using v(x: Int[0, 9], y: Int[0, 9]): Boolean pure { x < y }\n",
+    "function same using v(x: Int[0, 9], y: Int[0, 9]): Boolean pure { x = y }\n",
+);
+
+/// FR-021-AC-46: a body that is neither a supported scalar nor a supported equality is the
+/// sixth typed cause, not the renderer-internal `InvalidPlanState`; a supported sibling generates.
+#[trace("TC-031", "FR-021-AC-46")]
+#[test]
+fn an_unsupported_body_is_its_own_typed_refusal() {
+    let fixture = Fixture::new(UNSUPPORTED);
+    assert!(
+        fixture.generate("same").is_ok(),
+        "a supported body generates"
+    );
+    assert!(matches!(
+        fixture.generate("less"),
+        Err(OracleGenerationError::KaniUnsupportedBody {
+            reason: KaniUnsupportedReason::BodyShape
+        })
+    ));
+}
+
+/// FR-021-AC-46: the multi-segment name and missing source-index refusals are their own typed
+/// reasons; the single-segment and present-index inputs pass.
+#[trace("TC-031", "FR-021-AC-46")]
+#[test]
+fn name_and_index_failures_are_typed_unsupported_reasons() {
+    let one: Vec<Box<str>> = vec!["f".into()];
+    let two: Vec<Box<str>> = vec!["m".into(), "f".into()];
+    assert_eq!(single_segment_name(&one).as_deref(), Some("f"));
+    assert_eq!(single_segment_name(&two), None);
+    assert_eq!(single_segment_name(&[]), None);
+    let fixture = Fixture::new(SAME);
+    let function = fixture.function("same");
+    let mut indices = std::collections::BTreeMap::new();
+    assert!(matches!(
+        body_index(&indices, &function),
+        Err(OracleGenerationError::KaniUnsupportedBody {
+            reason: KaniUnsupportedReason::SourceIndex
+        })
+    ));
+    indices.insert(&function, 3);
+    assert!(matches!(body_index(&indices, &function), Ok(3)));
+}
+
+/// FR-021-AC-46: the nested-call cause is decided before the name and index lookups, so it is
+/// never masked by a generic refusal; its position in the entry is checked structurally.
+#[trace("TC-031", "FR-021-AC-46")]
+#[test]
+fn the_nested_call_refusal_precedes_the_name_and_index_lookups() {
+    let source = include_str!("../kani_harness.rs");
+    let entry = source
+        .split("pub fn generate_kani_function_harness(")
+        .nth(1)
+        .expect("the entry is present");
+    let nested = entry.find("KaniNestedCallBody").expect("nested refusal");
+    for later in [
+        "single_segment_name(",
+        "body_index(",
+        "serde_json::to_string(",
+    ] {
+        let position = entry
+            .find(later)
+            .unwrap_or_else(|| panic!("{later} present"));
+        assert!(
+            nested < position,
+            "the nested-call refusal precedes {later}"
+        );
+    }
+}
+
+/// Every owner-path call in the entry maps its error to the one `KaniOwnerPathRefused` cause.
+/// `NominalDeclaration` has no public constructor, so a failing declaration view or a
+/// `checked_composite_declarations` failure cannot be built as a value; this inspection fails if
+/// either call stops being mapped (FR-021-AC-46).
+#[trace("TC-031", "FR-021-AC-46")]
+#[test]
+fn every_owner_path_call_maps_to_the_owner_path_cause() {
+    let source = include_str!("../kani_harness.rs");
+    let entry = source
+        .split("pub fn generate_kani_function_harness(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("the entry is present")
+        .to_owned();
+    let unmapped = |entry: &str| {
+        [
+            "acquire_checked_source(",
+            "select_checked_callable(",
+            "checked_function_declarations(",
+            "checked_composite_declarations(",
+        ]
+        .into_iter()
+        .filter(|call| {
+            let after = entry.split(call).nth(1).unwrap_or("");
+            !after
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .contains(".map_err(owner_path)")
+        })
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(unmapped(&entry), Vec::<&str>::new());
+    let mutated = entry.replace(
+        "checked_composite_declarations(&owner).map_err(owner_path)?",
+        "checked_composite_declarations(&owner)?",
+    );
+    assert_eq!(unmapped(&mutated), vec!["checked_composite_declarations("]);
+}
+
+/// FR-021-AC-44 mutation row: the driven body must call `ready` before and `finish` after the
+/// call, and `finish` must hold the `admits` guard. The predicate flags each removal.
+#[trace("TC-031", "FR-021-AC-44")]
+#[test]
+fn the_driven_body_keeps_ready_finish_and_the_admits_guard() {
+    let fixture = Fixture::new(SAME);
+    let harness = fixture.generate("same").expect("generates");
+    let lib: String = library(&harness).split_whitespace().collect();
+    let violations = |lib: &str| {
+        let mut missing = Vec::new();
+        for required in ["self.0.ready()?", "self.0.finish(", "environment.admits("] {
+            if !lib.contains(required) {
+                missing.push(required);
+            }
+        }
+        missing
+    };
+    assert_eq!(violations(&lib), Vec::<&str>::new());
+    assert_eq!(
+        violations(&lib.replace("self.0.ready()?", "self.0.skip()?")),
+        vec!["self.0.ready()?"]
+    );
+    assert_eq!(
+        violations(&lib.replace("self.0.finish(", "self.0.keep(")),
+        vec!["self.0.finish("]
+    );
+    assert_eq!(
+        violations(&lib.replace("environment.admits(", "environment.kept(")),
+        vec!["environment.admits("]
+    );
+}
+
+/// FR-021-AC-44: the caller's environment limits and an already-cancelled handle are emitted
+/// literally; an observing link is not (the emitted handle is then a fresh `Cancel::new()`).
+#[trace("TC-031", "FR-021-AC-44")]
+#[test]
+fn limits_and_cancel_sources_are_emitted_literally() {
+    let fixture = Fixture::new(SAME);
+    let mut request = fixture.request(
+        fixture.function("same"),
+        &fixture.bytes,
+        fixture.source.as_bytes(),
+    );
+    request
+        .source
+        .body_resources
+        .environment_limits
+        .ancestor_steps = 7;
+    request.source.body_resources.environment_limits.work_units = 11;
+    let uncancelled = generate_kani_function_harness(&request).expect("generates");
+    let kani = kani_items(library(&uncancelled));
+    assert!(kani.contains("TypeEnvironmentLimits{ancestor_steps:7,work_units:11}"));
+    assert!(kani.contains("exact::Cancel::new()"));
+    assert!(!kani.contains("exact::CancelCause"));
+    request
+        .source
+        .body_resources
+        .cancel
+        .cancel(quire_exact::CancelCause::Deadline);
+    let cancelled = generate_kani_function_harness(&request).expect("generates");
+    assert!(kani_items(library(&cancelled)).contains("cancel.cancel(exact::CancelCause::Deadline)"));
 }

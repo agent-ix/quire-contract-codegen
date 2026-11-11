@@ -2,8 +2,12 @@
 //! host-emitted descriptors under `cfg(kani)`, compiled and run as a real scratch crate.
 //!
 //! `cfg(kani)` is applied to the emitted crate alone (`cargo rustc -- --cfg kani`), so the
-//! dependencies are the normally built ones. The rebuilt environment, parameters and result
-//! are compared by `Debug` with the values the genuine owner path produces here on the host.
+//! dependencies are the normally built ones. The rebuilt environment, parameters, result
+//! and location are compared by `Debug` with a host re-implementation of the genuine path: the
+//! test assembles the environment from the same owner views itself. It does not run the emitted
+//! `PreparedFunction::new`; that real host run is the embedded differential of FR-021-AC-45 (S2).
+//! The environment limits are consumed by construction and are asserted on the emitted text in
+//! the `kani_harness` unit tests.
 
 use std::fs;
 use std::path::PathBuf;
@@ -127,8 +131,15 @@ fn host_prepared(
         }
         Ok(environment)
     });
+    // Both functions of the fixtures are the first in their source.
+    let location = quire_semantic_value::location::ExpressionLocation::root(
+        quire_semantic_value::location::ExpressionOwner::Body {
+            function: name.to_owned(),
+            index: 0,
+        },
+    );
     let text = format!(
-        "{environment:?}|{:?}|{:?}",
+        "{environment:?}|{:?}|{:?}|{location:?}",
         selection.signature().parameters(),
         selection.signature().result()
     );
@@ -250,7 +261,7 @@ fn kani_probe() {
     let factory = kani_factory_same();
     let prepared = factory.0.clone();
     assert!(prepared.ready().expect("ready").is_none());
-    println!("PROBE:{:?}|{:?}|{:?}", prepared.environment, prepared.parameters, prepared.result);
+    println!("PROBE:{:?}|{:?}|{:?}|{:?}", prepared.environment, prepared.parameters, prepared.result, prepared.location);
     let large = u64::from(u32::MAX);
     let mut meter = Meter::new(ScalarLimits {
         integer_bits: large, decimal_digits: large, scale_expansion: large, text_input_bytes: large,
@@ -284,7 +295,7 @@ fn kani_probe() {
     let factory = kani_factory_eq();
     let prepared = factory.0.clone();
     assert!(prepared.ready().expect("ready").is_none());
-    println!("PROBE:{:?}|{:?}|{:?}", prepared.environment, prepared.parameters, prepared.result);
+    println!("PROBE:{:?}|{:?}|{:?}|{:?}", prepared.environment, prepared.parameters, prepared.result, prepared.location);
 }
 "#;
     let (expected, observed) = run_probe("kani-harness-composite", COMPOSITE, "eq", probe);
