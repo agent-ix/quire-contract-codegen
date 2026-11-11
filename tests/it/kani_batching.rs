@@ -51,7 +51,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
     let source = format!(
         "#[cfg(kani)]\nmod {name} {{\n    #[kani::proof]\n    pub fn check() {{\n{body}\n    }}\n}}\n"
     );
-    let options = [
+    let witness_options = [
         "-Z",
         "concrete-playback",
         "--harness",
@@ -68,6 +68,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
     ]
     .map(str::to_owned)
     .to_vec();
+    let options = witness_options[2..witness_options.len() - 2].to_vec();
     StateFrameHarness {
         identity: StateFrameIdentity {
             ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
@@ -106,6 +107,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
             solver: KaniSolver::Cadical,
             unwind,
             options,
+            witness_options,
         },
         rust: Artifact::new(format!("src/generated/{name}.rs"), source),
         record: Artifact::new(format!("kani-obligations/{name}.json"), String::new()),

@@ -50,6 +50,10 @@ pub enum KaniInconclusiveReason {
     TimedOut,
     /// The observed backend-tree resident memory exceeded the harness identity ceiling.
     MemoryExhausted,
+    /// The witness phase of a two-phase run did not reproduce the failed checks the proof phase
+    /// reported (FR-017-AC-63): the tool, not the property, is at fault, so neither phase's
+    /// result is taken.
+    WitnessDisagreed,
 }
 
 /// The backend-reported outcome of one run.

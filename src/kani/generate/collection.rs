@@ -16,7 +16,7 @@ use std::{borrow::Borrow, collections::BTreeMap};
 use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
-        abi::{adapter_options, readable_component, KaniSolver},
+        abi::{adapter_options, readable_component, witness_options, KaniSolver},
         generate::{
             outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -441,6 +441,12 @@ fn prepare_collection(
         KaniSolver::Cadical,
         false,
     );
+    let witness_options = witness_options(
+        &path.to_string(),
+        request.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
     let item_name = format!("selected_{}", readable_component(&field.field_name));
     let length_name = format!("{item_name}_len");
     let identity = CollectionObligationIdentity {
@@ -463,6 +469,7 @@ fn prepare_collection(
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
+        witness_options,
         module_symbol: path.module.clone(),
         harness_symbol: path.harness.clone(),
     };
@@ -600,6 +607,7 @@ pub(super) fn render_collection_operation(
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&spec.path().module.to_string(), &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(
@@ -1756,6 +1764,32 @@ pub(crate) mod tests {
                 reason: CollectionUnsupportedReason::DomainNotRepresentableInI64,
             }) if node_id == claim.field.quantifier
         ));
+    }
+
+    /// The generator-origin seal of a collection harness covers both option vectors: changing
+    /// only the recorded witness vector, or only the proof vector, breaks it (FR-015-AC-9).
+    #[trace("FR-015-AC-9", "TC-025")]
+    #[test]
+    fn a_collection_harness_seal_covers_the_witness_vector() {
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1 << 30).unwrap(),
+                wall_clock: std::time::Duration::from_secs(60),
+            },
+            items: &[],
+            subject_path: "crate::subject",
+            unwind: 8,
+        };
+        let harness =
+            render_collection(&request, &base_claim()).expect("the base collection renders");
+        assert!(harness.has_valid_provenance());
+        assert_ne!(harness.identity.options, harness.identity.witness_options);
+        let mut witness = harness.clone();
+        witness.identity.witness_options.push("--extra".to_owned());
+        assert!(!witness.has_valid_provenance(), "witness vector");
+        let mut proof = harness.clone();
+        proof.identity.options.push("--extra".to_owned());
+        assert!(!proof.has_valid_provenance(), "proof vector");
     }
 
     /// A quantity conversion is not a `binary` expression, so the collection predicate reader

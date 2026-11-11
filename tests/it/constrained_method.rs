@@ -663,6 +663,8 @@ fn same_named_general_clause_bodies_and_preconditions_cannot_reuse_a_method() {
             object.remove("oracle_contents");
             object.insert("module_symbol".into(), json!(""));
             object.insert("options".into(), json!([]));
+            // Both vectors name the digest-derived module symbol, as `options` does.
+            object.insert("witness_options".into(), json!([]));
             value
         };
         assert_eq!(

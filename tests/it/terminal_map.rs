@@ -61,11 +61,12 @@ pub(crate) fn synthetic_evidence(
         batch: None,
         diagnostics: None,
         failure_cause: None,
+        proof_phase: None,
     }
 }
 
 /// Every inconclusive reason the classifier has today.
-const REASONS: [KaniInconclusiveReason; 7] = [
+const REASONS: [KaniInconclusiveReason; 8] = [
     KaniInconclusiveReason::FailedWithoutCounterexample,
     KaniInconclusiveReason::NoVerdict,
     KaniInconclusiveReason::MissingCoverSummary,
@@ -73,6 +74,7 @@ const REASONS: [KaniInconclusiveReason; 7] = [
     KaniInconclusiveReason::UnwindBoundExhausted,
     KaniInconclusiveReason::TimedOut,
     KaniInconclusiveReason::MemoryExhausted,
+    KaniInconclusiveReason::WitnessDisagreed,
 ];
 
 fn falsified() -> KaniRunOutcome {
@@ -1433,7 +1435,7 @@ fn ordinary_row(outcome: &KaniRunOutcome, count: u32) -> Option<[TerminalValue; 
             R::MemoryExhausted | R::UnwindBoundExhausted => {
                 repeated(Incomplete(IncompleteCause::ResourceExhausted))
             }
-            R::NoVerdict | R::MissingCoverSummary => repeated(Failed),
+            R::NoVerdict | R::MissingCoverSummary | R::WitnessDisagreed => repeated(Failed),
             R::FailedWithoutCounterexample => [
                 Failed,
                 Failed,
@@ -1467,6 +1469,7 @@ fn assert_settlement_row(evidence: &KaniExecutionEvidence, settlement: ReplaySet
     "FR-029-AC-34",
     "FR-029-AC-35",
     "FR-029-AC-15",
+    "FR-029-AC-37",
     "TC-040"
 )]
 #[test]

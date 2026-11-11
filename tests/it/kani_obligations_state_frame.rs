@@ -5195,6 +5195,10 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
             Box::new(|h| h.options.push("--extra".to_owned())),
         ),
         (
+            "witness options",
+            Box::new(|h| h.witness_options.push("--extra".to_owned())),
+        ),
+        (
             "ranges",
             Box::new(|h| {
                 for domain in &mut h.domains {

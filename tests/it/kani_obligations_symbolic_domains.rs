@@ -1410,6 +1410,23 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         let expected_options: Vec<String> = [
             "-Z",
             "function-contracts",
+            "--harness",
+            exact_harness.as_str(),
+            "--exact",
+            "--unwind",
+            "8",
+            "--solver",
+            "cadical",
+            "--output-format",
+            "regular",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        assert_eq!(harness.identity.options, expected_options);
+        let expected_witness: Vec<String> = [
+            "-Z",
+            "function-contracts",
             "-Z",
             "concrete-playback",
             "--harness",
@@ -1427,7 +1444,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         .into_iter()
         .map(str::to_owned)
         .collect();
-        assert_eq!(harness.identity.options, expected_options);
+        assert_eq!(harness.identity.witness_options, expected_witness);
         assert!(harness.rust.contents.contains(assertion));
         assert!(harness
             .rust
@@ -2712,7 +2729,7 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
         let report_path = scratch.path.join("report.json");
         let output = Command::new("cargo")
             .arg("kani")
-            .args(&harness.identity.options)
+            .args(&harness.identity.witness_options)
             .args(["-Z", "unstable-options", "--export-json"])
             .arg(&report_path)
             .env(

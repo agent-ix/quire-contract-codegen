@@ -6,7 +6,7 @@ use super::spec::{ConstrainedConditionSpec, ConstrainedConditionsSpec, HarnessSp
 use crate::kani::identity::constrained::*;
 use crate::{
     kani::{
-        abi::{adapter_options, KaniSolver},
+        abi::{adapter_options, witness_options, KaniSolver},
         identity::{ProofCeilings, SymbolicBounds},
     },
     oracle::clause::{
@@ -350,6 +350,7 @@ pub(super) fn lower(
             .collect::<Result<Vec<_>, R>>()?,
         module_symbol: String::new(),
         options: Vec::new(),
+        witness_options: Vec::new(),
         safety_assertion_line: 0,
         ordinary_cover_line: 0,
         boundary_cover_line: None,
@@ -364,6 +365,12 @@ pub(super) fn lower(
             .collect::<String>()
     );
     identity.options = adapter_options(
+        &format!("{}::search", identity.module_symbol),
+        identity.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
+    identity.witness_options = witness_options(
         &format!("{}::search", identity.module_symbol),
         identity.unwind,
         KaniSolver::Cadical,

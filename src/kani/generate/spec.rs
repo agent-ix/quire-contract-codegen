@@ -4,7 +4,7 @@ use super::outcome::{UnsupportedObligation, MAX_OBLIGATION_UNWIND};
 use crate::oracle::clause::V2ClauseOracle;
 use crate::{
     core::identity::HarnessPath,
-    kani::abi::{adapter_options, KaniPrimitiveType, KaniSolver},
+    kani::abi::{adapter_options, witness_options, KaniPrimitiveType, KaniSolver},
     kani::identity::{CollectionKindIdentity, CollectionPredicateIdentity},
 };
 use std::collections::BTreeSet;
@@ -335,6 +335,7 @@ pub(super) struct HarnessSpec {
     unwind: u32,
     solver: KaniSolver,
     options: Vec<String>,
+    witness_options: Vec<String>,
 }
 #[derive(Clone, Debug)]
 pub(super) enum HarnessShape {
@@ -435,6 +436,7 @@ impl HarnessSpec {
             _ => {}
         }
         let options = adapter_options(&path.to_string(), unwind, solver, false);
+        let witness_options = witness_options(&path.to_string(), unwind, solver, false);
         Ok(Self {
             path,
             shape: HarnessShape::Frame(frame),
@@ -445,6 +447,7 @@ impl HarnessSpec {
             unwind,
             solver,
             options,
+            witness_options,
         })
     }
     pub(super) fn new(
@@ -568,6 +571,7 @@ impl HarnessSpec {
             }
         }
         let options = adapter_options(&path.to_string(), unwind, solver, false);
+        let witness_options = witness_options(&path.to_string(), unwind, solver, false);
         Ok(Self {
             path,
             shape: HarnessShape::Statements {
@@ -580,6 +584,7 @@ impl HarnessSpec {
             unwind,
             solver,
             options,
+            witness_options,
         })
     }
     pub(super) fn new_collection(
@@ -604,6 +609,7 @@ impl HarnessSpec {
             return Err(HarnessSpecError::InvalidUnwind(unwind));
         }
         let options = adapter_options(&path.to_string(), unwind, solver, false);
+        let witness_options = witness_options(&path.to_string(), unwind, solver, false);
         let cover = Cover {
             condition: ExprText::new(format!(
                 "{} == {} || {} == {}",
@@ -621,6 +627,7 @@ impl HarnessSpec {
             unwind,
             solver,
             options,
+            witness_options,
         })
     }
     pub(super) fn into_collection_operation(
@@ -662,6 +669,9 @@ impl HarnessSpec {
     }
     pub(super) fn options(&self) -> &[String] {
         &self.options
+    }
+    pub(super) fn witness_options(&self) -> &[String] {
+        &self.witness_options
     }
 }
 
@@ -1306,7 +1316,13 @@ impl HarnessSpec {
             KaniSolver::Cadical,
             false,
         );
-        if options != identity.options {
+        let witness_options = witness_options(
+            &path.to_string(),
+            identity.unwind,
+            KaniSolver::Cadical,
+            false,
+        );
+        if options != identity.options || witness_options != identity.witness_options {
             return Err(HarnessSpecError::InvalidExpression);
         }
         let unwind = identity.unwind;
@@ -1323,6 +1339,7 @@ impl HarnessSpec {
             unwind,
             solver: KaniSolver::Cadical,
             options,
+            witness_options,
         })
     }
 }

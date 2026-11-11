@@ -336,6 +336,7 @@ impl KaniScalarNativeError {
                 | KaniExecutionRefusal::BatchTimedOut { .. }
                 | KaniExecutionRefusal::BatchCancelled { .. }
                 | KaniExecutionRefusal::OutputUnread { .. }
+                | KaniExecutionRefusal::WitnessPhaseRefused { .. }
                 | KaniExecutionRefusal::Report(_) => EnvironmentFault,
             },
             Self::ProofNotVerified(evidence) => {
@@ -361,7 +362,8 @@ fn proof_failure_class(
             | KaniInconclusiveReason::UnwindBoundExhausted => CompletionRefusal,
             KaniInconclusiveReason::TimedOut
             | KaniInconclusiveReason::MemoryExhausted
-            | KaniInconclusiveReason::NoVerdict => EnvironmentFault,
+            | KaniInconclusiveReason::NoVerdict
+            | KaniInconclusiveReason::WitnessDisagreed => EnvironmentFault,
             KaniInconclusiveReason::FailedWithoutCounterexample => match cause {
                 None | Some(KaniFailureCause::PropertiesFailed) => CompletionRefusal,
                 Some(
@@ -2143,6 +2145,7 @@ mod tests {
             batch: None,
             diagnostics: None,
             failure_cause,
+            proof_phase: None,
         }
     }
 
@@ -2195,6 +2198,7 @@ mod tests {
             KaniInconclusiveReason::UnwindBoundExhausted => R,
             KaniInconclusiveReason::TimedOut => F,
             KaniInconclusiveReason::MemoryExhausted => F,
+            KaniInconclusiveReason::WitnessDisagreed => F,
         }
     }
 
@@ -2225,6 +2229,11 @@ mod tests {
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
             KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
+            // The class is the spec's (FR-017-AC-63): a refused witness phase is a fault, even
+            // when the refusal it wraps is a completion refusal; its stable code is the wrapped one.
+            KaniExecutionRefusal::WitnessPhaseRefused { refusal, .. } => {
+                (F, expected_nested(refusal).1)
+            }
             KaniExecutionRefusal::OutputOverLimit { .. } => (R, Some("kani_output_over_limit")),
             KaniExecutionRefusal::OutputUnread { .. } => (F, Some("kani_output_unread")),
             KaniExecutionRefusal::BatchTimedOut { .. } => (F, None),
@@ -2415,6 +2424,27 @@ mod tests {
                 detail: "table".into(),
             },
             KaniExecutionRefusal::Report(KaniReportRefusal::Missing),
+            KaniExecutionRefusal::WitnessPhaseRefused {
+                refusal: Box::new(KaniExecutionRefusal::OutputOverLimit {
+                    stream: CaptureStream::Stdout,
+                    limit: 8,
+                    harnesses: 1,
+                }),
+                proof_evidence: Vec::new(),
+            },
+            KaniExecutionRefusal::WitnessPhaseRefused {
+                refusal: Box::new(KaniExecutionRefusal::OutputUnread {
+                    stream: CaptureStream::Stderr,
+                    detail: "table".into(),
+                }),
+                proof_evidence: Vec::new(),
+            },
+            KaniExecutionRefusal::WitnessPhaseRefused {
+                refusal: Box::new(KaniExecutionRefusal::PlaybackForNonMember {
+                    harness: "other".into(),
+                }),
+                proof_evidence: Vec::new(),
+            },
         ];
         for nested in refusals {
             let (expected_class, expected_code) = expected_nested(&nested);

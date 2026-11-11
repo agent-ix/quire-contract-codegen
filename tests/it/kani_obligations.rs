@@ -651,6 +651,22 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     );
     assert!(identity.options.iter().any(|option| option == "--exact"));
     assert!(identity.options.iter().any(|option| option == "--unwind"));
+    assert!(
+        identity
+            .options
+            .iter()
+            .all(|option| !option.contains("concrete-playback")),
+        "the proof vector holds no concrete-playback option"
+    );
+    let at = identity
+        .options
+        .iter()
+        .position(|option| option == "--harness")
+        .expect("the proof vector selects its harness");
+    let mut witness = identity.options.clone();
+    witness.splice(at..at, ["-Z".to_owned(), "concrete-playback".to_owned()]);
+    witness.extend(["--concrete-playback".to_owned(), "print".to_owned()]);
+    assert_eq!(identity.witness_options, witness);
     assert!(!scalar_harnesses[0].rust.contents.contains("kani::unwind"));
     let repeated =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()).1;
