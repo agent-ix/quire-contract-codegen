@@ -175,16 +175,51 @@ fn tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written() {
         }
         ObligationIdentity::new(key, None, 0)
     };
-    // Control: a key at the supported depth is written and read back equal.
-    let shallow = generate(&fixture, nest(8), ids::frame());
-    let read = StateFrameIdentity::from_record(&shallow.postcondition.record.contents)
-        .expect("a supported depth reads");
-    assert_eq!(read.obligation, nest(8));
+    // Control: a key of exactly 32 node levels (the bound) is written and read back equal.
+    for levels in [8, 31] {
+        let at_bound = generate(&fixture, nest(levels), ids::frame());
+        let read = StateFrameIdentity::from_record(&at_bound.postcondition.record.contents)
+            .expect("a supported depth reads");
+        assert_eq!(read.obligation, nest(levels), "{} node levels", levels + 1);
+    }
+    // 33 node levels is one past the bound.
+    assert_eq!(
+        generate_state_frame_obligations(
+            &request(&fixture),
+            StateFrameRoleIdentities::new(nest(32), ids::frame()).expect("distinct"),
+        ),
+        Err(StateFrameRefusal::RecordSerialization)
+    );
     let refused = generate_state_frame_obligations(
         &request(&fixture),
         StateFrameRoleIdentities::new(nest(200), ids::frame()).expect("distinct"),
     );
     assert_eq!(refused, Err(StateFrameRefusal::RecordSerialization));
+}
+
+/// FR-015-AC-138: the reader refuses a key nested past the bound as well as the writer.
+#[trace("TC-025", "FR-015-AC-138")]
+#[test]
+fn tc_025_a_record_nested_past_the_readable_depth_is_not_read() {
+    let twin = Twin::new();
+    let fixture = emitted_fixture(&twin, BALANCE);
+    let pair = generate(&fixture, ids::contract(), ids::frame());
+    let wire_of = |levels: usize| {
+        let mut node = json!({"package": "deep", "path": [{"text": "leaf"}], "ordinal": 0});
+        for _ in 1..levels {
+            node = json!({"package": "deep", "path": [{"node": node}], "ordinal": 0});
+        }
+        node
+    };
+    let with_levels = |levels: usize| {
+        with_record(&pair.postcondition, |record| {
+            record["identity"]["obligation"]["node"] = wire_of(levels);
+        })
+    };
+    StateFrameIdentity::from_record(&with_levels(32)).expect("32 node levels read");
+    let error =
+        StateFrameIdentity::from_record(&with_levels(33)).expect_err("33 node levels are refused");
+    assert!(matches!(error, StateFrameRecordError::Json(_)), "{error}");
 }
 
 /// FR-015-AC-139: a record without the member, its `node` or its `ordinal` is not read.
@@ -448,6 +483,9 @@ fn tc_035_postcondition_decode_cross_checks_the_identity() {
     let fixture = emitted_fixture(&twin, BALANCE);
     let pair = generate(&fixture, ids::contract(), ids::frame());
     let harness = &pair.postcondition.identity;
+    // FR-024-AC-72: the accepted identity's node and ordinal differ from every other identity
+    // this test constructs, so a carry of any other identity cannot pass.
+    let distinct = generate(&fixture, ids::accepted(), ids::frame());
     let inputs = |identity: ObligationIdentity| {
         let mut inputs =
             twin.state_clause_inputs(&fixture.package, &fixture.clause, BALANCE, (0, 0), (4, 7));
@@ -457,13 +495,17 @@ fn tc_035_postcondition_decode_cross_checks_the_identity() {
     };
 
     // Control: the harness's own identity is accepted and carried into packet and request.
-    let mut accepted = inputs(ids::contract());
-    decode(&mut accepted, harness).expect("the matching identity is accepted");
+    let mut accepted = inputs(ids::accepted());
+    decode(&mut accepted, &distinct.postcondition.identity)
+        .expect("the matching identity is accepted");
     assert_eq!(accepted.playback.len(), 2);
     let replay = quire_contract_codegen::StateClauseReplay::new(accepted)
         .expect("the accepted inputs build a replay");
-    assert_eq!(replay.packet.obligation_identity, Some(ids::contract()));
-    assert_eq!(replay.wire.obligation_identity, ids::contract());
+    assert_eq!(replay.packet.obligation_identity, Some(ids::accepted()));
+    assert_eq!(replay.wire.obligation_identity, ids::accepted());
+    // The refusals below also accept the plain contract identity against its own harness.
+    let mut plain = inputs(ids::contract());
+    decode(&mut plain, harness).expect("the matching identity is accepted");
 
     for (name, wrong) in [
         ("ordinal only", ids::contract_ordinal_only()),

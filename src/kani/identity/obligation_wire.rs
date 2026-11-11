@@ -15,9 +15,14 @@ use serde::{
     Deserializer, Serialize, Serializer,
 };
 
-/// The deepest node nesting the wire form carries. `serde_json` refuses a document nested past
-/// 128 containers on read and each node level uses three, so a deeper key would be written but
-/// never read back; it is refused when written instead.
+/// The deepest node nesting the wire form carries (the obligation's own node is level 1).
+///
+/// `serde_json` refuses a document nested past 128 containers on read. Each node level adds
+/// three (the node object, its `path` array and the segment object) below the three that wrap
+/// the first node (`RecordView`, `identity`, `obligation`), so the read limit is first reached
+/// near level 42. A bound of 32 leaves about nine levels of margin: a deeper key would be
+/// written but never read back, so the writer refuses it as
+/// `StateFrameRefusal::RecordSerialization` and the reader refuses it too (FR-015-AC-138).
 const MAX_NODE_DEPTH: usize = 32;
 
 #[derive(Deserialize)]

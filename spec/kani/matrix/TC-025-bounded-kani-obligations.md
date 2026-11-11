@@ -1011,8 +1011,13 @@ with the required author `make kani-gate`; independent review and final acceptan
     `tc_025_the_pair_constructor_refuses_only_an_equal_pair` for (f), and
     `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` for the writer's depth
     bound). Mutants M1 to M8, M10 and M11 to M12 were each applied at the named site and each fails
-    the named test; M9 is not expressible, since `classify_state_frame_role` takes no identity
-    parameter, so classification cannot read one.
+    the named test; M9 is not expressible, since `classify_state_frame_role` (the routed preflight's call) takes no
+    identity parameter, so it cannot read one; negotiate's disposition is rendering, which can
+    depend on the identity only through the 32-level node depth bound (FR-015-AC-137), pinned
+    by `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` (exactly 32 levels
+    accepted and round trips, 33 refused as `RecordSerialization`) and
+    `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (the reader refuses 33). The
+    bound mutants 32 to 40 and 32 to 31 each fail one of them.
 
 ## Blocked
 

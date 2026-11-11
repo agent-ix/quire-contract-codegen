@@ -233,6 +233,11 @@ fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>)
             Ok(expected) => {
                 let actual = emitted.next().expect("supported role has a harness");
                 assert_eq!(
+                    &expected.identity.obligation,
+                    role_identity(&identities, role),
+                    "generate_state_frame_role carries the identity passed for its role"
+                );
+                assert_eq!(
                     actual, &expected,
                     "exact identity, record and harness bytes"
                 );

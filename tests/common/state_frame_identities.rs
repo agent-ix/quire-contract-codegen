@@ -14,6 +14,11 @@ pub fn contract() -> ObligationIdentity {
     ObligationIdentity::new(key("ids", "contract", 7), None, 3)
 }
 
+/// A `contract` identity whose node, model and ordinal differ from every other identity here.
+pub fn accepted() -> ObligationIdentity {
+    ObligationIdentity::new(key("ids", "accepted", 21), None, 17)
+}
+
 /// The `contract` identity with only its ordinal changed.
 pub fn contract_ordinal_only() -> ObligationIdentity {
     ObligationIdentity::new(key("ids", "contract", 7), None, 4)
