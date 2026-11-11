@@ -37,3 +37,19 @@ FAIL ON MEDIUMS. The NaN, invalid and charge-denial cases are delegated to the o
 | TC-024 IR-1502 step 2 | examined | spec/oracle/matrix/TC-024-exact-scalar-oracles.md:547-559 | Compare the complete owner outcome, flags, ordered admitted charges and consumed counters against a direct `evaluate_ieee` call, including a charge-denial case at every next-charge boundary. Vectors: ... the same two shapes at `float64`, with operands chosen by the same construction. |
 | TC-024 IR-1502 step 4 | examined | spec/oracle/matrix/TC-024-exact-scalar-oracles.md:566-570 | Present wrong operand count, a `float32` operand to a `float64` identity, a mode unequal to the rounding bound, and a missing rounding bound. Assert the typed refusals of FR-014-AC-74 ... |
 | FR-014-AC-10 | context_only | spec/oracle/functional/FR-014-exact-scalar-oracles.md:663 | Contract IR's FR-038 "Mode" reader rule also refuses a bare Float32 addition authored with the non-exact `nearest-even` mode and no `float_rounding` type pin ... before CG can classify a missing rounding bound. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | The closed set AC-79 gives for CG's defensive seam (`BodyMismatch`, `OperandTypeMismatch`, `ResultTypeMismatch`) leaves out `FormMismatch`. Generation checks `Shape::accepts_form` before the body operator (lower.rs:161-167), so a `sqrt`/`fma` descriptor presented against a node with another semantic form, such as add's `binary` node, is refused as `FormMismatch`, not `BodyMismatch`. Add `FormMismatch` to AC-79 and to TC-024 step 4. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:736 |
+| FND-004 | low | AC-72 puts the `float_rounding` bound `r` on the parameters ('over parameters typed `Float32[r]`... with a `float_rounding` bound `r` equal to `operation.mode`'). Derivation, however, reads the application's own result bound, and FR-014-AC-21 says a bound owned only by an operand is not a result bound (`MissingBound`). No genuine-source IEEE arithmetic derivation exists in CG yet. State that the bound is the application's result bound (its result type `Float32[r]`/`Float64[r]`, or a narrowing), so the genuine-source fixture is derivable as written. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:729 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |
+| FND-002 | fixed | verified at be0daf1b |
+| FND-003 | still-open | New this round: AC-79 closed set omits FormMismatch, which generation reports before BodyMismatch for a node of another semantic form. |
+| FND-004 | still-open | New this round: AC-72 places the float_rounding bound on the parameters; derivation reads the result bound (AC-21). |

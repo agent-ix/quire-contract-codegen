@@ -52,3 +52,11 @@ FAIL (not mergeable). The direction is right: the four identities exist in the o
 | TM FR-014-AC-72..74 row | examined | spec/oracle/matrix/tests.md:24 | FR-014-AC-72 through FR-014-AC-74 / TC-024 / Planned (IR-1502); `ieee.float32/64.sqrt` and `.fma` are `OperationNotDerivable` today; the TC-024 section has not run |
 | FR-014-AC-12 | context_only | spec/oracle/functional/FR-014-exact-scalar-oracles.md:665 | A descriptor naming a different catalogued operation is not ir_confirmed |
 | FR-014-AC-70 | context_only | spec/oracle/functional/FR-014-exact-scalar-oracles.md:723 | Each generated lazy And, Or and Implies scalar oracle accepts its right operand as a function of the caller's mutable exact Meter. ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |
+| FND-002 | fixed | verified at be0daf1b |
+| FND-003 | fixed | verified at be0daf1b |

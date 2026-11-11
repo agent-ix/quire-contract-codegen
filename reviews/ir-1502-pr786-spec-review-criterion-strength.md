@@ -44,3 +44,18 @@ FAIL ON MEDIUMS. Controls (a) through (d) can fail at binary32, and each names a
 | FR-014-AC-72 | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:725 | ... The exhaustive identity matches of derivation and of the descriptor check shall cover all four identities and the round-trip test shall walk them. |
 | FR-014-AC-73 | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:726 | The generated oracle for each of the four identities of FR-014-AC-72 shall call `evaluate_ieee` with `IeeeOperation::SquareRoot(a)` or `IeeeOperation::FusedMultiplyAdd(a, b, c)` in argument order ... |
 | FR-014-AC-74 | context_only | spec/oracle/functional/FR-014-exact-scalar-oracles.md:727 | If a `sqrt` or `fma` node of FR-014-AC-72 has the wrong operand count ... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | AC-77 says the other-width call 'stops as the owner's width refusal (FR-014-AC-9)'. The stop actually comes from CG's rendered `expect_width` prelude, `OracleStop::OperandWidth` (render.rs:70-76). The owner has no width refusal for unary `sqrt`: without the prelude it computes at the operand's own width. For a mixed-width `fma` the owner returns `IllTyped(DistinctIeeeWidths)`. A test that asserts the owner's refusal would fail a correct implementation. Name the generated oracle's `OperandWidth` stop instead. The 'before any charge, counters unchanged' clause and control (e) are correct, and (e) fails through the `sqrt` call. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:734 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |
+| FND-002 | fixed | verified at be0daf1b |
+| FND-003 | fixed | verified at be0daf1b |
+| FND-004 | still-open | New this round: AC-77 attributes the width stop to the owner; it is CG's rendered OperandWidth stop. |

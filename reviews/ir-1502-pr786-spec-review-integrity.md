@@ -39,3 +39,11 @@ FAIL (not mergeable). The rule that delegates to IEEE add contradicts itself. It
 | FR-014-AC-74 | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:727 | ... `quire.op.ieee.from_exact`, `quire.op.ieee.to_rational`, `quire.op.ieee.float32.negate` and `quire.op.ieee.float64.negate` remain `OperationNotDerivable`. |
 | FR-014 derivable-list prose | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:289-300 | The catalogued identities refused this way are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`, `ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`, `rational.narrow` and `text.size` |
 | FR-014-AC-67 | context_only | spec/oracle/functional/FR-014-exact-scalar-oracles.md:719 | For strict-reader-admitted `quire.op.ieee.numeric_equal`, ... CG accepts the genuine QSL-emitted `expression`/`call` semantic form with the catalogued `call` body operator ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |
+| FND-002 | fixed | verified at be0daf1b |
+| FND-003 | fixed | verified at be0daf1b |

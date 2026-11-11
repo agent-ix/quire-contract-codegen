@@ -566,15 +566,15 @@ quire-integration IR-842.
    - `fma(2.0, 3.0, 1.0)` is `7.0` at both widths (`0x40E00000`,
      `0x401C000000000000`); an oracle that swaps the addend and a factor yields `5.0`.
 3. Call the `float64` oracles with a `float32` `IeeeValue` and the reverse.
-   Assert the width stop occurs before any charge with every consumed counter
+   Assert the generated oracle's `OracleStop::OperandWidth` stop occurs before any charge with every consumed counter
    unchanged (AC-77).
 4. Present an admitted node whose mode differs from the rounding bound, and
    nodes with a missing, repeated and unreadable `float_rounding` bound. Assert
    `mode_not_derivable` and the `add`-equivalent bound refusals, no oracle, and
    unchanged sibling items (AC-78). At CG's defensive seam, present a `sqrt` or
-   `fma` descriptor against nodes with the wrong body operator, the wrong
+   `fma` descriptor against nodes with the wrong semantic form (an `add` `binary` node), the wrong body operator, the wrong
    operand count, a different width or non-float operand, and a wrong result
-   type; assert `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`
+   type; assert `FormMismatch`, `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`
    (AC-79). The strict reader's own refusals of wrong arity, cross-width and
    non-float operands and a wrong `fma` result family are tested at the
    Contract IR boundary and not claimed here. Assert `from_exact`,

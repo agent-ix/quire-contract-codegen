@@ -48,3 +48,9 @@ One statement describes FR-014's requirement rather than its implementation, and
 | spec.md FR-053 row | examined | spec/spec.md:93 | `sqrt` and `fma` also on IR-1502 |
 | TM FR-053 row | examined | spec/kani/matrix/tests.md:13 | and `sqrt`/`fma` the FR-014 `sqrt`/`fma` derivation (IR-1502) |
 | TM FR-014-AC-72..74 row | examined | spec/oracle/matrix/tests.md:24 | Planned (IR-1502); `ieee.float32/64.sqrt` and `.fma` are `OperationNotDerivable` today; the TC-024 section has not run |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |

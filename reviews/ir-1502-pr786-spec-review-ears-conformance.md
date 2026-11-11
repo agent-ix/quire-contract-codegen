@@ -33,3 +33,9 @@ FAIL (not mergeable). The new criteria do not conform once the tool can see them
 | FR-014-AC-73 | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:726 | The generated oracle for each of the four identities of FR-014-AC-72 shall call `evaluate_ieee` ... and shall return the owner's result, ordered admitted charges, consumed counters and typed stops unchanged. |
 | FR-014-AC-74 | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:727 | If a `sqrt` or `fma` node of FR-014-AC-72 has the wrong operand count, ... then derivation shall return the same typed refusal IEEE `add` returns for that defect ... |
 | FR-014 Behavior sqrt/fma bullet | examined | spec/oracle/functional/FR-014-exact-scalar-oracles.md:351-363 | For `quire.op.ieee.float32.sqrt`, `quire.op.ieee.float64.sqrt`, `quire.op.ieee.float32.fma` and `quire.op.ieee.float64.fma` (IR-1502), the generator shall derive the descriptor and generate the oracle exactly as for IEEE `add`, with these differences. ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at be0daf1b |
