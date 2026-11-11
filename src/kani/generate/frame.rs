@@ -29,6 +29,7 @@
 use std::collections::BTreeSet;
 use std::{num::NonZeroU64, time::Duration};
 
+use qsl_replay::ObligationIdentity;
 use quire_contract_model::{
     ApplicationOperator, CheckedFrameModification, CheckedMemberType, CheckedNodeId,
     CheckedNodeKind, CheckedNodeTag, CheckedPackageV2, CheckedTerm, CompleteLoweringProfileV2,
@@ -108,6 +109,66 @@ pub(crate) const fn default_settlement_ceilings() -> crate::kani::identity::Proo
     }
 }
 
+/// The QSL obligation identity of each role of one postcondition clause, for
+/// [`generate_state_frame_obligations`] (FR-015-AC-137, FR-015-AC-142).
+///
+/// Each is QSL's producer-issued identity, supplied by the caller from QSL's claim and carried
+/// unchanged into its harness; CG never fabricates one.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StateFrameRoleIdentities {
+    contract: ObligationIdentity,
+    frame: ObligationIdentity,
+}
+
+/// Why two role identities do not make a [`StateFrameRoleIdentities`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StateFrameRoleIdentitiesError {
+    /// The `contract` and `frame` identities are equal in every member, so one pair of
+    /// harnesses would carry one identity.
+    SharedIdentity,
+}
+
+impl std::fmt::Display for StateFrameRoleIdentitiesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SharedIdentity => {
+                f.write_str("the contract and frame roles carry one obligation identity")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StateFrameRoleIdentitiesError {}
+
+impl StateFrameRoleIdentities {
+    /// The identities of the `contract` and the `frame` role of one clause.
+    ///
+    /// # Errors
+    ///
+    /// [`StateFrameRoleIdentitiesError::SharedIdentity`] when the two are equal in every member.
+    pub fn new(
+        contract: ObligationIdentity,
+        frame: ObligationIdentity,
+    ) -> Result<Self, StateFrameRoleIdentitiesError> {
+        if contract == frame {
+            return Err(StateFrameRoleIdentitiesError::SharedIdentity);
+        }
+        Ok(Self { contract, frame })
+    }
+
+    /// The `contract` (postcondition) role's identity.
+    #[must_use]
+    pub fn contract(&self) -> &ObligationIdentity {
+        &self.contract
+    }
+
+    /// The `frame` role's identity.
+    #[must_use]
+    pub fn frame(&self) -> &ObligationIdentity {
+        &self.frame
+    }
+}
+
 /// The two obligations one postcondition clause yields.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StateFrameObligations {
@@ -160,11 +221,13 @@ enum Side {
 /// A [`StateFrameRefusal`] naming why no harness can be produced; nothing is partially returned.
 pub fn generate_state_frame_obligations(
     request: &StateFrameRequest<'_>,
+    identities: StateFrameRoleIdentities,
 ) -> Result<StateFrameObligations, StateFrameRefusal> {
     let prepared = prepare(request)?;
     first_refusal(request, &prepared)?;
-    let frame = frame_harness(request, &prepared)?;
-    let postcondition = contract_harness(request, &prepared)?;
+    let StateFrameRoleIdentities { contract, frame } = identities;
+    let frame = frame_harness(request, &prepared, &frame)?;
+    let postcondition = contract_harness(request, &prepared, &contract)?;
     Ok(StateFrameObligations {
         postcondition,
         frame,
@@ -244,10 +307,12 @@ fn require_bound(prepared: &Prepared<'_>, condition: &Condition) -> Result<(), S
 pub(crate) fn generate_state_frame_role(
     request: &StateFrameRequest<'_>,
     role: StateFrameRole,
+    obligation: &ObligationIdentity,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
     let plan = plan_state_frame_role(request, role)?;
     render(
         request,
+        obligation,
         &plan.scope,
         &plan.domains,
         &plan.unranged,
@@ -379,6 +444,7 @@ fn require_state_field(
 fn contract_harness(
     request: &StateFrameRequest<'_>,
     prepared: &Prepared<'_>,
+    obligation: &ObligationIdentity,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
     let Prepared {
         graph,
@@ -392,6 +458,7 @@ fn contract_harness(
     let (domains, unranged) = state_domains(graph, &shape.scope.object, request)?;
     render(
         request,
+        obligation,
         &shape.scope,
         &domains,
         &unranged,
@@ -406,6 +473,7 @@ fn contract_harness(
 fn frame_harness(
     request: &StateFrameRequest<'_>,
     prepared: &Prepared<'_>,
+    obligation: &ObligationIdentity,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
     let Prepared {
         graph,
@@ -421,6 +489,7 @@ fn frame_harness(
     let (domains, unranged) = state_domains(graph, &shape.scope.object, request)?;
     render(
         request,
+        obligation,
         &shape.scope,
         &domains,
         &unranged,
@@ -957,6 +1026,7 @@ fn state_domains(
 
 fn render(
     request: &StateFrameRequest<'_>,
+    obligation: &ObligationIdentity,
     scope: &StateFrameScope,
     domains: &[StateFieldDomain],
     unranged: &[StateUnrangedField],
@@ -1060,6 +1130,7 @@ fn render(
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,
+        obligation: obligation.clone(),
         state_fields: request
             .state_fields
             .iter()

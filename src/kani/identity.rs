@@ -1094,6 +1094,12 @@ pub struct StateFrameIdentity {
     pub scope: StateFrameScope,
     /// The property proved.
     pub property: StateFrameProperty,
+    /// QSL's producer-issued structural identity of this role's obligation, carried unchanged
+    /// from the caller (FR-015-AC-137). It is no input to the harness source or symbols
+    /// (FR-015-AC-140) and replay cross-checks it (FR-024-AC-71, FR-024-AC-73). A record
+    /// that lacks it is not read as a state-frame identity (FR-015-AC-139).
+    #[serde(with = "obligation_wire")]
+    pub obligation: ObligationIdentity,
     /// Every state field the harness draws, in draw order: the order of the harness's
     /// `kani::any()` calls, hence of the values a playback of it holds. It is what the decoder
     /// types a playback by; `domains` lists the ranged fields only and `property`'s lists are
@@ -1235,6 +1241,8 @@ impl StateFrameIdentity {
         Ok(identity)
     }
 }
+
+mod obligation_wire;
 
 // Method-qualified state search shares the existing subsystem boundary.
 pub(crate) mod constrained;

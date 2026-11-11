@@ -250,6 +250,7 @@ pub use crate::oracle::clause::{
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRequest,
+    StateFrameRoleIdentities, StateFrameRoleIdentitiesError,
 };
 pub use kani::generate::negotiate::{
     negotiate_kani_native_obligations, negotiate_kani_obligations,

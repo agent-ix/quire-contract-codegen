@@ -14,6 +14,7 @@ use crate::kani::generate::collection::{
 };
 use crate::kani::generate::frame::{
     generate_state_frame_obligations, generate_state_frame_role, StateFrameRequest,
+    StateFrameRoleIdentities,
 };
 use crate::kani::generate::negotiate::negotiate_kani_obligations;
 use crate::kani::generate::outcome::{
@@ -34,6 +35,37 @@ use crate::oracle::clause::{
 const FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
+
+/// Two hand-written role identities that differ in node, model and ordinal.
+fn role_identities() -> StateFrameRoleIdentities {
+    let node = |name: &str| {
+        quire_exact::NodeKey::new(
+            "fixture",
+            vec![quire_exact::PathSegment::Text(name.to_owned())],
+            0,
+        )
+        .expect("a node key")
+    };
+    StateFrameRoleIdentities::new(
+        qsl_replay::ObligationIdentity::new(node("contract"), None, 3),
+        qsl_replay::ObligationIdentity::new(
+            node("frame"),
+            Some(qsl_replay::ModelIdentity::new("model")),
+            4,
+        ),
+    )
+    .expect("distinct identities")
+}
+
+fn role_identity(
+    identities: &StateFrameRoleIdentities,
+    role: StateFrameRole,
+) -> &qsl_replay::ObligationIdentity {
+    match role {
+        StateFrameRole::Contract => identities.contract(),
+        StateFrameRole::Frame => identities.frame(),
+    }
+}
 
 fn clause_test_id(number: u8) -> CheckedNodeId {
     CheckedNodeId {
@@ -163,10 +195,12 @@ fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>)
         unwind: 4,
     };
     let roles = [StateFrameRole::Frame, StateFrameRole::Contract];
+    let identities = role_identities();
     let items = roles.map(|role| ObligationItem::StateFrame {
         package: &package,
         clause: &clause,
         role,
+        obligation: role_identity(&identities, role),
         state_path: STATE_PATH,
         state_fields: &FIELDS,
         subject_path: SUBJECT_PATH,
@@ -195,7 +229,7 @@ fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>)
             if role == StateFrameRole::Frame { 0 } else { 1 }
         );
         assert_eq!(record.kind, Some(role.obligation_kind()));
-        match generate_state_frame_role(&direct, role) {
+        match generate_state_frame_role(&direct, role, role_identity(&identities, role)) {
             Ok(expected) => {
                 let actual = emitted.next().expect("supported role has a harness");
                 assert_eq!(
@@ -234,9 +268,13 @@ fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>)
     );
     assert_eq!(direct_refusal.is_some(), refused_role.is_some());
     if let Some(refusal) = direct_refusal {
-        assert_eq!(generate_state_frame_obligations(&direct), Err(refusal));
+        assert_eq!(
+            generate_state_frame_obligations(&direct, identities.clone()),
+            Err(refusal)
+        );
     } else {
-        let pair = generate_state_frame_obligations(&direct).expect("both roles generate");
+        let pair = generate_state_frame_obligations(&direct, identities.clone())
+            .expect("both roles generate");
         let expected: [&StateFrameHarness; 2] = [&pair.frame, &pair.postcondition];
         assert_eq!(state_frame_harnesses.iter().collect::<Vec<_>>(), expected);
     }
@@ -273,10 +311,12 @@ fn state_frame_one_role_refused_matches_direct_generation() {
         unwind: 4,
     };
     let roles = [StateFrameRole::Frame, StateFrameRole::Contract];
+    let identities = role_identities();
     let items = roles.map(|role| ObligationItem::StateFrame {
         package: &package,
         clause: &clause,
         role,
+        obligation: role_identity(&identities, role),
         state_path: STATE_PATH,
         state_fields: &FIELDS,
         subject_path: SUBJECT_PATH,
@@ -298,7 +338,9 @@ fn state_frame_one_role_refused_matches_direct_generation() {
     };
     assert_eq!(records.len(), roles.len());
     assert!(state_frame_harnesses.is_empty());
-    let refusals = roles.map(|role| generate_state_frame_role(&direct, role).unwrap_err());
+    let refusals = roles.map(|role| {
+        generate_state_frame_role(&direct, role, role_identity(&identities, role)).unwrap_err()
+    });
     assert_eq!(refusals[0], refusals[1]);
     let StateFrameRefusal::NotLowered { refusal } = &refusals[0] else {
         panic!("direct roles must refuse at lowering");
@@ -318,7 +360,7 @@ fn state_frame_one_role_refused_matches_direct_generation() {
     }
     assert_eq!(records[0].disposition, records[1].disposition);
     assert_eq!(
-        generate_state_frame_obligations(&direct),
+        generate_state_frame_obligations(&direct, identities.clone()),
         Err(refusals[0].clone())
     );
 }

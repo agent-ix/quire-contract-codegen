@@ -16,3 +16,6 @@ pub mod proof_ceilings;
 
 /// The driver's projection of QSL requirement records for fixtures that select an `OwnResult`.
 pub mod requirements;
+
+/// Hand-written QSL obligation identities for the state-frame lane.
+pub mod state_frame_identities;

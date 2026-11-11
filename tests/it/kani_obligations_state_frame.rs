@@ -2826,8 +2826,11 @@ fn request<'a>(fixture: &'a Fixture, fields: &'a [&'a str]) -> StateFrameRequest
 }
 
 fn generate(fixture: &Fixture) -> StateFrameObligations {
-    generate_state_frame_obligations(&request(fixture, &STATE_FIELDS))
-        .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
+    generate_state_frame_obligations(
+        &request(fixture, &STATE_FIELDS),
+        crate::common::state_frame_identities::roles(),
+    )
+    .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
 }
 
 #[trace("FR-028-AC-1")]
@@ -2844,7 +2847,11 @@ fn both_state_obligation_identities_change_with_either_required_ceiling() {
         subject_path: SUBJECT_PATH,
         unwind: 4,
     };
-    let baseline = generate_state_frame_obligations(&requested).unwrap();
+    let baseline = generate_state_frame_obligations(
+        &requested,
+        crate::common::state_frame_identities::roles(),
+    )
+    .unwrap();
     for memory in [true, false] {
         requested.ceilings = baseline.frame.identity.ceilings;
         if memory {
@@ -2852,7 +2859,11 @@ fn both_state_obligation_identities_change_with_either_required_ceiling() {
         } else {
             requested.ceilings.wall_clock /= 2;
         }
-        let changed = generate_state_frame_obligations(&requested).unwrap();
+        let changed = generate_state_frame_obligations(
+            &requested,
+            crate::common::state_frame_identities::roles(),
+        )
+        .unwrap();
         for (original, changed) in [
             (&baseline.frame, &changed.frame),
             (&baseline.postcondition, &changed.postcondition),
@@ -2892,15 +2903,18 @@ fn generated_from_twin_with_ceilings(
     ceilings: quire_contract_codegen::ProofCeilings,
 ) -> StateFrameObligations {
     let (package, clause) = twin.emitted_package(clause_name);
-    generate_state_frame_obligations(&StateFrameRequest {
-        ceilings,
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: fields,
-        subject_path,
-        unwind: 4,
-    })
+    generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings,
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: fields,
+            subject_path,
+            unwind: 4,
+        },
+        twin.minted_role_identities(clause_name),
+    )
     .expect("the emitted clause generates both roles")
 }
 
@@ -3108,8 +3122,11 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 
 fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
     let fixture = fixture(shape);
-    generate_state_frame_obligations(&request(&fixture, fields))
-        .expect_err("the request must be refused")
+    generate_state_frame_obligations(
+        &request(&fixture, fields),
+        crate::common::state_frame_identities::roles(),
+    )
+    .expect_err("the request must be refused")
 }
 
 /// The reader-admitted frame retains the producer-assigned object and integer-bound
@@ -3314,11 +3331,14 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
 
     // Equal inputs regenerate byte-identically, and the unwind bound is part of the identity.
     assert_eq!(generate(&fixture), generated);
-    let unwound = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        unwind: 5,
-        ..request(&fixture, &STATE_FIELDS)
-    })
+    let unwound = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            unwind: 5,
+            ..request(&fixture, &STATE_FIELDS)
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("generates");
     assert_ne!(
         unwound.frame.identity.options,
@@ -3506,7 +3526,8 @@ fn tc_025_two_clauses_of_one_operation_never_share_a_frame_record_path() {
 fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     let fixture = fixture(&Shape::HEALTHY);
     let refused = |request: StateFrameRequest<'_>| {
-        generate_state_frame_obligations(&request).expect_err("refused")
+        generate_state_frame_obligations(&request, crate::common::state_frame_identities::roles())
+            .expect_err("refused")
     };
     assert_eq!(
         refused(StateFrameRequest {
@@ -3568,8 +3589,11 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
     };
     let (read_fixture, read_ids) = fixture_with_resolver(&read);
     assert_eq!(
-        generate_state_frame_obligations(&request(&read_fixture, &STATE_FIELDS))
-            .expect_err("the graph field name must be refused"),
+        generate_state_frame_obligations(
+            &request(&read_fixture, &STATE_FIELDS),
+            crate::common::state_frame_identities::roles()
+        )
+        .expect_err("the graph field name must be refused"),
         StateFrameRefusal::MalformedClause {
             at: read_ids.resolve(&code_id(read.code(410)))
         }
@@ -3584,8 +3608,11 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
     };
     let (keyword_fixture, keyword_ids) = fixture_with_resolver(&keyword_read);
     assert_eq!(
-        generate_state_frame_obligations(&request(&keyword_fixture, &STATE_FIELDS))
-            .expect_err("the keyword field name must be refused"),
+        generate_state_frame_obligations(
+            &request(&keyword_fixture, &STATE_FIELDS),
+            crate::common::state_frame_identities::roles()
+        )
+        .expect_err("the keyword field name must be refused"),
         StateFrameRefusal::MalformedClause {
             at: keyword_ids.resolve(&code_id(keyword_read.code(410)))
         }
@@ -3618,8 +3645,11 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
 fn tc_025_an_unselected_model_body_never_supplies_a_range() {
     let fixture = fixture(&Shape::HEALTHY);
     assert_eq!(
-        generate_state_frame_obligations(&request(&fixture, &STATE_FIELDS))
-            .expect_err("the model accessor refuses the body"),
+        generate_state_frame_obligations(
+            &request(&fixture, &STATE_FIELDS),
+            crate::common::state_frame_identities::roles()
+        )
+        .expect_err("the model accessor refuses the body"),
         StateFrameRefusal::BoundNotResolved {
             field: "balance".to_owned(),
             cause: BoundNotResolvedCause::ModelFieldsUnavailable {
@@ -3827,6 +3857,7 @@ impl<'a> Spec<'a> {
             package: self.package,
             clause: self.clause,
             role: self.role,
+            obligation: crate::common::state_frame_identities::for_role(self.role),
             state_path: self.state_path,
             state_fields: self.state_fields,
             subject_path: self.subject_path,
@@ -4009,21 +4040,25 @@ fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates(
         package: &fixture.package,
         clause: &fixture.clause,
         role,
+        obligation: crate::common::state_frame_identities::for_role(role),
         state_path: STATE_PATH,
         state_fields: &STATE_FIELDS,
         subject_path: SUBJECT_PATH,
     };
     let items = [selected(Frame), selected(Contract)];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
-    let engine = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &fixture.package,
-        clause: &fixture.clause,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let engine = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &fixture.package,
+            clause: &fixture.clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("the selected clause generates");
     // Request order: the frame item came first.
     assert_eq!(
@@ -4067,15 +4102,18 @@ fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
     let twin = Twin::with_unbounded_audit_clause();
     let (package, audit) = twin.emitted_package("AuditNeverDrops");
     let balance = twin.emitted_package("BalanceNeverDrops").1;
-    let expected = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &audit,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let expected = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &audit,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect_err("the unbounded audit read does not lower");
     let unbounded_type = match expected {
         StateFrameRefusal::NotLowered { refusal } => match *refusal {
@@ -4460,15 +4498,20 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
 fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse() {
     let world = world_for(&[NEGATION_GRANTS_ALL, GRANTS_ALL]);
     let refuse = |shape: usize, fields: &[&str]| {
-        generate_state_frame_obligations(&StateFrameRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-            package: &world.package,
-            clause: &world.ids(shape).clause,
-            state_path: STATE_PATH,
-            state_fields: fields,
-            subject_path: SUBJECT_PATH,
-            unwind: 4,
-        })
+        generate_state_frame_obligations(
+            &StateFrameRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    KANI_TIMEOUT,
+                ),
+                package: &world.package,
+                clause: &world.ids(shape).clause,
+                state_path: STATE_PATH,
+                state_fields: fields,
+                subject_path: SUBJECT_PATH,
+                unwind: 4,
+            },
+            crate::common::state_frame_identities::roles(),
+        )
         .expect_err("both roles refuse")
     };
     // A negation (contract) on a frame granting every field (frame).
@@ -4498,15 +4541,20 @@ fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse
 fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
     use StateFrameRole::{Contract, Frame};
     let engine = |fixture: &Fixture| {
-        generate_state_frame_obligations(&StateFrameRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-            package: &fixture.package,
-            clause: &fixture.clause,
-            state_path: STATE_PATH,
-            state_fields: &STATE_FIELDS,
-            subject_path: SUBJECT_PATH,
-            unwind: 4,
-        })
+        generate_state_frame_obligations(
+            &StateFrameRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    KANI_TIMEOUT,
+                ),
+                package: &fixture.package,
+                clause: &fixture.clause,
+                state_path: STATE_PATH,
+                state_fields: &STATE_FIELDS,
+                subject_path: SUBJECT_PATH,
+                unwind: 4,
+            },
+            crate::common::state_frame_identities::roles(),
+        )
         .expect_err("the clause has a role the engine refuses")
     };
     let roles = |fixture: &Fixture| {
@@ -4720,6 +4768,7 @@ fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
         package: &package,
         clause: &clause,
         role: StateFrameRole::Frame,
+        obligation: crate::common::state_frame_identities::for_role(StateFrameRole::Frame),
         state_path: STATE_PATH,
         state_fields: &STATE_FIELDS,
         subject_path: SUBJECT_PATH,
@@ -4730,6 +4779,7 @@ fn tc_035_other_admitted_frame_request_and_foreign_item_refuse() {
             package: &package,
             clause: &other_clause,
             role: StateFrameRole::Frame,
+            obligation: crate::common::state_frame_identities::for_role(StateFrameRole::Frame),
             state_path: STATE_PATH,
             state_fields: &STATE_FIELDS,
             subject_path: SUBJECT_PATH,
@@ -5337,11 +5387,14 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
         generated.frame.identity
     );
 
-    let reversed = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        state_fields: &["audit", "balance"],
-        ..request(&fixture, &STATE_FIELDS)
-    })
+    let reversed = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            state_fields: &["audit", "balance"],
+            ..request(&fixture, &STATE_FIELDS)
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("the fields generate in either order");
     let reversed_record: Value =
         serde_json::from_str(&reversed.frame.record.contents).expect("record");
@@ -5430,15 +5483,20 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
                 Some(&CheckedMemberType::IntRange { lower, upper })
             ),
         }
-        let generated = generate_state_frame_obligations(&StateFrameRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-            package: &package,
-            clause: &clause,
-            state_path: STATE_PATH,
-            state_fields: &STATE_FIELDS,
-            subject_path: SUBJECT_PATH,
-            unwind: 4,
-        })
+        let generated = generate_state_frame_obligations(
+            &StateFrameRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    KANI_TIMEOUT,
+                ),
+                package: &package,
+                clause: &clause,
+                state_path: STATE_PATH,
+                state_fields: &STATE_FIELDS,
+                subject_path: SUBJECT_PATH,
+                unwind: 4,
+            },
+            crate::common::state_frame_identities::roles(),
+        )
         .expect("balance clause still generates");
         assert_eq!(generated.frame.identity.domains.len(), 1);
         assert_eq!(generated.frame.identity.domains[0].field, "balance");
@@ -5486,15 +5544,18 @@ fn selected_model_variant_field_is_unranged_in_generated_frame_identity() {
             upper: 1000,
         })
     );
-    let generated = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let generated = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("the balance clause still generates");
     assert_eq!(
         generated.frame.identity.domains,
@@ -5634,15 +5695,18 @@ fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override(
             upper: 1_000_000,
         })
     );
-    let harness = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let harness = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        twin.minted_role_identities("BalanceNeverDrops"),
+    )
     .expect("the source model generates")
     .frame
     .identity;
@@ -5706,15 +5770,18 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
             upper: i128::from(i64::MAX) + 1,
         })
     );
-    let harness = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let harness = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        twin.minted_role_identities("BalanceNeverDrops"),
+    )
     .expect("the selected clause generates")
     .frame
     .identity;
@@ -6255,15 +6322,18 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
         Some(0),
         "QSL emits the object type with no members in its body"
     );
-    let generated = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: &STATE_FIELDS,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let generated = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("the accessor supplies both ranges");
     let expected = model::FIELDS
         .map(|(field, (minimum, maximum))| StateFieldDomain {
@@ -6326,15 +6396,18 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
     let twin = Twin::new();
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let fields = ["audit", "balance"];
-    let generated = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        package: &package,
-        clause: &clause,
-        state_path: STATE_PATH,
-        state_fields: &fields,
-        subject_path: SUBJECT_PATH,
-        unwind: 4,
-    })
+    let generated = generate_state_frame_obligations(
+        &StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &fields,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect("both named fields resolve");
     assert_eq!(generated.frame.identity.state_fields, fields);
     assert_eq!(
@@ -6348,19 +6421,24 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
         fields
     );
 
-    let absent = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        state_fields: &["balance", "ghost", "audit"],
-        ..StateFrameRequest {
+    let absent = generate_state_frame_obligations(
+        &StateFrameRequest {
             ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-            package: &package,
-            clause: &clause,
-            state_path: STATE_PATH,
-            state_fields: &fields,
-            subject_path: SUBJECT_PATH,
-            unwind: 4,
-        }
-    })
+            state_fields: &["balance", "ghost", "audit"],
+            ..StateFrameRequest {
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    KANI_TIMEOUT,
+                ),
+                package: &package,
+                clause: &clause,
+                state_path: STATE_PATH,
+                state_fields: &fields,
+                subject_path: SUBJECT_PATH,
+                unwind: 4,
+            }
+        },
+        crate::common::state_frame_identities::roles(),
+    )
     .expect_err("a requested name absent from the accessor refuses");
     assert!(matches!(
         absent,
