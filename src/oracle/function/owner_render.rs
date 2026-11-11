@@ -138,7 +138,10 @@ fn evaluated(outcome: Outcome<Value>, location: &sv::location::ExpressionLocatio
 fn rebuilt<T, E>(result: Result<T, E>) -> T {
     match result {
         Ok(value) => value,
-        Err(_) => panic!("descriptor rebuild failed"),
+        Err(_) => {
+            kani::assert(false, "descriptor rebuild failed");
+            loop {}
+        }
     }
 }
 #[cfg(kani)]

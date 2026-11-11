@@ -349,11 +349,14 @@ fn each_reader_result_maps_to_its_own_variant() {
         .and_then(|rest| rest.split("\n}\n").next())
         .expect("admitted_package is present");
     for (result, refusal) in [
-        ("Refused(refusal)", "KaniReaderRefused(refusal)"),
-        ("Incomplete(incomplete)", "KaniReaderIncomplete(incomplete)"),
+        ("Refused(refusal)", "KaniReaderRefused(Box::new(refusal))"),
+        (
+            "Incomplete(incomplete)",
+            "KaniReaderIncomplete(Box::new(incomplete))",
+        ),
         (
             "CatalogUnavailable(error)",
-            "KaniReaderCatalogUnavailable(error)",
+            "KaniReaderCatalogUnavailable(Box::new(error))",
         ),
     ] {
         let arm = function

@@ -38,6 +38,17 @@ const COMPOSITE: &str = concat!(
     "function eq using v(x: Holder, y: Holder): Boolean pure { x = y }\n",
 );
 
+/// The host has no `kani` crate; this stands in for the function the emitted rebuild helper
+/// calls, with an abort where Kani reports a failed assertion.
+const HOST_KANI_STUB: &str = r#"
+#[cfg(kani)]
+mod kani {
+    pub fn assert(condition: bool, _message: &'static str) {
+        if !condition { std::process::abort() }
+    }
+}
+"#;
+
 const PATH: &str = "function-owner.native";
 
 fn identity() -> SourceIdentity {
@@ -167,7 +178,7 @@ fn run_probe(label: &str, source: &str, name: &str, probe: &str) -> (String, Str
                 ),
             )
         } else {
-            format!("{}\n{probe}\n", artifact.contents)
+            format!("{}\n{HOST_KANI_STUB}\n{probe}\n", artifact.contents)
         };
         fs::write(root.join(&artifact.path), contents).expect("write the scratch file");
     }

@@ -147,11 +147,11 @@ pub enum OracleGenerationError {
         enum_name: &'static str,
     },
     /// The Kani-harness entry's strict read of the retained package bytes refused them.
-    KaniReaderRefused(quire_contract_model::CheckedPackageRefusal),
+    KaniReaderRefused(Box<quire_contract_model::CheckedPackageRefusal>),
     /// The Kani-harness entry's strict read of the retained package bytes hit a caller limit.
-    KaniReaderIncomplete(quire_contract_model::CheckedPackageIncomplete),
+    KaniReaderIncomplete(Box<quire_contract_model::CheckedPackageIncomplete>),
     /// The Kani-harness entry's strict reader could not read its operation catalog.
-    KaniReaderCatalogUnavailable(quire_contract_model::CatalogReadError),
+    KaniReaderCatalogUnavailable(Box<quire_contract_model::CatalogReadError>),
     /// Acquisition, selection, nominal-declaration reading or prepared-function
     /// construction refused on the Kani-harness entry's genuine owner path.
     KaniOwnerPathRefused {

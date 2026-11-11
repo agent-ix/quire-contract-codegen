@@ -205,14 +205,14 @@ fn admitted_package(
     match result {
         CheckedPackageV2ReadResult::Admitted(package) => Ok(package),
         CheckedPackageV2ReadResult::Refused(refusal) => {
-            Err(OracleGenerationError::KaniReaderRefused(refusal))
+            Err(OracleGenerationError::KaniReaderRefused(Box::new(refusal)))
         }
-        CheckedPackageV2ReadResult::Incomplete(incomplete) => {
-            Err(OracleGenerationError::KaniReaderIncomplete(incomplete))
-        }
-        CheckedPackageV2ReadResult::CatalogUnavailable(error) => {
-            Err(OracleGenerationError::KaniReaderCatalogUnavailable(error))
-        }
+        CheckedPackageV2ReadResult::Incomplete(incomplete) => Err(
+            OracleGenerationError::KaniReaderIncomplete(Box::new(incomplete)),
+        ),
+        CheckedPackageV2ReadResult::CatalogUnavailable(error) => Err(
+            OracleGenerationError::KaniReaderCatalogUnavailable(Box::new(error)),
+        ),
     }
 }
 
