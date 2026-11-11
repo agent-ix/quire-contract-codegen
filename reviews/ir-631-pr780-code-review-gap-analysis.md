@@ -154,3 +154,14 @@ bindings:
   ac_id: FR-032-AC-8
   trace: correct
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (35e5f198): AC-8 status, prose, TC-047 step 2/expected row and tests.md row now say the bounded-addition case is a descriptor-level check over a synthetic transcript of a chosen pair, reading no retained Kani playback, with no native observation claimed. |
+| FND-002 | fixed | Round 1 (35e5f198): With code-review FND-001/FND-002 fixed and the AC-22/AC-24 mutants killed, the IMPLEMENTED/Covered flips and the TC-047 'implements steps 10 to 14' claim are accurate. |
+
+## Disposition round 1 coverage
+
+Round 1 against fix commit 35e5f198 (rebased onto origin/main dbb88103; original commit now 08c6a332). Checked git diff 08c6a332..35e5f198 over src, tests and spec. One cargo job: the combined mutation control described in the Dispositions rows, filters scalar_settlement and tc_047_bounded_addition: 9 passed, 2 failed exactly at the mutated assertions; reverted, worktree clean, target removed. No regression: no stale `settle(` call in src/tests/spec/docs; quire matrix tags FR-032-AC-7, AC-8 and AC-20..AC-25; make spec passes with no grammar warning on FR-032, TC-047, tests.md or FR-029. The committed reviews/ir-631-pr780-code-review-*.md at 35e5f198 were byte-identical to the review-pass SR files before this section was appended.

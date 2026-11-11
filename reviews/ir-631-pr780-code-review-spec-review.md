@@ -155,3 +155,20 @@ scope:
   excerpt: 'PARTIAL (IR-631): `scalar_settlement.rs` runs the `x + 1` fixture (input `Int[0,9]`, result `Int[0,10]`) through routed generation, plan, native observation and QSL, and asserts that its operand ranges reach only `[1,10]`, so it has no out-of-result-range value; `kani_obligations.rs` asserts the `[-1000,1000]` bounded-addition descriptor and derives the exact sum `1200` of the decoded `(600,600)` playback outside the result range. Native observation and QSL parity of the bounded-addition fixture stay PLANNED, because QSL''s checker refuses its source (`Unproved(Range)`), so no QSL-emitted pa...'
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The quoted source `function subject(x: Int[-1000, 1000], y: Int[-1000, 1000]): Int[-1000, 1000] { x + y }` is not the source QSL checked and refused: the compiled form (as in tests/it/scalar_playback.rs::replay_fixture and the reviewer probe) is `function subject using v(...): Int[-1000, 1000] pure { x + y }` under the language/profile header. As quoted it may fail to parse rather than be refused with Unproved(Range). Quote the real form or say 'the equivalent QSL function'. Pure wording. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:445-447 |
+| FND-003 | low | The Description says steps 1, 2 and 7 to 9 remain Planned, but step 2's restated descriptor-level bounded-addition check is now delivered by kani_obligations::tc_047_bounded_addition_playback_derives_an_out_of_result_range_exact_value. Say that step 2's real-Kani run stays Planned while its descriptor-level check is implemented. Pure wording. | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:22-24 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (35e5f198): FR-032-AC-8, its prose paragraph, TC-047 step 2 and the AC-8 expected row are restated: the out-of-result-range case is the descriptor-level decoder/harness check on kani_obligations::scalar_package; QSL's correct Unproved(Range) refusal is cited (no version/hash) and native observation, QSL parity and harness-assertion mutation of that case are explicitly neither required nor claimed. AC-8 stays PARTIAL. Consistent across FR-032, TC-047, tests.md; FR-029 untouched by the change; make spec passes with no grammar warning on these files. |
+
+## Disposition round 1 coverage
+
+Round 1 against fix commit 35e5f198 (rebased onto origin/main dbb88103; original commit now 08c6a332). Checked git diff 08c6a332..35e5f198 over src, tests and spec. One cargo job: the combined mutation control described in the Dispositions rows, filters scalar_settlement and tc_047_bounded_addition: 9 passed, 2 failed exactly at the mutated assertions; reverted, worktree clean, target removed. No regression: no stale `settle(` call in src/tests/spec/docs; quire matrix tags FR-032-AC-7, AC-8 and AC-20..AC-25; make spec passes with no grammar warning on FR-032, TC-047, tests.md or FR-029. The committed reviews/ir-631-pr780-code-review-*.md at 35e5f198 were byte-identical to the review-pass SR files before this section was appended.

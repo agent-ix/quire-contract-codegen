@@ -227,23 +227,6 @@ fn step_10_settlement_refuses_a_changed_input_bytes_budget_and_a_missing_report(
     ));
 }
 
-/// Counts, in every match arm pattern at any depth, a `_` or a bare binding (a catch-all).
-fn catch_all_patterns(pattern: &syn::Pat) -> usize {
-    use syn::Pat;
-    match pattern {
-        Pat::Wild(_) => 1,
-        Pat::Ident(ident) => match &ident.subpat {
-            Some((_, inner)) => catch_all_patterns(inner),
-            None => 1,
-        },
-        Pat::Or(or) => or.cases.iter().map(catch_all_patterns).sum(),
-        Pat::Paren(paren) => catch_all_patterns(&paren.pat),
-        Pat::Reference(reference) => catch_all_patterns(&reference.pat),
-        Pat::Tuple(tuple) => tuple.elems.iter().map(catch_all_patterns).sum(),
-        _ => 0,
-    }
-}
-
 /// Top-level arms only: a `_` inside a variant's fields (`Refused(_)`) is not a catch-all arm.
 fn arm_is_catch_all(pattern: &syn::Pat) -> bool {
     use syn::Pat;
@@ -298,7 +281,6 @@ fn step_10_terminal_map_is_an_exhaustive_match_returning_the_qsl_terminal_value(
     let or: syn::Pat = syn::parse_str::<syn::Arm>("A | _ => 1").unwrap().pat;
     let field: syn::Pat = syn::parse_str::<syn::Arm>("A(_) => 1").unwrap().pat;
     assert!(arm_is_catch_all(&bare) && arm_is_catch_all(&or) && !arm_is_catch_all(&field));
-    assert_eq!(catch_all_patterns(&field), 0);
 
     let root = env!("CARGO_MANIFEST_DIR");
     let source = std::fs::read_to_string(format!("{root}/src/kani/terminal.rs")).unwrap();

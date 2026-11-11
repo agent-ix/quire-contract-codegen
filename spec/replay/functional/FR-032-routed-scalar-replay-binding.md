@@ -444,7 +444,7 @@ The emitted increment fixture's result range is `Int[0,10]`, as
 addition descriptor already accepted by `tests/it/kani_obligations.rs::scalar_package` has
 operand/result bounds `[-1000,1000]`, and `(600,600)` giving `1200` illustrates an exact result
 outside the result range. QSL's checker refuses the source
-`function subject(x: Int[-1000, 1000], y: Int[-1000, 1000]): Int[-1000, 1000] { x + y }` with
+the equivalent QSL function (two parameters and a result each declared `Int[-1000, 1000]`, with the body `x + y`) with
 `Unproved(Range)`, and a result range wide enough to compile leaves no operand pair outside it, so
 no QSL-emitted package carries an admitted pair with an out-of-result-range exact sum. That case
 is therefore the descriptor-level decoder and harness check of FR-032-AC-8 only; no hand-edited

@@ -183,3 +183,25 @@ bindings:
   ac_id: FR-032-AC-8
   trace: correct
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | catch_all_patterns is documented as counting catch-alls 'in every match arm pattern at any depth', but neither scan uses it; it is called once, in a self-check asserting it returns 0 for `A(_)`. It is effectively dead and its doc misdescribes what the inspection does (the scans use arm_is_catch_all, top-level arms only). Delete it, or use it and fix the doc. Pure test hygiene; no behaviour is wrong. | tests/it/scalar_settlement.rs:230-245 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (35e5f198): Step 11 pairs Parity and CgDefect with Verified, CoverUnsatisfied, both Cancelled sources and all 8 KaniInconclusiveReason values, and with Proved plus all 9 non-Counterexample IR kinds, requiring UnexpectedSettlement, and checks None equals the ordinary entry point. Verified at 35e5f198; reviewer mutation control (Inconclusive run outcome and TimedOut IR kind moved into the settled arms, plus a `/ _` or-pattern arm in setup_settlement) now fails step_11 (Ok(Inconclusive(ScalarAgrees)) vs Err(UnexpectedSettlement)) and step_10_terminal_map ('no catch-all arm in setup_settlement', left 1 right 0). |
+| FND-002 | fixed | Round 1 (35e5f198): Authority(Operands(UnknownNode)) is now in the step_13 list and classified None by assert_classified against the mirror match. |
+| FND-003 | fixed | Round 1 (35e5f198): Reach is summed from identity.arguments minima/maxima and the result range parsed from the generated harness's checked-domain line, asserted (0, 10), then compared. |
+| FND-004 | fixed | Round 1 (35e5f198): Arms are rejected for a top-level `_`, a bare binding or an or-pattern containing either; self-checks on parsed arms can fail; setup_settlement's deny attribute and arms are inspected. Verified at 35e5f198; reviewer mutation control (Inconclusive run outcome and TimedOut IR kind moved into the settled arms, plus a `/ _` or-pattern arm in setup_settlement) now fails step_11 (Ok(Inconclusive(ScalarAgrees)) vs Err(UnexpectedSettlement)) and step_10_terminal_map ('no catch-all arm in setup_settlement', left 1 right 0). |
+| FND-005 | fixed | Round 1 (35e5f198): Replaced by Ok(TerminalValue::Failed) assertions from both pair functions; the wrong comment is gone. |
+| FND-006 | fixed | Round 1 (35e5f198): The trust boundary is stated on ScalarSettlement and on scalar_ir_outcome_terminal_value. |
+| FND-007 | fixed | Round 1 (35e5f198): The comment-only claim is deleted. |
+
+## Disposition round 1 coverage
+
+Round 1 against fix commit 35e5f198 (rebased onto origin/main dbb88103; original commit now 08c6a332). Checked git diff 08c6a332..35e5f198 over src, tests and spec. One cargo job: the combined mutation control described in the Dispositions rows, filters scalar_settlement and tc_047_bounded_addition: 9 passed, 2 failed exactly at the mutated assertions; reverted, worktree clean, target removed. No regression: no stale `settle(` call in src/tests/spec/docs; quire matrix tags FR-032-AC-7, AC-8 and AC-20..AC-25; make spec passes with no grammar warning on FR-032, TC-047, tests.md or FR-029. The committed reviews/ir-631-pr780-code-review-*.md at 35e5f198 were byte-identical to the review-pass SR files before this section was appended.
