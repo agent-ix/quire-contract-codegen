@@ -308,6 +308,9 @@ own this map; FR-028 AC-17/24 retain refinement and ceiling ownership. The ordin
 `ReplaySettlement` input and its MissingSettlement/UnexpectedSettlement rules remain scoped to
 source-predicate replay. The composite route requires a distinct typed same-claim settlement input;
 AC-15 cannot reject that input as an ordinary unexpected replay settlement.
+The routed scalar route (FR-032-AC-20 to FR-032-AC-24, Planned under IR-631) likewise uses a
+distinct typed `ScalarSettlement` and its own pair entry points, which return the same
+`TerminalPairError`; `ReplaySettlement` and its six readings are unchanged.
 
 - For IR-460, the Kani adapter shall read a post-state value outside its
   field's declared range as the subject's output and so as the witness, not as a refused input: QSL
