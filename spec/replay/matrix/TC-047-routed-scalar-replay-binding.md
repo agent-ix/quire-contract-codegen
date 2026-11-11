@@ -19,8 +19,9 @@ Planned public-consumer coverage of
 failure from source-property refutation. Partial native evidence exists (IR-1184: #702, #741,
 #757, #481): `scalar_playback.rs`, `scalar_literal_operands.rs`, `scalar_replay_binding.rs` and
 `scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
-a compiled generated artifact, without a Kani run. Steps 1, 2 and 7 to 9 and the settlement
-steps 10 to 14 remain Planned, as does any real falsified Kani run through the route. No
+a compiled generated artifact, without a Kani run. `scalar_settlement.rs` implements the
+settlement steps 10 to 14 (IR-631). Steps 1, 2 and 7 to 9 remain Planned, as does any real
+falsified Kani run through the route. No
 passing proof-driven replay is claimed.
 
 ## Test Procedure

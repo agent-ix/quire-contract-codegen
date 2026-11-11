@@ -11,7 +11,8 @@
 
 use qsl_replay::{
     Certification, Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause,
-    ProofBasis, ProofRefusalCause, ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
+    OperatorParityResult, ProofBasis, ProofRefusalCause, ReplayRefusal, Std001Code, TerminalValue,
+    UnavailabilityCause,
 };
 use quire_contract_ir::kani::{
     KaniCancellationSource, KaniOutcome, KaniOutcomeError, KaniOutcomeKind,
@@ -248,6 +249,92 @@ pub fn ir_outcome_terminal_value(
             Some(_),
         ) => return Err(TerminalPairError::UnexpectedSettlement),
     })
+}
+
+/// The settlement of a routed scalar counterexample's operator-level replay (FR-032-AC-20).
+///
+/// A distinct input of the scalar pair functions, not a variant of [`ReplaySettlement`]: the
+/// scalar route proves lowering parity, never a source refutation, so `Reproduced` and
+/// `Inconclusive(ReplayParity)` are unrepresentable here. `replay/` builds the value.
+#[derive(Debug)]
+pub enum ScalarSettlement<'a> {
+    /// The genuine QSL operator-parity result of the driver's replay.
+    Parity(&'a OperatorParityResult),
+    /// A failure CG raised on a supported scalar family (FR-032-AC-24): read as `Failed`.
+    CgDefect,
+}
+
+/// The value of a scalar settlement: QSL owns every `Parity` value (FR-032-AC-21).
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+fn scalar_settled(settlement: ScalarSettlement<'_>) -> TerminalValue {
+    match settlement {
+        ScalarSettlement::Parity(result) => match result {
+            OperatorParityResult::Diverged { .. } => result.terminal_value(),
+            OperatorParityResult::Agrees { .. } => result.terminal_value(),
+            OperatorParityResult::GeneratedFault(_) => result.terminal_value(),
+            OperatorParityResult::RefusedInput(_) => result.terminal_value(),
+            OperatorParityResult::Incomplete(_) => result.terminal_value(),
+            OperatorParityResult::Refused(_) => result.terminal_value(),
+        },
+        ScalarSettlement::CgDefect => TerminalValue::Failed,
+    }
+}
+
+/// [`run_terminal_value`] for a routed scalar run (FR-032-AC-22): a `Falsified` run with a
+/// settlement reads as the settlement's value; any other outcome with a settlement is refused,
+/// and an outcome with none gives the ordinary entry point's value.
+///
+/// The settlement is not checked to belong to this evidence's obligation: the driver is the
+/// trusted pairing authority.
+///
+/// # Errors
+///
+/// [`TerminalPairError`] when a falsified run has no settlement, or another outcome has one.
+pub fn scalar_run_terminal_value(
+    evidence: &KaniExecutionEvidence,
+    settlement: Option<ScalarSettlement<'_>>,
+) -> Result<TerminalValue, TerminalPairError> {
+    match settlement {
+        None => run_terminal_value(evidence, None),
+        Some(settlement) => match evidence.outcome {
+            KaniRunOutcome::Falsified { .. } => Ok(scalar_settled(settlement)),
+            KaniRunOutcome::Verified
+            | KaniRunOutcome::CoverUnsatisfied { .. }
+            | KaniRunOutcome::Inconclusive { .. }
+            | KaniRunOutcome::Cancelled { .. } => Err(TerminalPairError::UnexpectedSettlement),
+        },
+    }
+}
+
+/// [`ir_outcome_terminal_value`] for a routed scalar outcome (FR-032-AC-22); the same shape as
+/// [`scalar_run_terminal_value`] over a `Counterexample` outcome.
+///
+/// # Errors
+///
+/// [`TerminalPairError`] when a `Counterexample` has no settlement, another kind has one, or
+/// the ordinary entry point refuses.
+pub fn scalar_ir_outcome_terminal_value(
+    outcome: &KaniOutcome,
+    settlement: Option<ScalarSettlement<'_>>,
+) -> Result<TerminalValue, TerminalPairError> {
+    match settlement {
+        None => ir_outcome_terminal_value(outcome, None),
+        Some(settlement) => match outcome.kind() {
+            KaniOutcomeKind::Counterexample => Ok(scalar_settled(settlement)),
+            KaniOutcomeKind::Proved
+            | KaniOutcomeKind::Refused
+            | KaniOutcomeKind::InvalidInput
+            | KaniOutcomeKind::IncompleteInput
+            | KaniOutcomeKind::Unavailable
+            | KaniOutcomeKind::TimedOut
+            | KaniOutcomeKind::ResourceExhausted
+            | KaniOutcomeKind::Cancelled { .. }
+            | KaniOutcomeKind::Inconclusive => Err(TerminalPairError::UnexpectedSettlement),
+        },
+    }
 }
 
 /// The value of a falsified run under `settlement`: `Refuted` only for a reproduced replay.

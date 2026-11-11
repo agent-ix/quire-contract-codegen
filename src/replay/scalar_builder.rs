@@ -19,6 +19,7 @@ use crate::core::{
     scalar_authority::{ScalarAuthorityError, ScalarReplayBody},
 };
 use crate::kani::identity::{KaniScalarObligationHarness, ScalarObligationIdentity};
+use crate::kani::terminal::ScalarSettlement;
 
 /// A typed pre-dispatch or report-binding refusal; this never fabricates a QSL settlement.
 #[derive(Debug)]
@@ -346,14 +347,15 @@ impl CompletedScalarReplay {
     pub fn request(&self) -> (ReplayRequestWire, OperatorClaim, ReplayLimits) {
         (self.wire.clone(), self.claim.clone(), self.replay_limits)
     }
-    /// Compare the entire genuine report claim before reading any terminal outcome.
+    /// Compare the entire genuine report claim before reading any terminal outcome, then return
+    /// the report's result as the scalar settlement (FR-032-AC-20).
     /// # Errors
     /// Another actual-sent claim, including different native evidence or context, refuses.
-    pub fn settle(
+    pub fn settlement<'r>(
         &self,
         actual_sent: &ScalarSentRequest,
-        report: Option<&OperatorParityReport>,
-    ) -> Result<qsl_replay::TerminalValue, ScalarBuildError> {
+        report: Option<&'r OperatorParityReport>,
+    ) -> Result<ScalarSettlement<'r>, ScalarBuildError> {
         if actual_sent.replay_limits != self.replay_limits
             || !same_wire(&actual_sent.wire, &self.wire)
         {
@@ -366,7 +368,40 @@ impl CompletedScalarReplay {
         if actual_claim != self.sent || report.claim() != &actual_claim {
             return Err(ScalarBuildError::Report);
         }
-        Ok(report.terminal_value())
+        Ok(ScalarSettlement::Parity(report.result()))
+    }
+}
+
+impl ScalarBuildError {
+    /// The settlement of a falsified run whose replay setup failed (FR-032-AC-24): `CgDefect`
+    /// only for a failure CG raised on a supported scalar family; `None` for a named unavailable
+    /// capability and for a binding mismatch, which must not write a record for another obligation.
+    #[deny(
+        clippy::wildcard_enum_match_arm,
+        clippy::match_wildcard_for_single_variants
+    )]
+    pub fn setup_settlement(&self) -> Option<ScalarSettlement<'static>> {
+        match self {
+            Self::Authority(cause) => match cause {
+                ScalarAuthorityError::Operation
+                | ScalarAuthorityError::Ranges
+                | ScalarAuthorityError::Record => Some(ScalarSettlement::CgDefect),
+                ScalarAuthorityError::Unavailable
+                | ScalarAuthorityError::Occurrence
+                | ScalarAuthorityError::Operands(_)
+                | ScalarAuthorityError::GeneratedArtifactChanged => None,
+            },
+            Self::Playback(_) | Self::Staging | Self::Identity(_) => {
+                Some(ScalarSettlement::CgDefect)
+            }
+            Self::BodyMismatch
+            | Self::Context(_)
+            | Self::Artifacts
+            | Self::Operation
+            | Self::Observation
+            | Self::Report
+            | Self::SentContext => None,
+        }
     }
 }
 
