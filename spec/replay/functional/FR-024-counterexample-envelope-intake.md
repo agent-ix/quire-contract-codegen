@@ -110,11 +110,13 @@ immutable lineage record refers to, but is not a member or copy of, QSL's envelo
 
 ## Scope
 
-The state-clause path covers the `postcondition` state clause of one operation over one state
-object (the operation-contract harness of FR-015-AC-26), replayed as QSL's `Invocation`
-observation. State preconditions (`PreCall`) have no CG harness obligation of this kind and are
-not specified here. The object-type invariant (`Current`) is specified by FR-024-AC-57 and
-FR-024-AC-58 (IR-1505).
+The state-clause path covers two clause kinds, each over one state object. The `postcondition`
+state clause of one operation (the operation-contract harness of FR-015-AC-26) is replayed as
+QSL's `Invocation` observation. The object-type `invariant` state clause (the V2 invariant harness
+of FR-015-AC-38 and FR-015-AC-49, IR-1505) is replayed as QSL's `Current` observation
+(FR-024-AC-57 to FR-024-AC-64). State preconditions (`PreCall`) are out of scope for this
+requirement: FR-015-AC-38 also generates a V2 precondition harness, but no requirement here
+specifies its replay, no ticket owns it, and the invariant path refuses it (FR-024-AC-62).
 
 The frame path (FR-024-AC-6) and the state-clause path fill the same `WitnessPacket` members from
 the same proving-run members. The state-clause code keeps its packet assembly inside its own
@@ -166,6 +168,15 @@ members against the operation's declaration in the domain package.
   claim context for input-arm parity, which belong to the replay request and not to the envelope:
   the dependency entries (QSL ADR-015 D-4), the state environment, the accounting limits, the S1 to
   S4 stage limits and the byte provision.
+- For an invariant state-clause counterexample (IR-1505), the request's `documents` vector starts
+  with the caller's domain package documents, as for the postcondition path, and contains no state
+  document from the proving run. The generator builds the one current snapshot from: the decoded
+  playback of the falsified V2 invariant harness (one `i64` per state field the harness draws,
+  which are the fields the clause reads); the caller's `SelectedAnchor` (`initialization` or
+  `handler`, and its name), because a drawn-state invariant harness carries no anchor of its own
+  and CG neither infers nor defaults one; the caller's self-object address (population and key)
+  and the snapshot's four identity labels (authority, identity, revision namespace and revision);
+  and the invariant's declared clause name.
 - For a postcondition state-clause counterexample, the request's `documents` vector starts with
   the caller's domain package documents (as `FrameReplayInputs::packages`) and contains no
   state document from the proving run. The two-label source `byte_provision` remains separate. The
@@ -208,6 +219,10 @@ members against the operation's declaration in the domain package.
 - For a postcondition state-clause counterexample: a `StateClauseReplay` holding the request and
   the envelope packet, whose `replay` returns QSL's `StateClauseReplayResult`, or a typed
   `StateClauseReplayError` with no replay.
+
+- For an invariant state-clause counterexample: a `StateClauseReplay` built by the invariant
+  constructor, holding the request and the envelope packet, whose `replay` returns QSL's
+  `StateClauseReplayResult`, or a typed `StateClauseReplayError` with no replay.
 
 ## Behavior
 
@@ -365,7 +380,8 @@ members against the operation's declaration in the domain package.
 - The generator shall set the state-clause packet and request's `state_clause` replay target to
   the clause's declared `QualifiedName` that QSL's `ClauseSite` validates. It shall set no
   payload `clause` member or duplicate selection.
-- The generator shall set the payload's `observation` to `ClauseSelectionInput::Invocation`.
+- When a counterexample is a postcondition state-clause counterexample, the generator shall set the
+  payload's `observation` to `ClauseSelectionInput::Invocation`.
 - The generator shall submit the state-clause envelope on the `Witness` arm, with a transcript
   rendered by the one adapter rendering function (FR-024-AC-2) from the decoded playback values,
   and shall set the payload's `witness` record to none. The counterexample is a backend
@@ -398,6 +414,41 @@ members against the operation's declaration in the domain package.
   return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and what it
   declares, before it builds any document. The shape is read from the caller's admitted package,
   while QSL's admission reads the documents in `ReplayRequestWire.documents`.
+- When a counterexample is the playback of a Falsified V2 invariant harness, the generator shall
+  submit a `WitnessEnvelope<StateClauseCounterexample>` through `qsl_replay::replay_state_clause`,
+  selecting the clause by its declared name, and shall return the executor's result unchanged
+  (FR-024-AC-57, FR-024-AC-60).
+- When the generator builds an invariant payload, it shall set `observation` to
+  `ClauseSelectionInput::Current` carrying the current snapshot's reference, the caller's selected
+  anchor and the self object, shall build exactly one state document (the current snapshot) and no
+  invocation document and no post snapshot, and shall write in the snapshot the same anchor it
+  puts in the selection (FR-024-AC-57).
+- When the generator builds the current snapshot, it shall bind only the state fields the harness
+  draws and shall give an unread declared field no invented value (FR-024-AC-58).
+- When the generator selects an invariant, it shall use the clause's declared name (FR-024-AC-59).
+- When the generator selects an invariant, it shall set the envelope's `clause_node` and
+  `occurrence_key` from the `ClauseSite` that `qsl_replay::call_site` names for it
+  (FR-024-AC-59).
+- When the generator builds the invariant envelope, it shall submit it on the `Witness` arm with a
+  transcript rendered by the one adapter rendering function from the decoded playback values, with
+  the selected anchor's name as the transcript's operation name, and shall set the payload's
+  `witness` record to none (FR-024-AC-63).
+- If the playback binds no value for a drawn field, binds a name the object does not declare,
+  binds one field more than once, binds a value outside the field's declared range, or is not the
+  decodable playback of the selected invariant harness, then the generator shall return
+  `StateClauseReplayError::MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` or
+  `Decode` respectively, before any document is built and without calling the executor
+  (FR-024-AC-61).
+- If the harness is not a V2 invariant harness, then the generator shall return
+  `StateClauseReplayError::NotInvariantHarness`; if its obligation or field order differs from the
+  replay inputs, `HarnessMismatch`; if the playback's selected assertion does not name this
+  invariant, `AssertionMismatch`; if the clause name is not declared by the unit, `CallSite`; if
+  QSL names a clause node other than the one the harness was generated from,
+  `ClauseSelectionMismatch`; if two documents share the four identity labels,
+  `DuplicateDocumentIdentity`; each without calling the executor. If QSL refuses the request or
+  envelope (including a wrong observation form or a snapshot anchor that differs from the
+  selection's), then the generator shall return `StateClauseReplayError::Refused` holding QSL's
+  refusal unchanged, and shall map it to no settlement (FR-024-AC-62).
 - If the generator returns `StateClauseReplayError::UnsupportedOperationShape`, then it shall not
   call `replay_state_clause`.
 - The generator shall encode each document only through `core::canonical` (AD-004), the one
@@ -484,7 +535,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
-| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name. Its packet and request carry `state_clause` as that clause's declared `QualifiedName`, with neither other replay target; its payload has no `clause` selection and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
+| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name. Its packet and request carry `state_clause` as that clause's declared `QualifiedName`, with neither other replay target; its payload has no `clause` selection and, for a postcondition clause, its `observation` is the `Invocation` arm (the invariant path's observation is FR-024-AC-57's). For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
 | FR-024-AC-13 | RETIRED, replaced by FR-024-AC-52; the former document-digest address and changed-digest checks are obsolete and earn no implementation credit. | Inspection |
 | FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A playback or post-state name outside the path's declared field list returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. | Test (TC-035) |
@@ -525,8 +576,14 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-54 | For a selected frame item, the public `FrameReplayInputs` accepts the driver's exact typed QSL `OperationSite.frame_operation` value with its admitted `package_id`, `request_index` and complete frame occurrence association. The association's `package_id` and `request_index` equal the independently selected CG item's admitted package identity and request index; its frame occurrence equals both that item's complete occurrence and QSL's located `OperationSite.frame_occurrence`; and its target value equals QSL's located `OperationSite.frame_operation`. `FrameReplay::new` copies that supplied target unchanged into the frame packet and replay request, and the packet retains the selected occurrence. An inherited operation uses QSL's declaring owner, not the spelling of the requested object. | Test (TC-035) |
 | FR-024-AC-55 | If the selected target is absent, or its operation or declaring owner differs from QSL's `OperationSite.frame_operation`, `FrameReplay::new` returns a typed selected-target refusal naming the missing or mismatched member. It constructs no packet or request and calls no replay executor. `OperationName`, harness scope and the internally located call site supply no name-only fallback. | Test (TC-035) |
 | FR-024-AC-56 | Holding the QSL target value fixed, a foreign or unknown `package_id`, a different `request_index` (including another valid selected item), or a different complete frame occurrence (including a different ordinal of the same frame node) each returns a typed selected-target refusal naming the mismatched association before packet, request or replay construction. The target cannot be attached to an item selected from a different package, request or occurrence. | Test (TC-035) |
-| FR-024-AC-57 | PLANNED (IR-1505; prerequisite named by FR-015-AC-129). Prerequisites: FR-015-AC-38 (V2 invariant harness generation), the shared playback decoder of FR-024-AC-25 (IR-625) and QSL's `qsl_replay::replay_state_clause`. From a Falsified V2 invariant harness over one object type of one model, whose concrete playback binds every declared state field of that object, CG builds a `StateClauseCounterexample` whose observation is `ClauseSelectionInput::Current` (the current snapshot, the selected anchor and the self object) and not `Invocation`, with one state document built from the decoded playback values and no post snapshot, and settles it through `qsl_replay::replay_state_clause` with the clause selected by its declared clause name. The result is exactly the one a direct call of `replay_state_clause` with the same request and envelope returns. For an invariant the playback violates, the replay settles `reproduced-with-evaluated-witness`, `violation`; for a playback of values that satisfy the invariant it settles a respecting category, and the two results differ. A playback that binds no value for a declared field returns `StateClauseReplayError::MissingField` naming that field, and a decoded value outside the field's declared range returns `StateClauseReplayError::OutOfDomain`, each with no executor call. A harness of another property kind (postcondition, frame) given to the Current path is refused with a typed error and no executor call. CG makes no memory-fit or Kani-verdict claim here. | Test (TC-035) |
-| FR-024-AC-58 | PLANNED (IR-1505; prerequisite FR-024-AC-57; consumed by FR-015-AC-129). Over a `Bank` model with object `Account`, field `balance` typed `Int[0, 100]`, and the QSL invariant `invariant NonNegative using v on Bank::Account at current { self.balance >= 0 }`, two concrete playbacks replay through `replay_state_clause` as FR-024-AC-57 states and each settles `reproduced-with-evaluated-witness`, `violation` for the named clause: the invariant text strengthened to `balance >= 1` with playback `balance = 0`; and the field widened to `Int[-1, 100]` with the invariant text unchanged and playback `balance = -1`. The unmutated invariant with playback `balance = 0` does not settle a violation. The test uses recorded playback text; installed-Kani verdicts for these mutants are FR-015-AC-129's. | Test (TC-035) |
+| FR-024-AC-57 | PLANNED (IR-1505). Prerequisites: FR-015-AC-38 and FR-015-AC-49 (V2 invariant harness generation), the shared playback decoder of FR-024-AC-25 (IR-625) and QSL's `qsl_replay::replay_state_clause`. When the playback of a Falsified V2 invariant harness over one object type is replayed, CG builds a `StateClauseCounterexample` whose `observation` is `ClauseSelectionInput::Current` and is not `Invocation`, carrying the current snapshot's reference, the caller's selected anchor and the self object (the supplied population and key). CG builds exactly one state document, the current snapshot, with the same anchor as the selection, and no invocation document and no post snapshot. A selected anchor that differs from the snapshot's is not corrected by CG: QSL's wrong-anchor refusal comes back as FR-024-AC-62 states. | Test (TC-035) |
+| FR-024-AC-58 | PLANNED (IR-1505). The current snapshot binds exactly the state fields the V2 invariant harness draws (the fields the clause reads) and gives every unread declared field no value. For an object type declaring `balance` and an unread `audit`, with the invariant reading only `balance`, the harness draws `balance`, the playback binds `balance`, the replay does not return `MissingField` for `audit`, and the snapshot holds `balance` alone. If QSL refuses a snapshot lacking an unread declared field, that refusal is returned as FR-024-AC-62 states and CG fills `audit` with no value of its own. | Test (TC-035) |
+| FR-024-AC-59 | PLANNED (IR-1505). The invariant is selected by its declared `QualifiedName`: the packet and request carry it as `state_clause`, and the envelope's `clause_node` and `occurrence_key` equal the `ClauseSite` that `qsl_replay::call_site` returns for it. For a unit declaring invariants `Positive` (`self.balance >= 1`) and `Capped` (`self.balance <= 100`) in that order over `Account.balance: Int[0, 100]`, the playback `balance = 0` replayed for `Positive` settles `reproduced-with-evaluated-witness`, `violation` with `Positive`'s node and occurrence, and replayed for `Capped` settles `inconclusive` with cause `Verdicts`, with `Capped`'s node and occurrence; the two invariants disagree on the playback, so a builder taking the first declared invariant returns `Positive`'s result for `Capped`. | Test (TC-035) |
+| FR-024-AC-60 | PLANNED (IR-1505). The invariant replay returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope. A playback that violates the invariant settles `reproduced-with-evaluated-witness`, `violation`. A playback of values that satisfy the invariant returns `Ok` and settles `inconclusive` with cause `Verdicts` (category `success`), as FR-024-AC-52 words it for the postcondition path; the two results differ. An executor passed to the invariant path's executor seam that returns a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
+| FR-024-AC-61 | PLANNED (IR-1505). Each playback refusal is a distinct typed `StateClauseReplayError` returned before any document is built and with the executor uncalled: a playback lacking a drawn field returns `MissingField` naming it; a playback naming a field the object does not declare returns `UndeclaredField`; one binding a field twice returns `DuplicateField`; a value outside the field's declared range returns `OutOfDomain` naming the field and value; and a playback of another harness, or of the wrong count or width, returns `Decode`. | Test (TC-035) |
+| FR-024-AC-62 | PLANNED (IR-1505). The refusal set of the invariant path is closed and typed, each returned without calling the executor. A V2 postcondition, frame or precondition harness given to the invariant path returns `StateClauseReplayError::NotInvariantHarness`; a harness whose obligation or field order differs from the replay inputs returns `HarnessMismatch`; a playback whose selected assertion does not name this invariant returns `AssertionMismatch`; an undeclared clause name returns `CallSite` holding the call site's refusal; a clause node other than the harness's returns `ClauseSelectionMismatch`; documents sharing four identity labels return `DuplicateDocumentIdentity`. QSL's own refusal of the request or envelope, including `WrongObservation` and a snapshot anchor that differs from the selection's, returns `Refused` holding QSL's refusal unchanged and is not mapped to a settlement. | Test (TC-035) |
+| FR-024-AC-63 | PLANNED (IR-1505). The invariant envelope rides the `Witness` arm with a transcript rendered by the one adapter rendering function from the decoded playback values, whose operation name is the selected anchor's name (an object-type invariant has no operation of its own), and the payload's `witness` record is none. A clause whose settlement basis is decisive makes QSL re-derive a witness record the payload does not carry, and the result is QSL's `inconclusive` with cause `Witness`, returned as it is. | Test (TC-035) |
+| FR-024-AC-64 | PLANNED (IR-1505; consumed by FR-015-AC-129). Over a `Bank` model with object `Account`, field `balance` typed `Int[0, 100]`, and the QSL invariant `invariant NonNegative using v on Bank::Account at current { self.balance >= 0 }`, two playbacks replay as FR-024-AC-57 to FR-024-AC-60 state, each settling `reproduced-with-evaluated-witness`, `violation` for `NonNegative`: the invariant text strengthened to `balance >= 1` with playback `balance = 0`; and the field widened to `Int[-1, 100]` with the invariant text unchanged and playback `balance = -1`. The unmutated package with playback `balance = 0` returns `Ok` and settles `inconclusive` with cause `Verdicts` for `NonNegative`. Each playback text is hand-authored in Kani's concrete-playback format for the invariant harness CG generates for that mutant, and is decoded through `parse_assertion_playback` and the shared decoder against that generated harness's identity and state fields; no installed Kani run is required, and the FR-015-AC-129 installed-backend run (IR-1436) is not a prerequisite. Installed-Kani verdicts for these mutants are FR-015-AC-129's. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -553,7 +610,7 @@ their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11, FR-024-AC-15 to FR-024-AC-19 and FR-024-AC-25 to FR-024-AC-29 have
 implemented slices described below. The retired digest requirement is replaced by Planned FR-024-AC-53; its former digest tests earn no replacement credit.
-FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
+FR-024-AC-57 to FR-024-AC-64 (the Current-observation replay of a Falsified V2 invariant harness, IR-1505) are planned: `StateClauseReplay::new` builds only the `Invocation` observation today (`src/replay/state_clause.rs`). FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
 IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under IR-624:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no

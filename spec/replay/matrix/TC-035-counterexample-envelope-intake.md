@@ -349,20 +349,39 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     request or replay construction, including the same-node different-ordinal case
     (FR-024-AC-56).
 
-39. Decode the playback of a Falsified V2 invariant harness and build the Current-observation
-    envelope (FR-024-AC-57). Replay it through `replay_state_clause` and compare with the direct
-    call; replay a satisfying playback and compare the two results. Omit one declared field from
-    the playback, then supply a value outside the field's range, then supply a postcondition and a
-    frame harness to the Current path, each checking the executor is not called. Mutation controls:
-    building `Invocation` instead of `Current` fails the observation-form check in this step; a
-    builder that ignores the playback values and always binds `0` fails on the `balance = -1`
-    playback of step 40; a builder that selects the clause by position instead of its declared
-    name fails when two invariants are declared in reverse order.
-40. Over the `Bank`/`Account` fixture of FR-024-AC-58, replay `balance = 0` against the strengthened
-    `balance >= 1` invariant, `balance = -1` against the widened-field package, and `balance = 0`
-    against the unmutated invariant. The first two settle `reproduced-with-evaluated-witness`,
-    `violation`; the third does not. A mutant that evaluates the unmutated text for the first
-    playback fails the first assertion.
+39. Decode the hand-authored playback of a V2 invariant harness and build the Current envelope.
+    Read back the payload's observation form, its single state document, the absence of an
+    invocation document and post snapshot, and the snapshot anchor against the selection's
+    (FR-024-AC-57). Mutation control: building `Invocation` instead of `Current` fails the
+    observation-form assertion of this step.
+40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback and
+    read the snapshot's fields (FR-024-AC-58). Mutation control: a builder that binds every
+    declared field returns `MissingField` for `audit` and fails this step.
+41. Over the two-invariant `Positive`/`Capped` unit, replay `balance = 0` for each clause
+    (FR-024-AC-59). The two settle differently (`violation`; `inconclusive`/`Verdicts`) with their
+    own nodes and occurrences. Mutation control: a builder selecting the first declared invariant
+    instead of the named one returns `Positive`'s result for `Capped` and fails.
+42. Compare the invariant replay with a direct `replay_state_clause` call for a violating and a
+    satisfying playback, and pass an executor returning a sentinel (FR-024-AC-60). The satisfying
+    case must be `Ok`, `inconclusive`, `Verdicts`. Mutation control: a builder that refuses every
+    satisfying playback fails the `Ok` assertion.
+43. Omit a drawn field, add an undeclared name, repeat a field, supply a value outside the range,
+    and supply another harness's playback, each asserting its distinct variant and an uncalled
+    executor (FR-024-AC-61). Mutation control: reading the range from the unmutated package makes
+    the widened `balance = -1` playback of step 45 return `OutOfDomain` and fails step 45.
+44. Supply a postcondition, a frame and a precondition harness, a mismatched obligation, a
+    mismatched assertion, an undeclared clause, a wrong snapshot anchor and a duplicate document
+    identity, each asserting its variant (`NotInvariantHarness`, `HarnessMismatch`,
+    `AssertionMismatch`, `CallSite`, `Refused`, `DuplicateDocumentIdentity`) and an uncalled
+    executor for the CG-side ones (FR-024-AC-62). Mutation control: the postcondition builder
+    accepting an invariant harness fails the `NotInvariantHarness` assertion.
+45. Read the transcript's operation name and the payload's witness member (FR-024-AC-63). Then
+    replay the FR-024-AC-64 fixture: `balance = 0` against the strengthened invariant, `balance =
+    -1` against the widened package, and `balance = 0` against the unmutated package. The first
+    two settle `reproduced-with-evaluated-witness`, `violation`; the third is `Ok`,
+    `inconclusive`, `Verdicts`. Mutation controls: building the request from the unmutated unit
+    or package instead of the supplied mutant makes the first playback settle `Verdicts` and fails
+    the first assertion; ignoring the playback and binding `0` fails the `balance = -1` case.
 
 ## Status
 
@@ -404,7 +423,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are planned: the Current-observation replay of a Falsified V2 invariant harness is not implemented, and no tagged test covers it. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)

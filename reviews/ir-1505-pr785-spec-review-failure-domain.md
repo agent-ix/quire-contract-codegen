@@ -1,0 +1,39 @@
+---
+id: SR-17940486709564847047671
+title: "IR-1505 PR #785 Current-observation invariant replay: failure-domain analysis"
+type: SpecReview
+analysis: failure-domain
+date: 2026-11-11
+scope: "agent-ix/quire-contract-codegen; PR #785 @ 0cb97e82; IR-1505; spec/replay/functional/FR-024-counterexample-envelope-intake.md, spec/replay/matrix/TC-035-counterexample-envelope-intake.md, spec/replay/matrix/tests.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-024
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-035
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1505. Spec-only PR #785 (head 0cb97e82, branch code/ir-1505-state-clause-replay) rewrites the FR-024 Scope so the object-type invariant (`Current`) is no longer excluded, adds PLANNED FR-024-AC-57 (Current-observation state-clause replay of a Falsified V2 invariant harness through `qsl_replay::replay_state_clause`) and FR-024-AC-58 (the FR-015-AC-129 `Bank`/`Account` invariant mutants), TC-035 steps 39-40, and the TC-035 row of tests.md. Verified against SOURCE: CG origin/main src/replay/state_clause.rs:672 (`observation: ClauseSelectionInput::Invocation { invocation }`, hard-coded), :241-315 (StateClauseReplayError: NotPostconditionHarness, MissingField, OutOfDomain, ...), src/kani/output/playback.rs:384 (parse_assertion_playback), src/kani/generate/clause/v2.rs:148/166/184/652 (ObligationKind::Invariant; invariant inputs are only `current_*` state-field reads of the clause; arithmetic invariants refused); pinned qsl-replay 434869e8 (Cargo.lock, branch main) at ~/.cargo/git/checkouts/quire-spec-language-c986aa40394a5ad7/434869e: qsl-replay/src/execute/state_clause.rs:170 replay_state_clause resolves the clause by name (`graph.state_clause(name)`), :428 expected_form maps Invariant/Constraint to Current and refuses another form (WrongObservation), WitnessArmResult::settle (result.rs:627) settles Inconclusive (cause Verdicts) when the replayed clause holds; qsl-semantics observation.rs:273 ClauseSelectionInput::Current { snapshot, anchor: SelectedAnchor {kind: initialization|handler, name}, self_object }, and admit_invariant requires the snapshot document's anchor to equal the selection's; call_site.rs ClauseName selects invariants too. Linear: IR-625 Done; IR-917 In Progress (PR #583 open) owns arithmetic clauses only. make spec and quire matrix compared with origin/main.
+
+## Verdict
+
+CHANGES REQUIRED. The happy path and the two named refusals are sound against source. But the V2 invariant harness's field coverage makes MissingField the normal outcome for multi-field objects, and the refusal set is open: the wrong-kind variant is unnamed, precondition harnesses are omitted, and the other existing refusals are unstated. No invented owner-only outcome was found: violation and inconclusive/Verdicts are QSL settlements CG passes through, and MissingField and OutOfDomain are existing CG variants.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | A V2 invariant harness draws only the state fields its clause reads. In src/kani/generate/clause/v2.rs:166-168 the inputs of an Invariant are the oracle descriptor's current_* state-field reads, and :652-700 emits one Input per such read. AC-57 applies only to a harness 'whose concrete playback binds every declared state field' and returns MissingField otherwise. So every invariant over an object with a field the clause does not read is refused, which is normal generator output treated as a typed error. The Bank fixture (one field) cannot show this. Fix: state how unread declared fields are populated in the Current snapshot (e.g. from the declared range, as FR-024-AC-30/31 do with model_object_fields for unread fields). Otherwise scope AC-57 explicitly to clauses that read every field, and give the out-of-scope case its own named refusal, not MissingField. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528 |
+| FND-002 | medium | The refusal set is not closed. (a) The wrong-kind refusal is 'a typed error' with no variant named. The existing StateClauseReplayError::NotPostconditionHarness is the inverse check, and two implementers will choose differently. (b) It lists postcondition and frame but omits the V2 precondition harness that FR-015-AC-38 generates. (c) The other existing refusals are not stated for the Current path: Decode (another harness's playback, wrong count or width), UndeclaredField, DuplicateField, CallSite for an undeclared clause name, ClauseSelectionMismatch and DuplicateDocumentIdentity. Neither is QSL's own WrongObservation passed through as Refused. Fix: name the variant (e.g. NotInvariantHarness), say every harness kind other than invariant gets it, and list which existing variants the Current path returns. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528 |
+| FND-003 | low | The Witness-arm rule (payload witness none, transcript from the one renderer, and inconclusive/Witness when QSL re-derives a decisive witness record) is written only for the postcondition counterexample. AC-57 says nothing about the Current payload's witness member or transcript, or about the transcript's operation name: render_witness takes an operation, which an object-type invariant does not have. Fix: state that the Current payload sets witness none and which name the transcript carries. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528, 369-377 |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-024-AC-57 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528 | PLANNED (IR-1505; prerequisite named by FR-015-AC-129). Prerequisites: FR-015-AC-38 (V2 invariant harness generation), the shared playback decoder of FR-024-AC-25 (IR-625) and QSL's `qsl_replay::replay_state_clause`. From a Falsified V2 invariant harness over one object type of one model, whose concrete playback binds every declared state field of that object, CG builds a `StateClauseCounterexample` whose observation is `ClauseSelectionInput::Current` (the current snapshot, the selected anchor and the self object) and not `Invocation`, ... |
+| FR-024-AC-58 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:529 | PLANNED (IR-1505; prerequisite FR-024-AC-57; consumed by FR-015-AC-129). Over a `Bank` model with object `Account`, field `balance` typed `Int[0, 100]`, and the QSL invariant `invariant NonNegative using v on Bank::Account at current { self.balance >= 0 }`, two concrete playbacks replay through `replay_state_clause` as FR-024-AC-57 states and each settles `reproduced-with-evaluated-witness`, `violation` for the named clause: ... The unmutated invariant with playback `balance = 0` does not settle a violation. The test uses recorded playback text; installed-Kani verdicts for these mutants are FR |
+| TC-035-step-39 | examined | spec/replay/matrix/TC-035-counterexample-envelope-intake.md:352 | 39. Decode the playback of a Falsified V2 invariant harness and build the Current-observation envelope (FR-024-AC-57). ... Mutation controls: building `Invocation` instead of `Current` fails the observation-form check in this step; a builder that ignores the playback values and always binds `0` fails on the `balance = -1` playback of step 40; a builder that selects the clause by position instead of its declared name fails when two invariants are declared in reverse order. |
+| FR-024-AC-52 | context_only | spec/replay/functional/FR-024-counterexample-envelope-intake.md:523 | ... The first run settles as a reproduced violation and each changed-value run as inconclusive with cause `Verdicts`, with no substitute document selected. ... |

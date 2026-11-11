@@ -1,0 +1,43 @@
+---
+id: SR-17940486709564847047670
+title: "IR-1505 PR #785 Current-observation invariant replay: spec-review integrity"
+type: SpecReview
+analysis: integrity
+date: 2026-11-11
+scope: "agent-ix/quire-contract-codegen; PR #785 @ 0cb97e82; IR-1505; spec/replay/functional/FR-024-counterexample-envelope-intake.md, spec/replay/matrix/TC-035-counterexample-envelope-intake.md, spec/replay/matrix/tests.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-024
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-035
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1505. Spec-only PR #785 (head 0cb97e82, branch code/ir-1505-state-clause-replay) rewrites the FR-024 Scope so the object-type invariant (`Current`) is no longer excluded, adds PLANNED FR-024-AC-57 (Current-observation state-clause replay of a Falsified V2 invariant harness through `qsl_replay::replay_state_clause`) and FR-024-AC-58 (the FR-015-AC-129 `Bank`/`Account` invariant mutants), TC-035 steps 39-40, and the TC-035 row of tests.md. Verified against SOURCE: CG origin/main src/replay/state_clause.rs:672 (`observation: ClauseSelectionInput::Invocation { invocation }`, hard-coded), :241-315 (StateClauseReplayError: NotPostconditionHarness, MissingField, OutOfDomain, ...), src/kani/output/playback.rs:384 (parse_assertion_playback), src/kani/generate/clause/v2.rs:148/166/184/652 (ObligationKind::Invariant; invariant inputs are only `current_*` state-field reads of the clause; arithmetic invariants refused); pinned qsl-replay 434869e8 (Cargo.lock, branch main) at ~/.cargo/git/checkouts/quire-spec-language-c986aa40394a5ad7/434869e: qsl-replay/src/execute/state_clause.rs:170 replay_state_clause resolves the clause by name (`graph.state_clause(name)`), :428 expected_form maps Invariant/Constraint to Current and refuses another form (WrongObservation), WitnessArmResult::settle (result.rs:627) settles Inconclusive (cause Verdicts) when the replayed clause holds; qsl-semantics observation.rs:273 ClauseSelectionInput::Current { snapshot, anchor: SelectedAnchor {kind: initialization|handler, name}, self_object }, and admit_invariant requires the snapshot document's anchor to equal the selection's; call_site.rs ClauseName selects invariants too. Linear: IR-625 Done; IR-917 In Progress (PR #583 open) owns arithmetic clauses only. make spec and quire matrix compared with origin/main.
+
+## Verdict
+
+CHANGES REQUIRED. The exclusion is reversed in Scope only. FR-024 Behavior:368 and AC-12 still require Invocation unconditionally, which contradicts AC-57 (high). Inputs and Outputs do not describe the Current path, notably its anchor. Traceability rows, status sections and AD-002 are not updated. grep over spec/ finds no other statement excluding invariant replay; TC-025:63/132 and FR-015-AC-129 already expect it.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | The unconditional Behavior statement 'The generator shall set the payload's observation to ClauseSelectionInput::Invocation' is unchanged, while the new FR-024-AC-57 requires the observation to be ClauseSelectionInput::Current 'and not Invocation'. Two requirements of the same FR now contradict, and FR-024-AC-12 also still says the state-clause envelope's observation 'is the Invocation arm'. The Scope exclusion was reversed only in Scope. Fix: scope line 368 and AC-12 to the postcondition path and add the Current-path Behavior statement. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:368 |
+| FND-002 | medium | Inputs and Outputs still describe only the postcondition state-clause counterexample, so where the Current path's inputs come from is unspecified. AC-57 names 'the selected anchor', but QSL's SelectedAnchor is {kind: initialization/handler, name}, and admit_invariant refuses a snapshot whose anchor differs (qsl-semantics observation.rs:2196 wrong-anchor). Nothing says which anchor CG writes for a drawn-state invariant harness that has no initialization or handler. The same gap covers the self object's population and key, the snapshot's identity labels, the domain packages in documents and the replay request members. Fix: add a Current-path Inputs bullet (caller-supplied anchor, object address and label, or a stated CG-chosen anchor) and an Outputs bullet. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528, 169, 208 |
+| FND-003 | low | AC-57/58 are added only to the TC-035 test-case row. The requirement-to-test table has no FR-024 row for them, unlike every other FR-024 AC group (tests.md:20-29). FR-024 '## Current state' and TC-035 '## Status' also do not mention AC-57/58 or steps 39-40 as planned. AD-002:54 still defines the state-clause seam row as 'postcondition state clause, Invocation observation'. Fix: add '/ FR-024 / FR-024-AC-57, FR-024-AC-58 / TC-035 / 🚧 Planned (IR-1505) /', one planned sentence in each status section, and extend the AD-002 row. | spec/replay/matrix/tests.md:20-29, 49 |
+| FND-004 | low | The rewritten Scope keeps 'State preconditions (PreCall) have no CG harness obligation of this kind'. FR-015-AC-38 now specifies V2 precondition harnesses, and the pinned QSL has ClauseSelectionInput::PreCall. The reasoning this PR reversed for invariants applies to preconditions too, so the sentence is now a stale factual claim rather than a scope choice. Fix: say that precondition replay (PreCall) is out of scope for this FR and name the ticket that owns it, or none. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:113-117 |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-024-scope | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:113 | The state-clause path covers the `postcondition` state clause of one operation over one state object (the operation-contract harness of FR-015-AC-26), replayed as QSL's `Invocation` observation. State preconditions (`PreCall`) have no CG harness obligation of this kind and are not specified here. The object-type invariant (`Current`) is specified by FR-024-AC-57 and FR-024-AC-58 (IR-1505). |
+| FR-024-AC-57 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:528 | PLANNED (IR-1505; prerequisite named by FR-015-AC-129). Prerequisites: FR-015-AC-38 (V2 invariant harness generation), the shared playback decoder of FR-024-AC-25 (IR-625) and QSL's `qsl_replay::replay_state_clause`. From a Falsified V2 invariant harness over one object type of one model, whose concrete playback binds every declared state field of that object, CG builds a `StateClauseCounterexample` whose observation is `ClauseSelectionInput::Current` (the current snapshot, the selected anchor and the self object) and not `Invocation`, ... |
+| FR-024-AC-58 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:529 | PLANNED (IR-1505; prerequisite FR-024-AC-57; consumed by FR-015-AC-129). Over a `Bank` model with object `Account`, field `balance` typed `Int[0, 100]`, and the QSL invariant `invariant NonNegative using v on Bank::Account at current { self.balance >= 0 }`, two concrete playbacks replay through `replay_state_clause` as FR-024-AC-57 states and each settles `reproduced-with-evaluated-witness`, `violation` for the named clause: ... The unmutated invariant with playback `balance = 0` does not settle a violation. The test uses recorded playback text; installed-Kani verdicts for these mutants are FR |
+| FR-024-behavior-observation | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:368 | - The generator shall set the payload's `observation` to `ClauseSelectionInput::Invocation`. |
+| FR-024-inputs-outputs-state-clause | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:169,208 | - For a postcondition state-clause counterexample, the request's `documents` vector starts with the caller's domain package documents ... / - For a postcondition state-clause counterexample: a `StateClauseReplay` holding the request and the envelope packet ... |
+| tests.md-TC-035-row | examined | spec/replay/matrix/tests.md:49 | / TC-035 / Verify counterexample submission in QSL's counterexample envelope / ... FR-024-AC-57, FR-024-AC-58 / 🚧 Planned (IR-1505 for AC-57/58) / |
+| FR-024-AC-12 | context_only | spec/replay/functional/FR-024-counterexample-envelope-intake.md:487 | The state-clause envelope's `clause_node` equals the `ClauseSite` node ... its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. ... |
