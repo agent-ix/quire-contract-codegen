@@ -1266,20 +1266,47 @@ fn assert_refused_on_state_reads(
     selected_reads(&outcome).expect("the refusal carries the selected reads")
 }
 
+/// The base document with `z_items` (cardinality 0..=3) holding elements `Int[1, 9]`: an element
+/// domain with a nonzero minimum and a range distinct from the cardinality range.
+fn element_document() -> Value {
+    let mut doc = document();
+    let item = "ix://ir1091.operation/domain/Item";
+    let mut ty = doc["types"][0].clone();
+    ty["identity"] = json!(item);
+    ty["displayName"] = json!("Item");
+    ty["origin"] = origin(item);
+    ty["constraints"][0]["identity"] = json!(format!("{item}/min"));
+    ty["constraints"][0]["operands"]["value"] = json!("1");
+    ty["constraints"][1]["identity"] = json!(format!("{item}/max"));
+    ty["constraints"][1]["operands"]["value"] = json!("9");
+    doc["types"].as_array_mut().unwrap().push(ty);
+    doc["types"][1]["fields"][0]["typeRef"] = json!(item);
+    doc
+}
+
 #[test]
 #[trace("TC-025", "FR-015-AC-133")]
 fn sequence_field_read_domain_is_cardinality_range_plus_element_domain() {
-    let package = fixture(&document(), "");
+    let package = fixture(&element_document(), "");
     let [clause] = clauses(&package).try_into().expect("one postcondition");
-    let claim = hand_written_claim(&package, &clause);
+    let mut claim = hand_written_claim(&package, &clause);
     let element = |low: i64, high: i64| {
         Some(V2ClauseElementDomain {
             minimum: low,
             maximum: high,
         })
     };
-    // The record lists the sequence field with its element domain and each scalar with none.
-    assert_eq!(claim.record.state_reads[0].element, element(0, 3));
+    // The record is written by hand: `z_items` has cardinality 0..=3 and elements Int[1, 9];
+    // the scalar reads carry no element domain.
+    claim.record.state_reads[0].element = element(1, 9);
+    assert_eq!(claim.record.state_reads.len(), 3);
+    assert_eq!(
+        (
+            claim.record.state_reads[0].minimum,
+            claim.record.state_reads[0].maximum
+        ),
+        (0, 3)
+    );
     assert!(claim.record.state_reads[1..]
         .iter()
         .all(|read| read.element.is_none()));
@@ -1290,15 +1317,21 @@ fn sequence_field_read_domain_is_cardinality_range_plus_element_domain() {
         KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.len() == 1
     ));
 
-    // (b) element maximum 3 -> 2, cardinality unchanged.
+    // (b) element maximum 9 -> 8, cardinality unchanged.
     let mut maximum = claim.clone();
-    maximum.record.state_reads[0].element = element(0, 2);
+    maximum.record.state_reads[0].element = element(1, 8);
     let selected = assert_refused_on_state_reads(&package, &clause, &maximum, "element maximum");
-    // The refusal's selected diagnostic carries the element domain, and none for a scalar.
-    assert_eq!(selected[0].element, element(0, 3));
+    // The refusal's selected diagnostic carries the element domain (nonzero minimum, range
+    // distinct from the cardinality range), and none for a scalar.
+    assert_eq!(selected[0].element, element(1, 9));
+    assert_eq!(
+        (selected[0].minimum, selected[0].maximum),
+        (0, 3),
+        "cardinality range is kept apart"
+    );
     assert!(selected[1..].iter().all(|read| read.element.is_none()));
 
-    // (c) element Int[0, 3] -> the Boolean pair, cardinality unchanged.
+    // (c) element Int[1, 9] -> the Boolean pair, cardinality unchanged.
     let mut boolean = claim.clone();
     boolean.record.state_reads[0].element = element(0, 1);
     assert_refused_on_state_reads(&package, &clause, &boolean, "Boolean element");
@@ -1308,17 +1341,22 @@ fn sequence_field_read_domain_is_cardinality_range_plus_element_domain() {
     cardinality.record.state_reads[0].maximum = 2;
     assert_refused_on_state_reads(&package, &clause, &cardinality, "cardinality");
 
-    // (f) element minimum 0 -> 1, maximum unchanged.
+    // (f) element minimum 1 -> 2, maximum unchanged.
     let mut minimum = claim.clone();
-    minimum.record.state_reads[0].element = element(1, 3);
+    minimum.record.state_reads[0].element = element(2, 9);
     assert_refused_on_state_reads(&package, &clause, &minimum, "element minimum");
+
+    // (g) the cardinality range copied into the element domain.
+    let mut copied = claim.clone();
+    copied.record.state_reads[0].element = element(0, 3);
+    assert_refused_on_state_reads(&package, &clause, &copied, "cardinality copied as element");
 
     // A sequence field recorded without an element domain, and a scalar field given one.
     let mut missing = claim.clone();
     missing.record.state_reads[0].element = None;
     assert_refused_on_state_reads(&package, &clause, &missing, "missing element domain");
     let mut invented = claim.clone();
-    invented.record.state_reads[2].element = element(0, 3);
+    invented.record.state_reads[2].element = element(1, 9);
     assert_refused_on_state_reads(&package, &clause, &invented, "scalar given an element");
 }
 

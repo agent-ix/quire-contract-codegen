@@ -908,23 +908,46 @@ with the required author `make kani-gate`; independent review and final acceptan
 ## AC-48 obligation-record gaps (IR-1515 spec; code IR-1517 and IR-1518 implemented)
 
 52. Whole-object collection clause, FR-015-AC-133 (AC-134 is evidenced by the existing test
-    named in its row; implemented by IR-1517 in `sequence_field_read_domain_is_cardinality_range_plus_element_domain`,
-    `boolean_element_domain_is_the_pair_zero_and_one` and `nested_sequences_stay_refused_ahead_of_any_record_comparison`
-    in `tests/it/kani_collection_operation.rs`, on the existing `Node` fixture with `z_items` as the sequence field, element `Small` 0..=3, in place of the `items`/`a_unread` fixture below). Author a fixture like the one in `tests/it/kani_collection_operation.rs`
-    whose object declares two fields: `items`, a one-level sequence of 0 to 3 elements each
-    `Int[0, 9]`, read by the clause, and `a_unread`, `Int[0, 5]`, not read. Both lower today
-    (`field_domain` admits a scalar element). Write every claim record by hand from the fixture
-    source (never copied from a `V2ClauseClaimMismatch` the generator returned), and assert
-    before each case that the record lists both reads. Cases, each against the same independently
-    selected clause: (a) control, the record at the declared domains is admitted and a harness is
-    generated; (b) `items` element maximum 9 changed to 8, cardinality unchanged: refuses
-    `V2ClauseClaimMismatch` naming `StateReads`, no harness; (c) `items` element changed from
-    `Int[0, 9]` to the Boolean pair, cardinality unchanged: same refusal; (d) `items` cardinality
-    maximum 3 changed to 2, element domain unchanged: same refusal; (e) a second fixture adding a drawn field `grid` whose element is itself a sequence, beside the one-level `items`: refused as `CollectionClaimNotRendered` with `UnsupportedObjectState` ahead of any record comparison, whatever its record; (e2) a third fixture whose quantified `items` has a sequence element: refused with `UnsupportedFieldType`, likewise; (f) `items` element minimum 0 changed to 1, maximum unchanged: same refusal as (b). Mutants, each
-    applied alone to `operation_selected_reads` in `src/kani/generate/collection.rs`: M1, the
-    `SymbolicBounds::Sequence` arm discarding `element` (what the code does today), fails 52(b)
-    and 52(c) and leaves 52(a) and 52(d) green; M2, comparing the element's maximum only, fails 52(f) and leaves 52(b) green; M3, selecting only the fields the clause reads, fails 52(a), the
-    control being refused (FR-015-AC-133).
+    named in its row). Implemented by IR-1517 in `tests/it/kani_collection_operation.rs`:
+    `sequence_field_read_domain_is_cardinality_range_plus_element_domain`,
+    `boolean_element_domain_is_the_pair_zero_and_one` and
+    `nested_sequences_stay_refused_ahead_of_any_record_comparison`. The fixture (`element_document`)
+    is the `Node` object whose `z_items` is a one-level ordered set of 0 to 3 elements each
+    `Int[1, 9]` (cardinality range and element domain distinct, element minimum nonzero), read by
+    the clause, beside the unread scalars `a_unread` (Boolean) and `m_count` (`Int[0, 3]`). Both
+    sequence and scalars lower (`field_domain` admits a scalar element). Write every claim record
+    by hand from the fixture source (never copied from a `V2ClauseClaimMismatch` the generator
+    returned), and assert before the cases that the record lists the three reads, `z_items` with
+    cardinality 0..=3 and element `Some(1..=9)` and each scalar with element `None`. Cases, each
+    against the same independently selected clause: (a) control, the record at the declared
+    domains is admitted and a harness is generated; (b) `z_items` element maximum 9 changed to
+    8, cardinality unchanged: refuses `V2ClauseClaimMismatch` naming `StateReads`, no harness,
+    and the refusal's `selected` diagnostic carries element `Some(1..=9)`, cardinality 0..=3 and
+    `None` for the scalars; (c) `z_items` element changed to the Boolean pair `0..=1`,
+    cardinality unchanged: same refusal; (d) `z_items` cardinality maximum 3 changed to 2,
+    element domain unchanged: same refusal; (f) `z_items` element minimum 1 changed to 2,
+    maximum unchanged: same refusal; (g) the cardinality range 0..=3 recorded as the element
+    domain: same refusal; (h) `z_items` recorded with no element domain, and a scalar given
+    `Some(1..=9)`: same refusal. The Boolean-pair case (`boolean_element_domain_is_the_pair_zero_and_one`)
+    makes `z_items` a Boolean ordered set of 0 to 2: element `Some(0..=1)` is admitted and
+    `Some(0..=2)` is refused. Nested sequences (`nested_sequences_stay_refused_ahead_of_any_record_comparison`):
+    (e) a fixture adding a drawn field `grid` whose element is itself a sequence: refused as
+    `CollectionClaimNotRendered` with `UnsupportedObjectState` ahead of any record comparison,
+    with a record that omits `grid`; its one-level control (`grid` of `Small` elements) is the
+    record mismatch instead; (e2) the same fixture with a quantifier over `grid`: refused with
+    `UnsupportedFieldType`, likewise. Mutants, each applied alone and each reverted: M1,
+    `operation_selected_reads` in `src/kani/generate/collection.rs` discarding the element
+    (`None` in the `SymbolicBounds::Sequence` arm), fails 52(a), the control, and the Boolean
+    case; M5, `element_domain` in the same file hard-coding the Integer element minimum to 0,
+    fails 52(a) (selected minimum 0, record 1); M6, the same arm copying the cardinality range
+    into the element domain, fails 52(a); M1b, `V2ClauseObligationClaim::mismatch`
+    (`src/kani/identity.rs`) ignoring the element on both sides, fails 52(b), 52(c), 52(f) and
+    52(g) and the Boolean case's wider-domain refusal while 52(a) stays green; M2, the same
+    comparison comparing the element maximum only, fails 52(f) and leaves 52(b) green; M4, the
+    `selected` diagnostic in `classify_v2_clause` (`src/kani/generate/negotiate.rs`) dropping
+    the element, fails 52(b)'s diagnostic assertion (FR-015-AC-133). The mutant that selects
+    only the fields the clause reads belongs to FR-015-AC-134 and is evidenced by that
+    criterion's test.
 53. NodeKey binding, FR-015-AC-135 and FR-015-AC-136. Author a package with two clauses A and B
     on different operations, request both with B listed first. Take each clause's expected key
     from a hand-written literal built from the package, node path and ordinal in the test (the
