@@ -349,6 +349,21 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     request or replay construction, including the same-node different-ordinal case
     (FR-024-AC-56).
 
+39. Decode the playback of a Falsified V2 invariant harness and build the Current-observation
+    envelope (FR-024-AC-57). Replay it through `replay_state_clause` and compare with the direct
+    call; replay a satisfying playback and compare the two results. Omit one declared field from
+    the playback, then supply a value outside the field's range, then supply a postcondition and a
+    frame harness to the Current path, each checking the executor is not called. Mutation controls:
+    building `Invocation` instead of `Current` fails the observation-form check in this step; a
+    builder that ignores the playback values and always binds `0` fails on the `balance = -1`
+    playback of step 40; a builder that selects the clause by position instead of its declared
+    name fails when two invariants are declared in reverse order.
+40. Over the `Bank`/`Account` fixture of FR-024-AC-58, replay `balance = 0` against the strengthened
+    `balance >= 1` invariant, `balance = -1` against the widened-field package, and `balance = 0`
+    against the unmutated invariant. The first two settle `reproduced-with-evaluated-witness`,
+    `violation`; the third does not. A mutant that evaluates the unmutated text for the first
+    playback fails the first assertion.
+
 ## Status
 
 Partly implemented. Steps 1 to 8 and 28 are planned: the skeleton spine renders a QSL transcript from decoded
