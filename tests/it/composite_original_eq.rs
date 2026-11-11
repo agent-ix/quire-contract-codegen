@@ -63,7 +63,9 @@ pub(super) const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     function g using v(a: Q): Boolean pure { a = Q { x: 1 } }\n\
     function m using v(a: Q): Boolean pure { a != Q { x: 1 } }\n\
     function h using v(): Boolean pure { Q { x: 1 } = Q { x: 2 } }\n\
-    function same using v(a: Q): Boolean pure { a = a }\n";
+    function same using v(a: Q): Boolean pure { a = a }\n\
+    function ne_lits using v(): Boolean pure { Q { x: 1 } != Q { x: 2 } }\n\
+    function ne_same using v(a: Q): Boolean pure { a != a }\n";
 
 const REPEATED_SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     profile v = \"quire.value.complete/v1\";\n\
@@ -718,6 +720,122 @@ fn self_comparison_keeps_two_positional_arguments() {
         report.settlement().unwrap().result(),
         VerifiedShadowResult::Tested
     ));
+}
+
+/// Ne over two composite literals keeps NotEqual and two empty-bounds graph children.
+#[trace("FR-033-AC-14", "TC-048")]
+#[test]
+fn original_ne_literal_literal_keeps_two_empty_bounds_children() {
+    let package = checked(SOURCE);
+    let (node, occurrence) =
+        application_with_operator(&package, "ne_lits", "quire.op.structural.ne");
+    let request = context(package.clone(), "ne_lits")
+        .request(&node, &occurrence, EqualityOperator::NotEqual, &[], 100_000)
+        .unwrap();
+    assert_eq!(request.preimage().arguments.len(), 2);
+    for (operand, argument) in request
+        .operands()
+        .operands
+        .iter()
+        .zip(&request.preimage().arguments)
+    {
+        assert_eq!(operand.domain, CheckedCompositeOperandDomain::Literal);
+        let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
+            panic!("literal graph child")
+        };
+        assert_eq!(
+            argument.identity,
+            OperandIdentity::GraphChild(node_key(&package, child))
+        );
+        let Domain::Bounds(entries) = &argument.domain else {
+            panic!("literal bounds")
+        };
+        assert!(entries.entries().is_empty());
+    }
+    assert_ne!(
+        request.preimage().arguments[0].identity,
+        request.preimage().arguments[1].identity
+    );
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::NotExhausted,
+        })
+        .unwrap();
+    assert_eq!(report.sent().operator, EqualityOperator::NotEqual);
+    assert_eq!(
+        report.settlement().unwrap().terminal_value(),
+        TerminalValue::Tested
+    );
+    let wrong = context(package.clone(), "ne_lits").request(
+        &node,
+        &occurrence,
+        EqualityOperator::Equal,
+        &[],
+        100_000,
+    );
+    assert!(wrong.is_err());
+}
+
+/// Ne self-comparison keeps two undeduplicated arguments with the same node and drawn bounds.
+#[trace("FR-033-AC-15", "TC-048")]
+#[test]
+fn original_ne_self_comparison_keeps_two_positional_arguments() {
+    let package = checked(SOURCE);
+    let (node, occurrence) =
+        application_with_operator(&package, "ne_same", "quire.op.structural.ne");
+    let bounds = vec![ProofBound::new(
+        DomainKey::Node {
+            node: node_key(&package, &first_child(&package, &node, &occurrence)),
+            path: vec![0],
+        },
+        Some(DomainKind::Integer),
+        FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64)).unwrap(),
+    )
+    .unwrap()];
+    let request = context(package.clone(), "ne_same")
+        .request(
+            &node,
+            &occurrence,
+            EqualityOperator::NotEqual,
+            &bounds,
+            100_000,
+        )
+        .unwrap();
+    let arguments = &request.preimage().arguments;
+    assert_eq!(arguments.len(), 2);
+    assert_eq!(arguments[0].identity, arguments[1].identity);
+    for argument in arguments {
+        let Domain::Bounds(entries) = &argument.domain else {
+            panic!("bounds")
+        };
+        assert_eq!(entries.entries().len(), 1);
+    }
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::NotExhausted,
+        })
+        .unwrap();
+    assert_eq!(report.sent().operator, EqualityOperator::NotEqual);
+    assert_eq!(
+        report.settlement().unwrap().terminal_value(),
+        TerminalValue::Tested
+    );
+}
+
+fn first_child(
+    package: &CheckedPackageV2,
+    node: &CheckedNodeId,
+    occurrence: &CheckedOccurrence,
+) -> CheckedNodeId {
+    let operands = package
+        .composite_application_operands(node, occurrence, 100_000)
+        .unwrap();
+    let CheckedScalarOperandChild::GraphChild(child) = &operands.operands[0].child else {
+        panic!("graph child")
+    };
+    child.clone()
 }
 
 /// Changed source bytes refuse before recompilation, including semantically equivalent edits.
