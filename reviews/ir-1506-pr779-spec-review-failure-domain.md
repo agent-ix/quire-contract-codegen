@@ -56,3 +56,4 @@ FAIL (not mergeable). The L_b length was checked against the Unicode data. For n
 | FND-003 | fixed | verified at 28a4a1af |
 | FND-004 | fixed | verified at 28a4a1af |
 | FND-005 | still-open | New this round: binary-utf8 at max 1 gives L_b = 0 (the empty payload), which has no final or first byte, while AC-14 says both pairs 'must' be found at L_b for binary-utf8 'or the check fails'; AC-14 cannot pass for a supported Text[0,1] binary-utf8 operand. |
+| FND-005 | fixed | verified at 941156d4 (round 2) |

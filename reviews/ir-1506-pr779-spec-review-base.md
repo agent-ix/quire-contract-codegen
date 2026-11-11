@@ -67,3 +67,4 @@ FAIL (not mergeable). The amendment is the right shape: P stays the AC-3 support
 | FND-004 | fixed | verified at 28a4a1af |
 | FND-005 | fixed | verified at 28a4a1af |
 | FND-006 | still-open | New this round: AC-13's 'and this criterion claims none exists' reads as asserting that no P-byte payload exists, the opposite of the intent (no such claim). Wording only. |
+| FND-006 | fixed | verified at 941156d4 (round 2) |
