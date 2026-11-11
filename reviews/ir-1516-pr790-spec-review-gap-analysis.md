@@ -56,3 +56,9 @@ The follow-up must decide four things:
 | FR-024-AC-65 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:595 | When `InvariantReplayInputs::decode_falsification` receives a V2 invariant harness whose `obligation` (QSL's `ObligationIdentity`) differs in any member from the `obligation_identity` the caller put in the inputs, it returns the distinct typed `StateClauseReplayError::ObligationIdentityMismatch` ... |
 | FR-024-AC-66 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:596 | When the harness's `obligation` equals the caller's `obligation_identity` member for member, `decode_falsification` accepts it ... |
 | FR-024-AC-11 | context_only | spec/replay/functional/FR-024-counterexample-envelope-intake.md:545 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at 984a34b2. Verified in the fix commit: FR-024-AC-65: ... IR-1516 delivers the invariant path only; the postcondition path's `StateClauseReplay::new` has no harness identity to compare (IR-1520). (IR-1520 filed, Backlog: carries the four decisions: identity location on the frame harness, one identity per property, refusal variant and settlement, V2-harness supersession; also cited in tests.md.) |

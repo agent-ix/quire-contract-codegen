@@ -34,7 +34,7 @@ the std/no_std comparison and its CI placement.
   limits and the names of generated bodies registered for the run.
 - The `package_id` from `qsl_replay::compile_package` of that source and its
   dependencies, called inside CG's existing replay module. Source authority,
-  identity and byte digest bind that package id; revision labels do not.
+  identity and byte digest bind that package id.
 - When `quire-eval` has the implementation that runs registered generated
   bodies, one result and meter from that implementation for each selected
   application. Until then, no recorded expected result is available.
@@ -76,8 +76,7 @@ or registration-identity object in place of FR-402's source case. The
 `package_id` SHALL come from QSL compilation in CG's replay module, and the
 bundle SHALL load and admit through FR-402's QSL case admission. A mutation of
 an identity label that binds `package_id` without recompilation refuses as
-`package_mismatch`; a revision-label change alone does not change
-`package_id`.
+`package_mismatch`.
 
 The loaded case-id set SHALL equal an independent census of the live admitted
 source applications, so removing a record fails the census. Repeating the
@@ -95,7 +94,7 @@ is enabled and the log is not truncated, otherwise `charges` is `null`.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-044-AC-1 | Given an admitted scalar, an equality and a nested generated-to-generated-to-interpreted source application, `make evaluator-corpus` writes one stable unique case id per application in `cases.jsonl` at `EVALUATOR_CORPUS_DIR`. Every line is a `quire-eval-corpus` `quire.evaluator-case/v1` record with FR-402's exact members: two source-identity labels (authority and identity), display path and text, sorted dependency units, QSL-compiled `package_id`, callable function name, FR-071 arguments, decimal-string limits, `object_environment: null`, `generated_bodies: []` and `expected: null` while `quire-eval` has no registered-body implementation. FR-402's loader and QSL admission admit all three as the same source applications; a changed authority, identity or valid source text with the old `package_id` refuses `package_mismatch`, while changed revision labels alone do not. | Test |
+| FR-044-AC-1 | Given an admitted scalar, an equality and a nested generated-to-generated-to-interpreted source application, `make evaluator-corpus` writes one stable unique case id per application in `cases.jsonl` at `EVALUATOR_CORPUS_DIR`. Every line is a `quire-eval-corpus` `quire.evaluator-case/v1` record with FR-402's exact members: two source-identity labels (authority and identity), display path and text, sorted dependency units, QSL-compiled `package_id`, callable function name, FR-071 arguments, decimal-string limits, `object_environment: null`, `generated_bodies: []` and `expected: null` while `quire-eval` has no registered-body implementation. FR-402's loader and QSL admission admit all three as the same source applications; a changed authority, identity or valid source text with the old `package_id` refuses `package_mismatch`. | Test |
 | FR-044-AC-2 | Repeating export of the same cases is byte-identical. Loaded case ids equal an independent enumeration of the live QSL-admitted source applications; deleting a record fails that census. Perturbing a callable, argument, dependency or limit changes the loaded case or causes FR-402's stated load/admission refusal. A producer-side compile, case-construction, case-encoding or load failure leaves the previous complete bundle byte-identical, or the target absent when none existed. | Test |
 | FR-044-AC-3 | Inspection finds CG uses `quire-eval-corpus` for case writing and loading, obtains `package_id` via `qsl_replay::compile_package` inside CG's replay module, defines no local case/compared-record codec or loader refusal, and computes no expectation from emitted source or Contract Runtime `exact`. CG uses no `qsl-eval` dependency or direct QSL evaluator call outside the existing replay facade. | Inspection |
 | FR-044-AC-4 | Once `quire-eval` implements registered generated-body execution, each selected case records a non-null `ComparedRecord` from one run with its sorted unique generated-body function names and fresh meter; FR-402's expected/std check passes. Perturbing a generated-body name changes the loaded case or causes FR-402's stated refusal. Boolean and Integer completed values encode; a completed value of another kind refuses `unencodable_value`. The compared record includes the exact result arm, refusal, location, losses and all ten consumed counters, with `charges` present only under FR-402's non-truncated `charge-log` test support and `null` otherwise. | Test |

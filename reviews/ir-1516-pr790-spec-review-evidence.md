@@ -42,3 +42,10 @@ PASS WITH FINDINGS. Every control can fail. Two of them are worded so that the p
 | TC-035-step-46 | examined | spec/replay/matrix/TC-035-counterexample-envelope-intake.md:394-405 | Over the step 45 invariant harness, supply a caller `obligation_identity` equal to the harness's `obligation` and assert `decode_falsification` accepts it ... Then supply an identity that differs from the harness's only in its ordinal and assert `ObligationIdentityMismatch` ... Mutation controls: ... The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`. |
 | FR-024-AC-65 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:595 | ... over one invariant harness, one caller identity differing from the harness's only in its ordinal returns `ObligationIdentityMismatch` and not `HarnessMismatch`. \| Test (TC-035) |
 | FR-024-AC-66 | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:596 | When the harness's `obligation` equals the caller's `obligation_identity` member for member, `decode_falsification` accepts it ... \| Test (TC-035) |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at 984a34b2. Verified in the fix commit: one that compares only the identity's `node` and `model` accepts the ordinal-only difference and fails the same assertion |
+| FND-002 | fixed | Round 1 at 984a34b2. Verified in the fix commit: one that replaces the caller's identity with the harness's own before comparing never refuses and fails the same assertion; one that replaces it with a default identity refuses the matching case and fails the accept assertion (FR-024-AC-66). A harness differing in both identity and field order must return `ObligationIdentityMismatch`, which fails a mutant that checks field order first. |

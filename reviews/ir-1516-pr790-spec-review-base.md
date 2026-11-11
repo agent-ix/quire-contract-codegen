@@ -60,3 +60,12 @@ Clean units: the AD-002 row, AC-52 and the Behavior label bullets.
 | FR-024-behavior-invocation | examined | spec/replay/functional/FR-024-counterexample-envelope-intake.md:411-414 | `pre` and `post` each the snapshot's two identity labels (authority and identity), `parameters` empty, `result` null |
 | AD-002-state-documents-row | examined | spec/assurance/AD-002-cg-qsl-replay-seam.md:55 | each document declares the two labels (authority and identity) QSL reads as its identity. |
 | interface-001-decode_falsification | context_only | spec/core/functional/interface-001-codegen-api.md:253-256 | output: Result<(), StateClauseReplayError (PlaybackAlreadySupplied \| NotInvariantHarness \| HarnessMismatch{member} \| Decode(DecodeFailure) \| AssertionMismatch)> |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at 984a34b2. Verified in the fix commit: FR-024-AC-62 / Behavior :449: a harness whose clause node, declaring object or field order differs from the replay inputs returns `HarnessMismatch`; ... AC-65: `HarnessMismatch` carries no obligation member and is not reused: over one invariant harness, a caller identity differing from the harness's only in its ordinal returns `ObligationIdentityMismatch` and not `HarnessMismatch`. |
+| FND-002 | fixed | Round 1 at 984a34b2. Verified in the fix commit: The variant settles as a CG defect (FR-029-AC-16), as `NotInvariantHarness` and `HarnessMismatch` do. IR-1516 delivers the invariant path only; the postcondition path's `StateClauseReplay::new` has no harness identity to compare (IR-1520). |
+| FND-003 | still-open | interface-001:255 output list now has ObligationIdentityMismatch, but the semantics line (:256) still reads 'accepts only a scalar V2 invariant harness whose clause node, declaring object and drawn field order are the inputs'' with no mention of the obligation-identity comparison, so after IR-1519 the contract's acceptance rule is incomplete. Add 'and whose obligation equals the inputs' obligation_identity (FR-024-AC-65, planned IR-1519)'. |
+| FND-004 | fixed | Round 1 at 984a34b2. Verified in the fix commit: FR-024-AC-66: ... the packet and the request that `StateClauseReplay::new_invariant` builds carry the caller's identity member for member, with an `ordinal` and a `node` that differ from every other identity the test constructs. |
