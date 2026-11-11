@@ -95,6 +95,8 @@
 //! agreement claim; quire-integration IR-842 owns that cross-repository boundary.
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
+mod kani_descriptor;
+pub(crate) mod kani_harness;
 pub(crate) mod owner_path;
 mod owner_render;
 use crate::core::contract_package::{
@@ -2838,6 +2840,47 @@ fn validate_signature(
     }
 }
 
+/// Each source `pure_function` node's index in the admitted source's own function order.
+fn source_body_indices(source: &CheckedPackageV2) -> BTreeMap<&CheckedNodeId, usize> {
+    let mut source_positions = BTreeMap::new();
+    for entry in source.source_map() {
+        for region in &entry.regions {
+            let position = (&region.source, region.start);
+            source_positions
+                .entry(&entry.node_id)
+                .and_modify(|current| {
+                    if position < *current {
+                        *current = position;
+                    }
+                })
+                .or_insert(position);
+        }
+    }
+    let original_graph = Graph::from_checked(source);
+    let source_order = |node_id: &CheckedNodeId| source_positions.get(node_id).copied();
+    let mut bodies_by_source = original_graph
+        .nodes()
+        .filter(|node| &*node.node_tag == "function" && &*node.semantic_form == "pure_function")
+        .filter_map(|node| {
+            let body = original_graph
+                .term(&node.node_id)
+                .and_then(|term| binding_value(term, "body"))
+                .and_then(|term| reference_in_graph(term, &original_graph))?;
+            Some((
+                source_order(&node.node_id).or_else(|| source_order(body)),
+                &node.node_id,
+                body,
+            ))
+        })
+        .collect::<Vec<_>>();
+    bodies_by_source.sort();
+    bodies_by_source
+        .into_iter()
+        .enumerate()
+        .map(|(index, (_, function, _))| (function, index))
+        .collect()
+}
+
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
 ///
@@ -3109,43 +3152,7 @@ pub fn generate_exact_function_oracles(
     // A location origin follows the admitted source's function order, which
     // is what the checked QSL call site records. Omitting or refusing another
     // function in the request cannot renumber this source location.
-    let mut source_positions = BTreeMap::new();
-    for entry in source.source_map() {
-        for region in &entry.regions {
-            let position = (&region.source, region.start);
-            source_positions
-                .entry(&entry.node_id)
-                .and_modify(|current| {
-                    if position < *current {
-                        *current = position;
-                    }
-                })
-                .or_insert(position);
-        }
-    }
-    let original_graph = Graph::from_checked(source);
-    let source_order = |node_id: &CheckedNodeId| source_positions.get(node_id).copied();
-    let mut bodies_by_source = original_graph
-        .nodes()
-        .filter(|node| &*node.node_tag == "function" && &*node.semantic_form == "pure_function")
-        .filter_map(|node| {
-            let body = original_graph
-                .term(&node.node_id)
-                .and_then(|term| binding_value(term, "body"))
-                .and_then(|term| reference_in_graph(term, &original_graph))?;
-            Some((
-                source_order(&node.node_id).or_else(|| source_order(body)),
-                &node.node_id,
-                body,
-            ))
-        })
-        .collect::<Vec<_>>();
-    bodies_by_source.sort();
-    let location_index: BTreeMap<&CheckedNodeId, usize> = bodies_by_source
-        .into_iter()
-        .enumerate()
-        .map(|(index, (_, function, _))| (function, index))
-        .collect();
+    let location_index = source_body_indices(source);
     let source_location = |declaration: &ExactFunctionDeclaration| {
         let body = accounting.represented_node(&declaration.node_id)?;
         let function = source_index.source_function_node_id(&declaration.name, body)?;

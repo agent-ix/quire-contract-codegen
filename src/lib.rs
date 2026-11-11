@@ -106,11 +106,14 @@ pub use oracle::equality::{
 };
 
 pub use oracle::function::owner_path::{
-    apply_checked_function, checked_function_declarations, checked_function_key,
-    select_checked_callable, selected_nested_call_site, CheckedFunctionError,
+    apply_checked_function, checked_composite_declarations, checked_function_declarations,
+    checked_function_key, select_checked_callable, selected_nested_call_site, CheckedFunctionError,
     CheckedFunctionErrorCode, CheckedFunctionResources, CheckedFunctionSource,
 };
 
+pub use oracle::function::kani_harness::{
+    generate_kani_function_harness, KaniFunctionHarness, KaniFunctionRequest,
+};
 pub use oracle::function::{
     generate_exact_function_oracles, generate_function_schedules,
     generate_function_schedules_with_limits, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
