@@ -71,3 +71,26 @@ Several spec and matrix rows also still describe removed mechanisms or overstate
 | FR-040-AC-5 | examined | A multi-member group sharing one handle stops wholly on its observed cause, returns BatchCancelled { source, members } ... another group using a distinct handle retains its own result |
 | ADR-007 | context_only | minimal Kani run ownership: own process group, wall-clock timeout and group kill, peak only from the environment, environment owns the memory cap |
 | interface-001 | examined | lines 134 and 363 (playback outcome, timeout kill wording) |
+
+## Dispositions
+
+Round 1, verified at 93eaf66f (CG main 89233605). Reviewer test job, flock'd, `--locked`, no Kani:
+- lib `kani::run:: kani::terminal kani_terminal_private routed::smt`: 150 passed.
+- it `kani_run_scan terminal_map`: 36 passed.
+
+Mutation control: reverting the `conclude_witness` out_of_memory arm makes `a_witness_report_stating_out_of_memory_is_failed_without_counterexample` FAIL (`WitnessDisagreed` != `FailedWithoutCounterexample`). The mutation was reverted.
+
+`quire validate` over spec, plan and reviews passes with the same warnings as main and none new. Compared with main, `quoin matrix` has 656 tagged (main 653) and 286 untagged (main 289); the only ids that lost tags are the retired FR-017-AC-55 and FR-028-AC-3.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `conclude_witness` now accepts a `FailedWithoutCounterexample` witness when the failures match or `failure_cause` is `OutOfMemory`. The new test asserts the cause, that no third launch is made, and that the proof and witness ceilings are equal; its no-status control stays `WitnessDisagreed`. The reviewer's mutation was killed. |
+| FND-002 | fixed | `ReachedLimit::MemoryBytes` and `ProcessLimits.memory_bytes` are deleted. FR-045 Inputs, Behavior and AC-3 and TC-059 step 4 now say the runner enforces no memory limit and the caller's environment owns the cap. No consumer remains: quire-driver, quire-integration and QSL main use neither item; QSL's own `ReachedLimit` is a different type. Deleting the unenforced field matches ADR-007 (the environment owns the cap). The proof-identity `memory_bytes` (FR-028-AC-1) is kept. |
+| FND-003 | fixed | A re-grep of spec/ and CLAUDE.md finds no live description of the removed mechanisms. FR-017 `class()`, AC-54/55/56, AC-63(c), FR-029 Behavior/AC-34/Status, interface-001 :134/:363, and TC-039/025/027/040 are rewritten as current truth. The remaining hits are historical ("Before IR-1510 ...", "IR-1510 deleted ..."), ADR-005/007, or measurement records (TC-050, FR-035, FR-052, AD-007). |
+| FND-004 | fixed | `tc_040_a_timeout_and_an_exhausted_unwind_bound_are_incomplete` now carries FR-029-AC-3, the AC-3 text drops the memory clause, and tests.md:88 names the test. The matrix shows it tagged. |
+| FND-005 | fixed | Both tc_027 tests now carry FR-017-AC-19, and the matrix shows 2 binders. They assert the bounded read (exactly the limit read whole, limit+1 refused as `TooLarge`), missing report as None, stale removal, and per-launch report isolation in a shared target dir. The argv-append part of AC-19 is not among them; that does not affect this finding. |
+| FND-006 | deferred | IR-1511, quire-driver adaptation (Backlog). |
+| FND-007 | fixed | AC-58 now says the outcome set has no such variant and the playback entry is still planned under IR-917. FR-017 "Source changes" and ADR-007 now say the planned playback must build no `MemoryExhausted` outcome. |
+| FND-008 | fixed | `is_cfg_test` matches exactly `cfg(test)`, and `visit_attribute` skips only `#[doc]`. The added Item/ImplItem arms only narrow test exclusion. The new `the_scan_excludes_only_cfg_test_items_and_doc_attributes` scans `cfg(not(test))`, `cfg(feature="test-support")` and non-doc attribute args, and excludes `#[doc]`, `///` and `#[cfg(test)]`. The comment-only fixture runs the real scanner. |
+| FND-009 | fixed | At the group signal, `RecordingTeardown` now probes the launcher pid with `test_kill_process` (a zombie still reserves the pid; a reaped one does not), so a reap-first order records `signal_group_after_reap`, and the control asserts this. |
+| FND-010 | fixed | The entry is renamed `execute_kani_obligation_library(request)` with `library_only: bool`, and the single caller in scalar.rs is updated. ADR-007 Consequences now records that the source tree is not made read-only and that the scalar.rs snapshot comparison is the guard. |

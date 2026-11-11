@@ -83,3 +83,14 @@ Deleted tests:
 | FR-040-AC-5 | examined | Reversing the two cause calls changes the cancelled group's source and not the other group's evidence. Distinct handles never share one launcher. |
 | FR-045-AC-3 | examined | a reached limit gives Stopped with that limit |
 | TC-055 | context_only | live Kani cancellation provenance; matrix status Planned |
+
+## Dispositions
+
+Round 1, verified at 93eaf66f with `quoin matrix --json` and the reviewer test job (see SR-17940486709564847047667 Dispositions).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `a_witness_report_stating_out_of_memory_is_failed_without_counterexample` (FR-017-AC-63, FR-028-AC-25) asserts `FailedWithoutCounterexample` with cause `out_of_memory`, that no third launch is made, and that the proof and witness ceilings are equal, plus a `WitnessDisagreed` control. Reverting the fix makes it fail. |
+| FND-002 | fixed | The matrix shows FR-029-AC-3 tagged by `tc_040_a_timeout_and_an_exhausted_unwind_bound_are_incomplete`, and tests.md:88 agrees. |
+| FND-003 | fixed | The matrix shows FR-017-AC-19 tagged with 2 binders (report_file.rs and execute.rs tc_027 tests), and tests.md:62 agrees. |
+| FND-004 | fixed | FR-045-AC-3 no longer has a memory clause. Its 14 remaining binders (process.rs, pair_tests.rs) cover the input, wall-clock and capture limits it now states. |
