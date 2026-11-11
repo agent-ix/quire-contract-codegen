@@ -51,3 +51,17 @@ Node-keyed filtering. Neither blocks on its own; the PR's merge blocker is FR-03
 | FR-033-AC-15 | examined | When the original application node is a structural.ne comparing one parameter with itself and the requested operator is NotEqual, the verified request carries NotEqual and a retained checked claim body with two positional graph_child arguments with the same node identity, each retaining the drawn Node-keyed bounds naming that parameter and neither deduplicated. |
 | TC-048 | context_only | For the Ne forms (FR-033-AC-14, FR-033-AC-15), require NotEqual and two positional arguments, then apply the AC-20 report binding and the AC-1 OperatorMismatch refusal when Equal is requested. |
 | src/replay/composite_builder.rs selected_claim | context_only | Projection, operator check, Literal empty bounds / Parameter Node-filtered bounds, two-argument check. |
+
+## Dispositions
+
+Round 1, head d094b87a (rebased onto origin/main 0f3bc428; src identical to main). Focused job:
+`cargo test --test it -- composite_original_eq` 29/29 pass. Mutation control (two mutants, one
+build): M1 drops the Node filter on Parameter bounds; `original_ne_self_comparison_keeps_two_positional_arguments`
+fails at :845 (2 vs 1), as do two existing tests. M2 rewrites every projection
+`UnsupportedOperand` reason to `InlineNonInteger`; the AC-17 graph-`none` control fails at :1019.
+Both mutants reverted.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Both Ne tests now match `Err(CompositeBuildError::OperatorMismatch { requested: Equal, actual: NotEqual })` |
+| FND-002 | fixed | AC-15 test adds a Population bound and asserts every kept entry is `DomainKey::Node`; mutant M1 killed |

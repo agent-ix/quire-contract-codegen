@@ -236,7 +236,7 @@ delivered API must establish their actual Rust representation before positive te
 IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
 rows through the CG converter. IR-635 adds the Eq-only verified constructor controls described
 above. Falsified construction, same-artifact native observation, backend/refinement strength
-production and generated-family controls remain planned under IR-806; Ne literal/literal, Ne self-comparison and the non-integer inline refusal (FR-033-AC-14, AC-15, AC-17) are delivered under IR-814; the integer inline refusal (AC-16) remains Inspection-only. Real Text-leaf profile
+production and generated-family controls remain planned under IR-806; Ne literal/literal, Ne self-comparison and the non-integer inline refusal (FR-033-AC-14, AC-15, AC-17) are delivered under IR-814; the integer inline refusal (AC-16) is delivered by Inspection of the `Operands` conversion in `selected_claim`. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact

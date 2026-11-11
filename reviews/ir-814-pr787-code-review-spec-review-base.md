@@ -53,3 +53,18 @@ above. Do not leave a Test AC that the PR claims cannot be tested.
 | tests.md FR-033 AC-14/AC-15 row | examined | Covered (IR-814); original_ne_literal_literal_keeps_two_empty_bounds_children and original_ne_self_comparison_keeps_two_positional_arguments |
 | tests.md FR-033 AC-16/AC-17 row | examined | Planned (IR-814); ... IR's reader refuses an inline operand of structural.eq/structural.ne at admission, so no authentic fixture reaches the operand projection's inline branch |
 | TC-048 | context_only | Only the non-integer case is testable; the integer case (AC-16) is verified by Inspection of the shared Operands conversion. |
+
+## Dispositions
+
+Round 1, head d094b87a.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-048:54 and :239 and the tests.md TC-048 summary row now say AC-14/15 (and AC-17) are delivered under IR-814 |
+| FND-002 | fixed | tests.md splits AC-17 (Covered, names the test) from AC-16 (Planned, Inspection); TC-048 step 1 describes the inline-none test and graph-none control; AC-17 DELIVERED with Test method |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | FR-033-AC-16 stays `PLANNED (IR-814; verified by Inspection ...)` and tests.md/TC-048 call it planned, but its Inspection is performable now (the single `.map_err(...Operands...)` in `selected_claim` that AC-17's test exercises); closing IR-814 would leave a PLANNED AC owned by a Done ticket | spec/replay/functional/FR-033-composite-parity-replay-binding.md:374, spec/replay/matrix/tests.md:37, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:239 |

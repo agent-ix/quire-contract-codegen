@@ -235,8 +235,8 @@ authored).
   Full-report binding and same-artifact observation remain separate obligations. [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md)
   AC-15 through AC-18 replace the retired hash-specific AC-9/10/11/13 without dropping
   their member-change, negative-path and no-fabricated-identity controls.
-- E-1 composite extension (PARTIAL: IR-635 Eq and some Ne controls; IR-814 and IR-806
-  retain their planned controls). CG takes the original equality/inequality application
+- E-1 composite extension (PARTIAL: IR-635 Eq and some Ne controls and IR-814 literal/literal, self-comparison
+  and inline-refusal controls; IR-806 retains its planned controls). CG takes the original equality/inequality application
   structural identity from IR admission and retains its authentic occurrence, kind and one
   argument per operand position. A self-comparison contributes two graph-child entries for
   the same actual parameter, each with the drawn Node-keyed bounds. Distinct parameters and

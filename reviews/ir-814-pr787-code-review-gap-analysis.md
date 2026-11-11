@@ -62,3 +62,18 @@ tampered-wire route are shown to fail should AC-17 move to Inspection (spec edit
 | FR-033-AC-15 | examined | structural.ne self-comparison, two same-identity graph_child arguments each with drawn Node-keyed bounds, neither deduplicated. |
 | FR-033-AC-16 | examined | If the owning operand projection refuses an inline integer literal operand (InlineInteger), then the builder returns that refusal through CompositeBuildError::Operands ... verified by Inspection. |
 | FR-033-AC-17 | examined | If the owning operand projection refuses an inline non-integer literal operand (InlineNonInteger), then the builder returns that refusal through CompositeBuildError::Operands before any QSL invocation, with no report or terminal value and no new CG error variant. No test of this path exists yet. |
+
+## Dispositions
+
+Round 1, head d094b87a. `quire matrix`: FR-033-AC-17 tagged (composite_original_eq.rs:982); AC-14
+:729, AC-15 :790 tagged; AC-16 method-without-symbol. `make spec` exit 0. Test passes at the new
+head; mutant M2 (all projection reasons rewritten to `InlineNonInteger`) is killed by its graph-`none`
+control. Fixture provenance: `opt_none_with_inline_operand` hand-edits a genuine QSL compile of
+`a = none` (QSL itself emits a graph `none`, refused as `NonliteralGraphValue`). The edited wire is
+admitted by IR's production reader (`read_checked`), which is the precondition AC-17 states. It
+is the same shape IR's own reader tests admit. It is not QSL-producible today; the AC-17 and TC-048
+text says so, so this is accepted as defensive-branch evidence, not a forgery of a positive.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Tagged AC-17 test over a reader-admitted inline `none` Option operand, asserting `Operands(UnsupportedOperand { ordinal: 1, reason: InlineNonInteger })`, plus a cause-distinguishing graph-`none` control |
