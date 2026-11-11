@@ -48,6 +48,12 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED: it is untagged in quire matrix, th
 | FR-015-AC-80 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:890 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. |
 | FR-017-AC-63 | context_only | spec/kani/functional/FR-017-kani-execution-evidence.md:914 | PLANNED (IR-1022; decision D1 of IR-1436). Over launcher stand-ins that return real-shaped reports, the run of one harness is two-phase, and each launch's evidence records its argument vector and the ceilings applied to it. (a) A proof report with a failed assertion check, then a witness report that fails the same check class and location and prints a playback: `Falsified` carrying that playback verbatim, with two launches whose argument vectors are the identity's literal proof vector and literal witness vector and whose recorded ceilings, crate and target are equal. (b) The proof run fails... |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | AC-48's status now reads 'PLANNED (specified by IR-489, Done; no code ticket yet)'. That is honest, but it leaves a PLANNED criterion with no code owner: quire matrix shows it untagged, and the CG check that compares obligation-record fields before generation has no ticket. AC-129 does not depend on AC-48, so this does not block AC-129. File a code ticket and name it in AC-48's status, or record an explicit deferral. | spec/kani/functional/FR-015-bounded-kani-obligations.md:860 |
+
 ## Dispositions
 
 | FND | outcome | reason |

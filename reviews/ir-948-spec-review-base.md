@@ -55,6 +55,12 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | FND-004 | low | AC-129 requires the unmutated postcondition 'self.balance = pre(self.balance) - amount' to classify Verified, but names no customer subject for withdraw. The postcondition harness calls the subject at the request's subject path, so the verdict depends on a subject that debits amount from balance and on nothing else in the fixture. State the healthy subject (debit by amount, balance the only write) so a test author cannot pick one that makes the run vacuous or falsified. | spec/kani/functional/FR-015-bounded-kani-obligations.md:937 |
 | FND-005 | low | FR-015-AC-49 and AC-129 now say arithmetic clauses are owned by IR-917 (IR-917, In Progress, carries the AC-41 arithmetic proof controls), but AC-41's own status, edited in this PR for the fit caveat, still reads 'PLANNED (IR-489; ...)'. IR-489 is the Done spec ticket. Name IR-917 as AC-41's owner so the three criteria agree. | spec/kani/functional/FR-015-bounded-kani-obligations.md:853 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Two live-status uses of IR-489 remain in files this PR edits. FR-015 line 558 still calls the V2 clause arm 'planned FR-015-AC-38 (IR-489)', although AC-38 is now PARTIAL (IR-948). Line 563 assigns an open decision, whether the contract role retires when AC-38 lands, to IR-489, which is Done, so that decision has no live owner. The spec/kani/matrix/tests.md:46 row for FR-015-AC-38 to AC-43 and AC-46 to AC-49 still gives '(IR-489, AD-004 step 4c)' as the owner of the planned and partial work. Point the status at IR-948 or IR-917, and give the retirement decision a live ticket or mark it as settled. Outside this PR's files, FR-014:593, TC-030:407 and spec.md:148 also cite IR-489 as a planned owner; that is context only, not part of this finding. | spec/kani/functional/FR-015-bounded-kani-obligations.md:558 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -62,3 +68,5 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | FND-001 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
 | FND-002 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
 | FND-003 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
+| FND-004 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
+| FND-005 | fixed | fixed in 8bc7337d; verified against origin/spec/ir-948-v2-contract-input at 8bc7337d |
