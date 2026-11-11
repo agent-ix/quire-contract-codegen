@@ -407,6 +407,7 @@ fn qsl_result_binder_is_not_drawn_as_a_postcondition_parameter() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -515,6 +516,7 @@ fn qsl_result_unused_binder_still_checks_produced_domain() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -555,6 +557,7 @@ fn qsl_result_postcondition_keeps_declared_parameter_call_order() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -605,6 +608,7 @@ fn qsl_result_boolean_uses_the_same_subject_value_for_both_bits() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -674,6 +678,7 @@ fn qsl_result_boolean_parameter_preserves_value_binding() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -718,6 +723,7 @@ fn qsl_result_unbounded_refuses_without_a_scalar_harness() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -757,6 +763,7 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     let [record] = outcome.records() else {
@@ -813,6 +820,7 @@ fn qsl_precondition_draws_selected_own_field_domain() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -883,6 +891,7 @@ fn qsl_two_parameter_precondition_draws_each_declared_domain() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     assert!(matches!(
@@ -938,6 +947,7 @@ fn qsl_two_parameter_precondition_refuses_unrenderable_domains() {
         let outcome = negotiate(&[ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: None,
         }]);
         assert!(matches!(
@@ -996,6 +1006,7 @@ fn qsl_v2_precondition_embeds_exact_referenced_clause_oracle() {
         let outcome = negotiate(&[ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: None,
         }]);
         let KaniObligationOutcome::Emitted {
@@ -1041,6 +1052,7 @@ fn inline_v2_precondition_embeds_exact_clause_oracle() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &admitted.package,
         clause: &admitted.clause,
+        claim: &crate::common::v2_claim::claim_for(&admitted.package, &admitted.clause),
         dependencies: None,
     }]);
     let KaniObligationOutcome::Emitted {
@@ -1082,6 +1094,7 @@ fn ordinary_v2_clause_cannot_settle_as_a_collection_totality_failure() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     let KaniObligationOutcome::Emitted {
@@ -1137,6 +1150,7 @@ fn v2_clause_census_refuses_invalid_declared_dependencies() {
         let item = [ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: Some(dependencies),
         }];
         negotiate_kani_obligations(&KaniObligationRequest {
@@ -1214,6 +1228,7 @@ fn v2_clause_census_is_order_independent_and_records_readiness() {
         let item = [ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: Some(dependencies),
         }];
         let outcome = negotiate_kani_obligations(&KaniObligationRequest {
@@ -1311,6 +1326,7 @@ fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1360,6 +1376,7 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1413,6 +1430,7 @@ fn native_v2_boolean_result_subject_mutation_fails_the_generated_assertion() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1487,6 +1505,7 @@ pub(super) fn decode_native_v2_helper_mutant_playback() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1550,6 +1569,7 @@ fn native_v2_decoder_enforces_original_inclusive_bounds() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1627,6 +1647,7 @@ fn native_v2_postcondition_oracle_typechecks_with_direct_dependencies() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
@@ -1710,6 +1731,7 @@ fn native_v2_chained_probe_uses_selected_intermediate_interval() {
         items: &[ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: None,
         }],
         subject_path: REQUEST_SUBJECT,
@@ -1775,6 +1797,7 @@ fn qsl_v2_scalar_clause_identity_tracks_request_facts() {
         let item = ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: None,
         };
         let generated = |unwind, subject_path| {
@@ -1838,6 +1861,7 @@ fn v2_precondition_fixture_harness(
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     };
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
@@ -6757,6 +6781,7 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     let [record] = outcome.records() else {
@@ -6845,6 +6870,7 @@ fn qsl_invariant_draws_each_selected_model_field_it_reads() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     let KaniObligationOutcome::Emitted {
@@ -6883,6 +6909,7 @@ fn qsl_invariant_unbounded_field_refuses_without_harness() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }]);
     let [record] = outcome.records() else {
@@ -6920,6 +6947,7 @@ fn qsl_native_invariant_preserves_oracle_selection_and_deterministic_identity() 
     let items = [ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }];
     let generate = |unwind| {
@@ -6982,6 +7010,7 @@ fn qsl_invariant_arithmetic_is_refused_without_unchecked_harness() {
     let items = [ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
         dependencies: None,
     }];
     let outcome = negotiate(&items);
@@ -7039,21 +7068,25 @@ fn v2_unsupported_clause_operator_names_exact_identity_without_suppressing_sibli
         ObligationItem::V2Clause {
             package: &package,
             clause: &refused_clauses[0],
+            claim: &crate::common::v2_claim::claim_for(&package, &refused_clauses[0]),
             dependencies: None,
         },
         ObligationItem::V2Clause {
             package: &package,
             clause: &refused_clauses[1],
+            claim: &crate::common::v2_claim::claim_for(&package, &refused_clauses[1]),
             dependencies: None,
         },
         ObligationItem::V2Clause {
             package: &package,
             clause: &refused_clauses[2],
+            claim: &crate::common::v2_claim::claim_for(&package, &refused_clauses[2]),
             dependencies: None,
         },
         ObligationItem::V2Clause {
             package: &supported_package,
             clause: &supported_clause,
+            claim: &crate::common::v2_claim::claim_for(&supported_package, &supported_clause),
             dependencies: None,
         },
     ]);
@@ -7116,6 +7149,7 @@ fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions
                 items: &[ObligationItem::V2Clause {
                     package: &package,
                     clause: &clause,
+                    claim: &crate::common::v2_claim::claim_for(&package, &clause),
                     dependencies: None,
                 }],
                 subject_path: REQUEST_SUBJECT,
@@ -7229,6 +7263,7 @@ fn qsl_constant_invariants_need_no_symbolic_input_or_subject() {
         let outcome = negotiate(&[ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            claim: &crate::common::v2_claim::claim_for(&package, &clause),
             dependencies: None,
         }]);
         let KaniObligationOutcome::Emitted {

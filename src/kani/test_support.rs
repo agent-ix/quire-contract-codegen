@@ -311,3 +311,14 @@ fn legacy_fixture_never_invents_scalar_authority() {
         Err(crate::core::scalar_authority::ScalarAuthorityError::Unavailable)
     );
 }
+
+/// A producer identity for fixtures that do not exercise FR-015-AC-48.
+pub(crate) fn fixture_obligation() -> qsl_replay::ObligationIdentity {
+    let node = qsl_replay::NodeKey::new(
+        "fixture",
+        vec![quire_exact::PathSegment::Text("clause".to_owned())],
+        0,
+    )
+    .expect("fixture node");
+    qsl_replay::ObligationIdentity::new(node, None, 0)
+}

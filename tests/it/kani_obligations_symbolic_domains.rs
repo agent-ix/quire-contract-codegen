@@ -1917,6 +1917,7 @@ fn precondition_collection_outcome(
     let item = ObligationItem::V2Clause {
         package: &fixture.package,
         clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&fixture.package, &clause),
         dependencies,
     };
     negotiate_kani_obligations(&KaniObligationRequest {

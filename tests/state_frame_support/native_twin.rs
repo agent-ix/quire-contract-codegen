@@ -461,6 +461,15 @@ impl Twin {
         twin
     }
 
+    /// The same unit with `lines` blank lines before `anchor`, moving every later source span.
+    pub fn with_blank_lines_before(mut self, anchor: &str, lines: usize) -> Self {
+        let source = String::from_utf8(self.unit).expect("native unit");
+        let changed = source.replacen(anchor, &format!("{}{anchor}", "\n".repeat(lines)), 1);
+        assert_ne!(changed, source, "the anchor is present");
+        self.unit = changed.into_bytes();
+        self
+    }
+
     /// A source-authored precondition over one bounded operation parameter and no state field.
     pub fn with_bounded_other_precondition() -> Self {
         Self::with_bounded_other_precondition_condition("other < 1000")

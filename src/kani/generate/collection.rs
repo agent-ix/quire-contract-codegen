@@ -30,7 +30,8 @@ use crate::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
             CollectionPreconditionIdentity, CollectionPredicateIdentity,
             KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
-            ProofDependencySnapshot, ScalarIntegerRepresentation, V2ClauseObligationIdentity,
+            ProofDependencySnapshot, ScalarIntegerRepresentation, SymbolicBounds,
+            V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead, V2ClauseSelection,
         },
     },
 };
@@ -276,6 +277,7 @@ pub(super) fn lower_collection_claim(
 pub(super) fn lower_collection_operation(
     graph: &CollectionGraph<'_>,
     clause_id: &CheckedNodeId,
+    obligation: &crate::kani::identity::V2ClauseObligationClaim,
 ) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
     let claim = graph
         .index
@@ -291,7 +293,7 @@ pub(super) fn lower_collection_operation(
     let quantifier = operation::first_quantifier(graph, &body)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field = resolve_collection_field(graph.package, &graph.index, clause_id, quantifier, role)?;
-    let operation = operation::lower(graph, clause_id, &field)?;
+    let operation = operation::lower(graph, clause_id, &field, obligation)?;
     Ok(LoweredCollectionClaim {
         dependencies: ProofDependencySnapshot::default(),
         package: ContractSourceV1 {
@@ -611,8 +613,65 @@ pub(super) fn render_collection_operation(
     };
     let record = record(&spec.path().module.to_string(), &identity, &rust)?;
     Ok(KaniV2ClauseObligationHarness::generated(
-        identity, rust, record,
+        identity,
+        operation.obligation.clone(),
+        rust,
+        record,
     ))
+}
+
+impl LoweredCollectionClaim {
+    /// The whole-object clause's parameters and state reads, as a claim states them. A
+    /// sequence-valued field's domain is its inclusive cardinality range (IR-1515).
+    pub(super) fn operation_selection(&self) -> Option<V2ClauseSelection> {
+        let context = &self.operation.as_ref()?.spec.identity;
+        Some(operation_selected_reads(context))
+    }
+}
+
+/// The parameters and state reads a whole-object collection clause draws.
+fn operation_selected_reads(
+    context: &crate::kani::identity::CollectionOperationIdentity,
+) -> V2ClauseSelection {
+    let domain = |element: &CollectionElementIdentity| match element {
+        CollectionElementIdentity::Boolean => (0, 1),
+        CollectionElementIdentity::Integer { minimum, maximum } => (*minimum, *maximum),
+    };
+    V2ClauseSelection {
+        parameters: context
+            .parameters
+            .iter()
+            .map(|parameter| {
+                let (minimum, maximum) = domain(&parameter.domain);
+                V2ClauseParameter {
+                    name: parameter.name.clone(),
+                    minimum,
+                    maximum,
+                }
+            })
+            .collect(),
+        state_reads: context
+            .fields
+            .iter()
+            .map(|field| {
+                let (minimum, maximum) = match &field.bounds {
+                    SymbolicBounds::Boolean => (0, 1),
+                    SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum),
+                    SymbolicBounds::Sequence {
+                        minimum_length,
+                        maximum_length,
+                        ..
+                    } => (*minimum_length, *maximum_length),
+                };
+                V2ClauseRead {
+                    declaring_node_id: field.declaring_node_id.clone(),
+                    field_name: field.field_name.clone(),
+                    minimum,
+                    maximum,
+                }
+            })
+            .collect(),
+    }
 }
 
 fn unique_element_capacity(element: CollectionElement) -> u128 {

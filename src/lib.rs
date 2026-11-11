@@ -271,7 +271,9 @@ pub use kani::identity::{
     ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
     StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseObligationIdentity, V2ClauseStateField,
+    V2ClauseClaimField, V2ClauseObligationClaim, V2ClauseObligationIdentity,
+    V2ClauseObligationRecord, V2ClauseParameter, V2ClauseRead, V2ClauseSelection,
+    V2ClauseStateField,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,

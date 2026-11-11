@@ -31,6 +31,7 @@ struct ConditionBindings<'a> {
 
 pub(super) struct LoweredOperation {
     pub(super) spec: CollectionOperationSpec,
+    pub(super) obligation: qsl_replay::ObligationIdentity,
 }
 
 fn refused(reason: CollectionUnsupportedReason) -> CollectionDomainRefusal {
@@ -152,6 +153,7 @@ pub(super) fn lower(
     graph: &CollectionGraph<'_>,
     clause: &CheckedNodeId,
     selected: &CollectionFieldDomain,
+    claim: &crate::kani::identity::V2ClauseObligationClaim,
 ) -> Result<LoweredOperation, CollectionDomainRefusal> {
     let failure = || refused(CollectionUnsupportedReason::UnsupportedClaimShape);
     let node = graph.index.node(clause).ok_or_else(failure)?;
@@ -273,7 +275,10 @@ pub(super) fn lower(
             spec.identity.precondition_bodies.push(condition);
         }
     }
-    Ok(LoweredOperation { spec })
+    Ok(LoweredOperation {
+        spec,
+        obligation: claim.obligation.clone(),
+    })
 }
 
 pub(super) fn first_quantifier<'a>(

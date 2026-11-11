@@ -25,6 +25,9 @@ use super::scalar::{
 pub struct ClauseOracleInput {
     /// The generated input name.
     pub name: String,
+    /// The name this input is declared under: the operation parameter or the model field.
+    #[serde(skip)]
+    pub declared_name: String,
     /// Admitted declaring field and name when this input reads model state.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state_field: Option<ClauseOracleStateField>,
@@ -238,6 +241,7 @@ fn plan_clause(
         .map(|input| {
             Ok(ClauseOracleInput {
                 name: names.get(input).ok_or(V2ClauseRefusal::Render)?.clone(),
+                declared_name: input.name.clone(),
                 state_field: input.declaring_node_id.as_ref().map(|declaring_node_id| {
                     ClauseOracleStateField {
                         declaring_node_id: declaring_node_id.clone(),

@@ -107,6 +107,7 @@ mod tc007_differential;
 mod terminal_map;
 mod v2_clause_integer_literal_agreement;
 mod v2_clause_integer_literals;
+mod v2_clause_obligation_identity;
 mod v2_integer_comparison_admission;
 mod v2_llvm_coverage;
 mod v2_numeric_population;
