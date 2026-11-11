@@ -654,6 +654,7 @@ impl LoweredV2Clause {
                     field_name: field.field_name.clone(),
                     minimum,
                     maximum,
+                    element: None,
                 });
             } else {
                 selection.parameters.push(V2ClauseParameter {

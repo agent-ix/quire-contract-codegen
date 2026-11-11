@@ -574,7 +574,7 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     or state-field read declaring node, field name or domain refuses with the named record member
     and no harness, on the scalar route and on the whole-object collection route, including ahead
     of a render refusal. The sequence-field element domain and the NodeKey binding are specified
-    by steps 52 (planned) and 53 (implemented, IR-1518) below; the unread drawn field is evidenced by the AC-134 test above.
+    by steps 52 (implemented, IR-1517) and 53 (implemented, IR-1518) below; the unread drawn field is evidenced by the AC-134 test above.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
@@ -905,10 +905,12 @@ with the required author `make kani-gate`; independent review and final acceptan
     and for the phrase `enumeration evidence`; a record renderer printing `Proved` must fail. The
     symbolic proof remains IR-1509.
 
-## AC-48 obligation-record gaps (IR-1515 spec; code IR-1517 planned, IR-1518 implemented)
+## AC-48 obligation-record gaps (IR-1515 spec; code IR-1517 and IR-1518 implemented)
 
 52. Whole-object collection clause, FR-015-AC-133 (AC-134 is evidenced by the existing test
-    named in its row). Author a fixture like the one in `tests/it/kani_collection_operation.rs`
+    named in its row; implemented by IR-1517 in `sequence_field_read_domain_is_cardinality_range_plus_element_domain`,
+    `boolean_element_domain_is_the_pair_zero_and_one` and `nested_sequences_stay_refused_ahead_of_any_record_comparison`
+    in `tests/it/kani_collection_operation.rs`, on the existing `Node` fixture with `z_items` as the sequence field, element `Small` 0..=3, in place of the `items`/`a_unread` fixture below). Author a fixture like the one in `tests/it/kani_collection_operation.rs`
     whose object declares two fields: `items`, a one-level sequence of 0 to 3 elements each
     `Int[0, 9]`, read by the clause, and `a_unread`, `Int[0, 5]`, not read. Both lower today
     (`field_domain` admits a scalar element). Write every claim record by hand from the fixture

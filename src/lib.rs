@@ -271,7 +271,7 @@ pub use kani::identity::{
     ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
     StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseClaimField, V2ClauseObligationClaim, V2ClauseObligationIdentity,
+    V2ClauseClaimField, V2ClauseElementDomain, V2ClauseObligationClaim, V2ClauseObligationIdentity,
     V2ClauseObligationRecord, V2ClauseParameter, V2ClauseRead, V2ClauseSelection,
     V2ClauseStateField,
 };

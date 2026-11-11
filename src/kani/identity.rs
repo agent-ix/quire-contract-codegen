@@ -384,6 +384,15 @@ pub struct V2ClauseParameter {
     pub maximum: i64,
 }
 
+/// The inclusive element domain of a one-level sequence-valued state field (Boolean is `0..=1`).
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct V2ClauseElementDomain {
+    /// Inclusive minimum of every element.
+    pub minimum: i64,
+    /// Inclusive maximum of every element.
+    pub maximum: i64,
+}
+
 /// One state-field read of a V2 clause: named by the declaring node id and field name, with its
 /// inclusive domain; never by a generated slot or identifier.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -392,10 +401,13 @@ pub struct V2ClauseRead {
     pub declaring_node_id: CheckedNodeId,
     /// Field name in that declaration.
     pub field_name: String,
-    /// Inclusive minimum.
+    /// Inclusive minimum: the value for a scalar field, the cardinality for a sequence field.
     pub minimum: i64,
-    /// Inclusive maximum.
+    /// Inclusive maximum: the value for a scalar field, the cardinality for a sequence field.
     pub maximum: i64,
+    /// The element domain of a one-level sequence field; `None` for a scalar field
+    /// (FR-015-AC-133).
+    pub element: Option<V2ClauseElementDomain>,
 }
 
 /// The parameters and state reads of one V2 clause, in the shape of a claim's record.

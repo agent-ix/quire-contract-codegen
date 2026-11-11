@@ -57,6 +57,7 @@ fn read(declaring: &CheckedNodeId, field: &str, minimum: i64, maximum: i64) -> V
         field_name: field.to_owned(),
         minimum,
         maximum,
+        element: None,
     }
 }
 
