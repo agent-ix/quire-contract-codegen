@@ -340,7 +340,9 @@ fn a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling() {
     }
 }
 
-/// (c) The same for the memory ceiling.
+/// (c) The same for the memory ceiling. The "a-quarter-over" tree (a 24 MiB array plus the
+/// interpreter, about 38 MiB) is over the 32 MiB ceiling but under one and a half times it (48 MiB),
+/// so a witness launch given 1.5 times the ceiling lets it finish and the case fails.
 #[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-3")]
 #[cfg(target_os = "linux")]
 #[test]
@@ -351,7 +353,7 @@ fn a_witness_phase_is_stopped_at_the_unchanged_memory_ceiling() {
         "Success",
         &[("Success", "assertion", "10"), COVER],
     );
-    for (name, megabytes, hold) in [("overrun", 128, 30), ("one-and-a-quarter", 40, 4)] {
+    for (name, megabytes, hold) in [("overrun", 128, 30), ("a-quarter-over", 24, 4)] {
         let harness = memory_member("a", ceiling);
         let proof = report_at("a::check", "Failure", &[FAIL_10]);
         let stand_in = StandIn::scaffold(&format!("two-phase-memory-{name}"));
@@ -776,6 +778,72 @@ fn a_witness_group_classifies_each_held_member_from_its_own_playback() {
     ));
     assert!(held.iter().all(|evidence| evidence.proof_phase.is_some()));
     assert!(held.iter().all(|evidence| evidence.batch.is_some()));
+}
+
+/// FR-017-AC-21: held members whose witness vectors are equal but whose identity ceilings differ
+/// start separate witness processes, each holding only the members of its own ceilings.
+#[trace("TC-043", "FR-017-AC-21", "FR-017-AC-63")]
+#[cfg(target_os = "linux")]
+#[test]
+fn held_members_with_different_ceilings_form_separate_witness_runs() {
+    let low: u64 = 64 * 1024 * 1024;
+    let high: u64 = 96 * 1024 * 1024;
+    let stand_in = StandIn::scaffold("two-phase-witness-ceilings");
+    let mut arms = String::new();
+    for (pair, (first, second)) in [("ab", ("a", "b")), ("cd", ("c", "d"))] {
+        let failing = batch_report(&[
+            entry(&format!("{first}::check"), "Failure", &[FAILED, COVER_OK]),
+            entry(&format!("{second}::check"), "Failure", &[FAILED, COVER_OK]),
+        ]);
+        let console = format!(
+            "{}{}",
+            block(&format!("{first}::check"), "assertion", "falsify"),
+            block(&format!("{second}::check"), "assertion", "falsify")
+        );
+        let proof = answer(&stand_in, &format!("proof-{pair}"), Some(&failing), "", 1);
+        let witness = answer(
+            &stand_in,
+            &format!("witness-{pair}"),
+            Some(&failing),
+            &console,
+            1,
+        );
+        arms.push_str(&format!(
+            "*{first}::check*)\nif [ \"$witness\" = yes ]; then\n{witness}\nelse\n{proof}\nfi\n;;\n"
+        ));
+    }
+    stand_in.install(&format!("case \"$ids\" in\n{arms}esac\n"));
+    let harnesses = [
+        memory_member("a", low),
+        memory_member("b", low),
+        memory_member("c", high),
+        memory_member("d", high),
+    ];
+    let runs = stand_in.batch(&harnesses, T).unwrap();
+    let members: Vec<_> = runs.iter().map(|run| run.members.clone()).collect();
+    assert_eq!(
+        members,
+        [vec![0, 1], vec![2, 3]],
+        "the proof groups hold every member, so only one witness group for each ceiling remains"
+    );
+    let calls = stand_in.calls();
+    assert_eq!(calls.len(), 4, "{calls:?} {runs:?}");
+    for call in &calls {
+        assert_eq!(
+            call.iter()
+                .filter(|argument| *argument == "--harness")
+                .count(),
+            2
+        );
+    }
+    assert!(!has_playback(&calls[0]) && !has_playback(&calls[1]));
+    assert!(has_playback(&calls[2]) && has_playback(&calls[3]));
+    for run in &runs {
+        let held = run.evidence.as_ref().unwrap();
+        assert!(held
+            .iter()
+            .all(|evidence| matches!(evidence.outcome, KaniRunOutcome::Falsified { .. })));
+    }
 }
 
 /// FR-015-AC-9 and AD-004: the proof vector holds no concrete-playback option and the witness

@@ -9,6 +9,12 @@
 //! one, and splits its one exported report and its one console back into one evidence record per
 //! harness. A harness is found in the report by the `module::harness` path the launch passed to
 //! `--harness`, and its playback in the console by the path its block is headed for.
+//!
+//! A run is two-phase (FR-017-AC-63). The proof phase launches the harness's proof vector, which
+//! has no concrete playback. Only when it fails a non-unwinding property does a witness phase
+//! launch the witness vector, which prints the playback; the witness phase must reproduce the
+//! failed checks, or the run is inconclusive with `WitnessDisagreed`. Both phases are held to the
+//! identity ceilings, and the witness phase's evidence nests the proof phase's.
 
 use std::{
     fmt, fs,
@@ -172,10 +178,12 @@ pub enum KaniExecutionRefusal {
 
 impl KaniExecutionRefusal {
     /// The stable machine-readable code of a refusal that has one: [`OUTPUT_OVER_LIMIT_CODE`] and
-    /// [`OUTPUT_UNREAD_CODE`]. The other refusals are told apart by their variant.
+    /// [`OUTPUT_UNREAD_CODE`]. The other refusals are told apart by their variant. A refused
+    /// witness phase has the code of the refusal it wraps.
     #[must_use]
-    pub const fn code(&self) -> Option<&'static str> {
+    pub fn code(&self) -> Option<&'static str> {
         match self {
+            Self::WitnessPhaseRefused { refusal, .. } => refusal.code(),
             Self::OutputOverLimit { .. } => Some(OUTPUT_OVER_LIMIT_CODE),
             Self::OutputUnread { .. } => Some(OUTPUT_UNREAD_CODE),
             Self::WrongMethodExecutionRoute
@@ -189,8 +197,7 @@ impl KaniExecutionRefusal {
             | Self::MemoryMechanismUnavailable { .. }
             | Self::MemoryObservationFailed { .. }
             | Self::BatchMemoryExhausted { .. }
-            | Self::PlaybackForNonMember { .. }
-            | Self::WitnessPhaseRefused { .. } => None,
+            | Self::PlaybackForNonMember { .. } => None,
         }
     }
 }
@@ -280,7 +287,8 @@ impl From<KaniToolError> for KaniExecutionRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KaniExecutionEvidence {
-    /// The identity ceilings actually enforced by this run.
+    /// The per-harness ceilings the launcher was given for this run: the identity memory ceiling and
+    /// the identity wall clock (a batch gives the launcher the product, recorded here per harness).
     pub ceilings: crate::kani::identity::ProofCeilings,
     /// Actual backend-tree memory mechanism and observed peak.
     pub memory: MemoryObservation,
@@ -342,7 +350,6 @@ pub struct KaniExecutionEvidence {
 /// Production attaches its actual observation only after the bounded launcher concludes.
 #[derive(Debug)]
 struct ReportedExecution {
-    ceilings: crate::kani::identity::ProofCeilings,
     symbolic_arguments: Vec<crate::kani::identity::SymbolicArgumentBounds>,
     kind: Option<ObligationKind>,
     harness_path: String,
@@ -360,10 +367,16 @@ struct ReportedExecution {
 }
 
 impl ReportedExecution {
-    fn with_memory(self, memory: MemoryObservation) -> KaniExecutionEvidence {
+    /// The evidence with the memory observation and the per-harness ceilings the launcher was
+    /// actually given, so a launch given other ceilings than the identity's records them.
+    fn with_launch(
+        self,
+        memory: MemoryObservation,
+        applied: crate::kani::identity::ProofCeilings,
+    ) -> KaniExecutionEvidence {
         KaniExecutionEvidence {
             memory,
-            ceilings: self.ceilings,
+            ceilings: applied,
             symbolic_arguments: self.symbolic_arguments,
             kind: self.kind,
             harness_path: self.harness_path,
@@ -397,6 +410,11 @@ pub struct KaniBatchInvocation {
 }
 
 /// Runs the harness and reports the backend's own outcome.
+///
+/// The proof vector launches first. When it fails a non-unwinding property the witness vector
+/// launches once under the same ceilings, and the verdict is the witness phase's with the proof
+/// phase's evidence nested in `proof_phase`; a refused witness phase refuses the run with
+/// [`KaniExecutionRefusal::WitnessPhaseRefused`] (FR-017-AC-63).
 ///
 /// Bounded execution requires Linux with readable procfs task-child/RSS information and pidfd
 /// APIs, plus `bwrap` supporting user/PID namespaces, gated startup and info descriptors.
@@ -499,20 +517,31 @@ fn bound_totality_line(library: &str, source: &str, artifact_line: u32) -> Optio
 }
 
 /// Starts `command` with the launcher's output captured for `harnesses` harnesses, and maps a
-/// failure to start it to the refusal that names the launcher.
+/// failure to start it to the refusal that names the launcher. Also returns the per-harness
+/// ceilings the launcher was given: its memory ceiling, and `timeout` divided among `harnesses`
+/// (the identity's wall clock when that division does not fit).
 fn start(
     request: &KaniExecutionRequest<'_>,
     command: super::namespace::BackendCommand,
     timeout: Duration,
     harnesses: NonZeroUsize,
-) -> Result<BoundedLaunch, KaniExecutionRefusal> {
+) -> Result<(BoundedLaunch, crate::kani::identity::ProofCeilings), KaniExecutionRefusal> {
     let deadline = Instant::now().checked_add(timeout);
     if !deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         // The namespace helper's successful spawn cannot establish backend executability.
         request.installation.require_executable()?;
     }
-    let mut ceilings = request.harness.view().ceilings;
+    let identity = request.harness.view().ceilings;
+    let mut ceilings = identity;
     ceilings.wall_clock = timeout;
+    let applied = crate::kani::identity::ProofCeilings {
+        memory_bytes: ceilings.memory_bytes,
+        wall_clock: u32::try_from(harnesses.get())
+            .ok()
+            .and_then(|members| timeout.checked_div(members))
+            .filter(|_| timeout != Duration::MAX)
+            .unwrap_or(identity.wall_clock),
+    };
     run_bounded_launcher(
         command,
         ceilings,
@@ -521,6 +550,7 @@ fn start(
         request.cancel,
         request.installation.owners(),
     )
+    .map(|launch| (launch, applied))
     .map_err(|error| match error {
         BoundedLaunchError::Unavailable(cause) => {
             KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
@@ -572,7 +602,6 @@ fn evidence_of(
         };
     }
     ReportedExecution {
-        ceilings: harness.ceilings,
         symbolic_arguments: request.harness.symbolic_arguments(),
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -774,7 +803,7 @@ fn run_phase_single(
     if let Some(source) = read_only_source {
         command.read_only_bind(source);
     }
-    let launch = start(
+    let (launch, applied) = start(
         request,
         command,
         request.harness.view().ceilings.wall_clock,
@@ -782,7 +811,7 @@ fn run_phase_single(
     )?;
     let report = take_report(&launch.outcome, &report_path);
     finish_single(request, arguments, launch.outcome, report?, totality_line)
-        .map(|reported| reported.with_memory(launch.memory))
+        .map(|reported| reported.with_launch(launch.memory, applied))
 }
 
 /// Classify one captured launch and its own report, without asserting memory enforcement.
@@ -872,8 +901,12 @@ fn process_output<'a>(
     }
 }
 
-/// What one launcher process (one group) of a batch yielded: the harnesses it ran and their evidence or the
-/// refusal of the whole process.
+/// What one launcher process (one group) of a batch yielded: the harnesses it ran and their
+/// evidence or the refusal of the whole process.
+///
+/// A proof-phase run lists only the members its report classified, and is absent when it
+/// classified none. A witness-phase run lists the members its proof phase held; its evidence
+/// nests each member's proof-phase evidence, which came from a different process.
 #[derive(Debug)]
 pub struct KaniGroupRun {
     /// The position in the request list of each harness the process ran, in request order.
@@ -897,7 +930,12 @@ pub struct KaniGroupRun {
 /// that does not fit never elapsing.
 ///
 /// A harness the crate does not contain refuses the whole call before any process starts. After
-/// that each process has its own result, in order of its first member: its report is split by the
+/// that each process has its own result. The proof-phase processes come first, in order of their
+/// first member. A member whose proof phase fails a non-unwinding property is held, and the held
+/// members are regrouped by witness vector and identity ceilings into witness-phase processes,
+/// which follow in order of their first held member; a witness process may therefore run members
+/// of more than one proof process, and its members are not in request order across runs. Each
+/// process's report is split by the
 /// `module::harness` path of each entry, each member is classified from its own entry and its own
 /// console playback, and a report that lacks, repeats or adds a harness, a playback that cannot be
 /// attributed, an output stream over 8 MiB per member and an outer bound that elapsed each refuse
@@ -1112,7 +1150,7 @@ fn run_group(
     let report_path = fresh_report_path(first.target_directory);
     remove_stale_report(&report_path)?;
     let (arguments, command) = batch_launch_command(first, &selections, phase, &report_path);
-    let launch = start(
+    let (launch, applied) = start(
         first,
         command,
         outer_bound(first.harness.view().ceilings.wall_clock, group.len()),
@@ -1157,7 +1195,7 @@ fn run_group(
     .map(|reported| {
         reported
             .into_iter()
-            .map(|run| run.with_memory(launch.memory.clone()))
+            .map(|run| run.with_launch(launch.memory.clone(), applied))
             .collect()
     })
 }
@@ -4749,6 +4787,8 @@ esac
     /// each member's outcome, checks and SUCCESS count come from its own entry: the report lists
     /// the members in the reverse of the request order, one falsified and one verified.
     #[trace("FR-017-AC-22", "TC-043")]
+    // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_members_are_matched_by_path_and_classified_from_their_own_entry() {
         let report = batch_report(&[
@@ -4853,6 +4893,8 @@ esac
     /// failure that exit stands for: every member Success with exit 1 is inconclusive, and one
     /// Failure entry makes the other member's success verified.
     #[trace("FR-017-AC-22", "TC-043")]
+    // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_success_beside_a_non_zero_exit_is_verified_only_when_an_entry_states_failure() {
         let no_verdict = KaniRunOutcome::Inconclusive {
@@ -4896,6 +4938,8 @@ esac
     /// timed out, naming T, while the others keep their results; one with no checks and no
     /// timeout is inconclusive with no counterexample.
     #[trace("FR-017-AC-22", "FR-028-AC-12", "TC-039", "TC-043")]
+    // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_timed_out_entry_is_timed_out_naming_t_and_a_bare_failure_has_no_counterexample() {
         let report = batch_report(&[
@@ -5034,6 +5078,8 @@ esac
     /// block headed for it is inconclusive with no counterexample, and its neighbours keep their
     /// results.
     #[trace("FR-017-AC-23", "TC-043")]
+    // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_member_is_given_the_playback_headed_for_its_own_path() {
         let report = batch_report(&[
@@ -5166,6 +5212,8 @@ fn kani_concrete_playback_check_1077496887511954657() {
     /// real Kani's console. It takes the first, as the same harness run alone does, and neither
     /// it nor its verified neighbour loses its evidence: the group is not refused.
     #[trace("FR-017-AC-22", "FR-017-AC-23", "TC-043")]
+    // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour() {
         let report = batch_report(&[
@@ -5903,6 +5951,8 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// no `NoVerdict` member and no record.
         ///
         #[trace("FR-017-AC-36", "TC-043")]
+        // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
+        #[cfg(target_os = "linux")]
         #[test]
         fn tc_043_a_group_report_decides_between_unknown_and_no_record() {
             let all_success = batch_report(&[

@@ -1469,6 +1469,7 @@ fn assert_settlement_row(evidence: &KaniExecutionEvidence, settlement: ReplaySet
     "FR-029-AC-34",
     "FR-029-AC-35",
     "FR-029-AC-15",
+    "FR-029-AC-37",
     "TC-040"
 )]
 #[test]
