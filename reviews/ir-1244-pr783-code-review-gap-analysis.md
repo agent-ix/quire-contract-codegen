@@ -49,6 +49,7 @@ Round 1, verified at 05c93d40. Mutation control: removing the `self.0.finish(..)
 | FND-002 | fixed | The selection assertion now pins `FacadeLookup`. `every_owner_path_call_maps_to_the_owner_path_cause` inspects all four owner-path calls for `.map_err(owner_path)` and has an injected-removal control. Value tests are impossible because `qsl_replay::NominalDeclaration` (434869e application.rs:88) has private fields and no public constructor, so inspection is the right evidence. |
 | FND-003 | fixed | The probe now prints and compares location as well. Limits are asserted on the emitted text (7/11). The module doc says the genuine side is a re-implementation and that the real `PreparedFunction::new` run is AC-45 (S2). |
 | FND-004 | fixed | The round-trip crate uses a per-label package name, adapts the lock offline with `cargo metadata`, then runs `cargo run --locked --offline`. |
+| FND-005 | fixed | Round 2 at 2f918837 (verified by reading, no cargo run): `host_prepared` computes the expected index from the function's position among the source's `function ` lines, independently of the entry. The new `SECOND` fixture (alpha, beta) and `a_later_function_rebuilds_with_its_own_body_index` target beta at index 1 and assert `observed == expected`, so a wrong emitted index fails the test. |
 
 ## New findings (disposition pass 1)
 
