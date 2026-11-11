@@ -858,6 +858,22 @@ with the required author `make kani-gate`; independent review and final acceptan
     state-field range path (FR-015-AC-119; distinct from the scalar
     FR-015-AC-118 and arithmetic mutant of step 11).
 
+## QSL-source four-kind installed-backend run (IR-948, planned)
+
+50. Author the `Account` source of FR-015-AC-129 and emit and admit its one package. Request
+    the precondition, postcondition, invariant and frame claims; require four harnesses with
+    pairwise distinct identities, every drawn domain equal to the package's accessor range or
+    `bounded_domain`, and no prepared data. With the installed backend, one job at a time at
+    the AC-126 ceiling, require the unmutated precondition, postcondition and invariant
+    `Verified` with the final cover satisfied (the frame by FR-015-AC-31). Run the two
+    invariant mutants (`balance >= 1`; the field widened to `Int[-1, 100]`) and require each
+    `Falsified` with the counterexample states `balance = 0` and `balance = -1`, each replayed
+    through `qsl_replay::replay_state_clause` as a reproduced violation of the same clause.
+    Run the `amount > 100` precondition and require `CoverUnsatisfied` at unwind 8. Record
+    the peak and teardown of each job; treat `MemoryExhausted`, timeout and unknown as
+    inconclusive and report the peak (FR-015-AC-129). A generation-time Boolean is not
+    a verdict.
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
