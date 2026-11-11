@@ -21,7 +21,7 @@ use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId,
     CheckedNodePathSegment, CheckedOccurrence, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedTerm,
-    ContractSourceKeyV1,
+    CheckedUnsupportedCompositeOperand, ContractSourceKeyV1,
 };
 use quire_exact::PathSegment;
 
@@ -65,7 +65,8 @@ pub(super) const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     function h using v(): Boolean pure { Q { x: 1 } = Q { x: 2 } }\n\
     function same using v(a: Q): Boolean pure { a = a }\n\
     function ne_lits using v(): Boolean pure { Q { x: 1 } != Q { x: 2 } }\n\
-    function ne_same using v(a: Q): Boolean pure { a != a }\n";
+    function ne_same using v(a: Q): Boolean pure { a != a }\n\
+    function opt_none using v(a: Option<Boolean>): Boolean pure { a = none }\n";
 
 const REPEATED_SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     profile v = \"quire.value.complete/v1\";\n\
@@ -774,7 +775,13 @@ fn original_ne_literal_literal_keeps_two_empty_bounds_children() {
         &[],
         100_000,
     );
-    assert!(wrong.is_err());
+    assert!(matches!(
+        wrong,
+        Err(CompositeBuildError::OperatorMismatch {
+            requested: EqualityOperator::Equal,
+            actual: EqualityOperator::NotEqual
+        })
+    ));
 }
 
 /// Ne self-comparison keeps two undeduplicated arguments with the same node and drawn bounds.
@@ -793,6 +800,32 @@ fn original_ne_self_comparison_keeps_two_positional_arguments() {
         FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64)).unwrap(),
     )
     .unwrap()];
+    let mut bounds = bounds;
+    bounds.push(
+        ProofBound::new(
+            DomainKey::Population {
+                member_type: node_key(&package, &node),
+                ordinal: 0,
+            },
+            Some(DomainKind::Population),
+            FiniteBound::cardinality(7),
+        )
+        .unwrap(),
+    );
+    let wrong = context(package.clone(), "ne_same").request(
+        &node,
+        &occurrence,
+        EqualityOperator::Equal,
+        &bounds,
+        100_000,
+    );
+    assert!(matches!(
+        wrong,
+        Err(CompositeBuildError::OperatorMismatch {
+            requested: EqualityOperator::Equal,
+            actual: EqualityOperator::NotEqual
+        })
+    ));
     let request = context(package.clone(), "ne_same")
         .request(
             &node,
@@ -810,6 +843,10 @@ fn original_ne_self_comparison_keeps_two_positional_arguments() {
             panic!("bounds")
         };
         assert_eq!(entries.entries().len(), 1);
+        assert!(entries
+            .entries()
+            .iter()
+            .all(|entry| matches!(entry.domain(), DomainKey::Node { .. })));
     }
     let report = request
         .settle_verified(VerifiedShadow {
@@ -836,6 +873,159 @@ fn first_child(
         panic!("graph child")
     };
     child.clone()
+}
+
+/// Re-reads the compiled `opt_none` package with its `none` operand replaced by an inline
+/// `none` literal of the same Option type, the shape IR's production reader admits. The wire
+/// numbers each node's operand slots by first occurrence, so the application is rewritten with
+/// the row rewritten to match.
+fn opt_none_with_inline_operand() -> OriginalPackage {
+    let compiled = compiled(SOURCE, &DependencyInput::default());
+    let mut wire: serde_json::Value = serde_json::from_slice(compiled.bytes()).unwrap();
+    let is_none = |id: &serde_json::Value| {
+        id["path"]
+            .as_array()
+            .is_some_and(|p| p.last() == Some(&serde_json::json!("none")))
+    };
+    let index = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|node| {
+            node["body"]["operation"]["identity"] == "quire.op.structural.eq"
+                && is_none(&node["body"]["arguments"][1]["target"])
+        })
+        .expect("opt_none application");
+    let none_index = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|node| is_none(&node["node_id"]))
+        .expect("none node");
+    let row = wire["semantic_graph"]["operand_rows"][index]
+        .as_array()
+        .unwrap()
+        .clone();
+    // Row of the original application: [text, integer, option, parameter, none, boolean].
+    let [text, integer, option, parameter, _none, boolean] = &row[..] else {
+        panic!("unexpected operand row {row:?}")
+    };
+    wire["semantic_graph"]["operand_rows"][index] =
+        serde_json::json!([text, integer, option, boolean, parameter]);
+    let id = |path: serde_json::Value| serde_json::json!({"ordinal": 0, "package": "original-eq", "path": path});
+    let parameter_id = id(serde_json::json!([
+        "value", "parameter", "name", {"operand": 0}, "a", "level", {"operand": 1}, "0", {"operand": 2}
+    ]));
+    let node = &mut wire["semantic_graph"]["nodes"][index];
+    node["body"]["arguments"] = serde_json::json!([
+        {"term": "reference", "target": parameter_id.clone()},
+        {
+            "term": "literal",
+            "type": id(serde_json::json!(["composite_type", "option", {"operand": 3}])),
+            "value_kind": "none",
+            "value": null
+        }
+    ]);
+    node["dependencies"] = serde_json::json!([parameter_id]);
+    node["node_id"] = id(serde_json::json!([
+        "expression", "binary", {"operand": 4}, "quire.op.structural.eq", "binary", {"operand": 3}
+    ]));
+    // The function holding the application names it by id; renumber that id and its row.
+    let function = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|node| node["declaration"]["qualified_name"] == serde_json::json!(["opt_none"]))
+        .expect("opt_none function");
+    let function_row = wire["semantic_graph"]["operand_rows"][function]
+        .as_array()
+        .unwrap()
+        .clone();
+    let [f_text, f_integer, f_option, f_parameter, _f_none, f_boolean] = &function_row[..] else {
+        panic!("unexpected function row {function_row:?}")
+    };
+    wire["semantic_graph"]["operand_rows"][function] =
+        serde_json::json!([f_text, f_integer, f_option, f_parameter, f_boolean]);
+    let application_id = id(serde_json::json!([
+        "expression", "binary", {"operand": 3}, "quire.op.structural.eq", "binary", {"operand": 4}
+    ]));
+    let function_node = &mut wire["semantic_graph"]["nodes"][function];
+    function_node["body"]["members"][1]["value"]["target"] = application_id.clone();
+    function_node["dependencies"][0] = application_id;
+    // Source-map entries name nodes by document index; the application no longer holds `none`.
+    let none_index = serde_json::json!({"node": none_index});
+    for entry in wire["source_map"].as_array_mut().unwrap() {
+        if let Some(path) = entry["node_id"]["path"].as_array_mut() {
+            if path.first() == Some(&serde_json::json!("expression")) {
+                path.retain(|segment| *segment != none_index);
+            }
+        }
+    }
+    for decision in wire["checked_term_data"]["equality_decisions"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if let Some(path) = decision["application"]["path"].as_array_mut() {
+            path.retain(|segment| *segment != none_index);
+        }
+    }
+    let bytes = quire_canonical::to_vec(&wire, quire_canonical::Limits::new(1 << 22)).unwrap();
+    read_checked(&bytes, &evidence())
+}
+
+/// An inline non-integer operand that IR's reader admits is refused by the owning projection and
+/// reaches the caller as `CompositeBuildError::Operands`, with no request and so no report.
+/// The control source spells the same comparison with a graph `none`, whose refusal is a
+/// different cause, so a conversion that rewrote every cause to `InlineNonInteger` fails.
+#[trace("TC-048", "FR-033-AC-17")]
+#[test]
+fn inline_non_integer_operand_refuses_through_operands_without_a_request() {
+    let inline = opt_none_with_inline_operand();
+    let (node, occurrence) =
+        application_with_operator(&inline, "opt_none", "quire.op.structural.eq");
+    let Err(refusal) = context(inline.clone(), "opt_none").request(
+        &node,
+        &occurrence,
+        EqualityOperator::Equal,
+        &[],
+        100_000,
+    ) else {
+        panic!("inline none operand refuses")
+    };
+    assert!(matches!(
+        refusal,
+        CompositeBuildError::Operands(ref cause) if matches!(
+            **cause,
+            CheckedCompositeOperandError::UnsupportedOperand {
+                ordinal: 1,
+                reason: CheckedUnsupportedCompositeOperand::InlineNonInteger,
+                ..
+            }
+        )
+    ));
+
+    let graph = checked(SOURCE);
+    let (node, occurrence) =
+        application_with_operator(&graph, "opt_none", "quire.op.structural.eq");
+    let Err(control) = context(graph, "opt_none").request(
+        &node,
+        &occurrence,
+        EqualityOperator::Equal,
+        &[],
+        100_000,
+    ) else {
+        panic!("graph none operand refuses")
+    };
+    assert!(matches!(
+        control,
+        CompositeBuildError::Operands(ref cause) if matches!(
+            **cause,
+            CheckedCompositeOperandError::UnsupportedOperand {
+                reason: CheckedUnsupportedCompositeOperand::NonliteralGraphValue,
+                ..
+            }
+        )
+    ));
 }
 
 /// Changed source bytes refuse before recompilation, including semantically equivalent edits.
