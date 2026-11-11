@@ -9,17 +9,17 @@ use super::terminal_map::synthetic_evidence;
 use ix_trace_rs::trace;
 use qsl_replay::{
     Code, IdentityEncodeError, IncompleteCause, InconclusiveCause, NativeOutcome,
-    OperatorParityReport, OperatorParityResult, ReplayLimits, TerminalValue,
+    OperatorParityReport, OperatorParityResult, ReplayLimits, Std001Code, TerminalValue,
 };
 use quire_contract_codegen::{
     run_terminal_value, scalar_ir_outcome_terminal_value, scalar_run_terminal_value,
-    CompletedScalarReplay, KaniRunOutcome, LockedSource, OriginalScalarContext, ReplayInputs,
-    ScalarAuthorityError, ScalarBuildError, ScalarSentRequest, ScalarSettlement, TerminalPairError,
-    WitnessDecodeLimits, SCALAR_PLAYBACK_BYTES,
+    CompletedScalarReplay, KaniInconclusiveReason, KaniRunOutcome, LockedSource,
+    OriginalScalarContext, ReplayInputs, ScalarAuthorityError, ScalarBuildError, ScalarSentRequest,
+    ScalarSettlement, TerminalPairError, WitnessDecodeLimits, SCALAR_PLAYBACK_BYTES,
 };
-use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_contract_model::CheckedPackageReadLimits;
-use quire_exact::{Integer, IntegerInterval};
+use quire_exact::Integer;
 use std::collections::BTreeMap;
 
 fn falsified() -> KaniRunOutcome {
@@ -227,23 +227,60 @@ fn step_10_settlement_refuses_a_changed_input_bytes_budget_and_a_missing_report(
     ));
 }
 
-#[trace("TC-047", "FR-032-AC-21")]
+/// Counts, in every match arm pattern at any depth, a `_` or a bare binding (a catch-all).
+fn catch_all_patterns(pattern: &syn::Pat) -> usize {
+    use syn::Pat;
+    match pattern {
+        Pat::Wild(_) => 1,
+        Pat::Ident(ident) => match &ident.subpat {
+            Some((_, inner)) => catch_all_patterns(inner),
+            None => 1,
+        },
+        Pat::Or(or) => or.cases.iter().map(catch_all_patterns).sum(),
+        Pat::Paren(paren) => catch_all_patterns(&paren.pat),
+        Pat::Reference(reference) => catch_all_patterns(&reference.pat),
+        Pat::Tuple(tuple) => tuple.elems.iter().map(catch_all_patterns).sum(),
+        _ => 0,
+    }
+}
+
+/// Top-level arms only: a `_` inside a variant's fields (`Refused(_)`) is not a catch-all arm.
+fn arm_is_catch_all(pattern: &syn::Pat) -> bool {
+    use syn::Pat;
+    match pattern {
+        Pat::Wild(_) => true,
+        Pat::Ident(ident) => ident.subpat.is_none(),
+        Pat::Or(or) => or.cases.iter().any(arm_is_catch_all),
+        Pat::Paren(paren) => arm_is_catch_all(&paren.pat),
+        Pat::Reference(reference) => arm_is_catch_all(&reference.pat),
+        _ => false,
+    }
+}
+
+fn denies_wildcards(function: &syn::ItemFn) -> bool {
+    function.attrs.iter().any(|attribute| {
+        let text = quote_tokens(attribute);
+        text.contains("deny") && text.contains("wildcard_enum_match_arm")
+    })
+}
+
+#[trace("TC-047", "FR-032-AC-21", "FR-032-AC-24")]
 #[test]
 fn step_10_terminal_map_is_an_exhaustive_match_returning_the_qsl_terminal_value() {
-    use syn::{visit::Visit, Expr, ExprMatch, ExprMethodCall, Item, Pat};
+    use syn::{visit::Visit, Expr, ExprMatch, ExprMethodCall, Item};
     #[derive(Default)]
     struct Scan {
         matches: usize,
-        wildcards: usize,
+        catch_alls: usize,
         terminal_calls: usize,
     }
     impl<'a> Visit<'a> for Scan {
         fn visit_expr_match(&mut self, node: &'a ExprMatch) {
             self.matches += 1;
-            self.wildcards += node
+            self.catch_alls += node
                 .arms
                 .iter()
-                .filter(|arm| matches!(arm.pat, Pat::Wild(_)))
+                .filter(|arm| arm_is_catch_all(&arm.pat))
                 .count();
             syn::visit::visit_expr_match(self, node);
         }
@@ -256,9 +293,15 @@ fn step_10_terminal_map_is_an_exhaustive_match_returning_the_qsl_terminal_value(
             syn::visit::visit_expr_method_call(self, node);
         }
     }
-    let source =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/kani/terminal.rs"))
-            .unwrap();
+    // The inspection must be able to fail: a catch-all binding or an or-pattern `_` counts.
+    let bare: syn::Pat = syn::parse_str::<syn::Arm>("other => 1").unwrap().pat;
+    let or: syn::Pat = syn::parse_str::<syn::Arm>("A | _ => 1").unwrap().pat;
+    let field: syn::Pat = syn::parse_str::<syn::Arm>("A(_) => 1").unwrap().pat;
+    assert!(arm_is_catch_all(&bare) && arm_is_catch_all(&or) && !arm_is_catch_all(&field));
+    assert_eq!(catch_all_patterns(&field), 0);
+
+    let root = env!("CARGO_MANIFEST_DIR");
+    let source = std::fs::read_to_string(format!("{root}/src/kani/terminal.rs")).unwrap();
     let file = syn::parse_file(&source).unwrap();
     let function = file
         .items
@@ -268,23 +311,18 @@ fn step_10_terminal_map_is_an_exhaustive_match_returning_the_qsl_terminal_value(
             _ => None,
         })
         .expect("the scalar terminal map");
-    let denied = function.attrs.iter().any(|attribute| {
-        quote_tokens(attribute).contains("deny")
-            && quote_tokens(attribute).contains("wildcard_enum_match_arm")
-    });
     assert!(
-        denied,
+        denies_wildcards(function),
         "deny(clippy::wildcard_enum_match_arm) is on the map"
     );
     let mut scan = Scan::default();
     scan.visit_block(&function.block);
     assert_eq!(scan.matches, 2, "the settlement match and the result match");
-    assert_eq!(scan.wildcards, 0, "no wildcard arm at any depth");
+    assert_eq!(scan.catch_alls, 0, "no wildcard or catch-all arm");
     assert_eq!(
         scan.terminal_calls, 6,
         "one `result.terminal_value()` arm per class"
     );
-    // Exhaustiveness is checked by the compiler; name the six classes too.
     let classes: Vec<_> = [
         "Diverged",
         "Agrees",
@@ -297,6 +335,31 @@ fn step_10_terminal_map_is_an_exhaustive_match_returning_the_qsl_terminal_value(
     .filter(|name| source.contains(&format!("OperatorParityResult::{name}")))
     .collect();
     assert_eq!(classes.len(), 6);
+
+    // `setup_settlement` is the AC-24 exhaustive match: same lint, no catch-all arm at any depth.
+    let builder = std::fs::read_to_string(format!("{root}/src/replay/scalar_builder.rs")).unwrap();
+    let file = syn::parse_file(&builder).unwrap();
+    let method = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Impl(implementation) => Some(implementation),
+            _ => None,
+        })
+        .flat_map(|implementation| &implementation.items)
+        .find_map(|item| match item {
+            syn::ImplItem::Fn(method) if method.sig.ident == "setup_settlement" => Some(method),
+            _ => None,
+        })
+        .expect("setup_settlement");
+    assert!(method.attrs.iter().any(|attribute| {
+        let text = quote_tokens(attribute);
+        text.contains("deny") && text.contains("wildcard_enum_match_arm")
+    }));
+    let mut scan = Scan::default();
+    scan.visit_block(&method.block);
+    assert_eq!(scan.matches, 2, "the error match and the authority match");
+    assert_eq!(scan.catch_alls, 0, "no catch-all arm in setup_settlement");
 }
 
 fn quote_tokens(attribute: &syn::Attribute) -> String {
@@ -341,48 +404,124 @@ fn step_11_pairing_requires_a_falsified_run_and_never_refutes() {
         );
     }
     let report = &reports[0].3;
-    let verified = synthetic_evidence(KaniRunOutcome::Verified, 3);
+    let settlements = || {
+        [
+            ScalarSettlement::Parity(report.result()),
+            ScalarSettlement::CgDefect,
+        ]
+    };
+    // Every run outcome except Falsified refuses a settlement and keeps the ordinary value
+    // without one.
+    let non_falsified = [
+        KaniRunOutcome::Verified,
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1,
+        },
+        KaniRunOutcome::Cancelled {
+            source: KaniCancellationSource::Requested,
+        },
+        KaniRunOutcome::Cancelled {
+            source: KaniCancellationSource::Deadline,
+        },
+    ]
+    .into_iter()
+    .chain(
+        [
+            KaniInconclusiveReason::FailedWithoutCounterexample,
+            KaniInconclusiveReason::NoVerdict,
+            KaniInconclusiveReason::MissingCoverSummary,
+            KaniInconclusiveReason::VacuousProof,
+            KaniInconclusiveReason::UnwindBoundExhausted,
+            KaniInconclusiveReason::TimedOut,
+            KaniInconclusiveReason::MemoryExhausted,
+            KaniInconclusiveReason::WitnessDisagreed,
+        ]
+        .map(|reason| KaniRunOutcome::Inconclusive { reason }),
+    );
+    for outcome in non_falsified {
+        let evidence = synthetic_evidence(outcome.clone(), 3);
+        for settlement in settlements() {
+            assert_eq!(
+                scalar_run_terminal_value(&evidence, Some(settlement)),
+                Err(TerminalPairError::UnexpectedSettlement),
+                "{outcome:?}"
+            );
+        }
+        assert_eq!(
+            scalar_run_terminal_value(&evidence, None),
+            run_terminal_value(&evidence, None),
+            "{outcome:?}"
+        );
+    }
+    // Every IR kind except Counterexample likewise.
+    let kinds = [
+        (
+            KaniOutcomeKind::Refused,
+            Std001Code::KANI_CAPABILITY_MISSING,
+        ),
+        (
+            KaniOutcomeKind::InvalidInput,
+            Std001Code::KANI_IDENTITY_INVALID,
+        ),
+        (
+            KaniOutcomeKind::IncompleteInput,
+            Std001Code::KANI_POPULATION_INCOMPLETE,
+        ),
+        (
+            KaniOutcomeKind::Unavailable,
+            Std001Code::KANI_CHECKER_ABSENT,
+        ),
+        (KaniOutcomeKind::TimedOut, Std001Code::KANI_BOUND_EXHAUSTED),
+        (
+            KaniOutcomeKind::ResourceExhausted,
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
+        (
+            KaniOutcomeKind::Cancelled {
+                source: KaniCancellationSource::Requested,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
+        (
+            KaniOutcomeKind::Cancelled {
+                source: KaniCancellationSource::Deadline,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
+        (
+            KaniOutcomeKind::Inconclusive,
+            Std001Code::KANI_VACUOUS_PROOF,
+        ),
+    ];
+    let mut outcomes = vec![KaniOutcome::proved(1, "source", "context").unwrap()];
+    for (kind, code) in kinds {
+        outcomes.push(KaniOutcome::non_success(kind, code, "source", "context").unwrap());
+    }
+    for outcome in &outcomes {
+        for settlement in settlements() {
+            assert_eq!(
+                scalar_ir_outcome_terminal_value(outcome, Some(settlement)),
+                Err(TerminalPairError::UnexpectedSettlement),
+                "{:?}",
+                outcome.kind()
+            );
+        }
+        assert_eq!(
+            scalar_ir_outcome_terminal_value(outcome, None),
+            quire_contract_codegen::ir_outcome_terminal_value(outcome, None),
+            "{:?}",
+            outcome.kind()
+        );
+    }
+    // A Counterexample reads the settlement: CgDefect is Failed from both entry points.
     assert_eq!(
-        scalar_run_terminal_value(&verified, Some(ScalarSettlement::Parity(report.result()))),
-        Err(TerminalPairError::UnexpectedSettlement)
+        run_pair(Some(ScalarSettlement::CgDefect)),
+        Ok(TerminalValue::Failed)
     );
     assert_eq!(
-        scalar_run_terminal_value(&verified, Some(ScalarSettlement::CgDefect)),
-        Err(TerminalPairError::UnexpectedSettlement)
-    );
-    let proved = KaniOutcome::proved(1, "source", "context").unwrap();
-    assert_eq!(
-        scalar_ir_outcome_terminal_value(&proved, Some(ScalarSettlement::Parity(report.result()))),
-        Err(TerminalPairError::UnexpectedSettlement)
-    );
-    // No settlement: the ordinary values.
-    assert_eq!(
-        scalar_run_terminal_value(&verified, None),
-        run_terminal_value(&verified, None)
-    );
-    assert!(matches!(
-        scalar_run_terminal_value(&verified, None),
-        Ok(TerminalValue::Proved { .. })
-    ));
-    assert_eq!(
-        scalar_ir_outcome_terminal_value(&proved, None),
-        quire_contract_codegen::ir_outcome_terminal_value(&proved, None)
-    );
-    let refused = KaniOutcome::non_success(
-        KaniOutcomeKind::Refused,
-        quire_contract_model::std001_code!("kani_capability_missing"),
-        "source",
-        "context",
-    )
-    .unwrap();
-    assert_eq!(
-        scalar_ir_outcome_terminal_value(&refused, Some(ScalarSettlement::CgDefect)),
-        Err(TerminalPairError::UnexpectedSettlement)
-    );
-    // A Counterexample must differ from the unsettled entry point: the settlement is read.
-    assert_ne!(
-        ir_pair(Some(ScalarSettlement::CgDefect)).unwrap(),
-        TerminalValue::Refuted
+        ir_pair(Some(ScalarSettlement::CgDefect)),
+        Ok(TerminalValue::Failed)
     );
 }
 
@@ -740,6 +879,12 @@ fn step_13_causes_no_public_input_reaches_keep_their_classification() {
         ),
         ("operation", ScalarBuildError::Operation),
         (
+            "authority operands",
+            ScalarBuildError::Authority(ScalarAuthorityError::Operands(
+                quire_contract_model::CheckedScalarOperandError::UnknownNode,
+            )),
+        ),
+        (
             "authority occurrence",
             ScalarBuildError::Authority(ScalarAuthorityError::Occurrence),
         ),
@@ -866,11 +1011,37 @@ fn increment_fixture_has_no_out_of_result_range_value_and_agrees_natively() {
             .collect::<Vec<_>>(),
         [(0, 9), (1, 1)]
     );
-    let result = IntegerInterval::spanning(Integer::from(0_i64), Integer::from(10_i64));
-    let reach = IntegerInterval::spanning(Integer::from(1_i64), Integer::from(10_i64));
+    // The reachable exact sums come from the generated identity's own argument ranges; the
+    // result range comes from the generated harness's checked-domain line.
+    let reach_lower: i128 = identity
+        .arguments
+        .iter()
+        .map(|a| i128::from(a.minimum))
+        .sum();
+    let reach_upper: i128 = identity
+        .arguments
+        .iter()
+        .map(|a| i128::from(a.maximum))
+        .sum();
+    let line = fixture
+        .harness
+        .rust
+        .contents
+        .lines()
+        .find(|line| line.contains("let admitted = exact >= i128::from("))
+        .expect("the harness states its checked domain");
+    let bounds: Vec<i128> = line
+        .split("i128::from(")
+        .skip(1)
+        .map(|part| part.split("_i64)").next().unwrap().parse().unwrap())
+        .collect();
+    let [result_lower, result_upper] = bounds.as_slice() else {
+        panic!("a lower and an upper result bound: {line}")
+    };
+    assert_eq!((*result_lower, *result_upper), (0, 10));
     assert!(
-        result.lower() <= reach.lower() && reach.upper() <= result.upper(),
-        "every reachable exact sum lies inside the result range: no refusal case exists"
+        *result_lower <= reach_lower && reach_upper <= *result_upper,
+        "every reachable exact sum [{reach_lower}, {reach_upper}] lies inside the result range: no refusal case exists"
     );
     let original = plan(&fixture, &[9, 1]);
     let operands = original.operands().to_vec();

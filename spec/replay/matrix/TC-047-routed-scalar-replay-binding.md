@@ -32,20 +32,16 @@ passing proof-driven replay is claimed.
    Compile a public scalar builder call using those types directly, without a function identity.
 2. In the named real-Kani lane, run the generated harness and an arithmetic mutation control.
    Retain its actual selected assertion playback and proved generated content. This increment
-   has no admitted out-of-result-range exact value; do not invent one. Separately use bounded
-   addition with both operands and result in `[-1000,1000]`, the descriptor already accepted by
-   `kani_obligations::scalar_package`. Its QSL source counterpart must emit those checked ranges
-   and retain its original `call_site` package/source tie before positive replay is admitted.
-   `(600,600)` giving `1200` is an illustrative reachable out-of-result-range case; Kani may
-   choose another pair. For an actual retained Kani falsification with correct generated
-   refusal, seed a harness-assertion mutation that rejects otherwise correct refusal outside
-   the result range, leaving the oracle intact. Decode the actual retained operand pair,
-   assert that both operands are admitted and their exact sum is outside the result range,
-   and derive the expected exact result from that pair rather than assume a solver choice.
-   Retain that same mutated proof artifact and observe its oracle natively.
-   This is the harness-defect agreement control, not a source violation. An arithmetic mutation
-   instead supplies the divergence control. The observed ranges and native refusal must be
-   asserted; source admission failure remains a gate, not a hand-built package replacement.
+   has no admitted out-of-result-range exact value; do not invent one. Separately, on the
+   descriptor `kani_obligations::scalar_package` accepts, with both operands and result in
+   `[-1000,1000]`, assert the operand bounds and the harness's checked result domain, decode a
+   playback of an in-domain pair (for example `(600,600)` giving `1200`), require the adjacent
+   out-of-domain operand to be refused, and derive the pair's exact sum and assert it is outside
+   the result range. QSL's checker refuses a source with those checked ranges (`Unproved(Range)`),
+   so no QSL-emitted package exists for this case and its native observation and
+   harness-assertion mutation are not part of this step. An arithmetic mutation of the
+   increment fixture supplies the divergence control. The observed increment ranges must be
+   asserted; a hand-built package never replaces QSL admission.
 3. Build the scalar plan from the actual identity, decoded playback, proving package and
    retained staged path and byte set of that same proved generated oracle and the retained original generation
    limits context. Check setup precedence with one defect at a time: context/identity/schema,
@@ -222,7 +218,7 @@ passing proof-driven replay is claimed.
 | FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
 | FR-032-AC-6 | Immutable full report claim and actual sent context match the retained binding/original proving context on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/operator/operand range/result range/limits/native outcome on a refusal, exact Incomplete, generated fault or divergence |
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
-| FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
+| FR-032-AC-8 | Increment emission/result range is observed and its reachable exact sums are derived from the generated identity and shown inside the result range; the descriptor-level bounded-addition check asserts the `[-1000,1000]` bounds and checked result domain, refuses the adjacent operand and derives a chosen pair's exact sum outside the result range, with no claim of native observation for that case | Use a hand-built function harness, substitute increment as the out-of-range case, compare two hard-coded intervals instead of deriving them, relabel an expected refusal as source falsification, accept wrong emitted fixture ranges or claim native observation of the bounded-addition case |
 | FR-032-AC-9 | Scalar positional shape measured in merged QSL change #650: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
 | FR-032-AC-10 | Shared mint conforms to independently checked O-09 scalar bytes and actual QSL accepts the identity once kind/metadata authority is available | Use a copied encoder, stand-in verifier or synthetic acceptance |
 | FR-032-AC-11 | Digest mismatch yields typed Obligation refusal with both digests and owning codes | Retain old digest after positional/occurrence/kind change and accept |

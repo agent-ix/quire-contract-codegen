@@ -748,7 +748,6 @@ fn tc_047_bounded_addition_playback_derives_an_out_of_result_range_exact_value()
     assert!(!(-1000..=1000).contains(&exact), "outside the result range");
     // The adjacent operand is outside its own domain and is refused before any replay.
     assert!(decode(&[1001, 600]).is_err());
-    // The increment case has no such pair: operands in [0, 9] and [1, 1] reach only [1, 10].
 }
 
 /// The scalar harness states a property the oracle does not itself guarantee: the outcome agrees

@@ -255,7 +255,9 @@ pub fn ir_outcome_terminal_value(
 ///
 /// A distinct input of the scalar pair functions, not a variant of [`ReplaySettlement`]: the
 /// scalar route proves lowering parity, never a source refutation, so `Reproduced` and
-/// `Inconclusive(ReplayParity)` are unrepresentable here. `replay/` builds the value.
+/// `Inconclusive(ReplayParity)` are unrepresentable here. `replay/` builds the value. Neither
+/// scalar pair function checks that a settlement belongs to the paired obligation: the driver
+/// is the trusted pairing authority.
 #[derive(Debug)]
 pub enum ScalarSettlement<'a> {
     /// The genuine QSL operator-parity result of the driver's replay.
@@ -311,6 +313,9 @@ pub fn scalar_run_terminal_value(
 
 /// [`ir_outcome_terminal_value`] for a routed scalar outcome (FR-032-AC-22); the same shape as
 /// [`scalar_run_terminal_value`] over a `Counterexample` outcome.
+///
+/// The settlement is not checked to belong to this outcome's obligation: the driver is the
+/// trusted pairing authority.
 ///
 /// # Errors
 ///
