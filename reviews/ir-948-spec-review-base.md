@@ -47,3 +47,18 @@ CHANGES REQUIRED. AC-129 is honestly PLANNED and untagged (quire matrix: FR-015-
 | FR-015-AC-126 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:934 | Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917 clause implication and IR-948 V2 pre/post/invariant profiles regenerate through public CG with the reviewed admitted kernel API. Original semantic domains, selected propositions/clauses, independent expected values, subject controls, assertions, final completion covers and existing solver/unwind/time settings remain. For IR-917 the declared Boolean result replaces the former unbound predicate return while preserving the original `amount: Int[0, 1000]` domain, guarded arithmetic probes, independent native expectation a... |
 | FR-015-AC-80 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:890 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. |
 | FR-017-AC-63 | context_only | spec/kani/functional/FR-017-kani-execution-evidence.md:914 | PLANNED (IR-1022; decision D1 of IR-1436). Over launcher stand-ins that return real-shaped reports, the run of one harness is two-phase, and each launch's evidence records its argument vector and the ceilings applied to it. (a) A proof report with a failed assertion check, then a witness report that fails the same check class and location and prints a playback: `Falsified` carrying that playback verbatim, with two launches whose argument vectors are the identity's literal proof vector and literal witness vector and whose recorded ceilings, crate and target are equal. (b) The proof run fails... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | AC-129 requires the unmutated postcondition 'self.balance = pre(self.balance) - amount' to classify Verified, but names no customer subject for withdraw. The postcondition harness calls the subject at the request's subject path, so the verdict depends on a subject that debits amount from balance and on nothing else in the fixture. State the healthy subject (debit by amount, balance the only write) so a test author cannot pick one that makes the run vacuous or falsified. | spec/kani/functional/FR-015-bounded-kani-obligations.md:937 |
+| FND-005 | low | FR-015-AC-49 and AC-129 now say arithmetic clauses are owned by IR-917 (IR-917, In Progress, carries the AC-41 arithmetic proof controls), but AC-41's own status, edited in this PR for the fit caveat, still reads 'PLANNED (IR-489; ...)'. IR-489 is the Done spec ticket. Name IR-917 as AC-41's owner so the three criteria agree. | spec/kani/functional/FR-015-bounded-kani-obligations.md:853 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
+| FND-002 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
+| FND-003 | fixed | fixed in d4a235c8, 37eb4b4b; verified against origin/spec/ir-948-v2-contract-input at 37eb4b4b |
