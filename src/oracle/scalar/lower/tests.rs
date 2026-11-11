@@ -977,3 +977,89 @@ fn quantity_multiply_with_integer_result_refuses_before_emission() {
         })) if found == "integer"
     ));
 }
+
+/// A `sqrt` or `fma` descriptor against a `call`-form node whose body operator is not `call` is a
+/// `BodyMismatch` at the defensive seam (FR-014-AC-79), even when the operand count is right. The
+/// strict reader refuses such a body, so the seam is driven directly; the same node with the
+/// catalogued `call` operator is not refused as a body mismatch.
+#[trace("FR-014-AC-79", "TC-024")]
+#[test]
+fn sqrt_and_fma_refuse_a_call_form_node_with_another_body_operator() {
+    for (identity, operator, width, arguments) in [
+        (
+            "quire.op.ieee.float32.sqrt",
+            IeeeArithmeticOperator::SquareRoot,
+            IeeeWidth::Binary32,
+            1,
+        ),
+        (
+            "quire.op.ieee.float64.fma",
+            IeeeArithmeticOperator::FusedMultiplyAdd,
+            IeeeWidth::Binary64,
+            3,
+        ),
+    ] {
+        let float = v2_node(
+            '1',
+            "scalar_type",
+            if width == IeeeWidth::Binary32 {
+                "float32"
+            } else {
+                "float64"
+            },
+            '1',
+            CheckedTerm::aggregate(vec![]),
+        );
+        let descriptor = ExactScalarOperation::IeeeArithmetic {
+            operator,
+            width,
+            rounding: RoundingMode::NearestEven,
+        };
+        let check = |body_operator| {
+            let body = CheckedTerm::Application {
+                operator: body_operator,
+                operation: serde_json::from_value(serde_json::json!({"identity": identity}))
+                    .expect("typed operation"),
+                result_type: node_id('1'),
+                arguments: (0..arguments).map(|_| reference_to('2')).collect(),
+            };
+            let root = v2_node('4', "expression", "call", '1', body);
+            let nodes = [float.clone(), root.clone()];
+            let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+            let record = CompleteLoweringRecordV2::Lowered {
+                node: Box::new(CompleteContractNodeV2 {
+                    node: root.metadata.clone(),
+                    node_tag: CheckedNodeTag::Expression,
+                    source_map: vec![],
+                    semantic_type: root.semantic_type.clone(),
+                    dependencies: vec![],
+                    bounds: vec![],
+                    claims: vec![],
+                }),
+            };
+            check_item(&graph, &root.node_id, &record, &descriptor)
+                .map(|_| ())
+                .map_err(|error| match error {
+                    ItemCheckError::Refusal(refusal) => refusal,
+                    ItemCheckError::Generation(error) => panic!("{error:?}"),
+                })
+        };
+        assert!(
+            matches!(
+                check(ApplicationOperator::Binary),
+                Err(ExactScalarRefusal::BodyMismatch {
+                    expected_operator: "call",
+                    expected_arguments,
+                }) if expected_arguments == arguments
+            ),
+            "{identity}: a binary body operator is a BodyMismatch"
+        );
+        assert!(
+            !matches!(
+                check(ApplicationOperator::Call),
+                Err(ExactScalarRefusal::BodyMismatch { .. })
+            ),
+            "{identity}: the catalogued call operator passes the body check"
+        );
+    }
+}

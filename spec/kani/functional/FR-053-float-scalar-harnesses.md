@@ -341,7 +341,7 @@ or occurrence key.
 
 All supported-harness criteria are conditional on P1 (IR-1446). The unpinned-operand
 refusal of AC-3 is conditional on P2 (IR-69) for its upstream half. The `sqrt` and `fma`
-parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are were conditional on P3 (IR-1502), which is delivered; they remain conditional on P1.
+parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 were conditional on P3 (IR-1502), which is delivered; they remain conditional on P1.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |

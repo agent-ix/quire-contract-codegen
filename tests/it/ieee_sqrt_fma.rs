@@ -232,7 +232,7 @@ fn defensive_seam_refuses_other_shapes_for_sqrt_and_fma() {
     let package = compiled(
         "function add32 using v(a: Float32[nearest-even], b: Float32[nearest-even]): Float32[nearest-even] pure { a + b }\n\
          function cmp32 using v(a: Float32[nearest-even], b: Float32[nearest-even]): Boolean pure { quire::value::ieee::totalOrder(a, b) }\n\
-         function neg32 using v(a: Float32[nearest-even]): Float32[nearest-even] pure { quire::value::ieee::sqrt(a) }",
+         function root32 using v(a: Float32[nearest-even]): Float32[nearest-even] pure { quire::value::ieee::sqrt(a) }",
     );
     let descriptor = |operator| ExactScalarOperation::IeeeArithmetic {
         operator,
@@ -258,14 +258,16 @@ fn defensive_seam_refuses_other_shapes_for_sqrt_and_fma() {
             matches!(&refusal, ExactScalarRefusal::FormMismatch { expected: "call", found } if found == "binary"),
             "{operator:?} over add: {refusal:?}"
         );
-        // A `call` node of the wrong result type (Boolean) is a `ResultTypeMismatch`.
+        // A two-operand `call` node (`totalOrder`) has the wrong operand count for either
+        // descriptor: the call body is a `BodyMismatch`.
         let refusal = refusal_of(&package, &cmp, descriptor(operator));
+        let expected_arguments = if operator == IeeeArithmeticOperator::SquareRoot {
+            1
+        } else {
+            3
+        };
         assert!(
-            matches!(
-                refusal,
-                ExactScalarRefusal::BodyMismatch { .. }
-                    | ExactScalarRefusal::ResultTypeMismatch { .. }
-            ),
+            matches!(&refusal, ExactScalarRefusal::BodyMismatch { expected_operator: "call", expected_arguments: found } if *found == expected_arguments),
             "{operator:?} over a comparison: {refusal:?}"
         );
     }
