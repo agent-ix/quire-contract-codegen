@@ -877,17 +877,23 @@ with the required author `make kani-gate`; independent review and final acceptan
 
 ## Exhaustive concrete enumeration (IR-1022, planned)
 
-51. Build the FR-015-AC-119 clause crate from QSL source as in step 11, with no Kani launch, and run
-    the host enumeration of FR-015-AC-132 over `amount_current = 0` through `1000`. Healthy:
-    require `checked` 1001, `passed` 1001, no failing input, `symbolic_proof` false and the other
-    record fields of FR-017-AC-64. Then rewrite one expression of a copy of the generated crate per
-    mutant and rerun the same enumeration: the consequent `amount + 2 <= 1000` must fail at 999
-    and only there; the consequent `amount + 1 < 1000` at 999; the antecedent `amount <= 1000` at
-    1000; the body of `implies_short_circuit` returning `false` at 0; the oracle `+` returning
-    `left + right + 1` at 0; the oracle `+` returning `left` at 0. Run an enumeration that omits
-    999 and require the count check to fail (`checked` 1000 against 1001). Require that the record
-    text and every status line crediting it say enumeration evidence and contain no `proved` or
-    `verified by Kani` (FR-017-AC-64); the symbolic proof remains IR-1509.
+51. Build the FR-015-AC-119 clause crate from QSL source as in step 49, with no Kani launch, and run
+    the host enumeration of FR-015-AC-132 over `amount_current = 0` through `1000`, evaluating all
+    1001 values whatever fails: the sealed generated harness body as a host test (draw replaced by
+    the value) and the independent `i128` comparison of the subject result. Healthy: require
+    `sequence_exact` true, `checked` 1001, `passed` 1001, `failing_inputs` empty, `symbolic_proof`
+    false and the other record fields of FR-017-AC-64. Then apply one mutant per run at its owner's
+    site and rerun the same enumeration, requiring the exact `failing_inputs` set: in the compiled
+    subject source, the consequent `amount + 2 <= 1000` gives {999}, `amount + 1 < 1000` gives {999}
+    and the antecedent `amount <= 1000` gives {1000}; in an isolated quire-contract-runtime
+    checkout, the body of `implies_short_circuit` returning `false` gives all 1001 values; in an
+    isolated quire-exact checkout, `left.0.checked_add(right.0)` rewritten to `left + right + 1`
+    and, separately, to `left` each fail through the generated probe with 0 in the set. Run an
+    enumeration that omits 999 and one that visits 998 twice and omits 999, and require each to
+    fail the sequence check. Check the printed record and the status column of the FR-015-AC-132
+    and FR-017-AC-64 rows of `tests.md` for the tokens listed in FR-017-AC-64 (none may appear)
+    and for the phrase `enumeration evidence`; a record renderer printing `Proved` must fail. The
+    symbolic proof remains IR-1509.
 
 ## Blocked
 
