@@ -48,3 +48,5 @@ Ticket: IR-1515. PR #791 (spec only, one commit 995a89f7 on origin/main a52a000e
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | still-open | Round 1, head e6e8dfa7: IR-1518's title now reads (FR-015-AC-135, AC-136), but its description still says 'Code ticket for the planned criterion FR-015-AC-134'. It also still says 'The request carries the QSL-issued NodeKey ... CG derives no key from a CheckedNodeId', which contradicts the rewritten AC-135. Only comment 89393a00 corrects it. Fix: edit the IR-1518 description. This is a tracker edit; no spec change is needed. |
+| FND-001 | fixed | Round 2, head 60c745ef: verified in the diff e6e8dfa7..60c745ef (tracker edits verified via linear issue view) |
+| FND-002 | fixed | Round 2, head 60c745ef: verified in the diff e6e8dfa7..60c745ef (tracker edits verified via linear issue view) |

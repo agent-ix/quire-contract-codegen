@@ -49,3 +49,4 @@ Ticket: IR-1515. PR #791 (spec only, one commit 995a89f7 on origin/main a52a000e
 | --- | --- | --- |
 | FND-001 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
 | FND-002 | fixed | Round 1, head e6e8dfa7: verified in the diff 995a89f7..e6e8dfa7 |
+| FND-003 | fixed | Round 2, head 60c745ef: verified in the diff e6e8dfa7..60c745ef (tracker edits verified via linear issue view) |
