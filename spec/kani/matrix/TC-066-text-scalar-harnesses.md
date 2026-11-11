@@ -96,25 +96,55 @@ Execute generated proofs only with the authorized runner and budget.
     at/under pair to the byte limit) and assert typed refusal with no replay. For a
     valid witness assert one `WitnessValue::Text` per parameter reaches public replay
     for that declaration. Record an unavailable route as an open dependency (AC-10).
-11. Inspect the run record for operation and source association, bounds, P and C,
-    correspondence, ordered physical bindings, argv, unwind bound, tool versions,
+11. Inspect the run record for operation and source association, bounds, P, the attained
+    length A, the boundary lengths L and L_b, and C, correspondence, ordered physical bindings, argv, unwind bound, tool versions,
     target, dependency cohort including the carrier, limits, observed peak memory,
     checks, cover, playback, exit and terminal classification (AC-11).
 12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the
     shipped `compare_text` over the step 2 enumeration for all six operators, at zero,
     exact and short budgets, and assert equal outcome, ordered charges, denied next
-    charge and counters. Repeat over a fixed long-payload family: per supported profile
-    a stated host `TextType` and the largest admitted length L = min(P, C) and L - 1
-    (`unicode-scalars` with all four-byte scalars), with pairs differing only in the
-    payload's own final byte (position L, or L - 1 for the shorter payloads; a continuation byte of a multibyte last scalar, or a
-    one-byte final scalar, never a differing lead byte), only in the first byte, and
-    only in length. For a payload of C + 1 bytes assert the carrier's encoding
+    charge and counters. Repeat over the step 14 family. For a payload of C + 1 bytes assert the carrier's encoding
     refusal, not agreement. Confirm the carrier makes its replacement callable from
     the host build (P1). Mutate the replacement's ordering, charge sequence and
-    outcome, plus an ordering loop bounded at L - 1 (which must fail the final-byte
-    pair) and a charge from a truncated length; each must fail the differential
-    (AC-12). The result covers the enumerated and boundary payloads, not every payload
+    outcome; for `binary-utf8`, `unicode-scalars`, `nfd` and `nfkd` bound the ordering loop at L - 1 or earlier
+    (which must fail the final-byte pair); for `nfc` and `nfkc` bound a payload-side
+    decode or normalize-input loop at L - 1 or earlier (which must fail the final-byte
+    pair under `eq`; an ordering loop bounded at L - 1 is not claimed there); and compute a charge from a truncated
+    length; each must fail the differential (AC-12). The result covers the enumerated and boundary payloads, not every payload
     up to C.
+13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc`
+    and `nfkc` at `max` of 0, 1, 2 and 8 by the quire-exact FR-400-AC-6 construction
+    (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most
+    `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by
+    `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most
+    P for every profile, A equals the independently computed P for the four profiles
+    other than `nfc` and `nfkc`, A is below P for `nfc` and `nfkc` at `max` of 1, A
+    equals `max` times the independently enumerated maximum decomposition length for
+    `nfc` and `nfkc` only, and at `max` of 0 the payload is empty with A and P zero.
+    Run the mutants: the family built at P for `nfc` at `max` of 1 (the unit plus one
+    appended four-byte self-normal scalar, refused by `Text[1, 1]`), the stability
+    filter dropped for `nfkc` at `max` of 1 (U+FDFA, refused), nfkd taken for `nfc` at
+    `max` of 1 (U+FDFA, refused), the unit not repeated at `max` of 2 under `nfc`
+    (one retained scalar, below `min` 2, refused), and the first multi-scalar
+    decomposition (U+00C0) instead of the longest at `max` of 1 under `nfc` (admitted,
+    fails the equality with the enumerated maximum). Each must fail (AC-13). Assert
+    support is unchanged: an item with P above C stays `unsupported` (step 3) even
+    when A is at most C.
+14. Build the long-payload family on the host for each supported profile over
+    `Text[0, max]` at L = A and L_b (AC-14): confirm every payload of every pair is
+    admitted by `TextType::admits`, that L_b is L - 1 for `binary-utf8`,
+    `unicode-scalars`, `nfd` and `nfkd`, and that for `nfc` and `nfkc` the L_b unit is
+    the first stable scalar in scalar order with the longest shorter decomposition
+    that has an admitted final-byte variant. Assert the final-byte pair is found at L
+    and, when L_b is greater than 0, at L_b for every supported profile, the first-byte pair is found at L and, when L_b is greater than 0, at
+    L_b for `binary-utf8`, `unicode-scalars`, `nfd` and `nfkd`, the length pair is
+    built, and an absent first-byte pair for `nfc` or `nfkc` is recorded as absent.
+    At `max` of 0 assert the family is the empty payload only. For `binary-utf8` at `max` of 1 assert L_b is 0, the empty payload is admitted by `Text[0, 1]`, only the length pair is built at L_b, and the final-byte and first-byte pairs are required at L only (a search that demands them at the empty L_b is a defect and fails the step). Run the mutants: L_b as
+    L - 1 for `nfc` at `max` of 1 (11 bytes, no admitted payload), the family type
+    `Text[max, max]` for `binary-utf8` at `max` of 2 (the 1-byte payload is refused),
+    the L_b unit chosen without the final-byte-variant condition for `nfc` at `max` of
+    1 (U+0CCB, whose final-byte search finds none), and a first-byte search that
+    returns none for `unicode-scalars` at `max` of 1. Each must fail (AC-14).
 
 ## Expected Results
 
@@ -125,7 +155,7 @@ agreement.
 
 ## Status
 
-PLANNED: all twelve FR-052 criteria are unimplemented and untagged. No missing
+PLANNED: all fourteen FR-052 criteria are unimplemented and untagged. No missing
 carrier capability (IR-1445), `Text` constructor (IR-1499), stated payload-byte bound (IR-1500), loop-free normalization (IR-1501), replay route or generated-proof result
 is waived. No capacity C is known to verify within a request's ceilings; TC-050
 recorded a 1 GiB bound exceeded and the IR-1436 review records 2.6 GiB.

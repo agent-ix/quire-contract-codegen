@@ -1,0 +1,39 @@
+---
+id: SR-17940486709564847047642
+title: "IR-1506 PR #779 FR-052 attained-length spec EARS conformance review"
+type: SpecReview
+analysis: ears-conformance
+date: 2026-11-11
+scope: "agent-ix/quire-contract-codegen; PR #779 @ a0d477a0; IR-1506; spec/kani/functional/FR-052-text-scalar-harnesses.md, spec/kani/matrix/TC-066-text-scalar-harnesses.md, spec/kani/matrix/tests.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-052
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-066
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1506. Spec-only PR #779 (head a0d477a0, one commit on origin/main d7e0505f), reviewed in a separate detached worktree of that head, scoped to git diff origin/main...HEAD (3 files under spec/kani/). Checked against quire-exact origin/main 7200065: FR-399, FR-400 (Statement, Derivation, Looseness, the 'Consequence for CG FR-052-AC-12' paragraph, FR-400-AC-1..AC-6), FR-401 (the 'table that does not fit' rule) and TC-947..TC-949, and against FR-052 at origin/main (git show). Host-side data check with Python unicodedata (Unicode 16.0.0, no cargo, no Kani): the stable scalars (nfc(c)=c, resp. nfkc(c)=c) with the most nfd (resp. nfkd) UTF-8 bytes are U+16126, U+16127, U+16128, U+16D6A at 12 bytes, so U+16126 is first, matching FR-400-AC-6; stable decomposition byte lengths are {1,2,3,4,5,6,8,9,12}; without the stability filter the nfkd maximum is U+FDFA (33 bytes, 18 scalars), and U+FDFA is also the nfc-stable scalar with the most nfkd bytes; the first nfc-stable scalar with a multi-scalar nfd is U+00C0 (3 bytes). An exhaustive canonical-equivalence search found admitted Text[1,1] nfc payload lengths {1..9,12} (none at 10 or 11); under nfkc a 10-byte admitted payload exists (for example U+1D6C2 U+0313 U+0300 U+0345, retained U+1F82), so L_b = 9 is a valid constructed length but not the nearest admitted length below A for nfkc. Single-byte variant search under Text[max,max]: at L for nfc/nfkc the final-byte pair exists (U+1611F to U+16120, that is U+16126 to U+16128) and no first-byte pair exists at max 1 or 2; at L_b no first-byte pair exists, and the final-byte pair exists for a Hangul LVT unit (23 variants) but not for U+0CCB (0 variants). make spec passes (exit 0, no warnings in the changed files); quire validate on FR-052 reports no warnings at base or head; quire matrix lists FR-052-AC-1..AC-13 untagged. No Unicode version literal, hash or pin is added by the diff (the pre-existing 'pinned Unicode 17.0.0 tables' sentence at FR-052:137 is unchanged). No ID collision: no other open PR touches FR-052, TC-066 or the FR-052 row of spec/kani/matrix/tests.md (#523 edits only FR-015 rows of that file); FR-052-AC-13 is referenced nowhere else. No reviews/ir-1506-* file exists in CG or any worktree.
+
+## Verdict
+
+PASS. The diff adds no requirement statement and changes no SHALL clause. The FR-052 Description statement ('When an admitted request selects ... CG SHALL generate') is unchanged and keeps its event form. AC-3, AC-11, AC-12 and AC-13 are direct verification assertions, not given-when-then statements. The new Bound and ceiling paragraph is descriptive prose with no SHALL. quire validate reports no ears or ac grammar warnings for FR-052 or TC-066 at base or head. No memory-fit claim is added ('No capacity is claimed to fit any ceiling' is unchanged). The compound shape of AC-13 is recorded under integrity.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | low | No findings (placeholder) | - |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-052 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:45-54 | When an admitted request selects a reader-admitted `text` scalar comparison (`quire.op.text.eq`, `.ne`, `.lt`, `.le`, `.gt`, `.ge`) over two parameters each typed by a `text_bounds` domain, and the planned prerequisite below is available, CG SHALL generate a bounded Kani harness that proves the generated text oracle of [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) agrees with an independent native expression of the same comparison over every admitted symbolic operand pair. This is the text row of the IR-269 scalar renderer that TC-030's Text scalar row settles today as `O... |
+| FR-052-AC-3 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:289 | The payload-byte bound P is `max` for `binary-utf8`, 4 x `max` (checked arithmetic) for `unicode-scalars`, and the bound IR-1500 states (quire-exact FR-400, `payload_byte_bound`) for `nfc`, `nfd`, `nfkc` and `nfkd`. P is an upper bound, which may exceed every admitted payload length (AC-13). An operand with P not greater than C is supported. An operand with P greater than C, a `max` or product beyond the carrier's length width or `u64`, or a normalizing profile whose bound IR-1500 does not state, yields named `unsupported` retaining the declared `max`, the profile, P (or its absence) and C;... |
+| FR-052-AC-11 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:297 | Run evidence records the operation and source association, both operands' `text_bounds`, the payload-byte bound P, the attained length A, the boundary lengths L and L_b of AC-12 and the capacity C per operand, correspondence, ordered physical bindings and their logical grouping, subject and full ordered backend arguments, the unwind bound, Kani/Rust/CBMC/solver versions, target, dependency cohort including the carrier, limits, the observed peak memory, raw checks, cover and playback, exit and typed terminal outcome. No-run, refusal, cover failure, resource exhaustion and semantic falsificat... |
+| FR-052-AC-12 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:298 | On the host, the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` agree for all six operators on the typed outcome, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets, over the AC-2 enumeration and over a fixed long-payload family at the capacity boundaries. For each supported profile the family uses a stated host `TextType` at the operand's declared `max` and builds its payloads at the attained length L = A of AC-13 (not at P) and at the lower length L_b of AC-13. L equals min(A, C), because AC-3 supports an item... |
+| FR-052-AC-13 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:299 | The attained length A(profile, `max`) is computed on the host at the operand's declared `max` by the construction of quire-exact FR-400-AC-6, not read from a constant and not replaced by P. For `nfc` (respectively `nfkc`), c is the first, in scalar order, of the stable scalars (`nfc(c) = c`, respectively `nfkc(c) = c`) whose `NormalizationForm::apply` nfd (respectively nfkd) output has the most UTF-8 bytes; the payload is that output repeated `max` times, is admitted by the host `TextType::admits` under `Text[max, max]` of the profile, and A is its byte length. For `binary-utf8` the payload... |
+| FR-052 Bound and ceiling (attained length A) | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:145-155 | P is a support upper bound and is not always attained. A fourth quantity, the attained payload length A(profile, `max`), is the byte length of the longest payload that quire-exact's [FR-400](ix://agent-ix/quire-exact/FR-400) (criterion FR-400-AC-6) constructs and the owner admits under that declared type. A is at most P. For `binary-utf8`, `unicode-scalars`, `nfd` and `nfkd`, A equals P. For `nfc` and `nfkc` A is below P: the scalar factor of P is attained but not by four-byte scalars, so a payload of P bytes does not exist and a boundary family cannot be built there. A is attained, not cla... |
