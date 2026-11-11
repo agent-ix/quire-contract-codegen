@@ -236,6 +236,9 @@ pub(super) enum Statement {
         condition: ExprText,
         message: String,
     },
+    /// Leak a fat runtime value so no symbolic drop glue runs. At the top level the
+    /// renderer emits it after the cover, which still observes the value.
+    Forget(String),
     /// A post-call probe executes only on the checked short-circuit path.
     ConditionalProbe {
         condition: ExprText,
@@ -553,6 +556,11 @@ impl HarnessSpec {
                     }
                     message(text)?;
                 }
+                Statement::Forget(name) => {
+                    if !called || !names.contains(name) {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                }
                 Statement::ConditionalProbe { body, .. } => {
                     if !called {
                         return Err(HarnessSpecError::AssertBeforeCall);
@@ -564,6 +572,7 @@ impl HarnessSpec {
                                 bind(&mut local, &binding.name)?;
                             }
                             Statement::Assert { message: text, .. } => message(text)?,
+                            Statement::Forget(name) if local.contains(name) => {}
                             _ => return Err(HarnessSpecError::InvalidExpression),
                         }
                     }

@@ -300,7 +300,14 @@ pub(crate) fn generate_v2_clause_native_oracle_with_view(
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum IntegerRenderPolicy {
     General,
+    /// Native integers; the stop is a payload-free Copy kind (the proof path).
     Native,
+}
+
+impl IntegerRenderPolicy {
+    fn is_native(self) -> bool {
+        self == Self::Native
+    }
 }
 
 pub(crate) fn generate_v2_clause_oracle_with_view(
@@ -337,7 +344,7 @@ fn generate_clause_oracle_with_view(
             _ => None,
         })
         .collect::<Vec<_>>();
-    let (mut source, native_integer_selection) = if policy == IntegerRenderPolicy::Native {
+    let (mut source, native_integer_selection) = if policy.is_native() {
         let (source, selected) = native::helpers(&plan, node_id)?;
         (source, Some(selected))
     } else {
@@ -346,11 +353,19 @@ fn generate_clause_oracle_with_view(
             None,
         )
     };
-    source.push_str(STOP_TYPE);
+    source.push_str(if policy.is_native() {
+        THIN_STOP_TYPE
+    } else {
+        STOP_TYPE
+    });
     if !operations.is_empty() {
-        source.push_str(MEASURED_HELPER);
+        source.push_str(if policy.is_native() {
+            THIN_MEASURED_HELPER
+        } else {
+            MEASURED_HELPER
+        });
     }
-    let integer_type = if policy == IntegerRenderPolicy::Native {
+    let integer_type = if policy.is_native() {
         "nx::NativeInteger"
     } else {
         "rt::Integer"
@@ -392,7 +407,11 @@ fn generate_clause_oracle_with_view(
                 policy,
             )?;
         }
-        source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
+        if policy.is_native() {
+            source.push_str(&format!("\n/// The admitted V2 clause condition; a stop is a payload-free kind.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<bool, ClauseStop> {{\n    value_{root}({arguments}meter)\n}}\n"));
+        } else {
+            source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
+        }
     }
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(V2ClauseRefusal::Render);
@@ -643,6 +662,50 @@ pub enum ClauseStop {
 }
 "#;
 
+const THIN_STOP_TYPE: &str = r#"
+/// A generated condition stopped. The kind carries no runtime payload.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClauseStop {
+    /// A typed runtime evaluation was undefined.
+    Undefined,
+    /// A typed runtime evaluation refused with an integer out of its semantic domain.
+    IntegerOutOfDomain,
+    /// A typed runtime evaluation refused for another reason.
+    Refused,
+    /// A typed runtime evaluation did not complete within its meter.
+    Incomplete,
+    /// A scalar oracle construction stopped.
+    Oracle,
+    /// An admitted integer literal could not be represented.
+    InvalidConstant,
+}
+"#;
+
+const THIN_MEASURED_HELPER: &str = r#"
+fn measured<T>(outcome: rt::Outcome<T>) -> Result<T, ClauseStop> {
+    match outcome {
+        rt::Outcome::Completed(value) => Ok(value),
+        rt::Outcome::Undefined(reason) => {
+            core::mem::forget(reason);
+            Err(ClauseStop::Undefined)
+        }
+        rt::Outcome::Refused(reason) => {
+            let kind = if matches!(&reason, rt::Refusal::IntegerOutOfDomain { .. }) {
+                ClauseStop::IntegerOutOfDomain
+            } else {
+                ClauseStop::Refused
+            };
+            core::mem::forget(reason);
+            Err(kind)
+        }
+        rt::Outcome::Incomplete(record) => {
+            core::mem::forget(record);
+            Err(ClauseStop::Incomplete)
+        }
+    }
+}
+"#;
+
 const MEASURED_HELPER: &str = r#"
 fn measured<T>(outcome: rt::Outcome<T>) -> Result<T, ClauseStop> {
     match outcome {
@@ -665,7 +728,7 @@ fn render_step(
 ) -> Result<(), V2ClauseRefusal> {
     let result = match step.kind {
         ValueKind::Boolean => "bool",
-        ValueKind::Integer if policy == IntegerRenderPolicy::Native => "nx::NativeInteger",
+        ValueKind::Integer if policy.is_native() => "nx::NativeInteger",
         ValueKind::Integer => "rt::Integer",
     };
     source.push_str(&format!("\nfn value_{index}({parameters}meter: &mut rt::Meter) -> Result<{result}, ClauseStop> {{\n"));
@@ -677,7 +740,7 @@ fn render_step(
     source.push_str(");\n");
     match &step.term {
         StepTerm::Boolean(value) => source.push_str(&format!("    Ok({value})\n")),
-        StepTerm::Integer(value) if policy == IntegerRenderPolicy::Native => {
+        StepTerm::Integer(value) if policy.is_native() => {
             let value = value.parse::<i128>().map_err(|_| V2ClauseRefusal::Render)?;
             source.push_str(&format!(
                 "    Ok(nx::NativeInteger::new({}))\n",
@@ -711,6 +774,11 @@ fn render_step(
             arguments: children,
             ..
         } => {
+            let oracle_stop = if policy.is_native() {
+                "|_| ClauseStop::Oracle"
+            } else {
+                "ClauseStop::Oracle"
+            };
             let arg = |position| -> Result<String, V2ClauseRefusal> {
                 let child = children.get(position).ok_or(V2ClauseRefusal::Render)?;
                 Ok(format!("value_{child}({arguments}meter)?"))
@@ -720,7 +788,7 @@ fn render_step(
                     operator: BooleanOperator::Not,
                     ..
                 } => {
-                    format!("let operand = {};\n    let outcome = scalar_{index}(operand, meter).map_err(ClauseStop::Oracle)?;", arg(0)?)
+                    format!("let operand = {};\n    let outcome = scalar_{index}(operand, meter).map_err({oracle_stop})?;", arg(0)?)
                 }
                 ExactScalarOperation::Boolean { operator, .. } => {
                     let decided = match operator {
@@ -729,13 +797,13 @@ fn render_step(
                         BooleanOperator::Implies => "!left",
                         BooleanOperator::Not => return Err(V2ClauseRefusal::Render),
                     };
-                    format!("let left = {};\n    let right = if {decided} {{ false }} else {{ {} }};\n    let outcome = scalar_{index}(left, |_| rt::Outcome::Completed(right), meter).map_err(ClauseStop::Oracle)?;", arg(0)?, arg(1)?)
+                    format!("let left = {};\n    let right = if {decided} {{ false }} else {{ {} }};\n    let outcome = scalar_{index}(left, |_| rt::Outcome::Completed(right), meter).map_err({oracle_stop})?;", arg(0)?, arg(1)?)
                 }
                 ExactScalarOperation::IntegerArithmetic {
                     operator: crate::oracle::operator_catalog::IntegerOperator::Negate,
                     ..
                 } => {
-                    format!("let operand = {};\n    let outcome = scalar_{index}(&operand, meter).map_err(ClauseStop::Oracle)?;", arg(0)?)
+                    format!("let operand = {};\n    let outcome = scalar_{index}(&operand, meter).map_err({oracle_stop})?;", arg(0)?)
                 }
                 ExactScalarOperation::IntegerArithmetic { .. }
                 | ExactScalarOperation::IntegerModulo { .. }
@@ -744,13 +812,13 @@ fn render_step(
                     operands: EqualityOperandKind::Integer,
                     ..
                 } => {
-                    format!("let left = {};\n    let right = {};\n    let outcome = scalar_{index}(&left, &right, meter).map_err(ClauseStop::Oracle)?;", arg(0)?, arg(1)?)
+                    format!("let left = {};\n    let right = {};\n    let outcome = scalar_{index}(&left, &right, meter).map_err({oracle_stop})?;", arg(0)?, arg(1)?)
                 }
                 ExactScalarOperation::Equality {
                     operands: EqualityOperandKind::Boolean,
                     ..
                 } => {
-                    format!("let left = {};\n    let right = {};\n    let outcome = scalar_{index}(left, right, meter).map_err(ClauseStop::Oracle)?;", arg(0)?, arg(1)?)
+                    format!("let left = {};\n    let right = {};\n    let outcome = scalar_{index}(left, right, meter).map_err({oracle_stop})?;", arg(0)?, arg(1)?)
                 }
                 _ => return Err(V2ClauseRefusal::Render),
             };

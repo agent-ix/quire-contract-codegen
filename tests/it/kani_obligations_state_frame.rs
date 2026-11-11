@@ -1366,6 +1366,84 @@ fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
         .expect("the native clause harness is valid Rust syntax");
 }
 
+/// The native proof oracle stops with a payload-free Copy kind; the general oracle is the control.
+#[trace("TC-025", "FR-015-AC-145")]
+#[test]
+fn native_clause_oracle_stop_is_a_payload_free_copy_kind() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let native = generate_v2_clause_native_oracle(&package, &clause).expect("native eligible");
+    let general = generate_v2_clause_oracle(&package, &clause).unwrap();
+    syn::parse_file(&native.source).expect("native oracle is valid Rust");
+    let stop = &native.source[native.source.find("pub enum ClauseStop").unwrap()..];
+    let stop = &stop[..stop.find('}').unwrap()];
+    assert!(!stop.contains('('), "no variant carries a payload: {stop}");
+    assert!(native
+        .source
+        .contains("#[derive(Clone, Copy, Debug, Eq, PartialEq)]\npub enum ClauseStop"));
+    assert!(native
+        .source
+        .contains("-> Result<bool, ClauseStop> {\n    value_"));
+    assert!(!native.source.contains("ClauseStop::Runtime"));
+    assert_eq!(
+        native.source.matches("core::mem::forget(reason);").count(),
+        2,
+        "both the undefined and the refused payload are forgotten"
+    );
+    assert!(native.source.contains("map_err(|_| ClauseStop::Oracle)"));
+    assert!(native.source.contains("core::mem::forget(record);"));
+    assert!(native.source.contains("ClauseStop::IntegerOutOfDomain"));
+    // Control: the general oracle keeps the full runtime outcome.
+    assert!(general.source.contains("Runtime(rt::Outcome<bool>)"));
+    assert!(general
+        .source
+        .contains("-> Result<rt::Outcome<bool>, ClauseStop>"));
+}
+
+/// A generated native harness never drops a fat runtime value, and the cover still observes it.
+#[trace("TC-025", "FR-015-AC-143", "FR-015-AC-144")]
+#[test]
+fn native_clause_harness_forgets_fat_values_after_the_cover() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
+        dependencies: None,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one harness");
+    };
+    let text = &harness.rust.contents;
+    syn::parse_file(text).expect("valid Rust");
+    let cover = text.find("kani::cover!(").unwrap();
+    let forget = text
+        .rfind("core::mem::forget(meter);")
+        .expect("the meter is forgotten");
+    assert!(forget > cover, "the meter is forgotten after the cover");
+    // The native outcome is Copy, so forgetting it would be a no-op the compiler denies.
+    assert!(!text.contains("core::mem::forget(outcome);"));
+    assert!(text.contains("core::mem::forget(arithmetic_outcome_0);"));
+    assert!(text.contains("core::mem::forget(arithmetic_meter_0);"));
+    assert!(text.contains("matches!(&outcome, Ok(true))"));
+    assert!(!text.contains("rt::Outcome::Completed(true)"));
+}
+
 #[trace("FR-015-AC-126", "TC-025")]
 #[test]
 fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation() {
@@ -6922,7 +7000,13 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
             _ => None,
         })
         .expect("the selected invariant proof function");
-    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.last() else {
+    // Fat runtime values are forgotten after the cover (FR-015-AC-143).
+    let is_forget = |statement: &&syn::Stmt| {
+        matches!(statement, syn::Stmt::Expr(syn::Expr::Call(call), _)
+            if matches!(&*call.func, syn::Expr::Path(path)
+                if path.path.segments.last().is_some_and(|segment| segment.ident == "forget")))
+    };
+    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.iter().rfind(|s| !is_forget(s)) else {
         panic!("the invariant's last statement must be its domain cover");
     };
     assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
@@ -7270,7 +7354,12 @@ fn qsl_invariant_emitted_oracles_execute_healthy_mutant_and_two_field_conditions
             let evaluation = if index >= 3 {
                 format!("assert_eq!(oracle_clause(), {expected});")
             } else {
-                format!("let outcome = oracle_clause({arguments}&mut meter); assert!(matches!(outcome, Ok(rt::Outcome::Completed(actual)) if actual == ({expected})), \"actual generated invariant oracle disagrees: {{outcome:?}}\");")
+                let completed = if native {
+                    "Ok(actual)"
+                } else {
+                    "Ok(rt::Outcome::Completed(actual))"
+                };
+                format!("let outcome = oracle_clause({arguments}&mut meter); assert!(matches!(outcome, {completed} if actual == ({expected})), \"actual generated invariant oracle disagrees: {{outcome:?}}\");")
             };
             source.push_str(&format!(r#"
 mod case_{index}_{native} {{

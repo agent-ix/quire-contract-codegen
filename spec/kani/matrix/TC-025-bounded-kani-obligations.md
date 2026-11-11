@@ -1019,6 +1019,20 @@ with the required author `make kani-gate`; independent review and final acceptan
     `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (the reader refuses 33). The
     bound mutants 32 to 40 and 32 to 31 each fail one of them.
 
+## Tractable clause harness (IR-1022)
+
+55. Native clause generation, FR-015-AC-143 to FR-015-AC-145. Generate the FR-015-AC-119 clause
+    harness through the native route. Require the oracle's `ClauseStop` to be a `Copy` enumeration
+    with no payload and `oracle_clause` to return `Result<bool, ClauseStop>`, the harness to
+    assert `matches!(&outcome, Ok(true))`, and `core::mem::forget` of the meter
+    after the cover and of each arithmetic probe's outcome and meter. Control: the general oracle
+    keeps `Runtime(rt::Outcome<bool>)`. Mutants: restoring the `Runtime` variant in the thin stop
+    type (site: `THIN_STOP_TYPE` in the clause generator), dropping the forget statements (site:
+    `forget_fat_values` and the arithmetic probe body) and emitting the forget before the cover
+    (site: the statement renderer) each fail the test of this step. The native Boolean equality
+    kernel (FR-015-AC-146) and the installed `Verified` and 999 playback runs
+    (FR-015-AC-147 and FR-015-AC-148) are PLANNED.
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
