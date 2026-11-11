@@ -48,6 +48,17 @@ Round 1, verified at head 7e0d82b3, rebased onto origin/main f38f8024.
 | FND-002 | fixed | `FR-029-AC-37` was added to the trace of `cause_matrix_preserves_literal_terminal_rows_and_pair_refusals`. |
 | FND-003 | fixed | New test `held_members_with_different_ceilings_form_separate_witness_runs`. A mutant that ignores ceilings for the witness phase fails it. |
 
+Round 2, verified at head 8b5ab0a7 (fix commit 8b5ab0a7 on 7e0d82b3; origin/main f38f8024 unchanged). One focused cargo job ran with runtime-selected mutants in `has_valid_provenance` (src/kani/identity.rs, all three impls; patch at scratchpad `ir1022-review-mutants-round2.patch`, reverted). With the mutants dormant, all 25 selected tests passed. Both mutants were caught by both new tests:
+
+- `prov_all` drops the identity comparison.
+- `prov_witness` compares the identities with `witness_options` masked, which is the targeted mutant.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | Two tests were added, both tagged FR-015-AC-9 and TC-025. `a_tampered_witness_vector_of_a_clause_harness_is_a_provenance_mismatch` covers a V2 clause harness: all three entry points refuse with `HarnessProvenanceMismatch` and nothing launches. `a_collection_harness_seal_covers_the_witness_vector` covers a collection harness, with the witness vector and the proof vector each tampered alone. FR-015-AC-9 was narrowed honestly: it now says the `new_constrained` recompute is exercised only through generation and that a witness-vector mismatch there is not separately tested. It no longer claims both checks are covered. |
+| FND-005 | fixed | FR-017-AC-63(a) now claims only that the recorded ceilings are equal. It states that the evidence records no crate or target directory, so their equality is not asserted and stays planned. |
+| FND-006 | fixed | The `code()` sentence is now wrapped at 100 columns. The only remaining line over 100 in that bullet is FR-017:264, and it is unchanged from origin/main, so it is outside this PR's diff. |
+
 ## New findings (disposition pass 1)
 
 | ID | Severity | Summary | Refs |
