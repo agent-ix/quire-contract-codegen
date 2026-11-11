@@ -30,8 +30,8 @@ use crate::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
             CollectionPreconditionIdentity, CollectionPredicateIdentity,
             KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
-            ProofDependencySnapshot, ScalarIntegerRepresentation, ScalarObligationArgument,
-            SymbolicBounds, V2ClauseObligationIdentity, V2ClauseStateField,
+            ProofDependencySnapshot, ScalarIntegerRepresentation, SymbolicBounds,
+            V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead, V2ClauseSelection,
         },
     },
 };
@@ -612,54 +612,66 @@ pub(super) fn render_collection_operation(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&spec.path().module.to_string(), &identity, &rust)?;
-    let selected = operation_selected_reads(context);
-    super::clause::v2::seal_with_selected(&operation.claim, identity, Some(selected), rust, record)
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        operation.obligation.clone(),
+        rust,
+        record,
+    ))
 }
 
-/// The parameters and state reads a whole-object collection clause draws, in the record shape
-/// of a claim. A sequence-valued field's domain is its inclusive cardinality range.
+impl LoweredCollectionClaim {
+    /// The whole-object clause's parameters and state reads, as a claim states them. A
+    /// sequence-valued field's domain is its inclusive cardinality range (IR-1515).
+    pub(super) fn operation_selection(&self) -> Option<V2ClauseSelection> {
+        let context = &self.operation.as_ref()?.spec.identity;
+        Some(operation_selected_reads(context))
+    }
+}
+
+/// The parameters and state reads a whole-object collection clause draws.
 fn operation_selected_reads(
     context: &crate::kani::identity::CollectionOperationIdentity,
-) -> (Vec<ScalarObligationArgument>, Vec<V2ClauseStateField>) {
+) -> V2ClauseSelection {
     let domain = |element: &CollectionElementIdentity| match element {
         CollectionElementIdentity::Boolean => (0, 1),
         CollectionElementIdentity::Integer { minimum, maximum } => (*minimum, *maximum),
     };
-    let arguments = context
-        .parameters
-        .iter()
-        .map(|parameter| {
-            let (minimum, maximum) = domain(&parameter.domain);
-            ScalarObligationArgument {
-                identifier: parameter.name.clone(),
-                minimum,
-                maximum,
-            }
-        })
-        .collect();
-    let reads = context
-        .fields
-        .iter()
-        .map(|field| {
-            let (minimum, maximum) = match &field.bounds {
-                SymbolicBounds::Boolean => (0, 1),
-                SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum),
-                SymbolicBounds::Sequence {
-                    minimum_length,
-                    maximum_length,
-                    ..
-                } => (*minimum_length, *maximum_length),
-            };
-            V2ClauseStateField {
-                declaring_node_id: field.declaring_node_id.clone(),
-                field_name: field.field_name.clone(),
-                identifier: field.slot.clone(),
-                minimum,
-                maximum,
-            }
-        })
-        .collect();
-    (arguments, reads)
+    V2ClauseSelection {
+        parameters: context
+            .parameters
+            .iter()
+            .map(|parameter| {
+                let (minimum, maximum) = domain(&parameter.domain);
+                V2ClauseParameter {
+                    name: parameter.name.clone(),
+                    minimum,
+                    maximum,
+                }
+            })
+            .collect(),
+        state_reads: context
+            .fields
+            .iter()
+            .map(|field| {
+                let (minimum, maximum) = match &field.bounds {
+                    SymbolicBounds::Boolean => (0, 1),
+                    SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum),
+                    SymbolicBounds::Sequence {
+                        minimum_length,
+                        maximum_length,
+                        ..
+                    } => (*minimum_length, *maximum_length),
+                };
+                V2ClauseRead {
+                    declaring_node_id: field.declaring_node_id.clone(),
+                    field_name: field.field_name.clone(),
+                    minimum,
+                    maximum,
+                }
+            })
+            .collect(),
+    }
 }
 
 fn unique_element_capacity(element: CollectionElement) -> u128 {

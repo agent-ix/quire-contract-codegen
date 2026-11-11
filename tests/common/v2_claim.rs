@@ -74,7 +74,7 @@ pub fn claims_for(
         });
         for (claim, selected) in claims.iter_mut().zip(selected.into_iter().flatten()) {
             if let Some(selected) = selected {
-                claim.record.arguments = selected.arguments;
+                claim.record.parameters = selected.parameters;
                 claim.record.state_reads = selected.state_reads;
             }
         }
@@ -116,7 +116,7 @@ fn bare_claim(package: &CheckedPackageV2, clause: &CheckedNodeId) -> V2ClauseObl
         record: V2ClauseObligationRecord {
             occurrence,
             kind,
-            arguments: Vec::new(),
+            parameters: Vec::new(),
             state_reads: Vec::new(),
         },
     }

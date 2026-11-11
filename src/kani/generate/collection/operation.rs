@@ -31,7 +31,7 @@ struct ConditionBindings<'a> {
 
 pub(super) struct LoweredOperation {
     pub(super) spec: CollectionOperationSpec,
-    pub(super) claim: crate::kani::identity::V2ClauseObligationClaim,
+    pub(super) obligation: qsl_replay::ObligationIdentity,
 }
 
 fn refused(reason: CollectionUnsupportedReason) -> CollectionDomainRefusal {
@@ -277,7 +277,7 @@ pub(super) fn lower(
     }
     Ok(LoweredOperation {
         spec,
-        claim: claim.clone(),
+        obligation: claim.obligation.clone(),
     })
 }
 

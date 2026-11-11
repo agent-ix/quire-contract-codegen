@@ -5,7 +5,9 @@ use ix_trace_rs::trace;
 use qsl_replay::{call_site, ClauseName, DependencyInput, Identifier, SourceIdentity};
 use quire_contract_codegen::{
     negotiate_kani_obligations, CollectionKindIdentity, KaniObligationOutcome,
-    KaniObligationRequest, KaniV2ClauseObligationHarness, ObligationItem,
+    KaniObligationRequest, KaniV2ClauseObligationHarness, ObligationDisposition, ObligationItem,
+    ObligationKind, RequirementOccurrence, UnsupportedObligation, V2ClauseClaimField,
+    V2ClauseObligationClaim, V2ClauseObligationRecord, V2ClauseParameter, V2ClauseRead,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -1043,4 +1045,180 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
             (family, harness.rust.contents)
         })
         .collect()
+}
+
+/// The claim a correct independent producer states for the postcondition of `document()`,
+/// written from the document: parameters `limit` (`Small`, 0..=3) and `enabled` (Boolean), and
+/// the three drawn `Node` fields. `z_items` is an ordered set of at most three, so its read
+/// domain is the cardinality range (IR-1515 tracks that choice).
+fn hand_written_claim(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+) -> V2ClauseObligationClaim {
+    let declaring = package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("the Node declaration")
+        .node_id
+        .clone();
+    let entry = package
+        .source_map()
+        .iter()
+        .find(|entry| &entry.node_id == clause)
+        .expect("clause occurrence");
+    let read = |field: &str, minimum: i64, maximum: i64| V2ClauseRead {
+        declaring_node_id: declaring.clone(),
+        field_name: field.to_owned(),
+        minimum,
+        maximum,
+    };
+    let parameter = |name: &str, minimum: i64, maximum: i64| V2ClauseParameter {
+        name: name.to_owned(),
+        minimum,
+        maximum,
+    };
+    V2ClauseObligationClaim {
+        obligation: qsl_replay::ObligationIdentity::new(
+            quire_exact::NodeKey::new(
+                "producer-issued",
+                vec![quire_exact::PathSegment::Text("collection".to_owned())],
+                0,
+            )
+            .unwrap(),
+            None,
+            0,
+        ),
+        record: V2ClauseObligationRecord {
+            occurrence: RequirementOccurrence {
+                node_id: entry.node_id.clone(),
+                role: entry.role.clone(),
+                ordinal: entry.ordinal,
+            },
+            kind: ObligationKind::Postcondition,
+            parameters: vec![parameter("limit", 0, 3), parameter("enabled", 0, 1)],
+            state_reads: vec![
+                read("z_items", 0, 3),
+                read("a_unread", 0, 1),
+                read("m_count", 0, 3),
+            ],
+        },
+    }
+}
+
+fn collection_outcome(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    claim: &V2ClauseObligationClaim,
+    unwind: u32,
+) -> KaniObligationOutcome {
+    let item = ObligationItem::V2Clause {
+        package,
+        clause,
+        claim,
+        dependencies: None,
+    };
+    negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(600),
+        ),
+        items: std::slice::from_ref(&item),
+        subject_path: "crate::subject",
+        unwind,
+    })
+    .unwrap()
+}
+
+fn field_of(outcome: &KaniObligationOutcome) -> Option<V2ClauseClaimField> {
+    match &outcome.records()[0].disposition {
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseClaimMismatch { field, .. },
+        } => Some(*field),
+        _ => None,
+    }
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-48")]
+fn whole_object_claim_is_carried_and_every_record_member_is_cross_checked() {
+    let package = fixture(&document(), "");
+    let [clause] = clauses(&package).try_into().expect("one postcondition");
+    let claim = hand_written_claim(&package, &clause);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = collection_outcome(&package, &clause, &claim, 8)
+    else {
+        panic!("the matching hand-written claim emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one whole-object harness");
+    };
+    assert_eq!(harness.obligation, claim.obligation, "carried unchanged");
+    assert!(
+        harness.identity.collection_operation.is_some(),
+        "collection route"
+    );
+
+    let mut cases = Vec::new();
+    let mut occurrence = claim.clone();
+    occurrence.record.occurrence.ordinal += 1;
+    cases.push((occurrence, V2ClauseClaimField::Occurrence));
+    let mut kind = claim.clone();
+    kind.record.kind = ObligationKind::Precondition;
+    cases.push((kind, V2ClauseClaimField::Kind));
+    let mut renamed = claim.clone();
+    renamed.record.parameters[0].name = "bound".to_owned();
+    cases.push((renamed, V2ClauseClaimField::Parameters));
+    let mut domain = claim.clone();
+    domain.record.parameters[0].maximum = 4;
+    cases.push((domain, V2ClauseClaimField::Parameters));
+    let mut dropped = claim.clone();
+    dropped.record.parameters.pop();
+    cases.push((dropped, V2ClauseClaimField::Parameters));
+    let mut cardinality = claim.clone();
+    cardinality.record.state_reads[0].maximum = 4;
+    cases.push((cardinality, V2ClauseClaimField::StateReads));
+    let mut field = claim.clone();
+    field.record.state_reads[1].field_name = "a_other".to_owned();
+    cases.push((field, V2ClauseClaimField::StateReads));
+    let mut declaring = claim.clone();
+    declaring.record.state_reads[2].declaring_node_id = clause.clone();
+    cases.push((declaring, V2ClauseClaimField::StateReads));
+    let mut unread = claim.clone();
+    unread.record.state_reads.remove(1);
+    cases.push((unread, V2ClauseClaimField::StateReads));
+    for (changed, expected) in cases {
+        assert_eq!(changed.obligation, claim.obligation);
+        let outcome = collection_outcome(&package, &clause, &changed, 8);
+        assert_eq!(field_of(&outcome), Some(expected));
+        assert!(matches!(
+            &outcome,
+            KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.is_empty()
+        ));
+    }
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-48")]
+fn a_record_mismatch_is_reported_ahead_of_a_render_refusal() {
+    let package = fixture(&document(), "");
+    let [clause] = clauses(&package).try_into().expect("one postcondition");
+    let claim = hand_written_claim(&package, &clause);
+    // An unwind bound below the collection's capacity refuses at render time.
+    let control = collection_outcome(&package, &clause, &claim, 1);
+    assert_eq!(
+        field_of(&control),
+        None,
+        "the matching claim meets only the render refusal"
+    );
+    assert!(matches!(
+        control.records()[0].disposition,
+        ObligationDisposition::Unsupported { .. }
+    ));
+    let mut changed = claim.clone();
+    changed.record.parameters[1].maximum = 2;
+    let outcome = collection_outcome(&package, &clause, &changed, 1);
+    assert_eq!(field_of(&outcome), Some(V2ClauseClaimField::Parameters));
 }

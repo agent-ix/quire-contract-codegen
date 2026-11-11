@@ -965,30 +965,48 @@ fn classify_v2_clause<'a>(
             }),
         },
     };
-    if matches!(
-        outcome,
-        Outcome::LoweredV2Clause(_) | Outcome::LoweredCollectionOperation(_)
-    ) {
-        let kind_selected = kind == Some(claim.record.kind);
-        let occurrence_selected = lookup.occurrences(clause).iter().any(|entry| {
-            entry.node_id == claim.record.occurrence.node_id
-                && entry.role == claim.record.occurrence.role
-                && entry.ordinal == claim.record.occurrence.ordinal
-        });
-        let mismatch = if !occurrence_selected {
-            Some(V2ClauseClaimField::Occurrence)
-        } else if !kind_selected {
-            Some(V2ClauseClaimField::Kind)
-        } else {
-            None
+    let selection = match &outcome {
+        Outcome::LoweredV2Clause(lowered) => Some(lowered.selection()),
+        Outcome::LoweredCollectionOperation(lowered) => lowered
+            .operation_selection()
+            .map(Ok)
+            .or(Some(Err(UnsupportedObligation::RenderFailed))),
+        _ => None,
+    };
+    if let Some(selection) = selection {
+        // Every record field is compared here, before any harness source is rendered.
+        outcome = match selection {
+            Err(reason) => Outcome::Unsupported(reason),
+            Ok(selection) => {
+                let occurrence_selected = lookup.occurrences(clause).iter().any(|entry| {
+                    entry.node_id == claim.record.occurrence.node_id
+                        && entry.role == claim.record.occurrence.role
+                        && entry.ordinal == claim.record.occurrence.ordinal
+                });
+                let mismatch = if !occurrence_selected {
+                    Some(V2ClauseClaimField::Occurrence)
+                } else {
+                    kind.and_then(|kind| claim.mismatch(kind, &selection))
+                        .or_else(|| {
+                            (kind != Some(claim.record.kind)).then_some(V2ClauseClaimField::Kind)
+                        })
+                };
+                match mismatch {
+                    None => outcome,
+                    Some(field) => {
+                        Outcome::Unsupported(UnsupportedObligation::V2ClauseClaimMismatch {
+                            node_id: clause.clone(),
+                            field,
+                            selected: matches!(
+                                field,
+                                V2ClauseClaimField::Parameters | V2ClauseClaimField::StateReads
+                            )
+                            .then_some(selection),
+                        })
+                    }
+                }
+            }
         };
-        if let Some(field) = mismatch {
-            outcome = Outcome::Unsupported(UnsupportedObligation::V2ClauseClaimMismatch {
-                node_id: clause.clone(),
-                field,
-                selected: None,
-            });
-        }
     }
     if let Some(dependencies) = dependencies {
         match validate_v2_dependencies(dependencies) {
@@ -1631,7 +1649,7 @@ mod tests {
             record: V2ClauseObligationRecord {
                 occurrence,
                 kind,
-                arguments: Vec::new(),
+                parameters: Vec::new(),
                 state_reads: Vec::new(),
             },
         };
@@ -1657,7 +1675,7 @@ mod tests {
             } = &outcome.records()[0].disposition
             {
                 let selected = selected.clone();
-                claim.record.arguments = selected.arguments;
+                claim.record.parameters = selected.parameters;
                 claim.record.state_reads = selected.state_reads;
             }
         }

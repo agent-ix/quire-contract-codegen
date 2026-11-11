@@ -367,20 +367,64 @@ pub(crate) fn collection_precondition_totality_assertion() -> String {
     )
 }
 
+/// One operation parameter of a V2 clause: its declared name on the clause's operation and
+/// inclusive declared domain (Boolean is `0..=1`). A parameter is identified by its checked
+/// declaration, never by an identifier CG generates for the harness.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct V2ClauseParameter {
+    /// The declared parameter name.
+    pub name: String,
+    /// Inclusive minimum.
+    pub minimum: i64,
+    /// Inclusive maximum.
+    pub maximum: i64,
+}
+
+/// One state-field read of a V2 clause: named by the declaring node id and field name, with its
+/// inclusive domain; never by a generated slot or identifier.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct V2ClauseRead {
+    /// Model object declaration that owns the field.
+    pub declaring_node_id: CheckedNodeId,
+    /// Field name in that declaration.
+    pub field_name: String,
+    /// Inclusive minimum.
+    pub minimum: i64,
+    /// Inclusive maximum.
+    pub maximum: i64,
+}
+
+/// The parameters and state reads of one V2 clause, in the shape of a claim's record.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct V2ClauseSelection {
+    /// Operation parameters.
+    pub parameters: Vec<V2ClauseParameter>,
+    /// State-field reads.
+    pub state_reads: Vec<V2ClauseRead>,
+}
+
+impl V2ClauseSelection {
+    fn sorted(mut self) -> Self {
+        self.parameters.sort();
+        self.state_reads.sort();
+        self
+    }
+}
+
 /// The source-side record of one V2 clause claim, compared field by field against the
 /// independently selected clause before any harness is generated (FR-015-AC-48). None of these
 /// members is part of QSL's structural [`ObligationIdentity`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct V2ClauseObligationRecord {
-    /// The clause's source occurrence.
+    /// The clause's source occurrence: node id, occurrence role and ordinal. The source span is
+    /// not compared.
     pub occurrence: RequirementOccurrence,
     /// The contract role of the clause.
     pub kind: ObligationKind,
-    /// Operation parameter identities and declared domains.
-    pub arguments: Vec<ScalarObligationArgument>,
-    /// State-field reads, each named by declaring node id and field name, with its domain. A
-    /// whole-object collection clause names every object field it draws.
-    pub state_reads: Vec<V2ClauseStateField>,
+    /// Operation parameters and declared domains.
+    pub parameters: Vec<V2ClauseParameter>,
+    /// State-field reads. A whole-object collection clause names every object field it draws.
+    pub state_reads: Vec<V2ClauseRead>,
 }
 
 /// One V2 state-clause claim: QSL's producer-issued structural identity, carried unchanged,
@@ -393,15 +437,6 @@ pub struct V2ClauseObligationClaim {
     pub record: V2ClauseObligationRecord,
 }
 
-/// The parameters and state reads of the selected clause, as a claim's record states them.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct V2ClauseSelectedReads {
-    /// Parameter identities and declared domains.
-    pub arguments: Vec<ScalarObligationArgument>,
-    /// State-field reads and domains.
-    pub state_reads: Vec<V2ClauseStateField>,
-}
-
 /// The record member of a [`V2ClauseObligationClaim`] that disagrees with the selected clause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -410,42 +445,33 @@ pub enum V2ClauseClaimField {
     Occurrence,
     /// The obligation kind.
     Kind,
-    /// A parameter identity or declared domain.
-    Arguments,
-    /// A state-field read identity or domain.
+    /// A parameter name or declared domain.
+    Parameters,
+    /// A state-field read declaring node, field name or domain.
     StateReads,
 }
 
 impl V2ClauseObligationClaim {
-    /// The first record member that differs from the generated clause identity.
+    /// The first record member that differs from the selected clause's `selection`.
     pub(crate) fn mismatch(
         &self,
         kind: ObligationKind,
-        arguments: &[ScalarObligationArgument],
-        state_reads: &[V2ClauseStateField],
+        selection: &V2ClauseSelection,
     ) -> Option<V2ClauseClaimField> {
         let record = &self.record;
         if record.kind != kind {
             return Some(V2ClauseClaimField::Kind);
         }
-        let mut claimed = record.arguments.clone();
-        claimed.sort_by(|left, right| left.identifier.cmp(&right.identifier));
-        let mut selected = arguments.to_vec();
-        selected.sort_by(|left, right| left.identifier.cmp(&right.identifier));
-        if claimed != selected {
-            return Some(V2ClauseClaimField::Arguments);
+        let claimed = V2ClauseSelection {
+            parameters: record.parameters.clone(),
+            state_reads: record.state_reads.clone(),
         }
-        let mut claimed = record.state_reads.clone();
-        claimed.sort_by(|left, right| {
-            (&left.declaring_node_id, &left.field_name)
-                .cmp(&(&right.declaring_node_id, &right.field_name))
-        });
-        let mut selected = state_reads.to_vec();
-        selected.sort_by(|left, right| {
-            (&left.declaring_node_id, &left.field_name)
-                .cmp(&(&right.declaring_node_id, &right.field_name))
-        });
-        (claimed != selected).then_some(V2ClauseClaimField::StateReads)
+        .sorted();
+        let selected = selection.clone().sorted();
+        if claimed.parameters != selected.parameters {
+            return Some(V2ClauseClaimField::Parameters);
+        }
+        (claimed.state_reads != selected.state_reads).then_some(V2ClauseClaimField::StateReads)
     }
 }
 

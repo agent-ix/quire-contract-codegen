@@ -550,8 +550,8 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     structural identity fixed. The harness identity record changes with the unwind bound
     and subject; the carried structural identity remains unchanged. Compare claims with
     a changed structural node, model or producer ordinal: each has a different structural
-    identity. Compare a changed source occurrence, kind, parameter identity or declared
-    domain, and state-field read identity or domain, against an independently selected
+    identity. Compare a changed source occurrence, kind, parameter declared name or domain,
+    and state-field read declaring node, field name or domain (never a generated identifier), against an independently selected
     claim while holding structural identity fixed: each mismatch refuses before harness
     generation. The source span is excluded from the structural identity
     (FR-015-AC-46 to FR-015-AC-48).
@@ -564,11 +564,17 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     whole-object collection postcondition in
     `whole_object_identity_regenerates_and_changes_with_unread_domains` has the same repeatability
     and request-variation results. These controls do not claim AC-46 non-vacuity or AC-48 producer
-    identity evidence. AC-48 evidence is `tests/it/v2_clause_obligation_identity.rs`: the carried
-    identity equals the supplied one for a changed node, model and ordinal; unwind and
-    subject changes leave it unchanged while the harness identity changes; and a changed
-    occurrence, kind, parameter identity or domain, or state-field read identity or domain
-    refuses with the named record member and no harness, while the matching control is admitted.
+    identity evidence. AC-48 evidence is `tests/it/v2_clause_obligation_identity.rs` and the two
+    `whole_object_*`/`a_record_mismatch_*` tests in `tests/it/kani_collection_operation.rs`, whose
+    records are written by hand from the fixture sources and never read back from the generator.
+    The carried identity equals the supplied one for a changed node, model and ordinal; unwind and
+    subject changes leave it unchanged while the harness identity changes; a source-span-only
+    change leaves identity and harness record unchanged; a correct claim is accepted although the
+    harness generates other identifiers; and a changed occurrence, kind, parameter name or domain,
+    or state-field read declaring node, field name or domain refuses with the named record member
+    and no harness, on the scalar route and on the whole-object collection route, including ahead
+    of a render refusal. The sequence-field read domain and the NodeKey binding are open under
+    IR-1515.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).

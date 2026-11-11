@@ -18,8 +18,9 @@ use quote::ToTokens;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use qsl_replay::ObligationIdentity;
+
 use crate::{
-    core::artifact::Artifact,
     core::ir::{
         checked_term::{application, bound_members, literal, reference},
         clause::{read_clause, ClauseGraphView, ClauseInputSide, ClauseTerm, MAX_CONDITION_TERMS},
@@ -38,8 +39,8 @@ use crate::{
         },
         identity::{
             KaniV2ClauseObligationHarness, ObligationKind, ScalarObligationArgument,
-            V2ClauseObligationClaim, V2ClauseObligationIdentity, V2ClauseSelectedReads,
-            V2ClauseStateField,
+            V2ClauseObligationClaim, V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead,
+            V2ClauseSelection, V2ClauseStateField,
         },
     },
     oracle::clause::{
@@ -58,7 +59,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     arithmetic: Vec<ArithmeticProbe>,
     symbolic_name: Option<String>,
     result_postcondition: Option<ResultPostcondition>,
-    claim: V2ClauseObligationClaim,
+    obligation: ObligationIdentity,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
 }
@@ -288,7 +289,7 @@ fn lower_with_census<'a>(
         arithmetic,
         symbolic_name,
         result_postcondition,
-        claim: claim.clone(),
+        obligation: claim.obligation.clone(),
         module_symbol,
         harness_symbol: if kind == ObligationKind::Postcondition {
             "prove_clause"
@@ -618,6 +619,53 @@ fn result_expectation_term(term: &ClauseTerm) -> Option<&ClauseTerm> {
 }
 
 impl LoweredV2Clause {
+    /// The clause's parameters and state reads by declared name, as a claim states them.
+    pub(in crate::kani::generate) fn selection(
+        &self,
+    ) -> Result<V2ClauseSelection, UnsupportedObligation> {
+        let bound = |lower: i128, upper: i128| {
+            Ok::<_, UnsupportedObligation>((
+                i64::try_from(lower).map_err(|_| UnsupportedObligation::RenderFailed)?,
+                i64::try_from(upper).map_err(|_| UnsupportedObligation::RenderFailed)?,
+            ))
+        };
+        let mut selection = V2ClauseSelection::default();
+        if let Some(signature) = &self.result_postcondition {
+            if signature.result.is_some() {
+                for parameter in &signature.parameters {
+                    let (minimum, maximum) = match parameter.scalar {
+                        MachineScalar::Boolean => (0, 1),
+                        MachineScalar::Integer { minimum, maximum } => (minimum, maximum),
+                    };
+                    selection.parameters.push(V2ClauseParameter {
+                        name: parameter.name.clone(),
+                        minimum,
+                        maximum,
+                    });
+                }
+                return Ok(selection);
+            }
+        }
+        for input in &self.oracle.descriptor.inputs {
+            let (minimum, maximum) = bound(input.lower, input.upper)?;
+            if let Some(field) = &input.state_field {
+                selection.state_reads.push(V2ClauseRead {
+                    declaring_node_id: field.declaring_node_id.clone(),
+                    field_name: field.field_name.clone(),
+                    minimum,
+                    maximum,
+                });
+            } else {
+                selection.parameters.push(V2ClauseParameter {
+                    name: input.declared_name.clone(),
+                    minimum,
+                    maximum,
+                });
+            }
+        }
+        Ok(selection)
+    }
+
     pub(in crate::kani::generate) fn set_dependencies(
         &mut self,
         dependencies: Vec<ProofDependencyEdge>,
@@ -640,47 +688,6 @@ impl LoweredV2Clause {
         self.native_integer = true;
         Ok(())
     }
-}
-
-/// Compare the claim's separate obligation record with the generated clause identity and, only
-/// when every member agrees, carry QSL's structural identity unchanged on the sealed harness
-/// (FR-015-AC-48). A mismatch refuses and no harness leaves this function.
-pub(in crate::kani::generate) fn seal_claimed_harness(
-    claim: &V2ClauseObligationClaim,
-    identity: V2ClauseObligationIdentity,
-    rust: Artifact,
-    record: Artifact,
-) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    seal_with_selected(claim, identity, None, rust, record)
-}
-
-/// As [`seal_claimed_harness`], comparing the claim with `selected` arguments and state reads
-/// when the harness identity does not record them itself (the whole-object collection route).
-pub(in crate::kani::generate) fn seal_with_selected(
-    claim: &V2ClauseObligationClaim,
-    identity: V2ClauseObligationIdentity,
-    selected: Option<(Vec<ScalarObligationArgument>, Vec<V2ClauseStateField>)>,
-    rust: Artifact,
-    record: Artifact,
-) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let (arguments, state_reads) =
-        selected.unwrap_or_else(|| (identity.arguments.clone(), identity.state_fields.clone()));
-    if let Some(field) = claim.mismatch(identity.kind, &arguments, &state_reads) {
-        return Err(UnsupportedObligation::V2ClauseClaimMismatch {
-            node_id: identity.clause.clone(),
-            field,
-            selected: Some(V2ClauseSelectedReads {
-                arguments,
-                state_reads,
-            }),
-        });
-    }
-    Ok(KaniV2ClauseObligationHarness::generated(
-        identity,
-        claim.obligation.clone(),
-        rust,
-        record,
-    ))
 }
 
 pub(in crate::kani::generate) fn render_clause(
@@ -855,7 +862,12 @@ pub(in crate::kani::generate) fn render_clause(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    seal_claimed_harness(&lowered.claim, identity, rust, record)
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        lowered.obligation.clone(),
+        rust,
+        record,
+    ))
 }
 
 fn expression(text: impl Into<String>) -> Result<ExprText, UnsupportedObligation> {
@@ -1114,7 +1126,12 @@ fn render_result_postcondition(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    seal_claimed_harness(&lowered.claim, identity, rust, record)
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        lowered.obligation.clone(),
+        rust,
+        record,
+    ))
 }
 
 fn append_arithmetic_probes(
@@ -1368,7 +1385,12 @@ fn render_postcondition(
         witness_options: spec.witness_options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    seal_claimed_harness(&lowered.claim, identity, rust, record)
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        lowered.obligation.clone(),
+        rust,
+        record,
+    ))
 }
 enum NativeTerm {
     Integer {
@@ -1742,7 +1764,7 @@ mod postcondition_signature_tests {
                         ordinal: 0,
                     },
                     kind: ObligationKind::Postcondition,
-                    arguments: Vec::new(),
+                    parameters: Vec::new(),
                     state_reads: Vec::new(),
                 },
             },

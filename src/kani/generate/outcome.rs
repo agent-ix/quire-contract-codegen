@@ -16,7 +16,7 @@ use crate::{
     kani::identity::{
         KaniCollectionObligationHarness, KaniScalarObligationHarness,
         KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness, V2ClauseClaimField,
-        V2ClauseObligationClaim, V2ClauseSelectedReads,
+        V2ClauseObligationClaim, V2ClauseSelection,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
@@ -236,8 +236,9 @@ pub enum UnsupportedObligation {
         /// The record member that differs.
         field: V2ClauseClaimField,
         /// The selected clause's own parameters and state reads, named when the difference is
-        /// in one of them.
-        selected: Option<V2ClauseSelectedReads>,
+        /// in one of them. This is CG's selection, a diagnostic: it is not an independent
+        /// claim, and a caller that copies it back proves nothing about its own selection.
+        selected: Option<V2ClauseSelection>,
     },
     /// This V2 clause cannot be represented by the bounded clause renderer.
     V2ClauseConditionNotRendered {
