@@ -46,3 +46,13 @@ Ticket: IR-1505. PR #789 (head 8f6517e1 on origin/main 3a4fa795, branch code/ir-
 | spec/replay/matrix/tests.md | examined | spec/replay/matrix/tests.md:28, 50 | FR-024-AC-57 through AC-64 Covered (IR-1505); TC-035 Partial |
 | AD-002 seam row | examined | spec/assurance/AD-002-cg-qsl-replay-seam.md:54 | object-type invariant with Current observation, FR-024-AC-57, IR-1505 |
 | interface-001 new_invariant / decode_falsification | examined | spec/core/functional/interface-001-codegen-api.md:249-256 | StateClauseReplay::new_invariant and InvariantReplayInputs::decode_falsification |
+
+## Dispositions
+
+Round 1, head 4c1b0509 (fix commit 72867ce8, rebased on main 0f3bc428 after #788). Focused job at the new head: lib unit test and 8 integration tests pass. quire matrix shows FR-024-AC-57..64 tagged; make spec gives 6 warnings, the same as main, none in edited files. Reviewer mutations: D1, removing ensure_unique_documents from request_documents, is caught by the unit test (invariant.rs:378). D2, having new_invariant bypass the seam and build documents inline without the guard, is not caught; it is an equivalent mutant on public behaviour, because no public input yields a duplicate (AC-62 now says so). The two unreachable decode branches (non-integer, i64 overflow) were folded into one guard with a source comment; that is acceptable, because the decoder's I64 binding yields WitnessValue::Integer(i128::from(i64)) only (replay/witness.rs:375-380).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | after: and the snapshot's two identity labels (authority and identity, QSL's `DocumentRef`); ... if two documents share the identity labels, `DuplicateDocumentIdentity` (FR-024-AC-52's guard, unreachable by a public invariant input) |
+| FND-002 | fixed | after: - The generator shall set a postcondition envelope's `declared_domains` to one `DeclaredDomain` per state field, from the field's declared integer range. - The generator shall leave an invariant envelope's `declared_domains` empty until that path adopts the key QSL's `FieldSite.domain` returns (QSL-345), as FR-024-AC-29 does for the frame path. The range check on an invariant playback is CG's `OutOfDomain` (FR-024-AC-61): QSL's state-clause replay never reads `declared_domains`, and its admission refuses an out-of-range value. |
+| FND-003 | accepted-no-change | Ruled (ii), an acceptable implementer choice; the spec mention was optional and was not added. The behaviour is now tested (tc_035_the_remaining_invariant_refusals_are_typed), and interface-001 states 'only a scalar V2 invariant harness'. |

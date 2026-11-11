@@ -404,6 +404,55 @@ impl Twin {
         twin
     }
 
+    /// The same bank with a second model object, `Vault`, that declares its own `balance` typed
+    /// `Int[0, 7]`: the fields a different object contributes under a name the clause reads.
+    pub fn with_vault_declaring_balance(mut self) -> Self {
+        let mut domain: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let types = domain["types"].as_array_mut().expect("types");
+        let vault_range = format!("ix://{PACKAGE}/vault_balance_range");
+        let mut range = types
+            .iter()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("balance value type")
+            .clone();
+        range["identity"] = json!(vault_range);
+        range["displayName"] = json!(vault_range);
+        range["origin"] = generated(&vault_range);
+        for constraint in range["constraints"].as_array_mut().expect("constraints") {
+            let keyword = constraint["keyword"].as_str().expect("keyword").to_owned();
+            constraint["identity"] = json!(format!("{vault_range}/constraints/{keyword}"));
+            constraint["origin"] = generated(&vault_range);
+            if constraint["keyword"] == "min" {
+                constraint["operands"]["value"] = json!("0");
+            }
+            if constraint["keyword"] == "max" {
+                constraint["operands"]["value"] = json!("7");
+            }
+        }
+        let vault_identity = format!("ix://{PACKAGE}/Vault");
+        let mut vault = types
+            .iter()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type")
+            .clone();
+        vault["identity"] = json!(vault_identity);
+        vault["displayName"] = json!(vault_identity);
+        vault["origin"] = generated(&vault_identity);
+        vault["operations"] = json!([]);
+        for field in vault["fields"].as_array_mut().expect("fields") {
+            let identity = format!("{vault_identity}/{}", field["name"].as_str().expect("name"));
+            field["identity"] = json!(identity);
+            field["origin"] = generated(&identity);
+            if field["name"] == "balance" {
+                field["typeRef"] = json!(vault_range);
+            }
+        }
+        types.push(range);
+        types.push(vault);
+        self.domain = domain.to_string().into_bytes();
+        self
+    }
+
     /// QSL-emitted postcondition package whose operation declares one `other` parameter.
     pub fn with_deposit_parameter() -> Self {
         Self::with_deposit_declaration(true, false)

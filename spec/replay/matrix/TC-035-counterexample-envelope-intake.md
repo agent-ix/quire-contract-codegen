@@ -373,10 +373,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     the widened `balance = -1` playback of step 45 return `OutOfDomain` and fails step 45.
 44. Supply a postcondition, a frame and a precondition harness to the invariant builder, a
     mismatched obligation, a failed check that is not the generated invariant assertion, an
-    undeclared clause, a clause node other than the harness's and an object declaration that does not own the
-    drawn field, each asserting its variant (`NotInvariantHarness`, `HarnessMismatch`,
-    `AssertionMismatch`, `CallSite`, `ClauseSelectionMismatch`, `ModelFields`) and an uncalled
-    executor. At unit level, the guard seam that builds the request's documents refuses a domain
+    undeclared clause, a clause node other than the harness's, a second model object that
+    declares a field of the same name with another range, an object type address that is not
+    the object node's and a drawn field the object does not declare, each asserting its variant
+    (`NotInvariantHarness`, `HarnessMismatch`, `AssertionMismatch`, `CallSite`,
+    `ClauseSelectionMismatch`, `HarnessMismatch` naming the object twice, `ModelFields`) and an
+    uncalled executor. At unit level, the guard seam that builds the request's documents refuses a domain
     package sharing the snapshot's labels with `DuplicateDocumentIdentity`.
     Then, through `replay_through`, replace the built snapshot document with one declaring a
     different anchor and call `replay_state_clause`: the result is `Refused` holding QSL's refusal

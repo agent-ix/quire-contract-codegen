@@ -203,6 +203,7 @@ fn unmutated() -> Twin {
 }
 
 const CLAUSE: &str = "NonNegative";
+const VAULT: &str = "ix://test/bank/Vault";
 
 /// Step 39 (FR-024-AC-57): the envelope's observation is `Current` carrying the snapshot, the
 /// caller's anchor and the self object; one state document, no invocation, no post snapshot; the
@@ -898,24 +899,68 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
         })
     ));
 
-    // The constructor itself refuses an object declaration that is not a model object, or that
-    // does not declare a drawn field, without calling the executor.
-    let mut wrong = fixture
+    // The constructor itself refuses an object other than the one the invariant is declared on,
+    // and a drawn field that object does not declare, without calling the executor.
+    let vault_twin = Twin::with_bank_invariants(&[(CLAUSE, "self.balance >= 0")], (0, 100))
+        .with_vault_declaring_balance();
+    let vault_fixture = generate(&vault_twin, CLAUSE);
+    let account = vault_fixture.object();
+    let vault = vault_fixture
+        .package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            matches!(&node.owner, Some(quire_contract_model::CheckedNodeOwner::Model { node, .. })
+                if node.as_ref() == VAULT)
+        })
+        .expect("the Vault object type")
+        .node_id
+        .clone();
+    assert_ne!(vault, account);
+    let vault_good = vault_fixture.playback(&[0]);
+    let object_mismatch = |object_node: &CheckedNodeId, object_type: &str| {
+        let mut inputs = vault_fixture
+            .decoded(
+                &vault_twin,
+                &account,
+                CLAUSE,
+                &vault_good,
+                StateClauseHarness::V2Clause(&vault_fixture.harness),
+            )
+            .expect("decodes");
+        inputs.object_node = object_node;
+        inputs.object.object_type = object_type.to_owned();
+        StateClauseReplay::new_invariant(inputs)
+            .err()
+            .expect("refused")
+    };
+    // (a) Vault declares `balance` too, with another range, and is a model object whose own
+    // address the snapshot names: only the invariant's declaring object separates them.
+    assert!(matches!(
+        object_mismatch(&vault, VAULT),
+        StateClauseReplayError::HarnessMismatch {
+            member: StateClauseHarnessMember::Object
+        }
+    ));
+    // (b) The declaring object with another object type's address.
+    assert!(matches!(
+        object_mismatch(&account, VAULT),
+        StateClauseReplayError::HarnessMismatch {
+            member: StateClauseHarnessMember::Object
+        }
+    ));
+    // The matching pair is accepted.
+    let ok = vault_fixture
         .decoded(
-            &twin,
-            &object,
+            &vault_twin,
+            &account,
             CLAUSE,
-            &good,
-            StateClauseHarness::V2Clause(&fixture.harness),
+            &vault_good,
+            StateClauseHarness::V2Clause(&vault_fixture.harness),
         )
         .expect("decodes");
-    wrong.object_node = &fixture.clause;
-    assert!(matches!(
-        StateClauseReplay::new_invariant(wrong)
-            .err()
-            .expect("refused"),
-        StateClauseReplayError::ModelFields { .. }
-    ));
+    assert!(StateClauseReplay::new_invariant(ok).is_ok());
     let mut absent = fixture
         .decoded(
             &twin,

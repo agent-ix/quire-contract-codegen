@@ -13,7 +13,7 @@ use qsl_replay::{
     SelectedAnchor, SelectedObject, StateClauseCounterexample, WitnessPacket, WitnessValue,
 };
 use quire_canonical::FixedShape;
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedNodeId, CheckedNodeOwner, CheckedPackageV2};
 use serde::Serialize;
 
 use super::{
@@ -22,7 +22,10 @@ use super::{
     StateClauseHarnessMember, StateClauseReplay, StateClauseReplayError, StateObjectAddress,
 };
 use crate::{
-    core::ir::{clause::ClauseGraphView, node_key::checked_node_key},
+    core::ir::{
+        clause::{read_clause, ClauseGraphView},
+        node_key::checked_node_key,
+    },
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{
@@ -201,6 +204,45 @@ impl InvariantReplayInputs<'_> {
     }
 }
 
+/// The caller's object is the one the invariant is declared on: every field the clause reads
+/// is declared by `object_node`, and the node is the model object whose address the snapshot
+/// names. A different model object that happens to declare a field of the same name, or an
+/// address that is not `object_node`'s, would otherwise lend its field set and range to the
+/// replay.
+fn ensure_declaring_object(
+    graph: &ClauseGraphView<'_>,
+    clause_node: &CheckedNodeId,
+    object_node: &CheckedNodeId,
+    object_type: &str,
+) -> Result<(), StateClauseReplayError> {
+    let mismatch = || StateClauseReplayError::HarnessMismatch {
+        member: StateClauseHarnessMember::Object,
+    };
+    let condition = read_clause(clause_node, graph).ok_or_else(mismatch)?;
+    if condition.inputs.iter().any(|input| {
+        input
+            .declaring_node_id
+            .as_ref()
+            .is_some_and(|node| node != object_node)
+    }) {
+        return Err(mismatch());
+    }
+    let address = graph
+        .package()
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == *object_node)
+        .and_then(|node| match &node.owner {
+            Some(CheckedNodeOwner::Model { node, .. }) => Some(node.as_ref()),
+            _ => None,
+        });
+    if address != Some(object_type) {
+        return Err(mismatch());
+    }
+    Ok(())
+}
+
 /// The documents the request provides: the domain packages, then the one current snapshot. The
 /// shared duplicate-identity guard (FR-024-AC-52) runs here, before the request is built.
 fn request_documents<'a>(
@@ -268,6 +310,7 @@ impl StateClauseReplay {
         }
 
         let graph = ClauseGraphView::new(package);
+        ensure_declaring_object(&graph, clause_node, object_node, &object.object_type)?;
         let fields = state_fields(&graph, object_node, &requested)?;
         let values = bind(&fields, &playback, Side::Playback)?;
 

@@ -50,3 +50,13 @@ The coder's own control (binding 0 regardless of the playback) is reported to fa
 | TC-035 steps 39-45 | examined | spec/replay/matrix/TC-035-counterexample-envelope-intake.md:352-388 | the seven steps and their mutation controls |
 | tests/it/state_clause_invariant_replay.rs | examined | tests/it/state_clause_invariant_replay.rs:1-792 | seven #[trace]-tagged tests |
 | src/replay/state_clause/invariant.rs | examined | src/replay/state_clause/invariant.rs:1-388 | new_invariant, decode_falsification, unit test |
+
+## Dispositions
+
+Round 1, head 4c1b0509 (fix commit 72867ce8, rebased on main 0f3bc428 after #788). Focused job at the new head: lib unit test and 8 integration tests pass. quire matrix shows FR-024-AC-57..64 tagged; make spec gives 6 warnings, the same as main, none in edited files. Reviewer mutations: D1, removing ensure_unique_documents from request_documents, is caught by the unit test (invariant.rs:378). D2, having new_invariant bypass the seam and build documents inline without the guard, is not caught; it is an equivalent mutant on public behaviour, because no public input yields a duplicate (AC-62 now says so). The two unreachable decode branches (non-integer, i64 overflow) were folded into one guard with a source comment; that is acceptable, because the decoder's I64 binding yields WitnessValue::Integer(i128::from(i64)) only (replay/witness.rs:375-380).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | after: AC-62: The invariant path applies the shared FR-024-AC-52 duplicate-identity guard (DuplicateDocumentIdentity) to its documents before it builds the request; no public input reaches it, because CG builds one state document and QSL refuses a domain package carrying a top-level identity member, so a unit test of the guard seam is its evidence. TC-035 step 44: At unit level, the guard seam that builds the request's documents refuses a domain package sharing the snapshot's labels with DuplicateDocumentIdentity. |
+| FND-002 | fixed | after: a value outside the field's declared range returns `OutOfDomain` naming the field; |
+| FND-003 | fixed | after: assert_eq!(result, through, "the executor's result is returned unchanged"); |
