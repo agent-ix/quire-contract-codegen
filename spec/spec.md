@@ -100,7 +100,7 @@ scalar proof qualification are distinct, both still required.
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | HP-2 SMT induction producer | [FR-045](routed/functional/FR-045-hyper-smt-induction-map.md) CG solver-run evidence and outcome handoff over QSL-owned hyper queries | [TC-059](routed/matrix/TC-059-hyper-smt-induction-map.md) partial |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
-| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope, [FR-032](replay/functional/FR-032-routed-scalar-replay-binding.md) planned scalar binding and proposition preservation, [FR-033](replay/functional/FR-033-composite-parity-replay-binding.md) planned composite equality parity | TC-026, TC-035, [TC-047](replay/matrix/TC-047-routed-scalar-replay-binding.md) and [TC-048](replay/matrix/TC-048-composite-parity-replay-binding.md) planned/gated |
+| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope, [FR-032](replay/functional/FR-032-routed-scalar-replay-binding.md) scalar binding, proposition preservation and (planned) settlement, [FR-033](replay/functional/FR-033-composite-parity-replay-binding.md) planned composite equality parity | TC-026, TC-035, [TC-047](replay/matrix/TC-047-routed-scalar-replay-binding.md) and [TC-048](replay/matrix/TC-048-composite-parity-replay-binding.md) planned/gated |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 
 FR-018 and FR-014 refuse the

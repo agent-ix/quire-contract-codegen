@@ -16,10 +16,12 @@ relationships:
 
 Planned public-consumer coverage of
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md), distinguishing lowering parity
-failure from source-property refutation. No implementation or passing replay is claimed. The
-completed CG route is CODE-gated on CG conformance to merged QSL full-claim reports, authoritative scalar
-identity metadata, retained generation/proving context and checked driver-observation contract.
-The measured QSL operator API and scalar terminal causes do not close those gates.
+failure from source-property refutation. Partial native evidence exists (IR-1184: #702, #741,
+#757, #481): `scalar_playback.rs`, `scalar_literal_operands.rs`, `scalar_replay_binding.rs` and
+`scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
+a compiled generated artifact, without a Kani run. Steps 1, 2 and 7 to 9 and the settlement
+steps 10 to 14 remain Planned, as does any real falsified Kani run through the route. No
+passing proof-driven replay is claimed.
 
 ## Test Procedure
 
@@ -93,8 +95,9 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    and compare it against the original proving context. Substitute a consistently compiled
    package, another enclosing function, source bytes, dependencies or limits while keeping
    the claim equal; require no settlement. An echoed expected context cannot establish the
-   actual sent context. Pass valid settlements, and no settlement, to `run_terminal_value`
-   to reuse FR-029 AC-15. These public-boundary tests remain planned and unrun.
+   actual sent context. Pass valid settlements, and no settlement, to the scalar pair functions of steps 11 and 12.
+   The converter-refusal half of these tests is exercised by `scalar_replay_binding.rs`; the
+   settled half is step 10.
 
 7. Using the positional rule measured in merged QSL change #650, after
    IR-648's authoritative typed `CheckedPackageV2` operand access is available, independently
@@ -148,6 +151,47 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    Boolean byte `2`, and an integer guard value one outside its narrowed domain. Decode the
    unguarded `x + 1` identity unchanged.
 
+10. Settlement (FR-032-AC-20, AC-21). With the `x + x` over `Int[0,9]` fixture of
+    `scalar_replay_binding.rs` (the routed generation path), build a plan, complete it with the
+    genuine observation and call the real `replay_operator_parity` for each of: the unchanged
+    observation (`Agrees`); the same artifact bytes with the driver-asserted outcome
+    `Completed(7)` (`Diverged`); the outcome `Incomplete` and then `ExecutionFault`
+    (`GeneratedFault`); and a context built with a `ReplayLimits.input_bytes` below the
+    request size (non-fault `Refused`). Pass each report and the actual sent request to
+    `CompletedScalarReplay::settlement` and assert `ScalarSettlement::Parity` over that
+    report's result, and that `scalar_run_terminal_value` equals `report.terminal_value()` and the
+    FR-032 table value. `RefusedInput` and exact `Incomplete` are unreachable through a completed
+    plan (CG refuses out-of-domain operands first and the original limits are the renderer's
+    `u64::MAX`), so pass genuine facade reports for a claim with an out-of-range operand and with
+    `limits.work_units = 0` straight to `ScalarSettlement::Parity` and assert
+    `Inconclusive(ReplayRefused(invalid_runtime_input))` and `Incomplete(ResourceExhausted)`.
+    Assert in the same test that the mapping function has no wildcard arm by inspection of the
+    source for `_ =>` in the function.
+11. Pairing (FR-032-AC-22). For each report of step 10, call `scalar_run_terminal_value` on a
+    falsified evidence value and `scalar_ir_outcome_terminal_value` on a `Counterexample`
+    outcome and require equal values. Collect every value and assert none is `Refuted`,
+    `Proved`, `Tested` or `Inconclusive(ReplayParity)`. Pass a settlement with a `Verified`
+    run and with a non-counterexample IR outcome and require `UnexpectedSettlement`. Pass `None`
+    for non-falsified outcomes and require the ordinary values.
+12. Missing settlement (FR-032-AC-23). With the identity and harness from `generate_routed` for
+    `x + 1` over `Int[0,9]`, pair falsified evidence and a `Counterexample` outcome with `None` and
+    require `TerminalPairError::MissingSettlement` from both pair functions. Then call
+    `settlement` with an absent report and with a report of another run and pass the absent
+    result as `None`; require `MissingSettlement` again.
+13. Setup defects (FR-032-AC-24). Produce a real `ScalarBuildError` of each constructible kind
+    through `plan` and `complete`: a four-byte operand (`Playback`), a changed body
+    (`BodyMismatch`), changed artifacts (`Artifacts`), a mutated observation (`Observation`),
+    and through `settlement` a changed budget (`SentContext`) and another claim's report (`Report`).
+    Assert `setup_settlement` returns `Some(CgDefect)` for `Playback` and `None` for the rest, and
+    that `scalar_run_terminal_value` of `Some(CgDefect)` is `Failed` and of `None` is
+    `MissingSettlement`. A test-local exhaustive `match` over `ScalarBuildError` asserts the table
+    for the variants no fixture can reach (`Authority`, `Context`, `Staging`, `Identity`,
+    `Operation`), so a new variant fails the build.
+14. Typed seam (FR-032-AC-25). Compile the full flow of steps 1 and 10 to 12 using only
+    `ScalarObligationIdentity`. Scan `src/replay/scalar_builder.rs` and `src/lib.rs` re-exports
+    for `KaniObligationIdentity`, CG's `ReplayPackage` (not `qsl_replay::ReplayPackage`) and a
+    `settle` method on `CompletedScalarReplay`; require none.
+
 ## Expected Results
 
 | Criterion | Planned observation | Mutation that must fail the check |
@@ -167,10 +211,16 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-13 | Public mint refuses an unencodable preimage; CG setup returns no identity or replay | Return a usable sentinel identity or accept an unencodable claim |
 | FR-032-AC-14 | Scalar addition preserves function/clause carry-only and function/frame identity rules | Redirect other paths through scalar positional parity |
 | FR-032-AC-19 | Guard entries follow the operands in `guard_inputs` order; a short playback is `kani_witness_arity_mismatch`, a wrong width `kani_witness_width_mismatch`, a Boolean byte `2` or an out-of-domain guard value `cg_scalar_witness_guard_out_of_domain`; guard values never reach QSL as operands; an identity without guard inputs decodes as before | Count only operands, decode a Boolean as eight bytes, skip the guard domain check or append guard values to the QSL operand vector |
+| FR-032-AC-20 | Step 10: `settlement` returns `Parity` over the genuine report's result after the AC-6 checks and no `ScalarSettlement` otherwise; `settle` is gone | Skip the sent-context comparison (the changed `input_bytes` report then settles); return `ScalarSettlement::CgDefect` for an absent report instead of `Err` (the `None` input then yields `Failed`, not `MissingSettlement`); keep `settle` alongside (step 14 finds it) |
+| FR-032-AC-21 | Step 10: the six result classes read as the table; equal to `report.terminal_value()` | Map `Diverged` to `Refuted` (fails the `Completed(7)` input); map `Agrees` to `Failed` (fails the unchanged observation); map `RefusedInput` to `Failed` (fails the out-of-range operand report); map `Incomplete` to `Incomplete(TimedOut)` (fails the `work_units = 0` report); read every `Refused` as `Failed` (fails the small `input_bytes` report, which must carry a catalog code) |
+| FR-032-AC-22 | Step 11: settlement pairs only with falsified or counterexample outcomes | Return `Refuted` for any `Parity` (fails the `Agrees` report); return a value for `Verified` plus a settlement (fails the `UnexpectedSettlement` input); ignore the settlement for a `Counterexample` IR outcome (fails equality with the run entry point) |
+| FR-032-AC-23 | Step 12: omitted settlement gives `MissingSettlement` from both entries, also after a converter refusal | Map falsified-with-`None` to `Failed` (fails the omitted-settlement input); drop the report-claim comparison in `settlement` (fails the other-run report) |
+| FR-032-AC-24 | Step 13: only `Playback` yields `CgDefect`; every other variant yields `None` | Return `None` for `Playback` (fails the four-byte operand input, whose pair result becomes `MissingSettlement`); return `Some(CgDefect)` for `Observation` (fails the mutated-observation input) |
+| FR-032-AC-25 | Step 14: the flow compiles and the scan finds nothing | Add a `KaniObligationIdentity` parameter to `plan` (fails the compile of the step 1 call); reintroduce `settle` (fails the scan) |
 
 All checks are planned; completed-route observations have the same explicit remaining CODE gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
-produces a source-property `Refuted` or `Verified` terminal. The absent-settlement check verifies
-[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15 directly, without
-adding a duplicate FR-032 criterion. Missing upstream types/causes
+produces a source-property `Refuted` or `Verified` terminal. The scalar absent-settlement check is FR-032-AC-23; ordinary
+[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15 is unchanged and
+still governs `run_terminal_value`. Missing upstream types/causes
 must be reported as a gate, not implemented as local QSL lookalikes.
