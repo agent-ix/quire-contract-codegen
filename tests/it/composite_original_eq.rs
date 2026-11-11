@@ -599,6 +599,34 @@ fn original_operator_mismatch_refuses_with_typed_operators() {
     }
 }
 
+/// A non-equality operation, a comparison here, is refused by the checked package's operand
+/// projection as an ineligible operator, whichever operator the caller requests, with no request.
+#[trace("FR-014-AC-2", "FR-033-AC-1", "TC-024", "TC-048")]
+#[test]
+fn a_non_equality_operation_refuses_as_an_ineligible_operator() {
+    let source = format!(
+        "{SOURCE}function k using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure {{ a < b }}\n"
+    );
+    let package = checked(&source);
+    let (node, occurrence) = application_with_operator(&package, "k", "quire.op.integer.lt");
+    let context = package
+        .clone()
+        .into_context(
+            &inputs(&source).source,
+            inputs(&source),
+            "k",
+            CheckedPackageReadLimits::bounded(),
+        )
+        .unwrap();
+    for requested in [EqualityOperator::Equal, EqualityOperator::NotEqual] {
+        assert!(matches!(
+            context.request(&node, &occurrence, requested, &[], 100_000),
+            Err(CompositeBuildError::Operands(cause))
+                if matches!(*cause, CheckedCompositeOperandError::IneligibleOperator { .. })
+        ));
+    }
+}
+
 /// One retained context resolves distinct operation nodes across repeated requests.
 #[trace("FR-033-AC-1", "TC-048")]
 #[test]

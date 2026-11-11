@@ -22,12 +22,13 @@ use qsl_replay::{
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
-    CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageEvidence,
-    CheckedPackageIncomplete, CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef, ContractSourceKeyV1,
+    CheckedCompositeOperator, CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole,
+    CheckedPackageEvidence, CheckedPackageIncomplete, CheckedPackageReadLimits,
+    CheckedPackageRefusal, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedScalarOperandChild,
+    CheckedSourceRef, ContractSourceKeyV1,
 };
 
-use crate::core::ir::{frame::application_identity, node_key::checked_node_key};
+use crate::core::ir::node_key::checked_node_key;
 
 use super::{
     composite::{verified_shadow_terminal_value, CompositeReportError, VerifiedShadowSettlement},
@@ -273,13 +274,10 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
-        // IR-803 will carry the typed operator; read the checked node's identity meanwhile.
-        let actual = self
-            .context
-            .original
-            .term(node)
-            .and_then(application_identity);
-        let actual = node_equality_operator(actual)?;
+        let actual = match operands.operator {
+            CheckedCompositeOperator::Eq => EqualityOperator::Equal,
+            CheckedCompositeOperator::Ne => EqualityOperator::NotEqual,
+        };
         if actual != operator {
             return Err(CompositeBuildError::OperatorMismatch {
                 requested: operator,
@@ -636,40 +634,6 @@ impl OriginalCompositeEqReport {
     /// Returns the converter's typed full-identity refusal, without a value.
     pub fn settlement(&self) -> Result<VerifiedShadowSettlement<'_>, CompositeReportError> {
         verified_shadow_terminal_value(&self.sent, Some(&self.report))
-    }
-}
-
-/// The equality operator a selected node's operation identity names. Only the two structural
-/// equality identities name one; every other identity, a quantity conversion included, and an
-/// absent identity are an unsupported node operation.
-// The 192-byte refusal is retained inline to preserve the public PackageRead payload.
-#[allow(clippy::result_large_err)]
-fn node_equality_operator(identity: Option<&str>) -> Result<EqualityOperator, CompositeBuildError> {
-    match identity {
-        Some("quire.op.structural.eq") => Ok(EqualityOperator::Equal),
-        Some("quire.op.structural.ne") => Ok(EqualityOperator::NotEqual),
-        Some(_) | None => Err(CompositeBuildError::UnsupportedNodeOperation),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ix_trace_rs::trace;
-
-    /// A quantity conversion is not an equality operation: the builder refuses it as an
-    /// unsupported node operation, with no request.
-    #[trace("FR-014-AC-2", "TC-024")]
-    #[test]
-    fn a_quantity_conversion_is_an_unsupported_node_operation() {
-        assert!(matches!(
-            node_equality_operator(Some("quire.op.quantity.convert")),
-            Err(CompositeBuildError::UnsupportedNodeOperation)
-        ));
-        assert!(matches!(
-            node_equality_operator(Some("quire.op.structural.eq")),
-            Ok(EqualityOperator::Equal)
-        ));
     }
 }
 
