@@ -133,6 +133,9 @@ impl InvariantReplayInputs<'_> {
                 identity.module_symbol.as_str(),
             )));
         }
+        if harness.obligation != self.obligation_identity {
+            return Err(StateClauseReplayError::ObligationIdentityMismatch);
+        }
         let mismatch = |member| Err(StateClauseReplayError::HarnessMismatch { member });
         if identity.clause != *self.clause_node {
             return mismatch(StateClauseHarnessMember::Clause);

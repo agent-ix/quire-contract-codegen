@@ -252,6 +252,9 @@ pub enum StateClauseReplayError {
         /// The member that differs.
         member: StateClauseHarnessMember,
     },
+    /// The harness's QSL `ObligationIdentity` (node, model and ordinal) differs from the identity
+    /// the caller supplied (FR-024-AC-65).
+    ObligationIdentityMismatch,
     /// The input already carries playback values; the Kani adapter requires an empty slot.
     PlaybackAlreadySupplied,
     /// The shared decoder refused the Kani playback.
@@ -272,7 +275,7 @@ pub enum StateClauseReplayError {
     Envelope(WitnessRefusal),
     /// A document could not be built.
     Document(DocumentError),
-    /// Two supplied documents declare the same four identity labels.
+    /// Two supplied documents declare the same two identity labels (authority, identity).
     DuplicateDocumentIdentity {
         /// The repeated labels.
         identity: DocumentRef,
@@ -325,6 +328,9 @@ impl fmt::Display for StateClauseReplayError {
             Self::NotPostconditionHarness => f.write_str("the harness is not a postcondition"),
             Self::NotInvariantHarness => f.write_str("the harness is not a V2 invariant"),
             Self::HarnessMismatch { member } => write!(f, "the harness's {member} differs"),
+            Self::ObligationIdentityMismatch => {
+                f.write_str("the harness's obligation identity differs from the supplied one")
+            }
             Self::PlaybackAlreadySupplied => f.write_str("playback values were already supplied"),
             Self::Decode(cause) => write!(f, "the Kani playback did not decode: {}", cause.code),
             Self::AssertionMismatch => f.write_str("the Kani assertion differs from the harness"),
@@ -382,6 +388,7 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             StateClauseReplayError::NotPostconditionHarness
             | StateClauseReplayError::NotInvariantHarness
             | StateClauseReplayError::HarnessMismatch { .. }
+            | StateClauseReplayError::ObligationIdentityMismatch
             | StateClauseReplayError::PlaybackAlreadySupplied
             | StateClauseReplayError::Decode(_)
             | StateClauseReplayError::AssertionMismatch
@@ -871,7 +878,7 @@ pub(crate) struct ObjectRef {
     pub(crate) key: String,
 }
 
-/// A snapshot as the invocation names it, by its four identity labels.
+/// A snapshot as the invocation names it, by its two identity labels (authority, identity).
 #[derive(Deserialize, Serialize, FixedShape)]
 pub(crate) struct SnapshotLink {
     identity: IdentityMember,

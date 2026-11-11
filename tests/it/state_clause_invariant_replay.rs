@@ -14,13 +14,14 @@ use std::cell::Cell;
 
 use qsl_replay::{
     replay_state_clause, AnchorKind, ClauseName, ClauseSelectionInput, DisagreementCause,
-    Identifier, ReplayRefusal, ReplayResult, StateClauseReplayResult, WitnessSettlement,
+    Identifier, ModelIdentity, ObligationIdentity, ReplayRefusal, ReplayResult,
+    StateClauseReplayResult, WitnessSettlement,
 };
 use quire_contract_codegen::{
     negotiate_kani_native_obligations, negotiate_kani_obligations, parse_assertion_playback,
     KaniObligationOutcome, KaniObligationRequest, KaniV2ClauseObligationHarness, ObligationItem,
-    StateClauseHarness, StateClauseHarnessMember, StateClauseReplay, StateClauseReplayError,
-    StateFrameObligations, StateFrameRequest,
+    ReplaySettlement, StateClauseHarness, StateClauseHarnessMember, StateClauseReplay,
+    StateClauseReplayError, StateFrameObligations, StateFrameRequest,
 };
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use quire_semantic_value::catalog::Category;
@@ -47,13 +48,27 @@ fn generate(twin: &Twin, clause: &str) -> Fixture {
 
 /// The harness generated for `clause`; a native postcondition goes through the native route.
 fn generate_with(twin: &Twin, clause: &str, native: bool) -> Fixture {
+    generate_claimed(twin, clause, native, None)
+}
+
+/// As [`generate_with`], the claim's identity replaced by `identity` when given (the identity is
+/// built by hand here, so the harness carries a node, model and ordinal of this test's choosing).
+fn generate_claimed(
+    twin: &Twin,
+    clause: &str,
+    native: bool,
+    identity: Option<&ObligationIdentity>,
+) -> Fixture {
     let (package, node) = twin.emitted_package(clause);
     let negotiate = if native {
         negotiate_kani_native_obligations
     } else {
         negotiate_kani_obligations
     };
-    let claims = crate::common::v2_claim::claims_for(&package, std::slice::from_ref(&node));
+    let mut claims = crate::common::v2_claim::claims_for(&package, std::slice::from_ref(&node));
+    if let Some(identity) = identity {
+        claims[0].obligation = identity.clone();
+    }
     let outcome = negotiate(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings(),
         items: &[ObligationItem::V2Clause {
@@ -114,6 +129,8 @@ impl Fixture {
     ) -> Result<quire_contract_codegen::InvariantReplayInputs<'a>, StateClauseReplayError> {
         let mut inputs =
             twin.invariant_inputs(&self.package, &self.clause, object, clause, &["balance"]);
+        // The caller names the obligation the harness was generated for (FR-024-AC-65).
+        inputs.obligation_identity = self.harness.obligation.clone();
         let identity = &self.harness.identity;
         let parsed = parse_assertion_playback(
             text,
@@ -573,6 +590,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
     let two = generate(&other_clause, "Other");
     let mut inputs =
         other_clause.invariant_inputs(&two.package, &two.clause, &object, "Other", &["balance"]);
+    inputs.obligation_identity = two.harness.obligation.clone();
     let two_text = two.playback(&[0]);
     let parsed_two = parse_assertion_playback(
         &two_text,
@@ -617,6 +635,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
         CLAUSE,
         &["balance", "audit"],
     );
+    inputs.obligation_identity = fixture.harness.obligation.clone();
     let error = inputs
         .decode_falsification(v2, &parsed, crate::unbounded_decode_limits())
         .err()
@@ -638,6 +657,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
         CLAUSE,
         &["balance"],
     );
+    inputs.obligation_identity = fixture.harness.obligation.clone();
     let error = inputs
         .decode_falsification(v2, &parsed, crate::unbounded_decode_limits())
         .err()
@@ -822,6 +842,7 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
             CLAUSE,
             &["balance"],
         );
+        inputs.obligation_identity = fixture.harness.obligation.clone();
         inputs.decode_falsification(
             StateClauseHarness::V2Clause(harness),
             &parsed,
@@ -878,6 +899,7 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
     let none_object = none.clause.clone();
     let mut inputs =
         constant.invariant_inputs(&none.package, &none.clause, &none_object, "Constant", &[]);
+    inputs.obligation_identity = none.harness.obligation.clone();
     let none_identity = &none.harness.identity;
     let none_text = none.playback(&[]);
     let none_parsed = parse_assertion_playback(
@@ -976,4 +998,235 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
         StateClauseReplayError::ModelFields { cause: quire_contract_codegen::StateClauseModelFieldsCause::Absent { field }, .. }
             if field == "ghost"
     ));
+}
+
+/// The harness identity of step 46: a node, a model and an ordinal that none of the decoys share.
+const IDENTITY_ORDINAL: u32 = 7;
+
+/// A fixture whose harness carries an identity built by hand, and the same package's other
+/// clause node, whose key is the decoy node.
+fn identified(twin: &Twin) -> (Fixture, ObligationIdentity, quire_exact::NodeKey) {
+    let (package, node) = twin.emitted_package(CLAUSE);
+    let own = crate::common::v2_claim::claim_for(&package, &node).obligation;
+    let (_, other) = twin.emitted_package("Other");
+    let other_node = crate::common::v2_claim::claim_for(&package, &other)
+        .obligation
+        .node()
+        .clone();
+    assert_ne!(&other_node, own.node(), "the decoy node is another node");
+    let identity = ObligationIdentity::new(
+        own.node().clone(),
+        Some(ModelIdentity::new("test/bank-model")),
+        IDENTITY_ORDINAL,
+    );
+    (
+        generate_claimed(twin, CLAUSE, false, Some(&identity)),
+        identity,
+        other_node,
+    )
+}
+
+fn two_clause_twin() -> Twin {
+    Twin::with_bank_invariants(
+        &[
+            ("NonNegative", "self.balance >= 1"),
+            ("Other", "self.balance >= 2"),
+        ],
+        (0, 100),
+    )
+}
+
+/// Step 46 (FR-024-AC-66): an identity equal to the harness's, member for member, is accepted
+/// and carried unchanged into the packet and the request; its ordinal and node differ from every
+/// other identity this test constructs.
+#[trace("TC-035", "FR-024-AC-66")]
+#[test]
+fn tc_035_an_equal_obligation_identity_is_accepted_and_carried_unchanged() {
+    let twin = two_clause_twin();
+    let (fixture, identity, other_node) = identified(&twin);
+    assert_eq!(
+        fixture.harness.obligation, identity,
+        "the harness carries it"
+    );
+    let object = fixture.object();
+    let mut inputs = twin.invariant_inputs(
+        &fixture.package,
+        &fixture.clause,
+        &object,
+        CLAUSE,
+        &["balance"],
+    );
+    // The caller's own copy, equal member for member, not the harness's value.
+    inputs.obligation_identity = ObligationIdentity::new(
+        identity.node().clone(),
+        identity.model().cloned(),
+        identity.ordinal(),
+    );
+    let harness_identity = &fixture.harness.identity;
+    let text = fixture.playback(&[0]);
+    let parsed = parse_assertion_playback(
+        &text,
+        harness_identity.harness_symbol.as_str(),
+        harness_identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("parses");
+    inputs
+        .decode_falsification(
+            StateClauseHarness::V2Clause(&fixture.harness),
+            &parsed,
+            crate::unbounded_decode_limits(),
+        )
+        .expect("an equal identity is accepted");
+    assert_eq!(inputs.playback, vec![("balance".to_owned(), 0)]);
+
+    let replay = StateClauseReplay::new_invariant(inputs).expect("the replay is built");
+    let packet = replay
+        .packet
+        .obligation_identity
+        .as_ref()
+        .expect("the packet carries an identity");
+    for carried in [packet, &replay.wire.obligation_identity] {
+        assert_eq!(carried.node(), identity.node());
+        assert_eq!(carried.model(), identity.model());
+        assert_eq!(carried.ordinal(), identity.ordinal());
+        assert_eq!(carried.ordinal(), IDENTITY_ORDINAL);
+        assert_ne!(carried.node(), &other_node);
+        assert_ne!(carried.ordinal(), 0);
+        assert!(carried.model().is_some());
+    }
+}
+
+/// Step 46 (FR-024-AC-65): a caller identity differing from the harness's in any one member is
+/// `ObligationIdentityMismatch`, never `HarnessMismatch`, with the playback unbound; the check
+/// follows `NotInvariantHarness` and precedes the field-order check; the variant settles as a CG
+/// defect.
+#[trace("TC-035", "FR-024-AC-65")]
+#[test]
+fn tc_035_a_different_obligation_identity_is_refused_before_the_harness_members() {
+    let twin = two_clause_twin();
+    let (fixture, identity, other_node) = identified(&twin);
+    let object = fixture.object();
+    let text = fixture.playback(&[0]);
+    let parsed = {
+        let harness_identity = &fixture.harness.identity;
+        parse_assertion_playback(
+            &text,
+            harness_identity.harness_symbol.as_str(),
+            harness_identity.module_symbol.as_str(),
+            usize::MAX,
+            usize::MAX,
+        )
+        .expect("parses")
+    };
+    let v2 = StateClauseHarness::V2Clause(&fixture.harness);
+    let refuse = |caller: ObligationIdentity, fields: &[&str], harness: StateClauseHarness<'_>| {
+        let mut inputs =
+            twin.invariant_inputs(&fixture.package, &fixture.clause, &object, CLAUSE, fields);
+        inputs.obligation_identity = caller;
+        let error = inputs
+            .decode_falsification(harness, &parsed, crate::unbounded_decode_limits())
+            .err()
+            .expect("refused");
+        assert!(inputs.playback.is_empty(), "the playback is left unbound");
+        error
+    };
+
+    // Each member alone, the ordinal alone first.
+    let ordinal_only = ObligationIdentity::new(
+        identity.node().clone(),
+        identity.model().cloned(),
+        IDENTITY_ORDINAL + 1,
+    );
+    let model_only = ObligationIdentity::new(identity.node().clone(), None, IDENTITY_ORDINAL);
+    let node_only = ObligationIdentity::new(
+        other_node.clone(),
+        identity.model().cloned(),
+        IDENTITY_ORDINAL,
+    );
+    let all_three = ObligationIdentity::new(other_node, None, 0);
+    for (name, caller) in [
+        ("ordinal only", ordinal_only.clone()),
+        ("model only", model_only),
+        ("node only", node_only),
+        ("every member", all_three),
+    ] {
+        let error = refuse(caller, &["balance"], v2);
+        assert!(
+            matches!(error, StateClauseReplayError::ObligationIdentityMismatch),
+            "{name}: {error}"
+        );
+        assert!(matches!(
+            ReplaySettlement::from(&error),
+            ReplaySettlement::CgDefect
+        ));
+    }
+
+    // Identity first: a harness differing in identity and in field order is the identity refusal.
+    let error = refuse(ordinal_only.clone(), &["balance", "audit"], v2);
+    assert!(
+        matches!(error, StateClauseReplayError::ObligationIdentityMismatch),
+        "{error}"
+    );
+    // The same field-order difference with the matching identity is the field-order refusal.
+    let error = refuse(identity.clone(), &["balance", "audit"], v2);
+    assert!(
+        matches!(
+            error,
+            StateClauseReplayError::HarnessMismatch {
+                member: StateClauseHarnessMember::StateFields
+            }
+        ),
+        "{error}"
+    );
+
+    // The harness-kind check comes first: a frame harness with a differing identity is
+    // `NotInvariantHarness`.
+    let frame_twin = Twin::new();
+    let (frame_package, frame_clause) = frame_twin.emitted_package("BalanceNeverDrops");
+    let frames = quire_contract_codegen::generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        package: &frame_package,
+        clause: &frame_clause,
+        state_path: "crate::subject::Account",
+        state_fields: &["balance", "audit"],
+        subject_path: "crate::subject::deposit_debiting_within_range",
+        unwind: 4,
+    })
+    .expect("state-frame harnesses generate");
+    let error = refuse(
+        ordinal_only.clone(),
+        &["balance"],
+        StateClauseHarness::StateFrame(&frames.frame.identity),
+    );
+    assert!(
+        matches!(error, StateClauseReplayError::NotInvariantHarness),
+        "{error}"
+    );
+    // A V2 postcondition and a V2 precondition harness pass the `V2Clause` destructuring, so only
+    // the V2 kind check separates them from the identity check: the identity check must follow it.
+    for (other, name, native) in [
+        (
+            Twin::with_bounded_amount_implication(),
+            "BalanceNeverDrops",
+            true,
+        ),
+        (
+            Twin::with_bounded_other_precondition(),
+            "OtherBelowLimit",
+            false,
+        ),
+    ] {
+        let other_fixture = generate_with(&other, name, native);
+        let error = refuse(
+            ordinal_only.clone(),
+            &["balance"],
+            StateClauseHarness::V2Clause(&other_fixture.harness),
+        );
+        assert!(
+            matches!(error, StateClauseReplayError::NotInvariantHarness),
+            "{name}: {error}"
+        );
+    }
 }
