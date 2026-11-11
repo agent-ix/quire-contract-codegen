@@ -706,4 +706,50 @@ mod tests {
             );
         }
     }
+
+    /// A solver that exits without consuming an over-pipe-buffer query is an
+    /// unread-input process failure, never its scripted answer, and yields no handoff.
+    #[trace("TC-059", "FR-045-AC-7")]
+    #[test]
+    fn solver_exiting_before_reading_query_is_process_failed_non_proof() {
+        let query = vec![b'q'; 256 * 1024];
+        let execution = run_solver_query(
+            QuerySelection {
+                product: (),
+                item: "refinement-a",
+                instance: (),
+                depth: NonZeroU64::MIN,
+                kind: RefinementRole::Base,
+                query_bytes: query.clone(),
+            },
+            "/bin/sh".into(),
+            vec![OsString::from("-c"), OsString::from("printf 'unsat\\n'")],
+            ProcessLimits {
+                input_bytes: NonZeroUsize::new(256 * 1024).expect("limit"),
+                wall_clock: Duration::from_secs(5),
+                output_bytes: NonZeroUsize::new(1024).expect("limit"),
+            },
+            Cancel::new(),
+        )
+        .expect("bounded invocation");
+        assert!(matches!(
+            execution.process().outcome,
+            crate::smt::ProcessOutcome::InputUnread { .. }
+        ));
+        let expected = Expected {
+            item: "refinement-a",
+            subjects: ["concrete", "abstract"],
+            role: RefinementRole::Base,
+            attempt: execution.query().association.attempt(),
+            query_bytes: query,
+        };
+        let record = Run::from_execution(["concrete", "abstract"], execution);
+        assert_eq!(record.status(), SolverStatus::ProcessFailed);
+        assert_eq!(
+            refinement_handoff(0, &[expected], &[record]),
+            Err(RefinementHandoffError::NonProof(
+                SolverStatus::ProcessFailed
+            ))
+        );
+    }
 }
