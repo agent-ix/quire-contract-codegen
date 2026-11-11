@@ -120,3 +120,13 @@ only in AC-138) in this PR.
 | FR-024-AC-74 | examined | An equal minted identity is accepted and carried into request and packet. |
 | FR-024-AC-75 | examined | FrameReplayError::ObligationIdentityMismatch settles as ReplaySettlement::CgDefect. |
 | src/replay/obligation.rs frame_identity | context_only | function_contract_identity(site.obligation_identity(), &site.frame_occurrence, kind, &[]) |
+
+
+## Dispositions
+
+Round 1, fix head 6a152bd5 (one commit on 0945ae7a; origin/main 354e7c6f unmoved, `git merge-tree` clean). Checked against `git diff 0945ae7a..6a152bd5` and the code. Own worktree under the cargo lock: `--test it state_frame_obligation_identity` 11/11, `layout::` 8/8, `--lib role_parity` 5/5; mutant ME (MAX_NODE_DEPTH 32 -> 40) now killed by `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` (:186) and `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (:221), reverted, tree clean. `make spec` exit 0 with 6 warnings (= main); `quire matrix` all 11 ACs tagged. The committed `reviews/` copies were byte-identical (cmp) to the scratchpad files.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-137 now states the 32-level exception (generation returns RecordSerialization, negotiate settles Unsupported(RenderFailed), routed preflight still reports supported, stated and accepted); AC-141 and interface-001 (negotiate semantics and both StateFrameRefusal outputs) state the same. The obligation_wire.rs doc comment derives the bound: 3 containers per node level below the 3 wrapping the first node, read limit near level 42, about nine levels of margin; this matches my arithmetic (innermost segment of level d at container 3d+3). |
+| FND-002 | fixed | Writer: exactly 32 levels (nest(31)) is written and round trips, 33 (nest(32)) refused as RecordSerialization. Reader: new tc_025_a_record_nested_past_the_readable_depth_is_not_read reads a 32-level record and refuses 33 with StateFrameRecordError::Json (33 levels is ~102 containers, so it is the reader's own check, not serde_json's). My ME mutant 32 -> 40 now fails both tests. |

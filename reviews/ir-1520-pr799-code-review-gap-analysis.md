@@ -60,3 +60,13 @@ criterion, no stub, no tautological oracle.
 | FR-024-AC-73 | examined | FrameReplay::new compares the minted frame identity with the harness obligation and refuses a difference with FrameReplayError::ObligationIdentityMismatch before the request is built. |
 | FR-024-AC-74 | examined | A frame harness carrying the minted identity is accepted and the request and packet carry it. |
 | FR-024-AC-75 | examined | FrameReplayError::ObligationIdentityMismatch settles as ReplaySettlement::CgDefect. |
+
+
+## Dispositions
+
+Round 1, fix head 6a152bd5 (one commit on 0945ae7a; origin/main 354e7c6f unmoved, `git merge-tree` clean). Checked against `git diff 0945ae7a..6a152bd5` and the code. Own worktree under the cargo lock: `--test it state_frame_obligation_identity` 11/11, `layout::` 8/8, `--lib role_parity` 5/5; mutant ME (MAX_NODE_DEPTH 32 -> 40) now killed by `tc_025_a_key_nested_past_the_readable_depth_is_refused_when_written` (:186) and `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (:221), reverted, tree clean. `make spec` exit 0 with 6 warnings (= main); `quire matrix` all 11 ACs tagged. The committed `reviews/` copies were byte-identical (cmp) to the scratchpad files.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | role_parity_tests::compare_roles now asserts expected.identity.obligation == role_identity(&identities, role) for the generate_state_frame_role output (lib role_parity 5/5 pass); AC-137's evidence now names the pair-entry test, the negotiate test (negotiated harness equals the pair entry's) and the crate-internal assertion accurately. |
+| FND-002 | fixed | New ids::accepted() (node ids/accepted/21, no model, ordinal 17) differs in node and ordinal from every other identity the test constructs; the accept control decodes a harness generated with it and asserts packet and wire carry ids::accepted(). |
