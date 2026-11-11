@@ -73,20 +73,16 @@ impl Scanner {
     }
 }
 
+/// Whether an attribute list holds exactly `#[cfg(test)]`; `cfg(not(test))`, `cfg(all(test, ..))`
+/// and a feature named `test-support` mark production items and are scanned.
 fn is_cfg_test(attributes: &[Attribute]) -> bool {
     attributes.iter().any(|attribute| {
-        attribute.path().is_ident("cfg") && attribute.meta.to_token_stream_string().contains("test")
+        attribute.path().is_ident("cfg")
+            && quote::ToTokens::to_token_stream(&attribute.meta)
+                .to_string()
+                .replace(' ', "")
+                == "cfg(test)"
     })
-}
-
-trait MetaText {
-    fn to_token_stream_string(&self) -> String;
-}
-
-impl MetaText for syn::Meta {
-    fn to_token_stream_string(&self) -> String {
-        quote::ToTokens::to_token_stream(self).to_string()
-    }
 }
 
 impl<'ast> Visit<'ast> for Scanner {
@@ -102,6 +98,11 @@ impl<'ast> Visit<'ast> for Scanner {
             Item::Trait(item) => &item.attrs,
             Item::Use(item) => &item.attrs,
             Item::Type(item) => &item.attrs,
+            Item::Union(item) => &item.attrs,
+            Item::Macro(item) => &item.attrs,
+            Item::ExternCrate(item) => &item.attrs,
+            Item::ForeignMod(item) => &item.attrs,
+            Item::TraitAlias(item) => &item.attrs,
             _ => &Vec::new(),
         };
         if !self.scope.test_items && is_cfg_test(attributes) {
@@ -114,6 +115,8 @@ impl<'ast> Visit<'ast> for Scanner {
         let attributes = match item {
             syn::ImplItem::Fn(item) => &item.attrs,
             syn::ImplItem::Const(item) => &item.attrs,
+            syn::ImplItem::Type(item) => &item.attrs,
+            syn::ImplItem::Macro(item) => &item.attrs,
             _ => &Vec::new(),
         };
         if !self.scope.test_items && is_cfg_test(attributes) {
@@ -122,8 +125,12 @@ impl<'ast> Visit<'ast> for Scanner {
         visit::visit_impl_item(self, item);
     }
 
-    // Attributes (doc text, `trace` arguments, `cfg`) are not source the launch path runs.
-    fn visit_attribute(&mut self, _attribute: &'ast Attribute) {}
+    // Only `#[doc]` text is excluded (FR-017-AC-67); every other attribute is scanned.
+    fn visit_attribute(&mut self, attribute: &'ast Attribute) {
+        if !attribute.path().is_ident("doc") {
+            self.tokens(quote::ToTokens::to_token_stream(&attribute.meta));
+        }
+    }
 
     fn visit_ident(&mut self, ident: &'ast proc_macro2::Ident) {
         self.check(&ident.to_string());
@@ -234,8 +241,8 @@ fn the_launch_path_source_has_no_linux_only_or_sandbox_construct() {
     assert!(findings.is_empty(), "forbidden constructs: {findings:#?}");
 }
 
-/// The scanner finds the code literal and nothing else in the fixture: a scanner that skips
-/// string literals finds none, and one that includes test modules or comments finds more.
+/// The scanner finds the code literal and nothing else in the fixture: it ignores the comment and
+/// the `#[cfg(test)]` module; each narrower or wider scanner differs, so each control can fail.
 #[trace("FR-017-AC-67", "TC-043")]
 #[test]
 fn the_scan_finds_the_code_literal_and_not_the_test_module_or_the_comment() {
@@ -260,14 +267,29 @@ fn the_scan_finds_the_code_literal_and_not_the_test_module_or_the_comment() {
         2,
         "a scanner that includes test modules finds the test literal too"
     );
-    let raw: usize = FORBIDDEN
-        .iter()
-        .map(|token| {
-            FIXTURE
-                .to_lowercase()
-                .matches(&token.to_lowercase())
-                .count()
-        })
-        .sum();
-    assert_eq!(raw, 3, "a text scan that includes comments finds all three");
+    // A comment alone is not a finding, and a text scan would find it.
+    let comment_only = "// a cgroup in a comment\nfn f() {}\n";
+    assert!(scan_source(comment_only, FULL).is_empty());
+    assert!(comment_only.to_lowercase().contains("cgroup"));
+}
+
+/// Only `#[cfg(test)]` and `#[doc]` are excluded: a production item under `cfg(not(test))` or with
+/// a non-doc attribute argument is scanned, while `#[doc]` text and a `#[cfg(test)]` function are not.
+#[trace("FR-017-AC-67", "TC-043")]
+#[test]
+fn the_scan_excludes_only_cfg_test_items_and_doc_attributes() {
+    let scanned = |source: &str| scan_source(source, FULL).len();
+    assert_eq!(
+        scanned("#[cfg(not(test))]\nfn f() { let _ = \"/proc\"; }"),
+        1
+    );
+    assert_eq!(
+        scanned("#[cfg(feature = \"test-support\")]\nfn f() { let _ = \"/proc\"; }"),
+        1
+    );
+    assert_eq!(scanned("#[allow(clippy::pidfd)]\nfn f() {}"), 1);
+    assert_eq!(scanned("#[doc = \"uses /proc\"]\nfn f() {}"), 0);
+    assert_eq!(scanned("/// uses /proc\nfn f() {}"), 0);
+    assert_eq!(scanned("#[cfg(test)]\nfn f() { let _ = \"/proc\"; }"), 0);
+    assert_eq!(scanned("fn f() { println!(\"{}\", \"/proc\"); }"), 1);
 }

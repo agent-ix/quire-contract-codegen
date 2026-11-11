@@ -3,7 +3,7 @@
 use std::{
     ffi::OsString,
     fmt, io,
-    num::{NonZeroU64, NonZeroUsize},
+    num::NonZeroUsize,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -21,9 +21,6 @@ pub struct ProcessLimits {
     pub input_bytes: NonZeroUsize,
     /// Maximum elapsed execution time.
     pub wall_clock: Duration,
-    /// The declared memory ceiling of the process tree. The runner neither checks nor enforces
-    /// it; the caller's environment owns the cap (FR-028-AC-21).
-    pub memory_bytes: NonZeroU64,
     /// Maximum bytes retained from each of stdout and stderr.
     pub output_bytes: NonZeroUsize,
 }
@@ -274,7 +271,6 @@ mod tests {
         ProcessLimits {
             input_bytes: NonZeroUsize::new(input_bytes).unwrap(),
             wall_clock: Duration::from_secs(5),
-            memory_bytes: NonZeroU64::new(128 * 1024 * 1024).unwrap(),
             output_bytes: NonZeroUsize::new(output_bytes).unwrap(),
         }
     }

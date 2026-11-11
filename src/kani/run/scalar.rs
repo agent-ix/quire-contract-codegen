@@ -26,7 +26,7 @@ use crate::{
         output::report::KaniFailureCause,
         run::{
             execute::{
-                execute_kani_obligation_readonly, KaniExecutionEvidence, KaniExecutionRefusal,
+                execute_kani_obligation_library, KaniExecutionEvidence, KaniExecutionRefusal,
                 KaniExecutionRequest,
             },
             harness::KaniExecutableHarness,
@@ -422,17 +422,14 @@ pub(crate) fn execute_with_cleanup(
     seal_snapshot(snapshot.path())?;
     ensure_snapshot_matches(snapshot.path(), &entries)?;
     let proof_target = request.target_directory.join("kani-scalar-proof");
-    let evidence = execute_kani_obligation_readonly(
-        &KaniExecutionRequest {
-            cancel: request.cancel,
-            installation: request.installation,
-            harness: KaniExecutableHarness::Scalar(request.harness),
-            crate_directory: snapshot.path(),
-            target_directory: &proof_target,
-            home_directory: None,
-        },
-        snapshot.path(),
-    )
+    let evidence = execute_kani_obligation_library(&KaniExecutionRequest {
+        cancel: request.cancel,
+        installation: request.installation,
+        harness: KaniExecutableHarness::Scalar(request.harness),
+        crate_directory: snapshot.path(),
+        target_directory: &proof_target,
+        home_directory: None,
+    })
     .map_err(KaniScalarNativeError::Kani)?;
     ensure_snapshot_matches(snapshot.path(), &entries)?;
     if evidence.outcome != KaniRunOutcome::Verified {

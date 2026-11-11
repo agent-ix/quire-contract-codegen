@@ -1673,7 +1673,9 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    /// Records the order of the group signal and the reap around the real operations.
+    /// Records the order of the group signal and the reap around the real operations. At the
+    /// signal it probes the launcher's own pid, which a zombie still reserves and a reaped child
+    /// does not, so the record reflects the process table and not only the call order.
     #[derive(Debug, Default)]
     struct RecordingTeardown {
         events: std::sync::Mutex<Vec<&'static str>>,
@@ -1681,7 +1683,13 @@ mod tests {
 
     impl LaunchTeardown for RecordingTeardown {
         fn signal_group(&self, child: &mut Child) {
-            self.events.lock().unwrap().push("signal_group");
+            let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+            let reserved = rustix::process::test_kill_process(pid).is_ok();
+            self.events.lock().unwrap().push(if reserved {
+                "signal_group"
+            } else {
+                "signal_group_after_reap"
+            });
             SystemTeardown.signal_group(child);
         }
 
@@ -1702,8 +1710,8 @@ mod tests {
     }
 
     /// On a timeout, and on a launcher that exits on its own, the group is signalled before the
-    /// launcher is reaped (FR-017-AC-68). The recorder reports a reap-first order when the
-    /// operations are driven in that order, so the check can fail.
+    /// launcher is reaped (FR-017-AC-68). The recorder probes the process table at the signal,
+    /// so a reap-first order records `signal_group_after_reap` and fails this test.
     #[trace("FR-017-AC-68", "TC-043")]
     #[test]
     fn tc_043_the_group_is_signalled_before_the_launcher_is_reaped() {
@@ -1730,7 +1738,8 @@ mod tests {
             );
         }
 
-        // The mutant's order: reap first, then signal. The recorder reports it as such.
+        // The control: the same recorder driven reap-first, as a mutant would, reports that the
+        // launcher was already gone when the group was signalled.
         let recorder = RecordingTeardown::default();
         let mut child = Command::new("sh")
             .args(["-c", "exit 0"])
@@ -1739,6 +1748,9 @@ mod tests {
             .unwrap();
         recorder.reap(&mut child).unwrap();
         recorder.signal_group(&mut child);
-        assert_eq!(*recorder.events.lock().unwrap(), ["reap", "signal_group"]);
+        assert_eq!(
+            *recorder.events.lock().unwrap(),
+            ["reap", "signal_group_after_reap"]
+        );
     }
 }

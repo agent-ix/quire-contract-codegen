@@ -223,7 +223,7 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
 
 /// The timed-out reason maps to `Incomplete(TimedOut)` and the exhausted-unwind-bound reason to
 /// `Incomplete(ResourceExhausted)`.
-#[trace("TC-040")]
+#[trace("TC-040", "FR-029-AC-3")]
 #[test]
 fn tc_040_a_timeout_and_an_exhausted_unwind_bound_are_incomplete() {
     assert_eq!(

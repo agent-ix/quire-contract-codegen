@@ -368,6 +368,64 @@ fn a_witness_phase_killed_by_the_environment_is_no_verdict() {
     assert_eq!(stand_in.calls().len(), 2, "no third launch");
 }
 
+/// (c) A witness whose report states the exit status `out_of_memory` lists no failed checks, yet
+/// is `FailedWithoutCounterexample` with cause `out_of_memory` (never `WitnessDisagreed`), with no
+/// third launch and ceilings equal to the proof launch's (FR-017-AC-63, FR-028-AC-25). The control
+/// is a witness with no such status and no checks, which is `WitnessDisagreed`.
+#[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-25")]
+#[test]
+fn a_witness_report_stating_out_of_memory_is_failed_without_counterexample() {
+    let harness = member("a", "check", 4);
+    let stating = |status: Option<&str>| {
+        let mut result = serde_json::json!({
+            "harness_id": "a::check", "status": "Failure", "checks": []
+        });
+        let mut document = serde_json::json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": { "results": [result.take()] }
+        });
+        if let Some(status) = status {
+            document["error_details"] = serde_json::json!([
+                { "harness_id": "a::check", "has_errors": true, "exit_status": status }
+            ]);
+        }
+        serde_json::to_vec(&document).unwrap()
+    };
+    let wire = |evidence: &KaniExecutionEvidence| serde_json::to_value(evidence).unwrap();
+
+    let stand_in = failing_then(
+        "two-phase-witness-oom",
+        &[FAIL_10],
+        (Some(&stating(Some("out_of_memory"))), "", 1),
+    );
+    let evidence = run(&stand_in, &harness);
+    assert_eq!(
+        evidence.outcome,
+        inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample)
+    );
+    assert_eq!(
+        wire(&evidence)["failureCause"],
+        serde_json::json!({ "kind": "out_of_memory" })
+    );
+    assert_eq!(stand_in.calls().len(), 2, "no third launch");
+    assert_eq!(evidence.ceilings, harness.identity.ceilings);
+    assert_eq!(
+        evidence.proof_phase.as_deref().unwrap().ceilings,
+        evidence.ceilings
+    );
+
+    let control = failing_then(
+        "two-phase-witness-no-status",
+        &[FAIL_10],
+        (Some(&stating(None)), "", 1),
+    );
+    assert_eq!(
+        run(&control, &harness).outcome,
+        inconclusive(KaniInconclusiveReason::WitnessDisagreed),
+        "a witness listing no failed checks and stating no cause still disagrees"
+    );
+}
+
 /// (c) A witness launch exiting unsuccessfully with no report is `NoVerdict`.
 #[trace("TC-027", "FR-017-AC-63")]
 #[test]

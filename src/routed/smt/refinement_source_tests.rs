@@ -291,7 +291,6 @@ fn source_records_with_rows(row_count: usize, reverse: bool) -> (Vec<Expected>, 
                 ProcessLimits {
                     input_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
                     wall_clock: Duration::from_secs(5),
-                    memory_bytes: NonZeroU64::new(128 << 20).expect("limit"),
                     output_bytes: NonZeroUsize::new(1 << 20).expect("limit"),
                 },
                 Cancel::new(),
@@ -469,7 +468,6 @@ fn production_refinement_live_solver_handoff_reaches_qsl_checker() {
                 ProcessLimits {
                     input_bytes: NonZeroUsize::new(16 << 20).expect("finite"),
                     wall_clock: Duration::from_secs(60),
-                    memory_bytes: NonZeroU64::new(1 << 30).expect("finite"),
                     output_bytes: NonZeroUsize::new(64 << 20).expect("finite"),
                 },
                 &cancel,
@@ -578,7 +576,6 @@ fn production_refinement_zero_rows_preserves_missing_tool() {
                 ProcessLimits {
                     input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                     wall_clock: Duration::from_secs(1),
-                    memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
                     output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                 },
                 &cancel,
@@ -629,7 +626,6 @@ fn production_refinement_source_permutation_preserves_named_query_associations()
                     ProcessLimits {
                         input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                         wall_clock: Duration::from_secs(5),
-                        memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
                         output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                     },
                     &cancel,
@@ -747,7 +743,6 @@ fn production_refinement_retains_completed_records_after_a_later_mechanism_error
                 ProcessLimits {
                     input_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                     wall_clock: Duration::from_secs(5),
-                    memory_bytes: NonZeroU64::new(128 << 20).expect("finite"),
                     output_bytes: NonZeroUsize::new(1 << 20).expect("finite"),
                 },
                 &cancel,

@@ -371,7 +371,6 @@ mod tests {
             ProcessLimits {
                 input_bytes: NonZeroUsize::new(1024).expect("limit"),
                 wall_clock: Duration::from_secs(5),
-                memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("limit"),
                 output_bytes: NonZeroUsize::new(1024).expect("limit"),
             },
             Cancel::new(),
@@ -676,7 +675,6 @@ mod tests {
                 ProcessLimits {
                     input_bytes: NonZeroUsize::new(1024).expect("limit"),
                     wall_clock: Duration::from_secs(5),
-                    memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("limit"),
                     output_bytes: NonZeroUsize::new(output_limit).expect("limit"),
                 },
                 Cancel::new(),

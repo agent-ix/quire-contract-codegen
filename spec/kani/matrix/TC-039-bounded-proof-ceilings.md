@@ -166,8 +166,7 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     (FR-028-AC-21).
 25. The over-allocating stand-in is `Verified`: the runner measured nothing and killed nothing, so
     the environment, not the runner, is the only thing that could stop it. The stand-in environment
-    with no memory interface runs and is not refused with `MemoryMechanismUnavailable`
-    (FR-028-AC-21).
+    with no memory interface runs and is not refused for lack of a memory mechanism (FR-028-AC-21).
 26. The scan finds none of the tokens. Before IR-1510 it found `procfs` and
     `pidfd` in `memory.rs`; they are deleted (FR-028-AC-21, FR-017-AC-67). The
     macOS property is verified when the suite runs on a macOS host and is not claimed by the Linux
@@ -211,14 +210,11 @@ Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), 
 `tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and
 wall-clock ceilings.
 
-The process-tree part of step 19 (the former FR-028-AC-21) is implemented in the current code with
-mandatory Linux PID-namespace ownership and a procfs resident-memory observer; bubblewrap,
-permission to create the namespaces and readable procfs observations are required, and an
-unavailable mechanism refuses before backend dispatch. ADR-007 withdraws that design: FR-028-AC-21
-is now environmental, and the memory-overage, observer, procfs, ancestry and gated-startup fixtures
-listed above test the runner-side mechanism that IR-1510 removes, so they are not evidence for the
-reworded criterion. The identity-ceiling and expired-deadline fixtures above are unaffected. Steps 23 to 26 are implemented under
-IR-1510: `execute.rs` (`identity_ceilings_govern_execution_and_the_runner_enforces_no_memory_cap`, `the_evidence_records_the_named_peak_the_environment_provides_in_bytes`, `an_environment_memory_kill_is_classified_from_the_report_only`), `two_phase_tests.rs` (`a_witness_phase_killed_by_the_environment_is_no_verdict`) and `tests/it/kani_run_scan.rs`.
+The process-tree part of step 19 (the former FR-028-AC-21) once ran with a Linux PID-namespace owner
+and a procfs resident-memory observer. ADR-007 withdrew that design and IR-1510 deleted it and its
+memory-overage, observer, procfs, ancestry and gated-startup fixtures: FR-028-AC-21 is now
+environmental. The identity-ceiling and expired-deadline fixtures above are unaffected. Steps 23 to 26 are implemented under
+IR-1510: `execute.rs` (`identity_ceilings_govern_execution_and_the_runner_enforces_no_memory_cap`, `the_evidence_records_the_named_peak_the_environment_provides_in_bytes`, `an_environment_memory_kill_is_classified_from_the_report_only`), `two_phase_tests.rs` (`a_witness_phase_killed_by_the_environment_is_no_verdict`, `a_witness_report_stating_out_of_memory_is_failed_without_counterexample`) and `tests/it/kani_run_scan.rs`.
 
 Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
 refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In

@@ -24,8 +24,6 @@ pub enum ReachedLimit {
     InputBytes,
     /// The process exceeded its wall-clock deadline.
     WallClock,
-    /// The process tree exceeded its resident-memory ceiling.
-    MemoryBytes,
     /// Captured stdout or stderr exceeded its byte ceiling.
     OutputBytes,
 }

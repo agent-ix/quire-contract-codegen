@@ -390,7 +390,7 @@ pub fn execute_kani_obligation(
         return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
     }
     let totality_line = require_in_crate(request)?;
-    run_single(request, None, totality_line)
+    run_single(request, false, totality_line)
 }
 
 pub(in crate::kani) fn execute_constrained_raw(
@@ -400,15 +400,15 @@ pub(in crate::kani) fn execute_constrained_raw(
         return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
     }
     let totality_line = require_in_crate(request)?;
-    run_single(request, None, totality_line)
+    run_single(request, false, totality_line)
 }
 
-/// Runs a harness from a prepared source tree that the backend is expected to leave unmodified.
-/// The runner does not enforce this (ADR-007): it is no sandbox, so the caller's environment
-/// owns any read-only mount.
-pub(crate) fn execute_kani_obligation_readonly(
+/// Runs a non-constrained harness over the prepared library target (`--lib`). The runner makes
+/// the source tree read-only for no one (ADR-007): it is no sandbox, so the caller's environment
+/// owns any read-only mount, and the staged-snapshot comparison in `scalar.rs` is the guard that
+/// the run left the tree unchanged.
+pub(crate) fn execute_kani_obligation_library(
     request: &KaniExecutionRequest<'_>,
-    source_directory: &Path,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     if matches!(
         request.harness,
@@ -417,7 +417,7 @@ pub(crate) fn execute_kani_obligation_readonly(
         return Err(KaniExecutionRefusal::WrongMethodExecutionRoute);
     }
     let totality_line = require_in_crate(request)?;
-    run_single(request, Some(source_directory), totality_line)
+    run_single(request, true, totality_line)
 }
 
 /// Refuses a request whose crate's library source does not contain its harness's generated
@@ -685,10 +685,13 @@ fn conclude_witness(
             && witnessed.iter().all(|failure| proved.contains(failure))
     };
     let agrees = match &witness.outcome {
-        KaniRunOutcome::Falsified { .. }
-        | KaniRunOutcome::Inconclusive {
+        KaniRunOutcome::Falsified { .. } => same_failures,
+        // A report stating `out_of_memory` lists no checks, so it cannot reproduce the proof
+        // phase's failures; the environment ended the witness, and that is the outcome
+        // (FR-017-AC-63(c), FR-028-AC-25).
+        KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::FailedWithoutCounterexample,
-        } => same_failures,
+        } => same_failures || matches!(witness.failure_cause, Some(KaniFailureCause::OutOfMemory)),
         KaniRunOutcome::Cancelled { .. }
         | KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::TimedOut | KaniInconclusiveReason::NoVerdict,
@@ -728,14 +731,14 @@ fn witness_refused(
 /// The two-phase run of one harness whose presence in the crate has been checked.
 fn run_single(
     request: &KaniExecutionRequest<'_>,
-    read_only_source: Option<&Path>,
+    library_only: bool,
     totality_line: Option<u32>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    let proof = run_phase_single(request, Phase::Proof, read_only_source, totality_line)?;
+    let proof = run_phase_single(request, Phase::Proof, library_only, totality_line)?;
     if !wants_witness(&proof) {
         return Ok(proof);
     }
-    match run_phase_single(request, Phase::Witness, read_only_source, totality_line) {
+    match run_phase_single(request, Phase::Witness, library_only, totality_line) {
         Ok(witness) => Ok(conclude_witness(proof, witness)),
         Err(refusal) => Err(witness_refused(refusal, vec![proof])),
     }
@@ -745,13 +748,12 @@ fn run_single(
 fn run_phase_single(
     request: &KaniExecutionRequest<'_>,
     phase: Phase,
-    read_only_source: Option<&Path>,
+    library_only: bool,
     totality_line: Option<u32>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, command) =
-        launch_command(request, phase, &report_path, read_only_source.is_some());
+    let (arguments, command) = launch_command(request, phase, &report_path, library_only);
     let (launch, applied) = start(
         request,
         command,
@@ -912,7 +914,7 @@ pub fn execute_kani_obligations(
         let members: Vec<usize> = group.iter().map(|(position, _)| *position).collect();
         let evidence = match group.as_slice() {
             [(position, only)] => {
-                run_phase_single(only, Phase::Proof, None, totality_lines[*position])
+                run_phase_single(only, Phase::Proof, false, totality_lines[*position])
                     .map(|evidence| vec![evidence])
             }
             _ => run_group(&group, Phase::Proof, &totality_lines),
@@ -951,7 +953,7 @@ pub fn execute_kani_obligations(
         let members: Vec<usize> = group.iter().map(|(position, _)| *position).collect();
         let witnessed = match group.as_slice() {
             [(position, only)] => {
-                run_phase_single(only, Phase::Witness, None, totality_lines[*position])
+                run_phase_single(only, Phase::Witness, false, totality_lines[*position])
                     .map(|evidence| vec![evidence])
             }
             _ => run_group(&group, Phase::Witness, &totality_lines),
@@ -1710,7 +1712,7 @@ mod tests {
 
     /// Two runs sharing a target directory at the same time each read their own report: the
     /// report of a run that is still going is neither read nor removed by another.
-    #[trace("TC-027")]
+    #[trace("TC-027", "FR-017-AC-19")]
     #[test]
     fn tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports() {
         let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
@@ -2509,9 +2511,7 @@ exit 0
                 home_directory: None,
             };
             if read_only {
-                execute_kani_obligation_readonly(&request, &stand_in.crate_directory)
-                    .unwrap()
-                    .outcome
+                execute_kani_obligation_library(&request).unwrap().outcome
             } else {
                 execute_kani_obligation(&request).unwrap().outcome
             }
@@ -2580,7 +2580,7 @@ exit 0
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
@@ -2614,7 +2614,7 @@ exit 0
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
@@ -2646,7 +2646,7 @@ exit 0
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
         assert!(matches!(
@@ -2668,7 +2668,7 @@ exit 0
             Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
         ));
         assert!(matches!(
@@ -2697,7 +2697,7 @@ exit 0
             Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
         ));
         assert!(matches!(
@@ -2726,7 +2726,7 @@ exit 0
             Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
         ));
         assert!(matches!(
@@ -2809,7 +2809,7 @@ exit 0
             Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
         ));
         assert!(matches!(
-            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            execute_kani_obligation_library(&request),
             Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
         ));
         assert!(matches!(
