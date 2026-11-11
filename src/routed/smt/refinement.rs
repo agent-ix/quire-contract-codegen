@@ -334,7 +334,7 @@ mod tests {
         RefinementRun,
     };
     use crate::{
-        kani::run::process::ProcessLimits,
+        kani::run::process::{ProcessLimits, ProcessOutcome},
         routed::smt::{run_solver_query, QuerySelection, ReachedLimit, SolverStatus},
     };
 
@@ -734,7 +734,7 @@ mod tests {
         .expect("bounded invocation");
         assert!(matches!(
             execution.process().outcome,
-            crate::smt::ProcessOutcome::InputUnread { .. }
+            ProcessOutcome::InputUnread { .. }
         ));
         let expected = Expected {
             item: "refinement-a",
