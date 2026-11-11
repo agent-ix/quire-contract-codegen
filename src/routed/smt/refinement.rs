@@ -334,7 +334,7 @@ mod tests {
         RefinementRun,
     };
     use crate::{
-        kani::run::process::ProcessLimits,
+        kani::run::process::{ProcessLimits, ProcessOutcome},
         routed::smt::{run_solver_query, QuerySelection, ReachedLimit, SolverStatus},
     };
 
@@ -644,18 +644,28 @@ mod tests {
     #[trace("TC-059", "FR-045-AC-7")]
     #[test]
     fn non_proof_solver_outcomes_refuse_refinement_handoff() {
+        // Each script drains stdin first; one that exits unread races the runner's
+        // query write and reports InputUnread (ProcessFailed) instead of its outcome.
         for (script, output_limit, expected_status) in [
-            ("printf 'sat\\n'", 1024, SolverStatus::Sat),
-            ("printf 'unknown\\n'", 1024, SolverStatus::Unknown),
+            ("cat >/dev/null; printf 'sat\\n'", 1024, SolverStatus::Sat),
             (
-                "printf 'unsat\\n'; exit 3",
+                "cat >/dev/null; printf 'unknown\\n'",
+                1024,
+                SolverStatus::Unknown,
+            ),
+            (
+                "cat >/dev/null; printf 'unsat\\n'; exit 3",
                 1024,
                 SolverStatus::ProcessFailed,
             ),
-            (":", 1024, SolverStatus::MalformedResponse),
-            ("printf 'invalid\\n'", 1024, SolverStatus::MalformedResponse),
+            ("cat >/dev/null", 1024, SolverStatus::MalformedResponse),
             (
-                "printf 'unsat\\n(extra)'",
+                "cat >/dev/null; printf 'invalid\\n'",
+                1024,
+                SolverStatus::MalformedResponse,
+            ),
+            (
+                "cat >/dev/null; printf 'unsat\\n(extra)'",
                 2,
                 SolverStatus::Stopped(ReachedLimit::OutputBytes),
             ),
@@ -695,5 +705,51 @@ mod tests {
                 "{script}"
             );
         }
+    }
+
+    /// A solver that exits without consuming an over-pipe-buffer query is an
+    /// unread-input process failure, never its scripted answer, and yields no handoff.
+    #[trace("TC-059", "FR-045-AC-7")]
+    #[test]
+    fn solver_exiting_before_reading_query_is_process_failed_non_proof() {
+        let query = vec![b'q'; 256 * 1024];
+        let execution = run_solver_query(
+            QuerySelection {
+                product: (),
+                item: "refinement-a",
+                instance: (),
+                depth: NonZeroU64::MIN,
+                kind: RefinementRole::Base,
+                query_bytes: query.clone(),
+            },
+            "/bin/sh".into(),
+            vec![OsString::from("-c"), OsString::from("printf 'unsat\\n'")],
+            ProcessLimits {
+                input_bytes: NonZeroUsize::new(256 * 1024).expect("limit"),
+                wall_clock: Duration::from_secs(5),
+                output_bytes: NonZeroUsize::new(1024).expect("limit"),
+            },
+            Cancel::new(),
+        )
+        .expect("bounded invocation");
+        assert!(matches!(
+            execution.process().outcome,
+            ProcessOutcome::InputUnread { .. }
+        ));
+        let expected = Expected {
+            item: "refinement-a",
+            subjects: ["concrete", "abstract"],
+            role: RefinementRole::Base,
+            attempt: execution.query().association.attempt(),
+            query_bytes: query,
+        };
+        let record = Run::from_execution(["concrete", "abstract"], execution);
+        assert_eq!(record.status(), SolverStatus::ProcessFailed);
+        assert_eq!(
+            refinement_handoff(0, &[expected], &[record]),
+            Err(RefinementHandoffError::NonProof(
+                SolverStatus::ProcessFailed
+            ))
+        );
     }
 }
