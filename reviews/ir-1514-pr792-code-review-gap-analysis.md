@@ -49,3 +49,16 @@ Ruling: accept for this PR. Add a small deterministic test as a follow-up, or in
 | TC-059 step 8 | examined | spec/routed/matrix/TC-059-hyper-smt-induction-map.md:114-123 | Separately exercise an FR-315 query refusal and Sat, Unknown, absent response, malformed response, process failure and reached-limit solver results ... Assert typed non-proof evidence and no proof-bearing handoff (FR-045-AC-7). |
 | FR-045-AC-3 | context_only | spec/routed/functional/FR-045-hyper-smt-induction-map.md:208 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query input-byte, wall-clock and captured-output limits |
 | tests::non_proof_solver_outcomes_refuse_refinement_handoff | examined | src/routed/smt/refinement.rs:644-708 | six scripted outcomes, status and NonProof handoff asserted |
+
+## Dispositions
+
+Round 1, head 13cd4276 (fix commit 13cd4276 on 9a0244cb; it merges cleanly with origin/main 6e62186e, and the PR diff is still only refinement.rs plus the two reviews/ files). The fix adds `solver_exiting_before_reading_query_is_process_failed_non_proof` (src/routed/smt/refinement.rs:710-754), tagged `#[trace("TC-059", "FR-045-AC-7")]`. The test sends a 256 KiB query (four times the default pipe buffer) to `/bin/sh -c "printf 'unsat\n'"` with `input_bytes` set to 256 KiB. It asserts outcome `InputUnread`, status `ProcessFailed` and `Err(NonProof(ProcessFailed))`.
+
+Reviewer runs, one flock-held sequence with all 32 cores saturated:
+- New test: 30/30 passed.
+- Old `non_proof_solver_outcomes_refuse_refinement_handoff`: 30/30 passed.
+- Mutation, mapping `InputUnread` to `MalformedResponse` at mod.rs:212-214: the new test failed at refinement.rs:747 (left `MalformedResponse`, right `ProcessFailed`). The mutation was then reverted.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | after: solver_exiting_before_reading_query_is_process_failed_non_proof: 256 KiB query to /bin/sh -c "printf 'unsat\n'"; asserts ProcessOutcome::InputUnread, record.status() == ProcessFailed, refinement_handoff == Err(NonProof(ProcessFailed)); deterministic 30/30 under load; InputUnread->MalformedResponse mutant killed |
