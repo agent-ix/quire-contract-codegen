@@ -68,3 +68,12 @@ The status and evidence edits are accurate apart from two low wording defects be
 | kani tests.md FR-053 row | examined | spec/kani/matrix/tests.md:13 | PLANNED (IR-1442) |
 | TC-030 IEEE-float row | examined | spec/routed/matrix/TC-030-capability-settlement.md:398 | sqrt and fma derive under the delivered FR-014 derivation of IR-1502 |
 | spec.md registry row | examined | spec/spec.md:93 | sqrt and fma use the delivered FR-014 derivation of IR-1502 |
+
+## Dispositions
+
+Round 1, head de49b2c4 (fix commit de49b2c4 on 8c0b9508). The fix merges cleanly with origin/main 69ab6109 (`git merge-tree --write-tree`). The three reviews/ files in the branch are byte-identical (cmp) to the reviewer copies. Reviewer focused job, under the cargo slot: `cargo test --locked --lib --test it -- ieee_sqrt_fma layout scalar::` gave lib 62 passed and it 14 passed, and `cargo fmt --check` is clean. Spec checks: `quire validate` over spec, plan and reviews gives 0 errors and 6 warnings, the same count as main, and `quire matrix` lists FR-014-AC-72..80 as tagged. AC-79 now also binds `src/oracle/scalar/lower/tests.rs:987`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | after: "parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 were conditional on P3 (IR-1502), which is delivered; they remain conditional on P1." (FR-053:344) |
+| FND-002 | fixed | after: "...the Contract IR float `requires_bound` ruling (IR-69); the FR-014 `sqrt`/`fma` derivation (IR-1502) is delivered; TC-067 controls have not run." (spec/kani/matrix/tests.md:13) |

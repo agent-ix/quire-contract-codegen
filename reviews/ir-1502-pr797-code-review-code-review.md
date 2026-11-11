@@ -80,3 +80,11 @@ One low test-quality nit follows. The spec and evidence gaps are in SR-179404867
 | tests/it/scalar_source_forms.rs | examined | tests/it/scalar_source_forms.rs:19-231 | helpers pub(crate) |
 | tests/exact_scalar_support/package.rs | examined | tests/exact_scalar_support/package.rs:2438-2463 | identity arms, call operator |
 | src/routed/capability.rs | context_only | src/routed/capability.rs:612 | IeeeArithmetic maps to KaniFormFamily::IeeeFloat |
+
+## Dispositions
+
+Round 1, head de49b2c4 (fix commit de49b2c4 on 8c0b9508). The fix merges cleanly with origin/main 69ab6109 (`git merge-tree --write-tree`). The three reviews/ files in the branch are byte-identical (cmp) to the reviewer copies. Reviewer focused job, under the cargo slot: `cargo test --locked --lib --test it -- ieee_sqrt_fma layout scalar::` gave lib 62 passed and it 14 passed, and `cargo fmt --check` is clean. Spec checks: `quire validate` over spec, plan and reviews gives 0 errors and 6 warnings, the same count as main, and `quire matrix` lists FR-014-AC-72..80 as tagged. AC-79 now also binds `src/oracle/scalar/lower/tests.rs:987`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | after: fixture renamed root32; comment "A two-operand call node (totalOrder) has the wrong operand count for either descriptor: the call body is a BodyMismatch."; assert matches!(&refusal, ExactScalarRefusal::BodyMismatch { expected_operator: "call", expected_arguments: found } if *found == expected_arguments) with 1 for sqrt and 3 for fma (tests/it/ieee_sqrt_fma.rs:235, 261-272) |
