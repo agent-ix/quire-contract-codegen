@@ -50,3 +50,19 @@ CHANGES REQUIRED. The central conclusion is sound and verified against the vendo
 | FR-034-AC-54 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1897 | \| FR-034-AC-54 \| PLANNED/UNRUN. On the independently grounded supported cooperative cancellation path, the actual original O gate owner retains the gate through actual I confirmation before actual close; early-close and omitted-confirmation controls fail without marker, stage or refusal-label proof. Genuine unavailable confirmation at the original cutoff follows AC-38 CleanupUnconfirmed with explicit actual-owner abandonment/right disposal and no ordering or cleanup credit, never a renamed fatal close or diagnosis of kernel fault. Healthy restored order and unavailable-confirmation refusal are |
 | FR-034-AC-83 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1926 | \| FR-034-AC-83 \| PLANNED/UNRUN. The original exclusive caller lease closes independently of retained monitor/INIT ownership and does not leak into children; a leaked alias cannot preserve authorization after actual caller death. \| Test \| |
 | FR-034-AC-87 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1930 | \| FR-034-AC-87 \| PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal. On AC-54's independently grounded supported cooperative path, actual I confirmation precedes retained-gate close; late-operation/early-close mutants fail. AC-38 unavailable-confirmation abandonment at the original cutoff grants no seal, order or cleanup credit; a skipped poll, lost pin or owner defect is not a kernel-fault diagnosis. Producer ordinal certificates are retired. \| Test \| |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | Option 3's P1 column says 'S is outside every foreign C fork with no unsafe code'. That is true of S, but the release authority moves to C's endpoint of the C-to-L channel ('release on C's instruction'), and that endpoint sits in C's shared table, which every foreign C fork copies. A fork child of a live C can write a release instruction on the inherited endpoint. SO_PEERCRED is fixed at socket creation, so L cannot tell the child from C. This is the same early-release alias that P1 records for S held in C. Only the dead-caller variant goes away, and only if L dies with C. State that the C-L endpoint (and every other C-held channel endpoint) is an aliasable release authority under option 3, and that P1 is not addressed for it. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:206 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in ac5beeeb |
+| FND-002 | fixed | fixed in ac5beeeb |
+| FND-003 | fixed | fixed in ac5beeeb |
+| FND-004 | fixed | fixed in ac5beeeb |
+| FND-005 | fixed | fixed in ac5beeeb |

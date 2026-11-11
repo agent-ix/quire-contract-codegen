@@ -35,3 +35,10 @@ CHANGES REQUIRED (manual: Jev client unavailable). All five controls are honestl
 | ADR-005-control-early-close | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:150 | \| Live early close \| C closes S before actual I confirmation, or omits confirmation \| Cooperative I-before-last-close passes; each mutant fails; withheld confirmation to the original cutoff yields only bounded AC-38 abandonment \| UNRUN \| |
 | ADR-005-control-peer-loss | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:151 | \| Peer loss on the NOSIGNAL release \| Peer disappears during C's send; second successful send; partial permission; NOSIGNAL omitted \| EPIPE with no SIGPIPE, no second release, original stop and cutoff remain active, permission is neither release nor Ready. A held R alias in C's window makes the send succeed and must fail this control. \| UNRUN \| |
 | ADR-005-control-charge | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:152 | \| Omitted native or kernel charge \| One socket, skb, in-flight right, stack or table term dropped from the peak, or one Start right wrong, extra or truncated \| The pre-exposure comparison fails rather than borrowing another ceiling; every received or pending right is disposed after refusal \| UNRUN; the two non-derivable terms have no oracle to compare against \| |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in ac5beeeb |
+| FND-002 | fixed | fixed in ac5beeeb |

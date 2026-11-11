@@ -50,3 +50,19 @@ CHANGES REQUIRED. Status, premise table, controls and consequences are consisten
 | FR-034-AC-54 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1897 | \| FR-034-AC-54 \| PLANNED/UNRUN. On the independently grounded supported cooperative cancellation path, the actual original O gate owner retains the gate through actual I confirmation before actual close; early-close and omitted-confirmation controls fail without marker, stage or refusal-label proof. Genuine unavailable confirmation at the original cutoff follows AC-38 CleanupUnconfirmed with explicit actual-owner abandonment/right disposal and no ordering or cleanup credit, never a renamed fatal close or diagnosis of kernel fault. Healthy restored order and unavailable-confirmation refusal are |
 | FR-034-AC-83 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1926 | \| FR-034-AC-83 \| PLANNED/UNRUN. The original exclusive caller lease closes independently of retained monitor/INIT ownership and does not leak into children; a leaked alias cannot preserve authorization after actual caller death. \| Test \| |
 | FR-034-AC-87 | context_only | spec/kani/functional/FR-034-caller-death-ownership.md:1930 | \| FR-034-AC-87 \| PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal. On AC-54's independently grounded supported cooperative path, actual I confirmation precedes retained-gate close; late-operation/early-close mutants fail. AC-38 unavailable-confirmation abandonment at the original cutoff grants no seal, order or cleanup credit; a skipped poll, lost pin or owner defect is not a kernel-fault diagnosis. Producer ordinal certificates are retired. \| Test \| |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | 'Every option that changes custody or protocol (2 to 7) ... contradicts AC-54's O gate owner' is too broad. Taken alone, option 6 is the committed O-held pipe gate with an RWF_NOSIGNAL write. Options 5 and 7 are a fork policy and a lease-liveness change. None of the three moves the gate writer away from O, so none contradicts AC-54 by itself, although each may still need an amendment for other reasons (protocol, AC-83, profile). Say that AC-54 is contradicted by options that move the writer (2, 3, 4, or 5-7 combined with one of them), and give the separate amendment reason for 5-7. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:197-200 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in ac5beeeb |
+| FND-002 | fixed | fixed in ac5beeeb |
+| FND-003 | fixed | fixed in ac5beeeb |
+| FND-004 | fixed | fixed in ac5beeeb |
+| FND-005 | fixed | fixed in ac5beeeb |

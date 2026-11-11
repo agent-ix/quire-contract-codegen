@@ -39,3 +39,12 @@ PASS WITH LOWS. The custody walk-through correctly marks R (C copy) as an aliasa
 | ADR-005-inventory | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:127-135 | \| Term \| Source \| Status \| \| --- \| --- \| --- \| \| Gate endpoint descriptors and file objects \| exact counts in C, L, O, M tables \| Count derivable; kernel object size not \| \| Control-message bytes per Start transfer \| `cmsg_space!` for the exact right count \| Derivable; five rights exceeds the four-right common maximum, so both Start counts and the common maximum change together \| \| Queued and partial rights after refusal, setup failure or cancellation \| receiver-owned `RecvAncillaryBuffer` drain with `CMSG_CLOEXEC` \| Ownership derivable; kernel in-flight cost not \| \| Stream queued bytes \| send |
 | ADR-005-option-5 | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:165 | \| 5. Authorize a non-descriptor lease and a measured gate profile \| Replace the fd lease by an identity not duplicated by fork, and pin a measured kernel profile for the gate. \| New caller-death mechanism and a profile-restricted support claim; the measurement is itself unrun. \| |
 | ADR-005-not-grounded | examined | spec/decisions/ADR-005-original-guardian-gate-ownership.md:180-187 | - No measurement: no Cargo build, native probe, kernel read or control was run. - Kernel facts (fork copying the table, the in-flight right accounting and per-message right list,   skb overhead, per-user counter) are stated from kernel behavior and were not verified on the   supported kernel here. - Whether any supported embedding actually forks from a signal handler, and which supported kernel   and build profile applies, are not established. - No packet existed at `/tmp/ix-handoff/ir717-operational-gate-contract.md`; the private design   review and feasibility report cited in the ticket were |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in ac5beeeb |
+| FND-002 | fixed | fixed in ac5beeeb |
+| FND-003 | fixed | fixed in ac5beeeb |
+| FND-004 | fixed | fixed in ac5beeeb |

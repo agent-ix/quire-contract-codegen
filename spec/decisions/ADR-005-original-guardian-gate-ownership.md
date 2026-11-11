@@ -63,9 +63,9 @@ alias, which is the premise that fails (P1). It is not evidence of any running m
 
 The strong original-gate construction is held **UNBACKED**; this record selects no architecture.
 FR-034-AC-38, AC-54, AC-83, AC-87 and AC-94 stay as committed, and a product choice below does not
-by itself authorize implementation: any option that changes custody or protocol contradicts
-AC-54's "actual original O gate owner" and needs an explicit, reviewed FR-034/TC-049 amendment
-evaluated by the separate specification reviewer before IR-652 implementation.
+by itself authorize implementation: any option that changes custody, protocol or a committed
+predicate needs an explicit, reviewed FR-034/TC-049 amendment (each option's reason is stated in
+the choice table) evaluated by the separate specification reviewer before IR-652 implementation.
 
 | Premise | Result | Exact grounding |
 | --- | --- | --- |
@@ -194,16 +194,21 @@ An omitted or unavailable construction earns no Test credit.
 Product choice, not a technical default. Each option has its cost recorded here; none is selected
 by this record, and none is implemented or evaluated beyond the grounding above. Options address
 P1 and P3 separately: the "P1" and "P3" columns say what each option does to each failed premise,
-and options can be combined (the P3 option 6 with a P1 option 2 or 3, for example). Every option
-that changes custody or protocol (2 to 7) still requires the explicit reviewed FR-034/TC-049
-amendment named in [Decision](#decision) before implementation, because it contradicts AC-54's O
-gate owner; option 8 is itself such an amendment.
+and options can be combined (the P3 option 6 with a P1 option 2 or 3, for example). Options 2 to 4
+move the gate writer away from O and so contradict AC-54's O gate owner and the O-held writer in
+FR-034 Behavior. Option 5 adds an embedding precondition (no fork while a run is live) that FR-034
+does not state, option 6 changes the gate transport, Start rights and `pipe_reserve` terms in
+FR-034 Behavior and TC-049 resource steps without moving the writer, and option 7 changes AC-83's
+"exclusive lease" predicate and adds a profile-restricted support claim. Each of options 2 to 7
+therefore still requires the explicit reviewed FR-034/TC-049 amendment named in
+[Decision](#decision) before implementation, for the stated reason; option 8 is itself such an
+amendment.
 
 | Option | What it changes | P1 | P3 | Open cost |
 | --- | --- | --- | --- | --- |
 | 1. Retain the hold | Original gate stays as committed (O-held writer). IR-652 production and IR-655 fixtures stay inactive. | Stays failed for S, R and the lease | Not applicable (no new transport) | The fatal-O held-gate predicate stays UNBACKED, and committed FR-034-AC-83 stays unbacked as well, because the lease sits in C's shared table today. Status quo stated openly, not a narrowing. |
 | 2. Authorize an audited unsafe owner boundary | A reviewed unsafe-allowing owner (dedicated thread with `unshare_unsafe(FILES)` plus a fork-denial mechanism) outside the `forbid(unsafe_code)` crate. | Possibly addressed if descriptor affinity and fork denial hold, including handlers on the owner thread | Stays failed | Revises the unsafe policy; rustix `thread` (and `net`) features; synchronous-fault handlers and seccomp coverage still open. |
-| 3. Hold the release endpoint in the existing launcher L | L is an existing single-thread process (C's unreaped Child) with its own table, PR_SET_PDEATHSIG on C's creating thread, whole-run lifetime and an authenticated C-to-L channel. L would create S and R after its own spawn of O, send R once to O, and release on C's instruction. | S is outside every foreign C fork with no unsafe code. The lease stays in C's shared table, so AC-83 is not addressed unless the lease also moves, which changes "only C holds the lease". | Stays failed (one fewer Start transfer of R) | Not a new custodian, but C-to-L release instruction is a new message on an existing channel and C would need a witness of L's actual close for AC-54/87 order without a new acknowledgement or pause; L exit or an L-to-C message are the only candidates and neither is established. PDEATHSIG tracks C's creating thread, not C process death, so L loss with C alive is a distinct case. Not evaluated against AC-54/87 beyond this. |
+| 3. Hold the release endpoint in the existing launcher L | L is an existing single-thread process (C's unreaped Child) with its own table, PR_SET_PDEATHSIG on C's creating thread, whole-run lifetime and an authenticated C-to-L channel. L would create S and R after its own spawn of O, send R once to O, and release on C's instruction. | **Not addressed for the release endpoint.** S itself is outside every foreign C fork with no unsafe code, but the release authority moves to C's end of the C-to-L channel, which every foreign fork of C copies. A fork child of a live C can send a release instruction, and `SO_PEERCRED` cannot distinguish it from C: the early-release alias remains. Only the dead-caller variant (a fork child keeping a gate open or releasing for a dead C) goes away. The lease stays in C's shared table, so AC-83 is not addressed unless the lease also moves, which changes "only C holds the lease". | Stays failed (one fewer Start transfer of R) | Not a new custodian, but C-to-L release instruction is a new message on an existing channel and C would need a witness of L's actual close for AC-54/87 order without a new acknowledgement or pause; L exit or an L-to-C message are the only candidates and neither is established. PDEATHSIG tracks C's creating thread, not C process death, so L loss with C alive is a distinct case. Not evaluated against AC-54/87 beyond this. |
 | 4. Authorize a new separate release custodian process | A new role with its own table holds S and the lease. | Addressed for the holder's own table | Stays failed | The ticket excludes a hidden or new custodian/channel; needs its own death, teardown and ordering contract and a changed C custody. |
 | 5. Authorize a process-wide no-fork rule for embedding C | Embedding C must not fork while a guardian run is live. | Addressed by policy, not enforced | Stays failed | Changes ordinary embedding behavior; the ticket forbids assuming it. |
 | 6. Pipe gate with `RWF_NOSIGNAL` writes | Gate endpoints are a pipe pair; the release is `io::pwritev2` with `RWF_NOSIGNAL`; reserve is `F_GETPIPE_SZ` like `pipe_reserve`. | Not addressed (combine with 2 or 3) | Narrows: removes the gate stream socket and skb terms with a derivable reserve; leaves the extra Start right, pipe object, in-flight list and native terms | Kernel support, minimum kernel version and pipe behavior at the current-position offset are **not probed**; an unsupported kernel must refuse, with no compatibility path. |
