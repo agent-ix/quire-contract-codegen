@@ -50,3 +50,20 @@ FAIL (not mergeable). The amendment is the right shape: P stays the AC-3 support
 | TC-066 step 13 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:121-136 | 13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc` and `nfkc` at `max` of 1, 2 and 8 by the quire-exact FR-400-AC-6 construction (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most P, A is below P for `nfc` and `nfkc` at `max` of 1, A equals `max` times the independently enumerated maximum decomposition length, and L_b is L - 1 for the four profiles whose A equals P. Run... |
 | TC-066 Status | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:145-149 | ## Status PLANNED: all thirteen FR-052 criteria are unimplemented and untagged. No missing carrier capability (IR-1445), `Text` constructor (IR-1499), stated payload-byte bound (IR-1500), loop-free normalization (IR-1501), replay route or generated-proof result is waived. No capacity C is known to verify within a request's ceilings; TC-050 |
 | TM FR-052 row | examined | spec/kani/matrix/tests.md:14 | / FR-052 / FR-052-AC-1 through FR-052-AC-13 / TC-066 / 🚧 PLANNED (IR-1441): no text scalar Kani harness; needs the quire-exact text carrier (IR-1445), a non-metered `Text` constructor (IR-1499) and, for normalizing profiles, a payload-byte bound (IR-1500) and a loop-free normalization (IR-1501); TC-066 controls have not run. / |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | AC-13 now says 'FR-400 constructs no payload of P bytes for nfc and nfkc and derives no byte supremum, and this criterion claims none exists.' Read literally, it claims that no P-byte payload exists, the opposite of what was meant (that the criterion makes no such claim). Reword it as 'and this criterion makes no claim that none exists'. | spec/kani/functional/FR-052-text-scalar-harnesses.md:300 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at 28a4a1af |
+| FND-002 | fixed | verified at 28a4a1af |
+| FND-003 | fixed | verified at 28a4a1af |
+| FND-004 | fixed | verified at 28a4a1af |
+| FND-005 | fixed | verified at 28a4a1af |
+| FND-006 | still-open | New this round: AC-13's 'and this criterion claims none exists' reads as asserting that no P-byte payload exists, the opposite of the intent (no such claim). Wording only. |

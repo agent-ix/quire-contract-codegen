@@ -40,3 +40,19 @@ FAIL (not mergeable). The L_b length was checked against the Unicode data. For n
 | FR-052-AC-3 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:289 | The payload-byte bound P is `max` for `binary-utf8`, 4 x `max` (checked arithmetic) for `unicode-scalars`, and the bound IR-1500 states (quire-exact FR-400, `payload_byte_bound`) for `nfc`, `nfd`, `nfkc` and `nfkd`. P is an upper bound, which may exceed every admitted payload length (AC-13). An operand with P not greater than C is supported. An operand with P greater than C, a `max` or product beyond the carrier's length width or `u64`, or a normalizing profile whose bound IR-1500 does not state, yields named `unsupported` retaining the declared `max`, the profile, P (or its absence) and C;... |
 | TC-066 step 12 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:103-120 | 12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` over the step 2 enumeration for all six operators, at zero, exact and short budgets, and assert equal outcome, ordered charges, denied next charge and counters. Repeat over a fixed long-payload family: per supported profile a stated host `TextType` at the declared `max` and the attained length L = A (step 13; not P) and the lower length L_b (`unicode-scalars` with all four-byte scalars), with pairs differing only in the payload's own final byte (position L, or L - 1 for the shorter pa... |
 | TC-066 step 13 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:121-136 | 13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc` and `nfkc` at `max` of 1, 2 and 8 by the quire-exact FR-400-AC-6 construction (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most P, A is below P for `nfc` and `nfkc` at `max` of 1, A equals `max` times the independently enumerated maximum decomposition length, and L_b is L - 1 for the four profiles whose A equals P. Run... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | AC-14 builds the binary-utf8 L_b by dropping the final byte, so at a supported max of 1 (Text[0,1], P = 1 <= C) L_b is 0, the empty payload. AC-14 then requires a final-byte pair and a first-byte pair at L_b for binary-utf8 'or the check fails', but an empty payload has no bytes, so AC-14 cannot pass for that item. max 0 is special-cased; max 1 for binary-utf8 is not. Say that a zero-length L_b carries only the length pair, or require the L_b byte pairs only when L_b > 0, and add the case to TC-066 step 14. | spec/kani/functional/FR-052-text-scalar-harnesses.md:301 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at 28a4a1af |
+| FND-002 | fixed | verified at 28a4a1af |
+| FND-003 | fixed | verified at 28a4a1af |
+| FND-004 | fixed | verified at 28a4a1af |
+| FND-005 | still-open | New this round: binary-utf8 at max 1 gives L_b = 0 (the empty payload), which has no final or first byte, while AC-14 says both pairs 'must' be found at L_b for binary-utf8 'or the check fails'; AC-14 cannot pass for a supported Text[0,1] binary-utf8 operand. |

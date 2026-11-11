@@ -41,3 +41,11 @@ FAIL (not mergeable). The new criterion is internally inconsistent about the hos
 | TC-066 step 12 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:103-120 | 12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` over the step 2 enumeration for all six operators, at zero, exact and short budgets, and assert equal outcome, ordered charges, denied next charge and counters. Repeat over a fixed long-payload family: per supported profile a stated host `TextType` at the declared `max` and the attained length L = A (step 13; not P) and the lower length L_b (`unicode-scalars` with all four-byte scalars), with pairs differing only in the payload's own final byte (position L, or L - 1 for the shorter pa... |
 | TC-066 step 13 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:121-136 | 13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc` and `nfkc` at `max` of 1, 2 and 8 by the quire-exact FR-400-AC-6 construction (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most P, A is below P for `nfc` and `nfkc` at `max` of 1, A equals `max` times the independently enumerated maximum decomposition length, and L_b is L - 1 for the four profiles whose A equals P. Run... |
 | TM FR-052 row | examined | spec/kani/matrix/tests.md:14 | / FR-052 / FR-052-AC-1 through FR-052-AC-13 / TC-066 / 🚧 PLANNED (IR-1441): no text scalar Kani harness; needs the quire-exact text carrier (IR-1445), a non-metered `Text` constructor (IR-1499) and, for normalizing profiles, a payload-byte bound (IR-1500) and a loop-free normalization (IR-1501); TC-066 controls have not run. / |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at 28a4a1af |
+| FND-002 | fixed | verified at 28a4a1af |
+| FND-003 | fixed | verified at 28a4a1af |

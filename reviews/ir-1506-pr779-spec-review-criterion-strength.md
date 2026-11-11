@@ -40,3 +40,12 @@ FAIL ON MEDIUMS (manual: Jev is not available here, so each mutant was traced by
 | FR-052-AC-11 | examined | spec/kani/functional/FR-052-text-scalar-harnesses.md:297 | Run evidence records the operation and source association, both operands' `text_bounds`, the payload-byte bound P, the attained length A, the boundary lengths L and L_b of AC-12 and the capacity C per operand, correspondence, ordered physical bindings and their logical grouping, subject and full ordered backend arguments, the unwind bound, Kani/Rust/CBMC/solver versions, target, dependency cohort including the carrier, limits, the observed peak memory, raw checks, cover and playback, exit and typed terminal outcome. No-run, refusal, cover failure, resource exhaustion and semantic falsificat... |
 | TC-066 step 12 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:103-120 | 12. On the host, run the carrier's `cfg(kani)` replacement of `compare_text` and the shipped `compare_text` over the step 2 enumeration for all six operators, at zero, exact and short budgets, and assert equal outcome, ordered charges, denied next charge and counters. Repeat over a fixed long-payload family: per supported profile a stated host `TextType` at the declared `max` and the attained length L = A (step 13; not P) and the lower length L_b (`unicode-scalars` with all four-byte scalars), with pairs differing only in the payload's own final byte (position L, or L - 1 for the shorter pa... |
 | TC-066 step 13 | examined | spec/kani/matrix/TC-066-text-scalar-harnesses.md:121-136 | 13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc` and `nfkc` at `max` of 1, 2 and 8 by the quire-exact FR-400-AC-6 construction (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most P, A is below P for `nfc` and `nfkc` at `max` of 1, A equals `max` times the independently enumerated maximum decomposition length, and L_b is L - 1 for the four profiles whose A equals P. Run... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified at 28a4a1af |
+| FND-002 | fixed | verified at 28a4a1af |
+| FND-003 | fixed | verified at 28a4a1af |
+| FND-004 | fixed | verified at 28a4a1af |
