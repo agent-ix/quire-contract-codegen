@@ -20,6 +20,7 @@ use std::{
     fmt, fs,
     num::NonZeroUsize,
     path::Path,
+    process::Command,
     time::{Duration, Instant},
 };
 
@@ -45,8 +46,7 @@ use crate::kani::{
     run::{
         harness::{HarnessView, KaniExecutableHarness},
         launch::{
-            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream,
-            CapturedStreams, LaunchOutcome,
+            run_bounded_launcher, BoundedLaunch, CaptureStream, CapturedStreams, LaunchOutcome,
         },
         memory::MemoryObservation,
         report_file::{fresh_report_path, read_report, remove_stale_report},
@@ -92,25 +92,6 @@ pub enum KaniExecutionRefusal {
     },
     /// The installed backend could not be located or started.
     Tool(KaniToolError),
-    /// No memory-enforcement mechanism is available; the backend was never spawned.
-    MemoryMechanismUnavailable {
-        /// The failed mechanism check.
-        cause: std::io::Error,
-    },
-    /// Memory observation failed during a launch, so the backend tree was killed.
-    MemoryObservationFailed {
-        /// The observation failure.
-        detail: String,
-    },
-    /// A batch exceeded its one aggregate memory ceiling. No member was classified.
-    BatchMemoryExhausted {
-        /// Members whose backend tree was killed.
-        members: usize,
-        /// The memory ceiling in bytes.
-        memory_bytes: u64,
-        /// Actual mechanism and its observations.
-        memory: MemoryObservation,
-    },
     /// The crate's `src/lib.rs` does not contain the harness source.
     HarnessNotInCrate {
         /// The generated artifact path.
@@ -194,9 +175,6 @@ impl KaniExecutionRefusal {
             | Self::BoundTotalityAssertionMismatch { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
-            | Self::MemoryMechanismUnavailable { .. }
-            | Self::MemoryObservationFailed { .. }
-            | Self::BatchMemoryExhausted { .. }
             | Self::PlaybackForNonMember { .. } => None,
         }
     }
@@ -213,22 +191,6 @@ impl fmt::Display for KaniExecutionRefusal {
                 "the {members}-harness group was cancelled by {source:?}"
             ),
             Self::Tool(error) => write!(formatter, "{error}"),
-            Self::MemoryMechanismUnavailable { cause } => write!(
-                formatter,
-                "backend tree memory enforcement is unavailable: {cause}"
-            ),
-            Self::MemoryObservationFailed { detail } => write!(
-                formatter,
-                "backend tree memory observation failed: {detail}"
-            ),
-            Self::BatchMemoryExhausted {
-                members,
-                memory_bytes,
-                ..
-            } => write!(
-                formatter,
-                "the backend tree of {members} harnesses exceeded {memory_bytes} resident bytes"
-            ),
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
             }
@@ -416,12 +378,11 @@ pub struct KaniBatchInvocation {
 /// phase's evidence nested in `proof_phase`; a refused witness phase refuses the run with
 /// [`KaniExecutionRefusal::WitnessPhaseRefused`] (FR-017-AC-63).
 ///
-/// Bounded execution requires Linux with readable procfs task-child/RSS information and pidfd
-/// APIs, plus `bwrap` supporting user/PID namespaces, gated startup and info descriptors.
-/// Permission to create those namespaces is required (including host AppArmor policy).
-/// Missing support yields `MemoryMechanismUnavailable` before the backend starts.
-/// In-process conclusions and startup errors confirm owned teardown. Abrupt caller death
-/// before the startup gate/PDEATH chain is fully armed is not yet protected (IR-639).
+/// The backend is started as the leader of its own process group and held to the wall-clock
+/// ceiling of its identity; on a timeout, an output overflow or a normal exit its whole process
+/// group is killed. The runner enforces no memory cap: the caller's environment owns it
+/// (FR-028-AC-21, ADR-007). A caller killed after the launch leaves the backend's process group
+/// running; any bound on that orphan is the caller's environment's.
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
@@ -442,7 +403,9 @@ pub(in crate::kani) fn execute_constrained_raw(
     run_single(request, None, totality_line)
 }
 
-/// Runs a harness from a prepared source tree that must remain read-only for the backend.
+/// Runs a harness from a prepared source tree that the backend is expected to leave unmodified.
+/// The runner does not enforce this (ADR-007): it is no sandbox, so the caller's environment
+/// owns any read-only mount.
 pub(crate) fn execute_kani_obligation_readonly(
     request: &KaniExecutionRequest<'_>,
     source_directory: &Path,
@@ -518,24 +481,21 @@ fn bound_totality_line(library: &str, source: &str, artifact_line: u32) -> Optio
 
 /// Starts `command` with the launcher's output captured for `harnesses` harnesses, and maps a
 /// failure to start it to the refusal that names the launcher. Also returns the per-harness
-/// ceilings the launcher was given: its memory ceiling, and `timeout` divided among `harnesses`
+/// ceilings the launcher was given: the identity's declared memory ceiling, and `timeout` divided among `harnesses`
 /// (the identity's wall clock when that division does not fit).
 fn start(
     request: &KaniExecutionRequest<'_>,
-    command: super::namespace::BackendCommand,
+    command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> Result<(BoundedLaunch, crate::kani::identity::ProofCeilings), KaniExecutionRefusal> {
     let deadline = Instant::now().checked_add(timeout);
     if !deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        // The namespace helper's successful spawn cannot establish backend executability.
         request.installation.require_executable()?;
     }
     let identity = request.harness.view().ceilings;
-    let mut ceilings = identity;
-    ceilings.wall_clock = timeout;
     let applied = crate::kani::identity::ProofCeilings {
-        memory_bytes: ceilings.memory_bytes,
+        memory_bytes: identity.memory_bytes,
         wall_clock: u32::try_from(harnesses.get())
             .ok()
             .and_then(|members| timeout.checked_div(members))
@@ -544,22 +504,19 @@ fn start(
     };
     run_bounded_launcher(
         command,
-        ceilings,
+        timeout,
         harnesses,
         deadline,
         request.cancel,
         request.installation.owners(),
     )
     .map(|launch| (launch, applied))
-    .map_err(|error| match error {
-        BoundedLaunchError::Unavailable(cause) => {
-            KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
-        }
-        BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
+    .map_err(|error| {
+        KaniExecutionRefusal::Tool(KaniToolError::Io {
             tool: KaniTool::Launcher,
             path: request.installation.launcher.clone(),
             error,
-        }),
+        })
     })
 }
 
@@ -573,8 +530,6 @@ fn take_report(
         LaunchOutcome::Completed { .. } => read_report(report_path),
         LaunchOutcome::Cancelled { .. }
         | LaunchOutcome::TimedOut
-        | LaunchOutcome::MemoryExhausted
-        | LaunchOutcome::MemoryUnobserved { .. }
         | LaunchOutcome::OutputOverLimit { .. }
         | LaunchOutcome::OutputUnread { .. } => Ok(None),
     };
@@ -736,10 +691,7 @@ fn conclude_witness(
         } => same_failures,
         KaniRunOutcome::Cancelled { .. }
         | KaniRunOutcome::Inconclusive {
-            reason:
-                KaniInconclusiveReason::TimedOut
-                | KaniInconclusiveReason::MemoryExhausted
-                | KaniInconclusiveReason::NoVerdict,
+            reason: KaniInconclusiveReason::TimedOut | KaniInconclusiveReason::NoVerdict,
         } => true,
         KaniRunOutcome::Verified
         | KaniRunOutcome::CoverUnsatisfied { .. }
@@ -798,11 +750,8 @@ fn run_phase_single(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, mut command) =
+    let (arguments, command) =
         launch_command(request, phase, &report_path, read_only_source.is_some());
-    if let Some(source) = read_only_source {
-        command.read_only_bind(source);
-    }
     let (launch, applied) = start(
         request,
         command,
@@ -942,9 +891,8 @@ pub struct KaniGroupRun {
 /// that process (group) and classify none of its members. The generator does not split or retry a
 /// refused group.
 ///
-/// The same Linux, procfs/pidfd, bubblewrap and namespace-permission prerequisites as
-/// [`execute_kani_obligation`] apply to every group; unsupported setup refuses before dispatch.
-/// Its documented caller-death startup limitation (IR-639) applies to batches too.
+/// Every group runs under the same minimal ownership as [`execute_kani_obligation`]: its own
+/// process group, the wall-clock bound and no runner-side memory cap.
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
@@ -1097,14 +1045,14 @@ fn outer_bound(timeout: Duration, members: usize) -> Duration {
         .unwrap_or(Duration::MAX)
 }
 
-/// The argument vector and [`super::namespace::BackendCommand`] recipe for one process that
+/// The argument vector and [`Command`] recipe for one process that
 /// runs every harness of `selections`.
 fn batch_launch_command(
     first: &KaniExecutionRequest<'_>,
     selections: &[String],
     phase: Phase,
     report_path: &Path,
-) -> (Vec<String>, super::namespace::BackendCommand) {
+) -> (Vec<String>, Command) {
     let mut arguments = vec!["kani".to_owned()];
     for selection in selections {
         arguments.extend([
@@ -1125,7 +1073,7 @@ fn batch_launch_command(
         "--export-json".to_owned(),
         report_path.display().to_string(),
     ]);
-    let mut command = super::namespace::BackendCommand::new(&first.installation.launcher);
+    let mut command = Command::new(&first.installation.launcher);
     command
         .args(&arguments)
         .env("CARGO_TARGET_DIR", first.target_directory)
@@ -1167,13 +1115,6 @@ fn run_group(
             return Err(KaniExecutionRefusal::BatchCancelled {
                 source,
                 members: group.len(),
-            });
-        }
-        Concluded::MemoryExhausted => {
-            return Err(KaniExecutionRefusal::BatchMemoryExhausted {
-                members: group.len(),
-                memory_bytes: first.harness.view().ceilings.memory_bytes.get(),
-                memory: launch.memory,
             });
         }
         Concluded::TimedOut => {
@@ -1330,7 +1271,6 @@ enum Concluded {
     Cancelled {
         source: KaniCancellationSource,
     },
-    MemoryExhausted,
 }
 
 /// The launch as a conclusion, or the refusal of a launch whose output cannot be vouched for: a
@@ -1348,10 +1288,6 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
         LaunchOutcome::Cancelled { source } => Ok(Concluded::Cancelled { source }),
-        LaunchOutcome::MemoryExhausted => Ok(Concluded::MemoryExhausted),
-        LaunchOutcome::MemoryUnobserved { detail } => {
-            Err(KaniExecutionRefusal::MemoryObservationFailed { detail })
-        }
         LaunchOutcome::OutputOverLimit {
             stream,
             limit,
@@ -1375,9 +1311,7 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
 /// file's name is unique to this call (the last argument), so two runs sharing a target
 /// directory never write, remove or read each other's report.
 #[cfg(test)]
-fn kani_launch_command(
-    request: &KaniExecutionRequest<'_>,
-) -> (Vec<String>, super::namespace::BackendCommand) {
+fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
     launch_command(
         request,
         Phase::Proof,
@@ -1391,7 +1325,7 @@ fn launch_command(
     phase: Phase,
     report_path: &Path,
     library_only: bool,
-) -> (Vec<String>, super::namespace::BackendCommand) {
+) -> (Vec<String>, Command) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().phase_options(phase).iter().cloned());
     if library_only {
@@ -1403,7 +1337,7 @@ fn launch_command(
         "--export-json".to_owned(),
         report_path.display().to_string(),
     ]);
-    let mut command = super::namespace::BackendCommand::new(&request.installation.launcher);
+    let mut command = Command::new(&request.installation.launcher);
     command
         .args(&arguments)
         .env("CARGO_TARGET_DIR", request.target_directory)
@@ -1463,7 +1397,6 @@ pub(super) fn launch_evidence(
             None,
         )),
         Concluded::TimedOut => Ok(stopped(KaniInconclusiveReason::TimedOut)),
-        Concluded::MemoryExhausted => Ok(stopped(KaniInconclusiveReason::MemoryExhausted)),
     }
 }
 
@@ -1484,29 +1417,21 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
 #[cfg(test)]
 mod report_fixture {
     use super::*;
-    #[cfg(not(target_os = "linux"))]
-    use crate::kani::run::launch::run_launcher;
 
-    #[cfg(target_os = "linux")]
     pub(super) type FixtureExecution = KaniExecutionEvidence;
-    #[cfg(not(target_os = "linux"))]
-    pub(super) type FixtureExecution = ReportedExecution;
 
-    /// Linux exercises bounded public execution; unsupported targets exercise report semantics
-    /// without inventing resource-enforcement evidence.
+    /// Bounded public execution, grouped as the public batch entry groups it.
     pub(super) struct ReportGroup {
         pub(super) members: Vec<usize>,
         pub(super) reports: Result<Vec<FixtureExecution>, KaniExecutionRefusal>,
     }
 
-    #[cfg(target_os = "linux")]
     pub(super) fn single(
         request: &KaniExecutionRequest<'_>,
     ) -> Result<FixtureExecution, KaniExecutionRefusal> {
         execute_kani_obligation(request)
     }
 
-    #[cfg(target_os = "linux")]
     pub(super) fn groups(
         requests: &[KaniExecutionRequest<'_>],
     ) -> Result<Vec<ReportGroup>, KaniExecutionRefusal> {
@@ -1519,90 +1444,6 @@ mod report_fixture {
                 })
                 .collect()
         })
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    pub(super) fn single(
-        request: &KaniExecutionRequest<'_>,
-    ) -> Result<FixtureExecution, KaniExecutionRefusal> {
-        require_in_crate(request)?;
-        let report_path = fresh_report_path(request.target_directory);
-        remove_stale_report(&report_path)?;
-        let (arguments, recipe) = launch_command(request, Phase::Proof, &report_path, false);
-        let outcome = run_launcher(
-            recipe.report_test_command(),
-            request.harness.view().ceilings.wall_clock,
-            NonZeroUsize::MIN,
-        )
-        .map_err(|error| KaniToolError::Io {
-            tool: KaniTool::Launcher,
-            path: request.installation.launcher.clone(),
-            error,
-        })?;
-        let report = take_report(&outcome, &report_path);
-        finish_single(request, arguments, outcome, report?, None)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    pub(super) fn groups(
-        requests: &[KaniExecutionRequest<'_>],
-    ) -> Result<Vec<ReportGroup>, KaniExecutionRefusal> {
-        for request in requests {
-            require_in_crate(request)?;
-        }
-        Ok(plan_groups(requests.iter().enumerate(), Phase::Proof)
-            .into_iter()
-            .map(|group| ReportGroup {
-                members: group.iter().map(|(position, _)| *position).collect(),
-                reports: match group.as_slice() {
-                    [(_, only)] => single(only).map(|report| vec![report]),
-                    _ => completed_group(&group),
-                },
-            })
-            .collect())
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn completed_group(
-        group: &[(usize, &KaniExecutionRequest<'_>)],
-    ) -> Result<Vec<FixtureExecution>, KaniExecutionRefusal> {
-        let first = group[0].1;
-        let selections: Vec<_> = group
-            .iter()
-            .map(|(_, request)| request.harness.view().selection.clone())
-            .collect();
-        let report_path = fresh_report_path(first.target_directory);
-        remove_stale_report(&report_path)?;
-        let (arguments, recipe) =
-            batch_launch_command(first, &selections, Phase::Proof, &report_path);
-        let outcome = run_launcher(
-            recipe.report_test_command(),
-            outer_bound(first.harness.view().ceilings.wall_clock, group.len()),
-            NonZeroUsize::new(group.len()).unwrap(),
-        )
-        .map_err(|error| KaniToolError::Io {
-            tool: KaniTool::Launcher,
-            path: first.installation.launcher.clone(),
-            error,
-        })?;
-        let report = take_report(&outcome, &report_path);
-        let Concluded::Completed {
-            exited_successfully,
-            exit_code,
-            streams,
-        } = settle(outcome)?
-        else {
-            panic!("report fixture must complete; bounded lifecycle is tested separately");
-        };
-        finish_group(
-            group,
-            arguments,
-            exited_successfully,
-            exit_code,
-            &streams,
-            report?,
-            &vec![None; group.len()],
-        )
     }
 }
 
@@ -2003,7 +1844,6 @@ pub(crate) mod batch_tests {
     /// The options every harness of these tests shares once its `--harness <path> --exact`
     /// selection is taken out, written out so the test is not the code's own vector.
     // Expected argv for the Linux full bounded-process count test only.
-    #[cfg(target_os = "linux")]
     const SHARED_OPTIONS: [&str; 8] = [
         "-Z",
         "function-contracts",
@@ -2015,56 +1855,16 @@ pub(crate) mod batch_tests {
         "regular",
     ];
 
-    /// A small shell launcher with two children, one of which allocates resident bytes.
-    #[cfg(target_os = "linux")]
-    const CHILD_MEMORY_OVERAGE: &str = r#"sleep 45 &
-echo $! > "$CALLS.sibling"
-python3 -c 'import os, pathlib, signal, sys
-root = pathlib.Path(sys.argv[1])
-child = os.fork()
-if child:
-    os._exit(0)
-os.setsid()
-while os.getppid() != 1:
-    os.sched_yield()
-pathlib.Path(str(root) + ".namespace").write_text(os.readlink("/proc/self/ns/pid"))
-pathlib.Path(str(root) + ".groups").write_text(str(os.getpgrp()) + " " + str(os.getpgid(os.getppid())))
-parent = pathlib.Path("/proc") / str(os.getppid()) / "status"
-rss = next(line.split()[1] for line in parent.read_text().splitlines() if line.startswith("VmRSS:"))
-pathlib.Path(str(root) + ".parent-rss").write_text(rss)
-pathlib.Path(str(root) + ".child").write_text(str(os.getpid()))
-allocated = bytearray(64 * 1024 * 1024)
-signal.pause()
-' "$CALLS" &
-wait
-"#;
-
-    #[cfg(target_os = "linux")]
+    /// Waits for the process whose pid `path` records to be gone, as `kill -0` reports it.
     fn recorded_process_gone(path: &Path) {
-        let pid = fs::read_to_string(path).expect("a child must have started before the overage");
-        let namespace_path = path.with_file_name("calls.namespace");
-        let namespace = fs::read_to_string(namespace_path)
-            .expect("the allocating descendant records its namespace");
+        let pid = fs::read_to_string(path).expect("a child must have started");
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
-            let alive = fs::read_dir("/proc")
-                .unwrap()
-                .filter_map(Result::ok)
-                .any(|entry| {
-                    let directory = entry.path();
-                    let same_namespace = fs::read_link(directory.join("ns/pid"))
-                        .is_ok_and(|link| link.as_os_str() == namespace.as_str());
-                    if !same_namespace {
-                        return false;
-                    }
-                    let Ok(status) = fs::read_to_string(directory.join("status")) else {
-                        return false;
-                    };
-                    status
-                        .lines()
-                        .find_map(|line| line.strip_prefix("NSpid:"))
-                        .is_some_and(|ids| ids.split_whitespace().last() == Some(pid.trim()))
-                });
+            let alive = std::process::Command::new("kill")
+                .args(["-0", pid.trim()])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success());
             if !alive {
                 return;
             }
@@ -2072,7 +1872,7 @@ wait
                 std::time::Instant::now() < deadline,
                 "the backend tree child must be killed"
             );
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 
@@ -2082,149 +1882,29 @@ wait
         harness
     }
 
-    // Exercises the real Linux namespace/procfs bounded execution API.
-    #[trace("FR-028-AC-3", "FR-028-AC-21", "FR-040-AC-3", "FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree() {
-        let ceiling = 32 * 1024 * 1024;
-        let harness = memory_member("a", ceiling);
-        let stand_in = StandIn::running("child-memory-overage", CHILD_MEMORY_OVERAGE);
-        let evidence = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap();
-        assert_eq!(
-            evidence.outcome,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::MemoryExhausted
-            }
-        );
-        assert_eq!(evidence.ceilings, harness.identity.ceilings);
-        assert_eq!(
-            evidence.memory.mechanism,
-            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
-        );
-        assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
-        stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
-        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
-        let parent_kib: u64 = fs::read_to_string(stand_in.directory.join("calls.parent-rss"))
-            .unwrap()
-            .parse()
-            .unwrap();
-        assert!(
-            parent_kib * 1024 < ceiling,
-            "the launcher's own resident memory must be below the ceiling"
-        );
-        let groups = fs::read_to_string(stand_in.directory.join("calls.groups")).unwrap();
-        let groups: Vec<u32> = groups
-            .split_whitespace()
-            .map(|pid| pid.parse().unwrap())
-            .collect();
-        assert_eq!(groups.len(), 2);
-        assert_ne!(
-            groups[0], groups[1],
-            "the allocating descendant must have left the launcher group"
-        );
-        recorded_process_gone(&stand_in.directory.join("calls.child"));
-        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
-        assert_eq!(evidence.exit_code, None);
-        assert_eq!(evidence.success_checks, 0);
-        assert!(evidence.checks.is_empty());
-        assert_eq!(
-            serde_json::to_value(evidence).unwrap()["outcome"]["reason"],
-            "memory_exhausted"
-        );
+    /// A named peak-memory source returning a fixed reading, for the evidence controls.
+    #[derive(Debug)]
+    struct FixedPeak {
+        name: &'static str,
+        reading: Option<crate::kani::run::memory::PeakReading>,
     }
 
-    /// A live cancellation recorded before accepting a measured overage cannot replace it.
-    #[trace("FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn measured_memory_overage_competing_with_cancellation_keeps_resource_outcome() {
-        use super::super::owners::{LaunchOwners, SystemPoll};
-
-        let ceiling = 32 * 1024 * 1024;
-        let harness = memory_member("overage_cancel", ceiling);
-        let mut stand_in = StandIn::running("cancel-measured-overage", CHILD_MEMORY_OVERAGE);
-        let (memory, observation) = OwnerGate::new();
-        stand_in.installation = KaniInstallation::with_owners(
-            stand_in.installation.launcher.clone(),
-            std::sync::Arc::new(LaunchOwners {
-                memory: std::sync::Arc::new(ControlledOverage {
-                    ceiling,
-                    gate: memory.clone(),
-                }),
-                stdout: std::sync::Arc::new(SystemPoll),
-                stderr: std::sync::Arc::new(SystemPoll),
-                confirmation: std::sync::Arc::new(SystemPoll),
-            }),
-        );
-        let evidence = std::thread::scope(|scope| {
-            let worker = scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
-            observation.entered();
-            stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
-            assert_eq!(
-                stand_in.cancel.cause(),
-                Some(quire_exact::CancelCause::Deadline)
-            );
-            observation.release();
-            worker.join().unwrap().unwrap()
-        });
-        assert!(memory.claimed.load(std::sync::atomic::Ordering::Acquire));
-        assert_eq!(
-            evidence.outcome,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::MemoryExhausted
-            }
-        );
-        assert_eq!(evidence.ceilings, harness.identity.ceilings);
-        assert_eq!(
-            evidence.memory.mechanism,
-            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
-        );
-        assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
-        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
-        assert_eq!(evidence.exit_code, None);
-        assert_eq!(evidence.success_checks, 0);
-        assert!(evidence.checks.is_empty());
-        assert_eq!(stand_in.calls().len(), 1);
-        recorded_process_gone(&stand_in.directory.join("calls.child"));
-        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
-    }
-
-    // Exercises the real Linux namespace/procfs bounded execution API.
-    #[trace("FR-028-AC-21")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn batch_memory_overage_refuses_every_member_without_classifying_a_partial_report() {
-        let ceiling = 32 * 1024 * 1024;
-        let harnesses = [memory_member("a", ceiling), memory_member("b", ceiling)];
-        let stand_in = StandIn::running("batch-child-memory-overage", CHILD_MEMORY_OVERAGE);
-        let refusal = only_group(stand_in.batch(&harnesses, T)).unwrap_err();
-        match refusal {
-            KaniExecutionRefusal::BatchMemoryExhausted {
-                members,
-                memory_bytes,
-                memory,
-            } => {
-                assert_eq!(members, 2);
-                assert_eq!(memory_bytes, ceiling);
-                assert_eq!(
-                    memory.mechanism,
-                    crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
-                );
-                assert!(memory.peak_resident_bytes.unwrap() > ceiling);
-            }
-            other => panic!("a memory-overage batch must be refused as a whole: {other}"),
+    impl crate::kani::run::memory::PeakMemorySource for FixedPeak {
+        fn name(&self) -> &str {
+            self.name
         }
-        recorded_process_gone(&stand_in.directory.join("calls.child"));
-        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
-        assert_eq!(stand_in.calls().len(), 1);
+
+        fn peak(&self, _launcher: u32) -> Option<crate::kani::run::memory::PeakReading> {
+            self.reading
+        }
     }
 
-    // Exercises the real Linux namespace/procfs bounded execution API.
-    #[trace("FR-028-AC-2", "FR-028-AC-4", "FR-028-AC-21")]
-    #[cfg(target_os = "linux")]
+    /// The identity ceilings govern execution, and the memory ceiling is a declared value the
+    /// runner never enforces: a run that allocates far past a 1 MiB ceiling and exits with a
+    /// verified report is `Verified`, not stopped and not refused (FR-028-AC-21, ADR-007).
+    #[trace("FR-028-AC-2", "FR-028-AC-4", "FR-028-AC-21", "TC-039")]
     #[test]
-    fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
+    fn identity_ceilings_govern_execution_and_the_runner_enforces_no_memory_cap() {
         let mut harness = memory_member("a", 128 * 1024 * 1024);
         harness.identity.state_fields = vec!["input".to_owned()];
         harness.identity.domains = vec![crate::kani::identity::StateFieldDomain {
@@ -2247,10 +1927,10 @@ wait
             }]
         );
         assert_eq!(
-            evidence.memory.mechanism,
-            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
+            evidence.memory,
+            crate::kani::run::memory::MemoryObservation::default(),
+            "an environment that provides no peak records none"
         );
-        assert!(evidence.memory.peak_resident_bytes.is_some());
         harness.identity.ceilings.wall_clock = Duration::from_millis(200);
         let stopped = StandIn::running("identity-wall-clock-bound", "sleep 45");
         let evidence =
@@ -2263,23 +1943,72 @@ wait
                 reason: KaniInconclusiveReason::TimedOut
             }
         );
-        harness.identity.ceilings.memory_bytes = std::num::NonZeroU64::MIN;
-        let stopped = StandIn::running("identity-memory-bound", "sleep 45");
-        let evidence =
-            execute_kani_obligation(&stopped.request(&harness, Duration::from_millis(200)))
-                .unwrap();
-        assert_eq!(evidence.ceilings.memory_bytes, std::num::NonZeroU64::MIN);
-        assert_eq!(
-            evidence.outcome,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::MemoryExhausted
-            }
+
+        let mut over = memory_member("over", 1024 * 1024);
+        over.identity.ceilings.wall_clock = T;
+        let allocating = StandIn::running(
+            "memory-ceiling-is-not-enforced",
+            &format!("python3 -c 'x = bytearray(64 * 1024 * 1024)'\n{VERIFY_EVERY_HARNESS}"),
         );
+        allocating.containing(&[&over]);
+        let evidence = execute_kani_obligation(&allocating.request(&over, T)).unwrap();
+        assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence.ceilings.memory_bytes.get(), 1024 * 1024);
     }
 
-    // Exercises the real Linux namespace/procfs bounded execution API.
-    #[trace("FR-028-AC-21")]
-    #[cfg(target_os = "linux")]
+    /// The peak the evidence records is the environment source's, in bytes, with its name; a
+    /// source reporting KiB is converted inside the seam; a source with nothing leaves no peak
+    /// and does not change the outcome (FR-028-AC-21).
+    #[trace("FR-028-AC-21", "TC-039")]
+    #[test]
+    fn the_evidence_records_the_named_peak_the_environment_provides_in_bytes() {
+        use crate::kani::run::memory::{MemoryUnit, PeakReading};
+        let harness = memory_member("a", 128 * 1024 * 1024);
+        for (reading, expected) in [
+            (
+                Some(PeakReading {
+                    value: 123_456_789,
+                    unit: MemoryUnit::Bytes,
+                }),
+                Some(123_456_789),
+            ),
+            (
+                Some(PeakReading {
+                    value: 1_048_576,
+                    unit: MemoryUnit::Kibibytes,
+                }),
+                Some(1_073_741_824),
+            ),
+            (
+                Some(PeakReading {
+                    value: u64::MAX,
+                    unit: MemoryUnit::Kibibytes,
+                }),
+                None,
+            ),
+            (None, None),
+        ] {
+            let mut stand_in = StandIn::verifying("named-peak-source");
+            stand_in.installation =
+                stand_in
+                    .installation
+                    .clone()
+                    .with_peak_memory_source(std::sync::Arc::new(FixedPeak {
+                        name: "test_peak_source",
+                        reading,
+                    }));
+            let evidence = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap();
+            assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+            assert_eq!(evidence.memory.peak_resident_bytes, expected);
+            assert_eq!(
+                evidence.memory.source.as_deref(),
+                expected.map(|_| "test_peak_source"),
+                "a source is named only beside the peak it provided"
+            );
+        }
+    }
+
+    #[trace("FR-017-AC-21", "TC-043")]
     #[test]
     fn unequal_identity_memory_ceilings_run_in_separate_backend_processes() {
         let harnesses = [
@@ -2303,8 +2032,8 @@ wait
     }
 
     /// Unequal identity memory ceilings plan separate groups; each planned selection and argv
-    /// retains its member, without executing an unsupported platform's bounded runner.
-    #[trace("FR-028-AC-21", "FR-017-AC-21")]
+    /// retains its member.
+    #[trace("FR-017-AC-21", "TC-043")]
     #[test]
     fn unequal_memory_ceilings_plan_separate_groups_with_their_own_selections() {
         let harnesses = [
@@ -2385,7 +2114,6 @@ exit 0
     }
 
     // Expected selections for the Linux full bounded-process count test only.
-    #[cfg(target_os = "linux")]
     fn path_of(harness: &StateFrameHarness) -> String {
         format!(
             "{}::{}",
@@ -2433,7 +2161,6 @@ exit 0
         }
 
         /// Persist the actual harness source that the public execution entry authenticates.
-        #[cfg(target_os = "linux")]
         fn containing(&self, harnesses: &[&StateFrameHarness]) {
             let source = harnesses
                 .iter()
@@ -2448,47 +2175,6 @@ exit 0
             let stand_in = Self::scaffold(name);
             stand_in.install(body);
             stand_in
-        }
-
-        /// Timing controls wait for actual teardown readiness before the owner's one poll.
-        #[cfg(target_os = "linux")]
-        fn with_preconfirmed_cleanup(mut self) -> Self {
-            use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
-            self.installation = KaniInstallation::with_owners(
-                self.installation.launcher.clone(),
-                std::sync::Arc::new(LaunchOwners {
-                    memory: std::sync::Arc::new(ProcessMemory),
-                    stdout: std::sync::Arc::new(SystemPoll),
-                    stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(PreconfirmedPoll(SystemPoll)),
-                }),
-            );
-            self
-        }
-
-        /// Hold the first real ready sample and first real cleanup poll return once.
-        #[cfg(target_os = "linux")]
-        fn controlled_owners(&mut self) -> (OwnerControl, OwnerControl) {
-            use super::super::owners::{LaunchOwners, SystemPoll};
-            let (memory, observation) = OwnerGate::new();
-            let (cleanup, confirmation) = OwnerGate::new();
-            self.installation = KaniInstallation::with_owners(
-                self.installation.launcher.clone(),
-                std::sync::Arc::new(LaunchOwners {
-                    memory: std::sync::Arc::new(ControlledMemory {
-                        ready: self.directory.join("calls.ready"),
-                        gate: memory,
-                    }),
-                    stdout: std::sync::Arc::new(SystemPoll),
-                    stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(PreconfirmedPoll(ControlledPoll {
-                        ready: None,
-                        gate: cleanup,
-                        fail: false,
-                    })),
-                }),
-            );
-            (observation, confirmation)
         }
 
         /// A stand-in that verifies every harness it is asked for.
@@ -2626,7 +2312,6 @@ exit 0
     /// A minimal collection-precondition harness, built by hand for the runner: a module whose
     /// one proof function holds the totality assertion on a known line, and the identity naming
     /// that line. The runner reads the identity and the source, never how they were generated.
-    #[cfg(target_os = "linux")]
     fn runner_precondition_fixture(quantifier: &str) -> KaniV2ClauseObligationHarness {
         use crate::{
             core::{
@@ -2765,7 +2450,6 @@ exit 0
         )
     }
 
-    #[cfg(target_os = "linux")]
     #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_controls_single_readonly_and_batch_evidence() {
@@ -3099,7 +2783,6 @@ exit 0
     /// A V2 clause harness whose recorded witness vector, and only that, differs from the one its
     /// generator sealed is refused before launch by every entry point (FR-015-AC-9).
     #[trace("FR-015-AC-9", "TC-025")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn a_tampered_witness_vector_of_a_clause_harness_is_a_provenance_mismatch() {
         let harness = runner_precondition_fixture("quire.op.collection.forall");
@@ -3138,58 +2821,33 @@ exit 0
 
     /// Incomplete capture refuses the real public run even when a cancellation follows its bytes.
     #[trace("FR-040-AC-3", "FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn output_over_limit_is_not_relabelled_as_cancellation() {
-        use super::super::owners::{LaunchOwners, SystemPoll};
         let mut harness = member("capture_cancel", "check", 4);
         // This ceiling bounds a stuck launcher; draining the large stream can
         // take longer than the shared 30-second test ceiling under host load.
         let ceiling = Duration::from_secs(90);
         harness.identity.ceilings.wall_clock = ceiling;
         let body = format!(
-            r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
+            r#"printf '%s' "$$" > "$CALLS.child"
 printf 'ready' > "$CALLS.ready"
-while [ ! -f "$CALLS.start" ]; do sleep 0.01; done
 head -c {} /dev/zero
 printf 'written' > "$CALLS.written"
 exec sleep 45
 "#,
             CAPTURE_LIMIT + 1,
         );
-        let mut stand_in = StandIn::running("capture-cancel-precedence", &body);
+        let stand_in = StandIn::running("capture-cancel-precedence", &body);
         stand_in.containing(&[&harness]);
-        let (memory, paused) = OwnerGate::within(ceiling);
-        stand_in.installation = KaniInstallation::with_owners(
-            stand_in.installation.launcher.clone(),
-            std::sync::Arc::new(LaunchOwners {
-                memory: std::sync::Arc::new(ControlledMemory {
-                    ready: stand_in.directory.join("calls.ready"),
-                    gate: memory,
-                }),
-                stdout: std::sync::Arc::new(SystemPoll),
-                stderr: std::sync::Arc::new(SystemPoll),
-                confirmation: std::sync::Arc::new(SystemPoll),
-            }),
-        );
         let result = std::thread::scope(|scope| {
             let worker =
                 scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, ceiling)));
-            // Hold the real memory observation before the launcher selects a stop.
-            // Capture remains live while the backend writes beyond its output limit.
-            paused
-                .entered
-                .recv_timeout(ceiling)
-                .expect("actual memory observation reached within the launcher ceiling");
-            fs::write(stand_in.directory.join("calls.start"), b"start").unwrap();
             let until = Instant::now() + ceiling;
             while !stand_in.directory.join("calls.written").is_file() {
                 assert!(Instant::now() < until, "backend wrote over-limit output");
                 std::thread::yield_now();
             }
             stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-            paused.release();
             worker.join().unwrap()
         });
         assert!(
@@ -3208,7 +2866,6 @@ exec sleep 45
 
     /// The public pre-spawn path retains the caller's source and starts no backend.
     #[trace("FR-040-AC-1", "FR-040-AC-6", "FR-040-AC-7")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn cancellation_before_spawn_has_no_backend_or_report() {
         for (cause, source) in [
@@ -3244,214 +2901,64 @@ exec sleep 45
         }
     }
 
-    #[cfg(target_os = "linux")]
-    const CANCELLATION_BARRIER: &str = r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
+    const CANCELLATION_BARRIER: &str = r#"printf '%s' "$$" > "$CALLS.child"
 printf 'ready' > "$CALLS.ready"
 exec sleep 45
 "#;
 
-    /// Record both causes while a genuine ready observation holds the ordinary stop decision.
-    #[cfg(target_os = "linux")]
+    /// Run `run` while the stand-in backend is alive, record both `causes` in order from the
+    /// caller's side once it reports ready, and return the run's result after the backend has
+    /// been torn down.
     fn cancel_running<R: Send + std::fmt::Debug>(
         stand_in: &StandIn,
         cancel: &Cancel,
         causes: [quire_exact::CancelCause; 2],
-        mut releases: OwnerReleases<'_>,
-        remaining_budget: Duration,
         run: impl FnOnce() -> R + Send,
     ) -> R {
         std::thread::scope(|scope| {
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let worker = scope.spawn(move || {
-                let _ = sender.send(run());
-            });
-            let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                releases.memory.entered();
-                assert!(stand_in.directory.join("calls.ready").is_file());
-                cancel.cancel(causes[0]);
-                cancel.cancel(causes[1]);
-                assert_eq!(cancel.cause(), Some(causes[0]));
-                releases.release_memory();
-                releases.cleanup.entered();
-                releases.release_cleanup();
-            }));
-            if scheduled.is_err() {
-                releases.abort();
+            let worker = scope.spawn(run);
+            let until = Instant::now() + T;
+            while !stand_in.directory.join("calls.ready").is_file() {
+                if Instant::now() >= until {
+                    cancel.cancel(quire_exact::CancelCause::Requested);
+                    panic!("the stand-in backend never reported ready");
+                }
+                std::thread::sleep(Duration::from_millis(5));
             }
-            let CancellationSettlement {
-                received,
-                late,
-                joined,
-            } = settle_cancellation_worker(
-                &receiver,
-                cancellation_settlement_budget(remaining_budget),
-                worker,
-                || releases.abort(),
-            );
-            releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
-            drop(releases);
-            if scheduled.is_err() || received.is_err() || joined.is_err() {
-                eprintln!(
-                    "running cancellation: initial receive {received:#?}; late public result {late:#?}; worker state {joined:?}"
-                );
-            }
-            if stand_in.directory.join("calls.child").is_file() {
-                recorded_process_gone(&stand_in.directory.join("calls.child"));
-            }
-            if let Err(panic) = scheduled {
-                std::panic::resume_unwind(panic);
-            }
-            joined.expect("running cancellation worker joined after owned teardown");
-            received.expect("all sequential groups settled after owned teardown")
+            cancel.cancel(causes[0]);
+            cancel.cancel(causes[1]);
+            assert_eq!(cancel.cause(), Some(causes[0]));
+            let result = worker.join().expect("the execution worker joined");
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+            result
         })
     }
 
-    /// Preserve the first receive failure while collecting a result sent during abort/join.
-    #[cfg(target_os = "linux")]
-    #[derive(Debug)]
-    struct CancellationSettlement<R> {
-        received: Result<R, std::sync::mpsc::RecvTimeoutError>,
-        late: Option<Result<R, std::sync::mpsc::TryRecvError>>,
-        joined: std::thread::Result<()>,
-    }
-
-    #[cfg(target_os = "linux")]
-    fn settle_cancellation_worker<R>(
-        receiver: &std::sync::mpsc::Receiver<R>,
-        budget: Duration,
-        worker: std::thread::ScopedJoinHandle<'_, ()>,
-        abort: impl FnOnce(),
-    ) -> CancellationSettlement<R> {
-        let received = receiver.recv_timeout(budget);
-        if received.is_err() {
-            abort();
-        }
-        let joined = worker.join();
-        let late = received.is_err().then(|| receiver.try_recv());
-        CancellationSettlement {
-            received,
-            late,
-            joined,
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn controller_timeout_retains_result_sent_during_abort_join() {
-        std::thread::scope(|scope| {
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let (abort, aborted) = std::sync::mpsc::sync_channel(1);
-            let worker = scope.spawn(move || {
-                aborted
-                    .recv_timeout(T)
-                    .expect("controller abort precedes send");
-                sender
-                    .send(String::from("worker result after controller abort"))
-                    .unwrap();
-            });
-            let settlement = settle_cancellation_worker(&receiver, Duration::ZERO, worker, || {
-                abort.send(()).unwrap();
-            });
-            assert!(matches!(
-                settlement.received,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
-            ));
-            assert_eq!(
-                settlement.late.as_ref().unwrap().as_ref().unwrap(),
-                "worker result after controller abort"
-            );
-            assert!(settlement.joined.is_ok());
-            let diagnostic = format!("{settlement:#?}");
-            eprintln!("controller timeout diagnostic: {diagnostic}");
-            assert!(diagnostic.contains("worker result after controller abort"));
-            let failure = std::panic::catch_unwind(|| {
-                settlement
-                    .received
-                    .expect("initial timeout remains a failure");
-            })
-            .unwrap_err();
-            assert!(failure
-                .downcast_ref::<String>()
-                .unwrap()
-                .contains("initial timeout remains a failure: Timeout"));
-        });
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn controller_timeout_keeps_disconnected_result_and_worker_panic_distinct() {
-        std::thread::scope(|scope| {
-            let (sender, receiver) = std::sync::mpsc::sync_channel::<String>(1);
-            let (abort, aborted) = std::sync::mpsc::sync_channel(1);
-            let worker = scope.spawn(move || {
-                aborted
-                    .recv_timeout(T)
-                    .expect("controller abort precedes worker failure");
-                drop(sender);
-                panic!("execution worker failed after abort");
-            });
-            let settlement = settle_cancellation_worker(&receiver, Duration::ZERO, worker, || {
-                abort.send(()).unwrap();
-            });
-            assert!(matches!(
-                settlement.received,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
-            ));
-            assert!(matches!(
-                settlement.late,
-                Some(Err(std::sync::mpsc::TryRecvError::Disconnected))
-            ));
-            assert_eq!(
-                settlement.joined.unwrap_err().downcast_ref::<&str>(),
-                Some(&"execution worker failed after abort")
-            );
-        });
-    }
-
-    /// After the first cleanup poll returns: allow its reap, then an independent group's
-    /// startup, cleanup and reap (five seconds each) in addition to that group's work budget.
-    /// Startup is already inside the work budget; counting it again is conservative slack.
-    /// One extra second covers both groups' bounded capture-drain/poll settlements.
-    #[cfg(target_os = "linux")]
-    fn cancellation_settlement_budget(remaining_budget: Duration) -> Duration {
-        remaining_budget + Duration::from_secs(4 * 5 + 1)
-    }
-
-    /// One positively acknowledged owner operation; its production dependency remains real.
-    #[cfg(target_os = "linux")]
+    /// One positively acknowledged capture operation; its production dependency remains real.
     #[derive(Debug)]
     struct OwnerGate {
         entered: std::sync::mpsc::SyncSender<()>,
         release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
         ceiling: Duration,
         claimed: std::sync::atomic::AtomicBool,
-        attempts: std::sync::atomic::AtomicUsize,
         failed: std::sync::atomic::AtomicBool,
     }
 
-    #[cfg(target_os = "linux")]
     struct OwnerControl {
         entered: std::sync::mpsc::Receiver<()>,
         release: std::sync::mpsc::SyncSender<()>,
     }
 
-    #[cfg(target_os = "linux")]
     impl OwnerGate {
         fn new() -> (std::sync::Arc<Self>, OwnerControl) {
-            Self::within(T)
-        }
-
-        fn within(ceiling: Duration) -> (std::sync::Arc<Self>, OwnerControl) {
             let (entered, observed) = std::sync::mpsc::sync_channel(1);
             let (release, released) = std::sync::mpsc::sync_channel(1);
             (
                 std::sync::Arc::new(Self {
                     entered,
                     release: std::sync::Mutex::new(released),
-                    ceiling,
+                    ceiling: T,
                     claimed: std::sync::atomic::AtomicBool::new(false),
-                    attempts: std::sync::atomic::AtomicUsize::new(0),
                     failed: std::sync::atomic::AtomicBool::new(false),
                 }),
                 OwnerControl {
@@ -3463,7 +2970,6 @@ exec sleep 45
 
         fn enter(&self) -> bool {
             use std::sync::atomic::Ordering;
-            self.attempts.fetch_add(1, Ordering::AcqRel);
             if self.claimed.swap(true, Ordering::AcqRel) {
                 return false;
             }
@@ -3482,20 +2988,8 @@ exec sleep 45
             self.failed
                 .store(true, std::sync::atomic::Ordering::Release);
         }
-
-        fn await_refusal(&self) {
-            let until = Instant::now() + T;
-            while !self.failed.load(std::sync::atomic::Ordering::Acquire) {
-                assert!(
-                    Instant::now() < until,
-                    "owner selected its injected refusal"
-                );
-                std::thread::yield_now();
-            }
-        }
     }
 
-    #[cfg(target_os = "linux")]
     impl OwnerControl {
         fn entered(&self) {
             self.entered
@@ -3509,148 +3003,13 @@ exec sleep 45
         }
     }
 
-    #[cfg(target_os = "linux")]
-    #[derive(Debug)]
-    struct FailingMemory {
-        ready: PathBuf,
-        gate: std::sync::Arc<OwnerGate>,
-    }
-
-    /// A successful real observation can be held before the ordinary stop decision.
-    #[cfg(target_os = "linux")]
-    #[derive(Debug)]
-    struct ControlledMemory {
-        ready: PathBuf,
-        gate: std::sync::Arc<OwnerGate>,
-    }
-
-    #[cfg(target_os = "linux")]
-    impl super::super::owners::MemorySampling for ControlledMemory {
-        fn observe(
-            &self,
-            observer: &mut super::super::memory::MemoryObserver,
-            root: u32,
-        ) -> std::io::Result<u64> {
-            let measured = observer.observe(root)?;
-            if self.ready.is_file() {
-                self.gate.enter();
-            }
-            Ok(measured)
-        }
-    }
-
-    /// Release gates before joining an aborted controller's real execution worker.
-    #[cfg(target_os = "linux")]
-    struct OwnerReleases<'a> {
-        memory: OwnerControl,
-        cleanup: OwnerControl,
-        shared: &'a Cancel,
-        independent: &'a Cancel,
-        memory_released: bool,
-        cleanup_released: bool,
-        settled: bool,
-    }
-
-    #[cfg(target_os = "linux")]
-    impl<'a> OwnerReleases<'a> {
-        fn new(
-            memory: OwnerControl,
-            cleanup: OwnerControl,
-            shared: &'a Cancel,
-            independent: &'a Cancel,
-        ) -> Self {
-            Self {
-                memory,
-                cleanup,
-                shared,
-                independent,
-                memory_released: false,
-                cleanup_released: false,
-                settled: false,
-            }
-        }
-
-        fn release_memory(&mut self) {
-            self.memory.release();
-            self.memory_released = true;
-        }
-
-        fn release_cleanup(&mut self) {
-            self.cleanup.release();
-            self.cleanup_released = true;
-        }
-
-        fn abort(&mut self) {
-            self.shared.cancel(quire_exact::CancelCause::Requested);
-            self.independent.cancel(quire_exact::CancelCause::Requested);
-            if !self.memory_released {
-                let _ = self.memory.release.try_send(());
-                self.memory_released = true;
-            }
-            if !self.cleanup_released {
-                let _ = self.cleanup.release.try_send(());
-                self.cleanup_released = true;
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    impl Drop for OwnerReleases<'_> {
-        fn drop(&mut self) {
-            if !self.settled {
-                self.abort();
-            }
-        }
-    }
-
-    /// Pause only after the real observer has measured overage; return its exact sample.
-    #[cfg(target_os = "linux")]
-    #[derive(Debug)]
-    struct ControlledOverage {
-        ceiling: u64,
-        gate: std::sync::Arc<OwnerGate>,
-    }
-
-    #[cfg(target_os = "linux")]
-    impl super::super::owners::MemorySampling for ControlledOverage {
-        fn observe(
-            &self,
-            observer: &mut super::super::memory::MemoryObserver,
-            root: u32,
-        ) -> std::io::Result<u64> {
-            let measured = observer.observe(root)?;
-            if measured > self.ceiling {
-                self.gate.enter();
-            }
-            Ok(measured)
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    impl super::super::owners::MemorySampling for FailingMemory {
-        fn observe(
-            &self,
-            observer: &mut super::super::memory::MemoryObserver,
-            root: u32,
-        ) -> std::io::Result<u64> {
-            let measured = observer.observe(root)?;
-            if self.ready.is_file() && self.gate.enter() {
-                self.gate.refuse();
-                return Err(std::io::Error::other("injected RSS observation failure"));
-            }
-            Ok(measured)
-        }
-    }
-
-    #[cfg(target_os = "linux")]
+    /// Fail the first capture poll once the backend is ready, after a controlled pause.
     #[derive(Debug)]
     struct ControlledPoll {
-        ready: Option<PathBuf>,
+        ready: PathBuf,
         gate: std::sync::Arc<OwnerGate>,
-        fail: bool,
     }
 
-    #[cfg(target_os = "linux")]
     impl super::super::owners::PollOperation for ControlledPoll {
         fn poll(
             &self,
@@ -3658,249 +3017,35 @@ exec sleep 45
             timeout: Option<&rustix::time::Timespec>,
         ) -> Result<usize, rustix::io::Errno> {
             let observed = rustix::event::poll(fds, timeout)?;
-            if self.ready.as_ref().is_none_or(|ready| ready.is_file()) && self.gate.enter() {
-                if self.ready.is_none() {
-                    assert!(
-                        observed > 0,
-                        "real owned init pidfd confirmed after actual signals"
-                    );
-                    assert!(fds
-                        .iter()
-                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN)));
-                }
-                if self.fail {
-                    self.gate.refuse();
-                    return Err(rustix::io::Errno::IO);
-                }
+            if self.ready.is_file() && self.gate.enter() {
+                self.gate.refuse();
+                return Err(rustix::io::Errno::IO);
             }
             Ok(observed)
         }
     }
 
-    /// Batch-order tests first wait for genuine pidfd readiness, so host scheduling does not
-    /// consume the production owner's single five-second confirmation poll.
-    #[cfg(target_os = "linux")]
-    #[derive(Debug)]
-    struct PreconfirmedPoll<P: super::super::owners::PollOperation>(P);
-
-    #[cfg(target_os = "linux")]
-    impl<P: super::super::owners::PollOperation> super::super::owners::PollOperation
-        for PreconfirmedPoll<P>
-    {
-        fn poll(
-            &self,
-            fds: &mut [rustix::event::PollFd<'_>],
-            timeout: Option<&rustix::time::Timespec>,
-        ) -> Result<usize, rustix::io::Errno> {
-            let ready = rustix::event::poll(
-                fds,
-                Some(&rustix::time::Timespec {
-                    tv_sec: 30,
-                    tv_nsec: 0,
-                }),
-            )?;
-            if ready == 0
-                || !fds
-                    .iter()
-                    .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
-            {
-                return Err(rustix::io::Errno::TIMEDOUT);
-            }
-            for fd in fds.iter_mut() {
-                fd.clear_revents();
-            }
-            super::super::owners::PollOperation::poll(&self.0, fds, timeout)
-        }
-    }
-
-    /// Confirm the real pidfd first, then omit only the first result delivered to its owner.
-    /// The owner's Drop retry receives the real result from the same descriptor.
-    #[cfg(target_os = "linux")]
-    #[derive(Debug, Default)]
-    struct OmittedReadyPoll {
-        calls: std::sync::atomic::AtomicUsize,
-    }
-
-    #[cfg(target_os = "linux")]
-    impl super::super::owners::PollOperation for OmittedReadyPoll {
-        fn poll(
-            &self,
-            fds: &mut [rustix::event::PollFd<'_>],
-            timeout: Option<&rustix::time::Timespec>,
-        ) -> Result<usize, rustix::io::Errno> {
-            if self.calls.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
-                let ready = rustix::event::poll(
-                    fds,
-                    Some(&rustix::time::Timespec {
-                        tv_sec: 30,
-                        tv_nsec: 0,
-                    }),
-                )?;
-                if ready == 0
-                    || !fds
-                        .iter()
-                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
-                {
-                    return Err(rustix::io::Errno::TIMEDOUT);
-                }
-                for fd in fds.iter_mut() {
-                    fd.clear_revents();
-                }
-                let observed = rustix::event::poll(fds, timeout)?;
-                if observed == 0
-                    || !fds
-                        .iter()
-                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
-                {
-                    return Err(rustix::io::Errno::TIMEDOUT);
-                }
-                for fd in fds.iter_mut() {
-                    fd.clear_revents();
-                }
-                return Ok(0);
-            }
-            rustix::event::poll(fds, timeout)
-        }
-    }
-
-    /// Missing readiness from the owned pidfd still refuses public evidence after real teardown.
-    #[trace("FR-017-AC-55")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn omitted_namespace_confirmation_refuses_public_evidence() {
-        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
-
-        let harness = member("omitted_cleanup", "check", 4);
-        let body = format!(
-            "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nprintf '%s' \"$$\" > \"$CALLS.child\"\n{VERIFY_EVERY_HARNESS}"
-        );
-        let mut stand_in = StandIn::running("omitted-cleanup-confirmation", &body);
-        stand_in.containing(&[&harness]);
-        let omission = std::sync::Arc::new(OmittedReadyPoll::default());
-        stand_in.installation = KaniInstallation::with_owners(
-            stand_in.installation.launcher.clone(),
-            std::sync::Arc::new(LaunchOwners {
-                memory: std::sync::Arc::new(ProcessMemory),
-                stdout: std::sync::Arc::new(SystemPoll),
-                stderr: std::sync::Arc::new(SystemPoll),
-                confirmation: omission.clone(),
-            }),
-        );
-        let refusal = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap_err();
-        assert!(
-            matches!(
-                refusal,
-                KaniExecutionRefusal::MemoryObservationFailed { ref detail }
-                    if detail.contains("namespace cleanup failed: namespace teardown was not confirmed")
-            ),
-            "{refusal:?}"
-        );
-        assert_eq!(omission.calls.load(std::sync::atomic::Ordering::Acquire), 2);
-        assert_eq!(stand_in.calls().len(), 1);
-        recorded_process_gone(&stand_in.directory.join("calls.child"));
-    }
-
-    /// A failed real RSS observation owns the public refusal even if a cause is already recorded.
-    #[trace("FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn memory_observation_failure_competing_with_cancellation_refuses_public_evidence() {
-        use super::super::owners::{LaunchOwners, SystemPoll};
-        for cancel_before_failure in [false, true] {
-            let harness = member("failed_memory", "check", 4);
-            let mut stand_in = StandIn::running("cancel-memory-observation", CANCELLATION_BARRIER);
-            stand_in.containing(&[&harness]);
-            let (memory, observation) = OwnerGate::new();
-            let (cleanup, teardown) = OwnerGate::new();
-            stand_in.installation = KaniInstallation::with_owners(
-                stand_in.installation.launcher.clone(),
-                std::sync::Arc::new(LaunchOwners {
-                    memory: std::sync::Arc::new(FailingMemory {
-                        ready: stand_in.directory.join("calls.ready"),
-                        gate: memory.clone(),
-                    }),
-                    stdout: std::sync::Arc::new(SystemPoll),
-                    stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(ControlledPoll {
-                        ready: None,
-                        gate: cleanup,
-                        fail: false,
-                    }),
-                }),
-            );
-            let normal = KaniInstallation::new(stand_in.installation.launcher.clone());
-            assert_eq!(normal, KaniInstallation::new(normal.launcher.clone()));
-            let cloned = stand_in.installation.clone();
-            let distinct = KaniInstallation::with_owners(
-                stand_in.installation.launcher.clone(),
-                std::sync::Arc::new(LaunchOwners {
-                    memory: normal.owners().memory.clone(),
-                    stdout: normal.owners().stdout.clone(),
-                    stderr: normal.owners().stderr.clone(),
-                    confirmation: normal.owners().confirmation.clone(),
-                }),
-            );
-            let request = stand_in.request(&harness, T);
-            let mut other = stand_in.request(&harness, T);
-            other.installation = &cloned;
-            assert!(shares_process(&request, &other, Phase::Proof));
-            other.installation = &distinct;
-            assert!(!shares_process(&request, &other, Phase::Proof));
-            std::thread::scope(|scope| {
-                let worker =
-                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
-                observation.entered();
-                if cancel_before_failure {
-                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                }
-                observation.release();
-                teardown.entered();
-                if !cancel_before_failure {
-                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                }
-                teardown.release();
-                let refusal = worker.join().unwrap().unwrap_err();
-                assert!(
-                    matches!(
-                        refusal,
-                        KaniExecutionRefusal::MemoryObservationFailed { .. }
-                    ),
-                    "{refusal:?}"
-                );
-            });
-            assert!(memory.failed.load(std::sync::atomic::Ordering::Acquire));
-            assert_eq!(stand_in.calls().len(), 1);
-            recorded_process_gone(&stand_in.directory.join("calls.child"));
-        }
-    }
-
     /// Actual pipe polling failure refuses even when cancellation selected the preceding stop.
     #[trace("FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn unread_capture_competing_with_cancellation_refuses_public_evidence() {
-        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+        use super::super::owners::{LaunchOwners, SystemPoll};
         for cancel_before_unread in [false, true] {
             let harness = member("failed_capture", "check", 4);
             let mut stand_in = StandIn::running("cancel-unread-capture", CANCELLATION_BARRIER);
             stand_in.containing(&[&harness]);
             let (capture, pipe) = OwnerGate::new();
-            let (cleanup, teardown) = OwnerGate::new();
+            let real = LaunchOwners::real();
             stand_in.installation = KaniInstallation::with_owners(
                 stand_in.installation.launcher.clone(),
                 std::sync::Arc::new(LaunchOwners {
-                    memory: std::sync::Arc::new(ProcessMemory),
                     stdout: std::sync::Arc::new(ControlledPoll {
-                        ready: Some(stand_in.directory.join("calls.ready")),
+                        ready: stand_in.directory.join("calls.ready"),
                         gate: capture.clone(),
-                        fail: true,
                     }),
                     stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(ControlledPoll {
-                        ready: None,
-                        gate: cleanup,
-                        fail: false,
-                    }),
+                    teardown: std::sync::Arc::clone(&real.teardown),
+                    peak: std::sync::Arc::clone(&real.peak),
                 }),
             );
             std::thread::scope(|scope| {
@@ -3909,14 +3054,11 @@ exec sleep 45
                 pipe.entered();
                 if cancel_before_unread {
                     stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                    teardown.entered();
                     pipe.release();
                 } else {
                     pipe.release();
-                    teardown.entered();
                     stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
                 }
-                teardown.release();
                 let refusal = worker.join().unwrap().unwrap_err();
                 assert!(
                     matches!(
@@ -3935,79 +3077,8 @@ exec sleep 45
         }
     }
 
-    /// Confirmation failure leaves the actual owner unconfirmed; its real Drop retries teardown.
-    #[trace("FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn cleanup_nonconfirmation_competing_with_cancellation_refuses_public_evidence() {
-        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
-        for cancel_before_cleanup in [false, true] {
-            let harness = member("failed_cleanup", "check", 4);
-            let body = format!(
-                r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
-printf 'ready' > "$CALLS.ready"
-while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
-{VERIFY_EVERY_HARNESS}"#
-            );
-            let mut stand_in = StandIn::running("cancel-cleanup-confirmation", &body);
-            stand_in.containing(&[&harness]);
-            let (cleanup, teardown) = OwnerGate::new();
-            stand_in.installation = KaniInstallation::with_owners(
-                stand_in.installation.launcher.clone(),
-                std::sync::Arc::new(LaunchOwners {
-                    memory: std::sync::Arc::new(ProcessMemory),
-                    stdout: std::sync::Arc::new(SystemPoll),
-                    stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(ControlledPoll {
-                        ready: None,
-                        gate: cleanup.clone(),
-                        fail: true,
-                    }),
-                }),
-            );
-            std::thread::scope(|scope| {
-                let worker =
-                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
-                let until = Instant::now() + T;
-                while !stand_in.directory.join("calls.ready").is_file() {
-                    assert!(Instant::now() < until, "actual backend ready");
-                    std::thread::yield_now();
-                }
-                if cancel_before_cleanup {
-                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                } else {
-                    fs::write(stand_in.directory.join("calls.finish"), b"finish").unwrap();
-                }
-                teardown.entered();
-                teardown.release();
-                cleanup.await_refusal();
-                if !cancel_before_cleanup {
-                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                }
-                let refusal = worker.join().unwrap().unwrap_err();
-                assert!(
-                    matches!(
-                        refusal,
-                        KaniExecutionRefusal::MemoryObservationFailed { .. }
-                    ),
-                    "{refusal:?}"
-                );
-            });
-            assert!(cleanup.failed.load(std::sync::atomic::Ordering::Acquire));
-            assert_eq!(
-                cleanup.attempts.load(std::sync::atomic::Ordering::Acquire),
-                2,
-                "real Drop retries the failed owner confirmation"
-            );
-            assert_eq!(stand_in.calls().len(), 1);
-            recorded_process_gone(&stand_in.directory.join("calls.child"));
-        }
-    }
-
     /// Reversing real caller events reverses the launch/evidence/IR/QSL cause; no report exists.
     #[trace("FR-040-AC-1", "FR-040-AC-2", "FR-040-AC-6")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn live_cancellation_preserves_first_event_through_ir_and_qsl() {
         use quire_exact::CancelCause::{Deadline, Requested};
@@ -4016,18 +3087,12 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             ([Deadline, Requested], KaniCancellationSource::Deadline),
         ] {
             let harness = member("live_cancel", "check", 4);
-            let mut stand_in = StandIn::running("live-first-cancellation", CANCELLATION_BARRIER);
-            let (observation, confirmation) = stand_in.controlled_owners();
+            let stand_in = StandIn::running("live-first-cancellation", CANCELLATION_BARRIER);
             stand_in.containing(&[&harness]);
             let caller = stand_in.cancel.clone();
-            let evidence = cancel_running(
-                &stand_in,
-                &caller,
-                causes,
-                OwnerReleases::new(observation, confirmation, &caller, &caller),
-                Duration::ZERO,
-                || execute_kani_obligation(&stand_in.request(&harness, T)),
-            )
+            let evidence = cancel_running(&stand_in, &caller, causes, || {
+                execute_kani_obligation(&stand_in.request(&harness, T))
+            })
             .unwrap();
             assert_eq!(stand_in.calls().len(), 1);
             assert_eq!(
@@ -4037,7 +3102,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             assert_eq!(evidence.exit_code, None);
             assert_eq!(evidence.success_checks, 0);
             assert!(evidence.checks.is_empty());
-            assert!(evidence.memory.peak_resident_bytes.is_some());
+            assert_eq!(evidence.memory.peak_resident_bytes, None);
             let (ir, terminal) = evidence.cancellation_terminal_value().unwrap().unwrap();
             assert_eq!(ir.kind(), KaniOutcomeKind::Cancelled { source: expected });
             assert_eq!(ir.boolean_claim(), None);
@@ -4057,7 +3122,6 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// One cancelled group has no member evidence; an independent handle's group still completes.
     #[trace("FR-040-AC-5")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn cancelled_batch_retains_first_source_and_independent_group() {
         use quire_exact::CancelCause::{Deadline, Requested};
@@ -4071,8 +3135,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                 member("c", "check", 4),
             ];
             let body = format!("case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}");
-            let mut stand_in = StandIn::running("cancel-shared-batch", &body);
-            let (observation, confirmation) = stand_in.controlled_owners();
+            let stand_in = StandIn::running("cancel-shared-batch", &body);
             stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
             let independent = Cancel::new();
             let clone = stand_in.cancel.clone();
@@ -4087,14 +3150,9 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     ..stand_in.request(&harnesses[2], T)
                 },
             ];
-            let groups = cancel_running(
-                &stand_in,
-                &stand_in.cancel,
-                causes,
-                OwnerReleases::new(observation, confirmation, &stand_in.cancel, &independent),
-                T,
-                || execute_kani_obligations(&requests),
-            )
+            let groups = cancel_running(&stand_in, &stand_in.cancel, causes, || {
+                execute_kani_obligations(&requests)
+            })
             .unwrap();
             assert_eq!(groups.len(), 2);
             assert_eq!(groups[0].members, [0, 1]);
@@ -4116,152 +3174,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         }
     }
 
-    /// Injected event ordering distinguishes running cancellation from accepted completion.
-    #[trace("TC-055", "FR-040-AC-3", "FR-040-AC-5")]
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn controlled_caller_order_distinguishes_cancelled_and_completed_batch() {
-        for withhold in [false, true] {
-            controlled_batch_cancellation_arm(withhold);
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn controlled_batch_cancellation_arm(withhold: bool) {
-        use quire_exact::CancelCause::{Deadline, Requested};
-
-        let mut harnesses = [
-            member("a", "check", 4),
-            member("b", "check", 4),
-            member("c", "check", 4),
-        ];
-        // These assertions order caller events, not elapsed time. The controller's
-        // settlement timeout cancels both handles if a real owner stops progressing.
-        for harness in &mut harnesses {
-            harness.identity.ceilings.wall_clock = Duration::MAX;
-        }
-        let body = format!(
-            r#"case "$ids" in *a::check*)
-printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
-printf 'ready' > "$CALLS.ready"
-while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
-exit 0;;
-esac
-{VERIFY_EVERY_HARNESS}"#
-        );
-        let mut stand_in = StandIn::running("controlled-caller-order", &body);
-        stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
-        let independent = Cancel::new();
-        let clone = stand_in.cancel.clone();
-        let (observation, confirmation) = stand_in.controlled_owners();
-        let requests = [
-            stand_in.request(&harnesses[0], Duration::MAX),
-            KaniExecutionRequest {
-                cancel: &clone,
-                ..stand_in.request(&harnesses[1], Duration::MAX)
-            },
-            KaniExecutionRequest {
-                cancel: &independent,
-                ..stand_in.request(&harnesses[2], Duration::MAX)
-            },
-        ];
-        let groups = std::thread::scope(|scope| {
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let requests = &requests;
-            let worker = scope.spawn(move || {
-                let _ = sender.send(execute_kani_obligations(requests));
-            });
-            let mut releases =
-                OwnerReleases::new(observation, confirmation, &stand_in.cancel, &independent);
-            let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                releases.memory.entered();
-                assert_eq!(stand_in.cancel.cause(), None);
-                eprintln!(
-                    "controlled withhold={withhold}: real memory acknowledged after readiness"
-                );
-                if !withhold {
-                    stand_in.cancel.cancel(Requested);
-                    stand_in.cancel.cancel(Deadline);
-                    assert_eq!(stand_in.cancel.cause(), Some(Requested));
-                }
-                if withhold {
-                    fs::write(stand_in.directory.join("calls.finish"), b"finish").unwrap();
-                }
-                releases.release_memory();
-                releases.cleanup.entered();
-                eprintln!("controlled withhold={withhold}: real cleanup poll returned; readiness validation follows release");
-                if withhold {
-                    assert_eq!(stand_in.cancel.cause(), None);
-                    stand_in.cancel.cancel(Requested);
-                    stand_in.cancel.cancel(Deadline);
-                    assert_eq!(stand_in.cancel.cause(), Some(Requested));
-                }
-                releases.release_cleanup();
-            }));
-            if scheduled.is_err() {
-                releases.abort();
-            }
-            let CancellationSettlement { received, late, joined } = settle_cancellation_worker(
-                &receiver,
-                cancellation_settlement_budget(T),
-                worker,
-                || releases.abort(),
-            );
-            releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
-            drop(releases);
-            eprintln!("controlled withhold={withhold}: initial receive {received:#?}; late public result {late:#?}; worker state {joined:?}");
-            for name in ["calls", "calls.ready", "calls.namespace", "calls.child"] {
-                eprintln!(
-                    "controlled withhold={withhold}: {name}={:?}",
-                    fs::read_to_string(stand_in.directory.join(name))
-                );
-            }
-            if stand_in.directory.join("calls.child").is_file() {
-                recorded_process_gone(&stand_in.directory.join("calls.child"));
-            }
-            if let Err(panic) = scheduled {
-                std::panic::resume_unwind(panic);
-            }
-            joined.expect("controlled execution worker joined");
-            received.expect("full public batch settled after cleanup and independent group")
-        })
-        .unwrap();
-        assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].members, [0, 1]);
-        if withhold {
-            assert!(matches!(
-                groups[0].evidence,
-                Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
-            ));
-        } else {
-            assert!(matches!(
-                groups[0].evidence,
-                Err(KaniExecutionRefusal::BatchCancelled {
-                    source: KaniCancellationSource::Requested,
-                    members: 2,
-                })
-            ));
-        }
-        assert_eq!(groups[1].members, [2]);
-        let evidence = groups[1].evidence.as_ref().unwrap();
-        assert_eq!(evidence.len(), 1);
-        assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
-        assert_eq!(evidence[0].cancellation_terminal_value().unwrap(), None);
-        assert_eq!(independent.cause(), None);
-        let calls = stand_in.calls();
-        assert_eq!(calls.len(), 2);
-        for member in ["a::check", "b::check"] {
-            assert!(calls[0]
-                .windows(3)
-                .any(|args| args == ["--harness", member, "--exact"]));
-        }
-        recorded_process_gone(&stand_in.directory.join("calls.child"));
-    }
-
     /// Otherwise groupable requests with distinct handles run in separate real processes.
     #[trace("FR-040-AC-5")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn distinct_cancellation_handles_have_distinct_launchers() {
         let harnesses = [member("a", "check", 4), member("b", "check", 4)];
@@ -4291,7 +3205,6 @@ esac
 
     /// A late timer event cannot relabel either a completed report or a no-event execution ceiling.
     #[trace("FR-040-AC-3", "FR-040-AC-4")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn completed_and_elapsed_runs_do_not_acquire_late_cancellation() {
         let harness = member("late", "check", 4);
@@ -4321,7 +3234,6 @@ esac
     /// The evidence of every member of a batch whose members share their proof process, in
     /// request order (a member held for the witness phase is in its witness group's run), or the
     /// first refusal.
-    #[cfg(target_os = "linux")]
     fn only_group(
         runs: Result<Vec<KaniGroupRun>, KaniExecutionRefusal>,
     ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
@@ -4335,7 +3247,6 @@ esac
         Ok(placed.into_iter().map(|(_, evidence)| evidence).collect())
     }
 
-    #[cfg(target_os = "linux")]
     fn outcomes(evidence: &[KaniExecutionEvidence]) -> Vec<KaniRunOutcome> {
         evidence
             .iter()
@@ -4392,37 +3303,7 @@ esac
         vec![member("a", "check", 4), member("b", "check", 4)]
     }
 
-    #[trace("FR-028-AC-21")]
-    #[cfg(not(target_os = "linux"))]
-    #[test]
-    fn unsupported_platform_refuses_single_and_batch_before_backend_dispatch() {
-        let stand_in = StandIn::verifying("unsupported-platform");
-        let harnesses = pair();
-        assert!(matches!(
-            execute_kani_obligation(&stand_in.request(&harnesses[0], T)),
-            Err(KaniExecutionRefusal::MemoryMechanismUnavailable { .. })
-        ));
-        let runs = stand_in.batch(&harnesses, T).unwrap();
-        assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].members, [0, 1]);
-        assert!(matches!(
-            runs[0].evidence,
-            Err(KaniExecutionRefusal::MemoryMechanismUnavailable { .. })
-        ));
-        assert!(
-            !stand_in.directory.join("calls").exists(),
-            "backend never dispatched"
-        );
-    }
-
-    /// N harnesses with equal options and timeout start one launcher process, whose arguments hold
-    /// one `--harness <module::harness> --exact` pair per member in request order, then
-    /// `--harness-timeout` T, then the shared options; one harness starts one process with the
-    /// single-run vector. Counting the processes before (one run each) and after batching gives
-    /// N and 1 for N = 1, 10 and 50.
-    // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-017-AC-22", "TC-043")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_compatible_harnesses_start_one_process_with_one_selection_each_in_request_order() {
         for count in [1_usize, 10, 50] {
@@ -4658,16 +3539,13 @@ esac
     ///
     /// The stand-in's sleep never ends early, so it outlasts T and N times T halved however the
     /// scheduler treats the test; the 39 s between it and the 80 s bound tolerate host load.
-    // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
         let stand_in = StandIn::running(
             "inside-n-times-t",
             &format!("sleep 41\n{VERIFY_EVERY_HARNESS}"),
-        )
-        .with_preconfirmed_cleanup();
+        );
         let harnesses: Vec<_> = (0..4)
             .map(|index| member(&format!("m{index}"), "check", 4))
             .collect();
@@ -4681,16 +3559,13 @@ esac
 
     /// Two members at T = 45 s complete after 46 s: beyond (N - 1) times T (45 s), with
     /// 44 seconds left before N times T (90 s). The real batch launch must count both members.
-    // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn a_batch_finishes_between_one_fewer_members_bound_and_its_full_bound() {
         let stand_in = StandIn::running(
             "full-member-count-bound",
             &format!("sleep 46\n{VERIFY_EVERY_HARNESS}"),
-        )
-        .with_preconfirmed_cleanup();
+        );
         let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(45)))
             .expect("both members must finish before their full 90-second batch bound");
         assert_eq!(
@@ -4736,9 +3611,7 @@ esac
 
     /// A batch still running at N times T is killed and refused as timed out, and no member is
     /// classified: the stand-in sleeps far past the bound and writes no report.
-    // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_still_running_at_its_outer_bound_is_refused_as_timed_out() {
         let stand_in = StandIn::running("outer-bound", "sleep 45");
@@ -4829,7 +3702,6 @@ esac
     /// the members in the reverse of the request order, one falsified and one verified.
     #[trace("FR-017-AC-22", "TC-043")]
     // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_members_are_matched_by_path_and_classified_from_their_own_entry() {
         let report = batch_report(&[
@@ -4902,7 +3774,6 @@ esac
         }
         // Only actual bounded execution yields public wire evidence. Unsupported hosts keep
         // every metadata assertion above without serializing a second wire contract.
-        #[cfg(target_os = "linux")]
         for (actual, module) in evidence.iter().zip(["a", "b"]) {
             let wire = serde_json::to_value(actual).unwrap();
             assert_eq!(
@@ -4926,7 +3797,6 @@ esac
         let single = StandIn::verifying("evidence-single");
         let alone = report_fixture::single(&single.request(&harnesses[0], T)).unwrap();
         assert!(alone.batch.is_none());
-        #[cfg(target_os = "linux")]
         assert!(serde_json::to_value(&alone).unwrap().get("batch").is_none());
     }
 
@@ -4935,7 +3805,6 @@ esac
     /// Failure entry makes the other member's success verified.
     #[trace("FR-017-AC-22", "TC-043")]
     // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_success_beside_a_non_zero_exit_is_verified_only_when_an_entry_states_failure() {
         let no_verdict = KaniRunOutcome::Inconclusive {
@@ -4980,7 +3849,6 @@ esac
     /// timeout is inconclusive with no counterexample.
     #[trace("FR-017-AC-22", "FR-028-AC-12", "TC-039", "TC-043")]
     // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_timed_out_entry_is_timed_out_naming_t_and_a_bare_failure_has_no_counterexample() {
         let report = batch_report(&[
@@ -5120,7 +3988,6 @@ esac
     /// results.
     #[trace("FR-017-AC-23", "TC-043")]
     // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_member_is_given_the_playback_headed_for_its_own_path() {
         let report = batch_report(&[
@@ -5254,7 +4121,6 @@ fn kani_concrete_playback_check_1077496887511954657() {
     /// it nor its verified neighbour loses its evidence: the group is not refused.
     #[trace("FR-017-AC-22", "FR-017-AC-23", "TC-043")]
     // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour() {
         let report = batch_report(&[
@@ -5324,19 +4190,15 @@ fn kani_concrete_playback_check_1077496887511954657() {
     /// A run over the limit for its harness count is refused with the stable code naming the
     /// stream, the limit and the count: one harness at 8 MiB, a batch of two at 16 MiB; a batch
     /// at exactly its limit completes with its real exit status.
-    #[trace("FR-017-AC-14", "FR-028-AC-21", "TC-043")]
+    #[trace("FR-017-AC-14", "TC-043")]
     #[test]
     fn tc_043_an_over_limit_stream_refuses_a_single_run_and_a_batch_by_its_member_count() {
         let flood = |bytes: usize, exit: i32| {
-            // On Linux an observable descendant remains alive until the namespace is killed;
-            // over-limit and completed conclusions must both confirm its teardown.
-            #[cfg(target_os = "linux")]
+            // An observable descendant remains alive until the group is killed; over-limit and
+            // completed conclusions must both kill it.
             let descendant = r#"sleep 45 &
 printf '%s' "$!" > "$CALLS.child"
-printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 "#;
-            #[cfg(not(target_os = "linux"))]
-            let descendant = "";
             format!("{descendant}head -c {bytes} /dev/zero; exit {exit}")
         };
         let one = StandIn::running("flood-one", &flood(CAPTURE_LIMIT + 1, 0));
@@ -5351,7 +4213,6 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             } if limit == CAPTURE_LIMIT
         ));
         assert_eq!(single.code(), Some("kani_output_over_limit"));
-        #[cfg(target_os = "linux")]
         recorded_process_gone(&one.directory.join("calls.child"));
 
         let two = StandIn::running("flood-two", &flood(2 * CAPTURE_LIMIT + 1, 0));
@@ -5364,12 +4225,10 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 ..
             } if limit == 2 * CAPTURE_LIMIT
         ));
-        #[cfg(target_os = "linux")]
         recorded_process_gone(&two.directory.join("calls.child"));
 
         let exact = StandIn::running("flood-exact", &flood(2 * CAPTURE_LIMIT, 1));
         let evidence = only_report_group(exact.reported_batch(&pair(), T)).unwrap();
-        #[cfg(target_os = "linux")]
         recorded_process_gone(&exact.directory.join("calls.child"));
         assert!(evidence
             .iter()
@@ -5387,7 +4246,6 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
     /// The diagnostic record of a run Kani gave no verdict for, or whose CBMC failed, over launcher stand-ins
     /// (FR-017-AC-32 to FR-017-AC-36).
-    #[cfg(target_os = "linux")]
     pub(crate) mod no_verdict_diagnostics {
         use super::*;
         use crate::kani::{
@@ -5829,17 +4687,6 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 }
             );
             assert!(wire_has_no_diagnostics(&timed_out));
-
-            let memory = memory_member("proofs", 32 * 1024 * 1024);
-            let hog = StandIn::running("diag-memory", CHILD_MEMORY_OVERAGE);
-            let exhausted = execute_kani_obligation(&hog.request(&memory, T)).unwrap();
-            assert_eq!(
-                exhausted.outcome,
-                KaniRunOutcome::Inconclusive {
-                    reason: KaniInconclusiveReason::MemoryExhausted
-                }
-            );
-            assert!(wire_has_no_diagnostics(&exhausted));
         }
 
         /// A refusal returns no evidence and so no record: an over-limit stream by its code, an
@@ -5993,7 +4840,6 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         ///
         #[trace("FR-017-AC-36", "TC-043")]
         // Linux only: these expect the witness phase, which the report-only fixture of other targets does not run.
-        #[cfg(target_os = "linux")]
         #[test]
         fn tc_043_a_group_report_decides_between_unknown_and_no_record() {
             let all_success = batch_report(&[
@@ -6143,6 +4989,34 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     "Unknown option: --no-such-option\n",
                     1,
                 )
+            }
+
+            /// An environment memory kill is classified from the backend's report alone: a report
+            /// stating `out_of_memory` is `FailedWithoutCounterexample` with that cause, and a
+            /// launcher killed by SIGKILL that exports no report is `NoVerdict`; FR-029's mapping
+            /// of each is asserted in `tests/it/terminal_map.rs`. The runner measured nothing itself (FR-028-AC-25, ADR-007).
+            #[trace("FR-028-AC-25", "TC-039")]
+            #[test]
+            fn an_environment_memory_kill_is_classified_from_the_report_only() {
+                let harness = proofs();
+                let stand_in = cbmc_failed("env-oom-report", &failing_with("out_of_memory"));
+                let evidence = run(&stand_in, &harness);
+                assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(
+                    wire(&evidence)["failureCause"],
+                    json!({ "kind": "out_of_memory" })
+                );
+                assert_eq!(evidence.memory.peak_resident_bytes, None);
+
+                let killed = StandIn::running("env-oom-sigkill", "kill -9 $$");
+                let evidence = run(&killed, &harness);
+                assert_eq!(
+                    evidence.outcome,
+                    KaniRunOutcome::Inconclusive {
+                        reason: KaniInconclusiveReason::NoVerdict
+                    }
+                );
+                assert_eq!(evidence.exit_code, None);
             }
 
             /// A `FailedWithoutCounterexample` run keeps the cause the report states, and a
@@ -6395,29 +5269,23 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     assert!(!has_member(&evidence, "failureCause"), "{label}");
                 }
 
-                // A run stopped by the timeout or by the memory ceiling reads no report.
+                // A run stopped by the timeout reads no report.
                 let stand_in = StandIn::scaffold("cause-stopped");
-                for (launch, expected) in [
-                    (LaunchOutcome::TimedOut, KaniInconclusiveReason::TimedOut),
-                    (
-                        LaunchOutcome::MemoryExhausted,
-                        KaniInconclusiveReason::MemoryExhausted,
-                    ),
-                ] {
-                    let reported = finish_single(
-                        &stand_in.request(&harness, T),
-                        Vec::new(),
-                        launch,
-                        Some(failing_with("exit_code_64")),
-                        None,
-                    )
-                    .unwrap();
-                    assert_eq!(
-                        reported.outcome,
-                        KaniRunOutcome::Inconclusive { reason: expected }
-                    );
-                    assert_eq!((reported.failure_cause, reported.diagnostics), (None, None));
-                }
+                let reported = finish_single(
+                    &stand_in.request(&harness, T),
+                    Vec::new(),
+                    LaunchOutcome::TimedOut,
+                    Some(failing_with("exit_code_64")),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(
+                    reported.outcome,
+                    KaniRunOutcome::Inconclusive {
+                        reason: KaniInconclusiveReason::TimedOut
+                    }
+                );
+                assert_eq!((reported.failure_cause, reported.diagnostics), (None, None));
             }
 
             /// A number and a lone surrogate escape as the exit status are still refused as

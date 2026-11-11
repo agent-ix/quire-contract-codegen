@@ -16,8 +16,7 @@ truncated, that a capture failure is refused, and that no launcher descendant ou
 (IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
 `NoVerdict` group never feeds classification (FR-017-AC-36), and that a batch member's CBMC failure
 cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
-FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 18, planned
-under IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
+FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 18, IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
 with its descendants and signals it before the launcher is reaped, and that those files have no
 Linux-only construct. The former
 namespace-confirmation diagnostics (FR-017-AC-54 to FR-017-AC-56) are retired with the namespace
@@ -69,21 +68,21 @@ owner.
     same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
 13. (FR-029-AC-33, planned under IR-848.) Pass the evidence of `c::check` and of `d::check` from
     step 12 to `run_terminal_value`.
-15. (FR-017-AC-65, planned under IR-1510.) Launch a launcher stand-in that prints its own process
+15. (FR-017-AC-65, IR-1510.) Launch a launcher stand-in that prints its own process
     id and process group id, and read its group id beside the process id and the group id of the
     test process. Launch a second stand-in left in the caller's group as a control.
-16. (FR-017-AC-66, planned under IR-1510.) Under a 1 s wall-clock ceiling, launch a stand-in that
+16. (FR-017-AC-66, IR-1510.) Under a 1 s wall-clock ceiling, launch a stand-in that
     starts a descendant in its group, which starts a grandchild in the same group, each appending one
     byte to its own heartbeat file every 50 ms, and then waits. Read the outcome and the elapsed time
     of the call, then the sizes of both heartbeat files and, after three heartbeat intervals, the sizes
     again. Repeat with a descendant that holds the output pipe open for 5 seconds. Repeat with a
     stand-in whose descendant ends its own heartbeat by exiting before the timeout, as a control that
     the files are read after a real stop.
-17. (FR-017-AC-67, planned under IR-1510.) Run the structural scan: parse the non-test, non-comment source files of `src/kani/run/` (`#[cfg(test)]` modules, comments and `#[doc]` attributes excluded) and search its identifiers and string literals for the one token list
+17. (FR-017-AC-67, IR-1510.) Run the structural scan: parse the non-test, non-comment source files of `src/kani/run/` (`#[cfg(test)]` modules, comments and `#[doc]` attributes excluded) and search its identifiers and string literals for the one token list
     `bwrap`, `bubblewrap`, `unshare`, `CLONE_NEW`, `pidfd`, `procfs`, `/proc`, `cgroup`, `namespace`.
     Run the scan also over a fixture file holding `Path::new("/proc")` in code, the same literal in
     a `#[cfg(test)]` module, and `cgroup` in a comment.
-18. (FR-017-AC-68, planned under IR-1510.) Through the launch test seam that records the group
+18. (FR-017-AC-68, IR-1510.) Through the launch test seam that records the group
     signal and the reap, kill a stand-in's group on a timeout and read the order of the two
     operations.
 
@@ -154,9 +153,9 @@ owner.
 17. The scan finds none of the tokens in those files and exactly one finding in the fixture (the
     `Path::new("/proc")` literal in code); the test-module literal and the comment are not findings.
     A scanner that skips string literals finds none in the fixture, and one that includes test
-    modules or comments finds three, so each fails. On main as of this specification the scan finds
-    `bwrap`, `unshare`, `pidfd` and `procfs` in `namespace.rs`, `owners.rs` and `memory.rs`, so the
-    step fails until IR-1510 lands (FR-017-AC-67).
+    modules or comments finds three, so each fails. Before IR-1510 the scan found
+    `bwrap`, `unshare`, `pidfd` and `procfs` in `namespace.rs`, `owners.rs` and `memory.rs`; those are
+    deleted (FR-017-AC-67).
 18. The group signal is recorded before the reap. A mutant that reaps the launcher first records the
     reap first and fails (FR-017-AC-68).
 
@@ -212,12 +211,12 @@ Step 12 (FR-017-AC-39) is covered by
 `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
 `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
-Steps 15 to 18 are planned under IR-1510 and are not written. The shell-script launcher stand-ins
+Steps 15 to 18 are implemented under IR-1510 in `src/kani/run/launch.rs` (`tc_043_the_launcher_leads_its_own_process_group`, `tc_043_a_timeout_kills_the_whole_group_and_returns_within_the_allowance` with its three controls, `tc_043_the_group_is_signalled_before_the_launcher_is_reaped`) and in `tests/it/kani_run_scan.rs` (step 17). The shell-script launcher stand-ins
 of `batch_tests` and the `tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` test
 (step 3) are the models: step 16 is the same stand-in with a wall-clock ceiling in place of the
 launcher's own exit, and its heartbeat files are read through the filesystem, never by a PID reopen.
 Step 17 is an Analysis control: a `syn` scan (`syn` is already a normal dependency, `Cargo.toml`)
-run as a test or `scripts/` check in `make ci`; it needs no cross-compilation and no macOS host. The
+run as a test in `make ci`; it needs no cross-compilation and no macOS host. The
 property that those files have no Linux-only dependency is verified when the suite also runs on a
 macOS host; the Linux CI does not claim it. Step 18 uses the same seam as step 16.
 
@@ -229,4 +228,4 @@ covered by `unequal_identity_memory_ceilings_run_in_separate_backend_processes` 
 `src/kani/run/execute.rs`. The runner-measured grouped memory exhaustion once covered under TC-039
 (FR-028-AC-21) is withdrawn with the runner-side mechanism (ADR-007).
 
-Steps 15 to 18 (FR-017-AC-65 to FR-017-AC-68, ADR-007) are PLANNED/UNRUN under IR-1510.
+Steps 15 to 18 (FR-017-AC-65 to FR-017-AC-68, ADR-007) are met on Linux under IR-1510; the macOS property of FR-017-AC-67 is UNRUN until the suite runs on a macOS host.

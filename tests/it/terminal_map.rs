@@ -21,11 +21,10 @@ use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
     DependencyLockError, DocumentError, EvidenceFailureCause, FrameReplayError,
     KaniExecutionEvidence, KaniFailureCause, KaniInconclusiveReason, KaniRunOutcome, KaniSolver,
-    LockedSource, MemoryMechanism, MemoryObservation, ModelError, ObligationIdentityError,
-    OperationDeclaration, PreStateFault, ProofCeilings, ReplayInputs, ReplayPackage,
-    ReplayPackageError, ReplaySettlement, ReplayVerdict, ScopeMember, SelectedTargetMember,
-    SpineReplayError, StateClauseReplay, StateClauseReplayError, StateFrameRefusal,
-    TerminalPairError,
+    LockedSource, MemoryObservation, ModelError, ObligationIdentityError, OperationDeclaration,
+    PreStateFault, ProofCeilings, ReplayInputs, ReplayPackage, ReplayPackageError,
+    ReplaySettlement, ReplayVerdict, ScopeMember, SelectedTargetMember, SpineReplayError,
+    StateClauseReplay, StateClauseReplayError, StateFrameRefusal, TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_exact::CancelCause;
@@ -43,10 +42,7 @@ pub(crate) fn synthetic_evidence(
             memory_bytes: std::num::NonZeroU64::new(1_073_741_824).unwrap(),
             wall_clock: std::time::Duration::from_secs(30),
         },
-        memory: MemoryObservation {
-            mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
-            peak_resident_bytes: None,
-        },
+        memory: MemoryObservation::default(),
         symbolic_arguments: Vec::new(),
         kind: None,
         harness_path: "synthetic::mapping".into(),
@@ -66,14 +62,13 @@ pub(crate) fn synthetic_evidence(
 }
 
 /// Every inconclusive reason the classifier has today.
-const REASONS: [KaniInconclusiveReason; 8] = [
+const REASONS: [KaniInconclusiveReason; 7] = [
     KaniInconclusiveReason::FailedWithoutCounterexample,
     KaniInconclusiveReason::NoVerdict,
     KaniInconclusiveReason::MissingCoverSummary,
     KaniInconclusiveReason::VacuousProof,
     KaniInconclusiveReason::UnwindBoundExhausted,
     KaniInconclusiveReason::TimedOut,
-    KaniInconclusiveReason::MemoryExhausted,
     KaniInconclusiveReason::WitnessDisagreed,
 ];
 
@@ -224,15 +219,6 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
             Some(ReportedInconclusiveCause::KaniVacuousProof)
         );
     }
-}
-
-#[trace("FR-029-AC-3")]
-#[test]
-fn observed_memory_exhaustion_maps_to_incomplete_resource_exhausted() {
-    assert_eq!(
-        map_run(&inconclusive(KaniInconclusiveReason::MemoryExhausted), None),
-        TerminalValue::Incomplete(IncompleteCause::ResourceExhausted),
-    );
 }
 
 /// The timed-out reason maps to `Incomplete(TimedOut)` and the exhausted-unwind-bound reason to
@@ -1432,9 +1418,7 @@ fn ordinary_row(outcome: &KaniRunOutcome, count: u32) -> Option<[TerminalValue; 
         KaniRunOutcome::Inconclusive { reason } => match reason {
             R::VacuousProof => repeated(proved(0)),
             R::TimedOut => repeated(Incomplete(IncompleteCause::TimedOut)),
-            R::MemoryExhausted | R::UnwindBoundExhausted => {
-                repeated(Incomplete(IncompleteCause::ResourceExhausted))
-            }
+            R::UnwindBoundExhausted => repeated(Incomplete(IncompleteCause::ResourceExhausted)),
             R::NoVerdict | R::MissingCoverSummary | R::WitnessDisagreed => repeated(Failed),
             R::FailedWithoutCounterexample => [
                 Failed,

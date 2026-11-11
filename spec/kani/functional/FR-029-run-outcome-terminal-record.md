@@ -149,7 +149,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   | Outcome | Result |
   |---|---|
   | `inconclusive` with the timed-out reason | `Incomplete(IncompleteCause::TimedOut)` |
-  | `inconclusive` with the memory-exhausted reason (current code, removed by IR-1510) | `Incomplete(IncompleteCause::ResourceExhausted)` |
+  | `inconclusive` with the memory-exhausted reason (removed by IR-1510) | `Incomplete(IncompleteCause::ResourceExhausted)` |
   | `inconclusive` with the exhausted-unwind-bound reason | `Incomplete(IncompleteCause::ResourceExhausted)` |
   | `inconclusive` with the no-verdict reason | `Failed` |
   | `inconclusive` with the failure-without-counterexample reason, cause `out_of_memory` | `Incomplete(IncompleteCause::ResourceExhausted)` |
@@ -269,7 +269,7 @@ verified-run row.
 In the absence of a retained refinement disagreement, every `bounded_shadow` inconclusive backend
 outcome takes the ordinary inconclusive rows, without a proof strength or a completed parity
 settlement: vacuous proof and cover-unsatisfied give the vacuous record; timed-out gives
-`Incomplete(TimedOut)`; memory-exhausted (current code, removed by IR-1510) and unwind-bound-exhausted give
+`Incomplete(TimedOut)`; memory-exhausted (removed by IR-1510) and unwind-bound-exhausted give
 `Incomplete(ResourceExhausted)`; a failure without a counterexample takes the cause rows
 (`out_of_memory` gives `Incomplete(ResourceExhausted)`, `timeout` gives `Incomplete(TimedOut)`, any
 other cause or none gives `Failed`); no-verdict and missing-cover-summary give `Failed`. These source classes are not deleted by the parity route.
@@ -381,7 +381,7 @@ retain the partial/planned statuses below; falsified native/generated-family wor
 |----|----------|--------------|
 | FR-029-AC-1 | `verified` with three SUCCESS checks maps to `Proved { success_checks: 3 }`, and `falsified` with a reproduced replay maps to `Refuted`. | Test (TC-040) |
 | FR-029-AC-2 | `inconclusive` with the vacuous-proof reason and `cover-unsatisfied` each map to `Proved { success_checks: 0 }`, whose QSL category is `inconclusive` with cause `KaniVacuousProof`. | Test (TC-040) |
-| FR-029-AC-3 | The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted (current code, removed by IR-1510; ADR-007) and exhausted-unwind-bound reasons each map to `Incomplete(ResourceExhausted)`. | Test (TC-040) |
+| FR-029-AC-3 | The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted (removed by IR-1510; ADR-007) and exhausted-unwind-bound reasons each map to `Incomplete(ResourceExhausted)`. | Test (TC-040) |
 | FR-029-AC-4 | The no-verdict reason maps to `Failed`. | Test (TC-040) |
 | FR-029-AC-5 | The missing-cover-summary reason maps to `Failed`. The failure-without-counterexample reason maps by its cause (FR-029-AC-32 to FR-029-AC-35). | Test (TC-040) |
 | FR-029-AC-6 | The ordinary production/source-predicate map returns no `Tested`. | Test |

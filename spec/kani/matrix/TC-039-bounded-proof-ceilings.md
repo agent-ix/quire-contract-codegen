@@ -85,7 +85,7 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     exceeds its memory ceiling; read the refinement evidence (class, cases, seed, ceilings,
     mechanism, outcome, versions) beside the shadow run's.
 
-### The environment-owned memory cap (planned, IR-1510, ADR-007)
+### The environment-owned memory cap (IR-1510, ADR-007)
 
 23. Run a launcher stand-in whose report states the harness entry with exit status `out_of_memory`
     (the shape Kani writes when CBMC is killed by SIGKILL), and a stand-in that is killed by SIGKILL
@@ -167,9 +167,9 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 25. The over-allocating stand-in is `Verified`: the runner measured nothing and killed nothing, so
     the environment, not the runner, is the only thing that could stop it. The stand-in environment
     with no memory interface runs and is not refused with `MemoryMechanismUnavailable`
-    (FR-028-AC-21). Both fail on main as of this specification.
-26. The scan finds none of the tokens. On main as of this specification it finds `procfs` and
-    `pidfd` in `memory.rs`, so the step fails until IR-1510 lands (FR-028-AC-21, FR-017-AC-67). The
+    (FR-028-AC-21).
+26. The scan finds none of the tokens. Before IR-1510 it found `procfs` and
+    `pidfd` in `memory.rs`; they are deleted (FR-028-AC-21, FR-017-AC-67). The
     macOS property is verified when the suite runs on a macOS host and is not claimed by the Linux
     CI.
 
@@ -217,8 +217,8 @@ permission to create the namespaces and readable procfs observations are require
 unavailable mechanism refuses before backend dispatch. ADR-007 withdraws that design: FR-028-AC-21
 is now environmental, and the memory-overage, observer, procfs, ancestry and gated-startup fixtures
 listed above test the runner-side mechanism that IR-1510 removes, so they are not evidence for the
-reworded criterion. The identity-ceiling and expired-deadline fixtures above are unaffected. Steps 23 to 26 are PLANNED/UNRUN under
-IR-1510.
+reworded criterion. The identity-ceiling and expired-deadline fixtures above are unaffected. Steps 23 to 26 are implemented under
+IR-1510: `execute.rs` (`identity_ceilings_govern_execution_and_the_runner_enforces_no_memory_cap`, `the_evidence_records_the_named_peak_the_environment_provides_in_bytes`, `an_environment_memory_kill_is_classified_from_the_report_only`), `two_phase_tests.rs` (`a_witness_phase_killed_by_the_environment_is_no_verdict`) and `tests/it/kani_run_scan.rs`.
 
 Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
 refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In

@@ -872,7 +872,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     `qsl_replay::replay_state_clause` as a reproduced violation of the same clause; credit no
     other kind's verdict of the widened package. Run the `amount > 100` precondition and require
     `CoverUnsatisfied`. Record the teardown of each job and its peak when the environment provides one (ADR-007);
-    `MemoryExhausted` (current code, removed by IR-1510), `WitnessDisagreed`, `NoVerdict`, `MissingCoverSummary` and timeout are `Inconclusive`, the
+    `MemoryExhausted` (removed by IR-1510), `WitnessDisagreed`, `NoVerdict`, `MissingCoverSummary` and timeout are `Inconclusive`, the
     control unmet, and the peak is reported (FR-015-AC-129).
 
 ## Exhaustive concrete enumeration (IR-1022, planned)

@@ -3,6 +3,7 @@
 use std::{
     fmt, fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
     time::Instant,
 };
@@ -30,7 +31,6 @@ use crate::{
             },
             harness::KaniExecutableHarness,
             launch::{run_bounded_launcher, LaunchOutcome},
-            namespace::BackendCommand,
             tool::KaniInstallation,
         },
     },
@@ -330,9 +330,6 @@ impl KaniScalarNativeError {
                 | KaniExecutionRefusal::OutputOverLimit { .. }
                 | KaniExecutionRefusal::PlaybackForNonMember { .. } => CompletionRefusal,
                 KaniExecutionRefusal::Tool(_)
-                | KaniExecutionRefusal::MemoryMechanismUnavailable { .. }
-                | KaniExecutionRefusal::MemoryObservationFailed { .. }
-                | KaniExecutionRefusal::BatchMemoryExhausted { .. }
                 | KaniExecutionRefusal::BatchTimedOut { .. }
                 | KaniExecutionRefusal::BatchCancelled { .. }
                 | KaniExecutionRefusal::OutputUnread { .. }
@@ -361,7 +358,6 @@ fn proof_failure_class(
             | KaniInconclusiveReason::VacuousProof
             | KaniInconclusiveReason::UnwindBoundExhausted => CompletionRefusal,
             KaniInconclusiveReason::TimedOut
-            | KaniInconclusiveReason::MemoryExhausted
             | KaniInconclusiveReason::NoVerdict
             | KaniInconclusiveReason::WitnessDisagreed => EnvironmentFault,
             KaniInconclusiveReason::FailedWithoutCounterexample => match cause {
@@ -841,11 +837,10 @@ fn execute_native(
     request: &KaniScalarNativeRequest<'_>,
     root: &Path,
 ) -> Result<(Outcome<Integer>, NativeMeterObservation), KaniScalarNativeError> {
-    let mut command = BackendCommand::new(request.installation.scalar_native_launcher());
+    let mut command = Command::new(request.installation.scalar_native_launcher());
     let arguments = native_arguments(request.operands, request.scalar_limits);
     command.args(&arguments);
     command.current_dir(root);
-    command.read_only_bind(root);
     command.env(
         "CARGO_TARGET_DIR",
         request.target_directory.join("kani-scalar-native"),
@@ -853,21 +848,14 @@ fn execute_native(
     let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
     let result = run_bounded_launcher(
         command,
-        request.harness.identity.ceilings,
+        request.harness.identity.ceilings.wall_clock,
         std::num::NonZeroUsize::MIN,
         deadline,
         request.cancel,
         request.installation.owners(),
     )
-    .map_err(|error| {
-        KaniScalarNativeError::NativeLaunch(match error {
-            crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                format!("native memory enforcement unavailable: {cause}")
-            }
-            crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                format!("native launcher I/O failed: {cause}")
-            }
-        })
+    .map_err(|cause| {
+        KaniScalarNativeError::NativeLaunch(format!("native launcher I/O failed: {cause}"))
     })?;
     decode_native_launch(result.outcome, request.scalar_limits)
 }
@@ -1102,27 +1090,20 @@ fn generate_lockfile(
     request: &KaniScalarNativeRequest<'_>,
     root: &Path,
 ) -> Result<(), KaniScalarNativeError> {
-    let mut command = BackendCommand::new("cargo");
-    command.args(&["generate-lockfile".into(), "--offline".into()]);
+    let mut command = Command::new("cargo");
+    command.args(["generate-lockfile", "--offline"]);
     command.current_dir(root);
     let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
     let result = run_bounded_launcher(
         command,
-        request.harness.identity.ceilings,
+        request.harness.identity.ceilings.wall_clock,
         std::num::NonZeroUsize::MIN,
         deadline,
         request.cancel,
         request.installation.owners(),
     )
-    .map_err(|error| {
-        KaniScalarNativeError::NativeLaunch(match error {
-            crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                format!("lockfile memory enforcement unavailable: {cause}")
-            }
-            crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                format!("lockfile launcher I/O failed: {cause}")
-            }
-        })
+    .map_err(|cause| {
+        KaniScalarNativeError::NativeLaunch(format!("lockfile launcher I/O failed: {cause}"))
     })?;
     match result.outcome {
         LaunchOutcome::Completed {
@@ -2119,18 +2100,12 @@ mod tests {
         outcome: KaniRunOutcome,
         failure_cause: Option<KaniFailureCause>,
     ) -> KaniExecutionEvidence {
-        use crate::kani::{
-            abi::KaniSolver,
-            run::memory::{MemoryMechanism, MemoryObservation},
-        };
+        use crate::kani::{abi::KaniSolver, run::memory::MemoryObservation};
         KaniExecutionEvidence {
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
                 std::time::Duration::from_secs(1),
             ),
-            memory: MemoryObservation {
-                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
-                peak_resident_bytes: None,
-            },
+            memory: MemoryObservation::default(),
             symbolic_arguments: Vec::new(),
             kind: None,
             harness_path: "table-only".into(),
@@ -2197,7 +2172,6 @@ mod tests {
             KaniInconclusiveReason::VacuousProof => R,
             KaniInconclusiveReason::UnwindBoundExhausted => R,
             KaniInconclusiveReason::TimedOut => F,
-            KaniInconclusiveReason::MemoryExhausted => F,
             KaniInconclusiveReason::WitnessDisagreed => F,
         }
     }
@@ -2222,9 +2196,6 @@ mod tests {
             KaniExecutionRefusal::WrongMethodExecutionRoute => (R, None),
             KaniExecutionRefusal::BatchCancelled { .. } => (F, None),
             KaniExecutionRefusal::Tool(_) => (F, None),
-            KaniExecutionRefusal::MemoryMechanismUnavailable { .. } => (F, None),
-            KaniExecutionRefusal::MemoryObservationFailed { .. } => (F, None),
-            KaniExecutionRefusal::BatchMemoryExhausted { .. } => (F, None),
             KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
             KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. } => (R, None),
@@ -2313,9 +2284,6 @@ mod tests {
             KaniRunOutcome::Inconclusive {
                 reason: I::TimedOut,
             },
-            KaniRunOutcome::Inconclusive {
-                reason: I::MemoryExhausted,
-            },
         ];
         for outcome in outcomes {
             let evidence = classification_evidence(outcome, None);
@@ -2374,7 +2342,6 @@ mod tests {
             output::report::KaniReportRefusal,
             run::{
                 launch::CaptureStream,
-                memory::{MemoryMechanism, MemoryObservation},
                 tool::{KaniTool, KaniToolError},
             },
         };
@@ -2397,20 +2364,6 @@ mod tests {
                 tool: KaniTool::Launcher,
                 path: "table".into(),
             }),
-            KaniExecutionRefusal::MemoryMechanismUnavailable {
-                cause: std::io::Error::other("table"),
-            },
-            KaniExecutionRefusal::MemoryObservationFailed {
-                detail: "table".into(),
-            },
-            KaniExecutionRefusal::BatchMemoryExhausted {
-                members: 1,
-                memory_bytes: 1,
-                memory: MemoryObservation {
-                    mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
-                    peak_resident_bytes: Some(2),
-                },
-            },
             KaniExecutionRefusal::BatchTimedOut {
                 members: 1,
                 timeout: std::time::Duration::from_secs(1),

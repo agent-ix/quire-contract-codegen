@@ -319,8 +319,8 @@ pub use oracle::boolean_v1::{
 /// Resource ceilings bound into each generated proof identity.
 pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
 
-/// The actual tree memory mechanism and observations recorded by bounded backend runs.
-pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
+/// The peak memory an environment provides for a bounded backend run, and the source seam.
+pub use kani::run::memory::{MemoryObservation, MemoryUnit, PeakMemorySource, PeakReading};
 
 // State-method types retain exact identity across generation, execution and conversion.
 /// Original admitted scalar replay body and typed family authority.
