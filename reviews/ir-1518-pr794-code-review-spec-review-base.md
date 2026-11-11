@@ -42,3 +42,13 @@ run: no requirement statement, structure or relationship edge changed.
 | FR-015-AC-48 | examined | ... One gap stays open and is specified by FR-015-AC-133 (element domain of a one-level sequence field; code IR-1517). The unread-drawn-field gap is closed: FR-015-AC-134 is implemented, and so are FR-015-AC-135 and FR-015-AC-136 ... |
 | TC-025 step 14 / steps 52-53 heading | examined | The sequence-field element domain and the NodeKey binding are specified by steps 52 (planned) and 53 (implemented, IR-1518) below. |
 | spec/kani/matrix/tests.md AC-38..49 row | examined | ... leaves only AC-133 (code IR-1517) open, AC-135 and AC-136 being implemented by IR-1518 ... |
+
+## Dispositions
+
+Round 1, head 4a521fdc. `quire validate --scope . 'spec/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'`
+exits 0 with main's 6 warnings, none on a changed line. `quire matrix` shows AC-135 tagged by 3 tests
+and AC-136 by 3 tests (:726, :755, :792).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The AC-135 row now names its three evidence tests and states in the present tense that the V2 fixtures carry the resolved key and that `fixture_obligation` is used only where classification is bypassed; the AC-136 row names its evidence and the lowering-order test. |

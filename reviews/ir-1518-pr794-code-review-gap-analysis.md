@@ -52,3 +52,25 @@ gaps on test procedure and unspecified ordering.
 | FR-015-AC-136 | examined | A V2 clause claim whose NodeKey is not the selected clause node's resolved key is refused as V2ClauseNodeKeyMismatch even when its record also differs, so the refusal precedes every record comparison. |
 | TC-025 step 53 | examined | Two clauses A and B, B listed first, hand-written expected keys; cases (a)-(e); mutants M4-M8. |
 | FR-015-AC-48 | context_only | Carried identity and record cross-check; residual-gap text updated by this PR. |
+
+## Dispositions
+
+Round 1, head 4a521fdc. Focused job (`flock`, own worktree, `QUIRE_CVC5_BIN` set):
+`cargo test --test it -- a_key_mismatch_precedes state_clause_invariant_replay`: 12/12 pass (the two
+new ordering tests and the ten `state_clause_invariant_replay` tests, which include the six edited
+identity sites). One mutant: the key check guarded by `lower_v2_clause(..).is_ok()`, so lowering
+runs before it. `a_key_mismatch_precedes_a_lowering_refusal` FAILED at :787; the other
+11 identity tests passed. The mutant was reverted.
+
+The six replay sites now `assert_eq!(inputs.obligation_identity, harness.obligation)` instead of
+copying the harness's identity into the inputs. The left side is QSL's own call-site identity
+(`Twin::invariant_inputs`: `call_site(..).site.node`, model `None`, the site occurrence ordinal),
+and the right side is the CG claim built by `claims_for` from the package's structural key. The two
+are produced independently, so the assertion is a real check, not a tautology: it confirms on these
+fixtures that QSL mints the clause's own key (the AC-135 producer assumption), and it now drives
+the replay identity check with an unforged identity.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-025 step 53(d) now states the state-read variant for the two-clause fixture and adds the parameter-domain variant, which `a_key_mismatch_precedes_a_parameter_domain_mismatch` implements over `parameter_fixtures()` with the record-only `V2ClauseClaimMismatch { Parameters }` control. |
+| FND-002 | fixed | Step 53(d2) and the AC-136 row now pin the key refusal ahead of a lowering refusal. `a_key_mismatch_precedes_a_lowering_refusal`'s control reaches `V2ClauseConditionNotRendered` under the resolved key, and the lowering-first mutant fails it. |

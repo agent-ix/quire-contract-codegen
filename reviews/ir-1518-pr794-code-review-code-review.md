@@ -69,3 +69,12 @@ M5 and M7. One low readability nit.
 | resolved_key / clause_obligation / claim_of / hand_written_claim | examined | Fixture claims carry the resolved key of the clause they claim. |
 | Twin::with_preconditions_on_two_operations | examined | Two preconditions on deposit and transfer of Account reading balance and audit. |
 | src/replay/state_clause.rs:617-623 | context_only | structural_key then checked_node_key compared with the site NodeKey. |
+
+## Dispositions
+
+Round 1, head 4a521fdc (one squashed commit rebased onto main 6e62186e; `git merge-tree` against
+main dab4861f is clean). Checked against `git diff 1da7a721..4a521fdc` and the code.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The unsupported-kind arm and the `kind.is_some() &&` conjunct are gone; the key check is the first `Some(_)` guard arm inside `match kind`, and the `None` arm (refusing a kind other than precondition, postcondition or invariant) is now reachable. Behavior is unchanged: a `None` kind still refuses without a key check. |
