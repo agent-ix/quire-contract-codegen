@@ -194,7 +194,8 @@ An omitted or unavailable construction earns no Test credit.
 Product choice, not a technical default. Each option has its cost recorded here; none is selected
 by this record, and none is implemented or evaluated beyond the grounding above. Options address
 P1 and P3 separately: the "P1" and "P3" columns say what each option does to each failed premise,
-and options can be combined (the P3 option 6 with option 2, which is the only option that could address P1 for S, for example; option 3 only narrows it to the release-instruction endpoint). Options 2 to 4
+and options can be combined (the P3 option 6 with option 2, the only option that could enforce
+P1 for S, for example; option 3 only narrows it to the release-instruction endpoint). Options 2 to 4
 move the gate writer away from O and so contradict AC-54's O gate owner and the O-held writer in
 FR-034 Behavior. Option 5 adds an embedding precondition (no fork while a run is live) that FR-034
 does not state, option 6 changes the gate transport, Start rights and `pipe_reserve` terms in
