@@ -2434,7 +2434,7 @@ exit 0
 
         /// Persist the actual harness source that the public execution entry authenticates.
         #[cfg(target_os = "linux")]
-        pub(super) fn containing(&self, harnesses: &[&StateFrameHarness]) {
+        fn containing(&self, harnesses: &[&StateFrameHarness]) {
             let source = harnesses
                 .iter()
                 .map(|harness| harness.rust.contents.as_str())
@@ -2444,7 +2444,7 @@ exit 0
         }
 
         /// A stand-in running `body` after its prologue.
-        pub(super) fn running(name: &str, body: &str) -> Self {
+        fn running(name: &str, body: &str) -> Self {
             let stand_in = Self::scaffold(name);
             stand_in.install(body);
             stand_in
@@ -2452,7 +2452,7 @@ exit 0
 
         /// Timing controls wait for actual teardown readiness before the owner's one poll.
         #[cfg(target_os = "linux")]
-        pub(super) fn with_preconfirmed_cleanup(mut self) -> Self {
+        fn with_preconfirmed_cleanup(mut self) -> Self {
             use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
             self.installation = KaniInstallation::with_owners(
                 self.installation.launcher.clone(),
@@ -2492,18 +2492,13 @@ exit 0
         }
 
         /// A stand-in that verifies every harness it is asked for.
-        pub(super) fn verifying(name: &str) -> Self {
+        fn verifying(name: &str) -> Self {
             Self::running(name, VERIFY_EVERY_HARNESS)
         }
 
         /// A stand-in that exports `report` (when given), prints `console` and exits with the
         /// status `exit`.
-        pub(super) fn replaying(
-            name: &str,
-            report: Option<&[u8]>,
-            console: &str,
-            exit: i32,
-        ) -> Self {
+        fn replaying(name: &str, report: Option<&[u8]>, console: &str, exit: i32) -> Self {
             let stand_in = Self::scaffold(name);
             let mut body = String::new();
             if let Some(report) = report {
@@ -2521,7 +2516,7 @@ exit 0
         /// A stand-in that answers a launch whose vector holds `concrete-playback` (the witness
         /// phase) with `witness` and every other launch with `proof`, each a report (when given),
         /// a console and an exit status.
-        pub(super) fn replaying_phases(
+        fn replaying_phases(
             name: &str,
             proof: (Option<&[u8]>, &str, i32),
             witness: (Option<&[u8]>, &str, i32),
@@ -2587,7 +2582,7 @@ exit 0
 
         /// Exercise actual bounded execution on Linux and shared POSIX report semantics on
         /// unsupported targets. Only the Linux result carries a memory-enforcement attestation.
-        pub(super) fn reported_batch(
+        fn reported_batch(
             &self,
             harnesses: &[StateFrameHarness],
             timeout: Duration,

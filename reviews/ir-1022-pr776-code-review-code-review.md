@@ -87,3 +87,18 @@ Round 1, verified at head 7e0d82b3, which is fix commit 7e0d82b3 on 2a793499, re
 | FND-005 | fixed | The module, `execute_kani_obligation`, `execute_kani_obligations` and `KaniGroupRun` docs now describe the two phases and the order of the runs. |
 | FND-006 | fixed | The PR body no longer mentions `--slice-formula`. It now reports both TimedOut runs with their peaks. |
 | FND-007 | accepted-no-change | The title, body and commits now only reference the ticket ("refs IR-1022"), with no closing word. The branch `code/ir-1022-two-phase-run` still links the ticket. PR #771 (branch `spec/ir-1022-...`, no closing word) moved IR-1022 to done on merge, so a close on merge is still likely. The lead has accepted this and will reopen the ticket on merge. |
+
+## New findings (disposition pass 3)
+
+This is a read-only delta review of `git diff a78c3fdc 0c181c09`: the `make ci` fixes, with no cargo run. The delta:
+
+- moves `batch_tests/two_phase.rs` to `two_phase_tests.rs`, a `#[cfg(test)]` sibling of execute.rs. The rename is 99% similar, only the `use` lines change, and every trace tag, test name and cfg is identical.
+- regenerates the scalar golden. A JSON diff shows only `identity.options` changed, to the proof vector, plus the new `identity.witnessOptions`, which equals the old vector byte for byte.
+- adds a clause to FR-022-AC-31 that states this accurately.
+- blanks `witness_options` in the constrained legacy-preimage collision test. This is correct: the constrained witness vector is built from `<module_symbol>::search`, which is derived from the digest, the same as `options`. The `assert_ne!` checks on `oracle_contents`, `module_symbol` and `rust().path` still tell the two methods apart.
+
+No production code changed: every visibility edit is inside `#[cfg(test)] batch_tests`, and the no-panic scanner is untouched.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | The visibility widening in `batch_tests` is broader than the moved tests need. Seven `StandIn` methods became `pub(super)` that `two_phase_tests.rs` never calls: `containing`, `running`, `with_preconfirmed_cleanup`, `verifying`, `replaying`, `replaying_phases` and `reported_batch`. The file uses only `scaffold`, `install`, `request`, `batch`, `calls` and the struct fields. This is test-only and changes no behaviour, but these seven should stay private. | src/kani/run/execute.rs:2434-2602 |
