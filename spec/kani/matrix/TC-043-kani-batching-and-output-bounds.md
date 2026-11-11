@@ -18,7 +18,7 @@ truncated, that a capture failure is refused, and that no launcher descendant ou
 cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
 FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 18, planned
 under IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
-with its descendants and signals it before the launcher is reaped, and that the launch path has no
+with its descendants and signals it before the launcher is reaped, and that those files have no
 Linux-only construct. The former
 namespace-confirmation diagnostics (FR-017-AC-54 to FR-017-AC-56) are retired with the namespace
 owner.
@@ -79,8 +79,7 @@ owner.
     again. Repeat with a descendant that holds the output pipe open for 5 seconds. Repeat with a
     stand-in whose descendant ends its own heartbeat by exiting before the timeout, as a control that
     the files are read after a real stop.
-17. (FR-017-AC-67, planned under IR-1510.) Run the structural scan: parse the non-test, non-comment
-    source of `src/kani/run/` and search its identifiers and string literals for the one token list
+17. (FR-017-AC-67, planned under IR-1510.) Run the structural scan: parse the non-test, non-comment source files of `src/kani/run/` (`#[cfg(test)]` modules, comments and `#[doc]` attributes excluded) and search its identifiers and string literals for the one token list
     `bwrap`, `bubblewrap`, `unshare`, `CLONE_NEW`, `pidfd`, `procfs`, `/proc`, `cgroup`, `namespace`.
     Run the scan also over a fixture file holding `Path::new("/proc")` in code, the same literal in
     a `#[cfg(test)]` module, and `cgroup` in a comment.
@@ -152,7 +151,7 @@ owner.
     stop at its descendant's own exit. Killing only the launcher's process id leaves both heartbeat
     files growing and fails; a wait on the descendants before returning exceeds the allowance and
     fails (FR-017-AC-66).
-17. The scan finds none of the tokens in the launch path and exactly one finding in the fixture (the
+17. The scan finds none of the tokens in those files and exactly one finding in the fixture (the
     `Path::new("/proc")` literal in code); the test-module literal and the comment are not findings.
     A scanner that skips string literals finds none in the fixture, and one that includes test
     modules or comments finds three, so each fails. On main as of this specification the scan finds
@@ -217,9 +216,9 @@ Steps 15 to 18 are planned under IR-1510 and are not written. The shell-script l
 of `batch_tests` and the `tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` test
 (step 3) are the models: step 16 is the same stand-in with a wall-clock ceiling in place of the
 launcher's own exit, and its heartbeat files are read through the filesystem, never by a PID reopen.
-Step 17 is an Analysis control: a `syn` scan (a test-only dependency already common in Rust tooling)
+Step 17 is an Analysis control: a `syn` scan (`syn` is already a normal dependency, `Cargo.toml`)
 run as a test or `scripts/` check in `make ci`; it needs no cross-compilation and no macOS host. The
-property that the launch path has no Linux-only dependency is verified when the suite also runs on a
+property that those files have no Linux-only dependency is verified when the suite also runs on a
 macOS host; the Linux CI does not claim it. Step 18 uses the same seam as step 16.
 
 ## Status

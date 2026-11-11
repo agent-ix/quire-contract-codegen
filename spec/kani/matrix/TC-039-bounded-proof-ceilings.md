@@ -97,8 +97,9 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 25. Run a launcher stand-in with an identity memory ceiling of 1 MiB that allocates 64 MiB and exits
     with a verified report, and read the outcome. Run a run on a stand-in environment that offers no
     memory interface at all, and read that it is not refused.
-26. Run the structural scan of TC-043 step 17, with its one token list, over the memory-evidence
-    files of `src/kani/run/`.
+26. Run the structural scan of TC-043 step 17, with its one token list and its one file set (the
+    non-test, non-comment source files of `src/kani/run/`, `#[cfg(test)]` modules, comments and
+    `#[doc]` attributes excluded).
 
 ## Expected Results
 

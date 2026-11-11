@@ -267,9 +267,10 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    cancellation, output over-limit/unread and owned
    teardown with the concrete-playback entry, and a stand-in killed by SIGKILL
    as an environment memory kill. Require distinct `TimedOut`,
-   `Cancelled { source, memory }`, `Completed { succeeded: false }` with no exit
-   code for the SIGKILLed stand-in (no `MemoryExhausted` outcome; ADR-007,
-   IR-1510) and existing typed output refusals; verify the backend tree is gone and no case is classified as a
+   `Cancelled { source, memory }`, `Completed { succeeded: false }` with the exit
+   code observed (none for a stand-in whose launcher is SIGKILLed; 101 for one whose child dies and
+   whose launcher exits 101) and no `MemoryExhausted` outcome (ADR-007,
+   IR-1510), and existing typed output refusals; verify the backend tree is gone and no case is classified as a
    proof outcome (FR-017-AC-58).
 5. With installed Kani, call this exact public entry for a healthy V2 clause
    playback and for the plus-one owner mutant's `amount_current = 999`
