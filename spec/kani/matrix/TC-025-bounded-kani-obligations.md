@@ -949,11 +949,14 @@ with the required author `make kani-gate`; independent review and final acceptan
     `generate_state_frame_obligations` with the pair carries I_c on the `contract` harness and
     I_f on the `frame` harness (FR-015-AC-137). (b) Round trip: `StateFrameIdentity::from_record`
     of each harness's record returns an `obligation` equal to the generated one member for member
-    (FR-015-AC-138). (c) A record with `obligation` removed, one with `node` removed and one with
+    (FR-015-AC-138), including a fourth identity I_n whose `node` path holds a `Node` segment that
+    itself nests a key with a `Node` segment, which must round-trip equal and encode the segment as
+    `{"node": ...}`. (c) A record with `obligation` removed, one with `node` removed and one with
     `ordinal` removed each return `StateFrameRecordError` (FR-015-AC-139). (d) Generate with I_c
     and then with I_c2: sources byte-identical, records differ only in `obligation`
     (FR-015-AC-140). (e) A negotiated request holding a `contract` item with I_c and a `frame`
-    item with I_f for one clause returns each in `state_frame_harnesses` carrying its own
+    item with I_f for one clause (and, as a separate case, both items with the same identity I_c:
+    both are carried unchanged and neither item is refused) returns each in `state_frame_harnesses` carrying its own
     identity; classifying the same item with I_c and with I_f gives equal results and the routed
     preflight builds no identity (FR-015-AC-141). (f) `StateFrameRoleIdentities::new(I_c, I_c)`
     returns `SharedIdentity`; `new(I_c, I_f)` and `new(I_c, I_c2)` build (FR-015-AC-142).
@@ -966,7 +969,10 @@ with the required author `make kani-gate`; independent review and final acceptan
     member (site: the parser), fails (c); M7, folding the identity into the harness source or
     symbol (site: the renderer), fails (d); M8, negotiate passing a placeholder identity to the
     item's harness (site: the `ObligationItem::StateFrame` arm), fails (e); M9, classification
-    reading the identity so that results differ, fails (e); M10, the pair constructor comparing
+    reading the identity so that results differ, fails (e); M11, a serialiser that flattens a `Node` segment to text or drops its nested key (site: the
+    record writer's segment encoder), fails the I_n round trip of (b); M12, negotiate refusing or
+    deduplicating equal identities across items (site: the `ObligationItem::StateFrame` arm), fails
+    the same-identity case of (e); M10, the pair constructor comparing
     only `node`, refuses I_c2 and fails (f), and one accepting equal identities fails (f).
 
 ## Blocked
