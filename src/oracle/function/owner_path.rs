@@ -493,6 +493,101 @@ pub fn checked_function_declarations(
     Ok(declarations)
 }
 
+/// Acquire the checked closure of `source` for the admitted unit, through QSL's genuine
+/// acquisition. Application and the Kani-harness entry share this one call.
+pub(crate) fn acquire_checked_source(
+    admitted_unit: &CheckedPackageV2,
+    source: &CheckedFunctionSource<'_>,
+) -> Result<CheckedClosureCompilation, CheckedFunctionError> {
+    acquire_checked_closure(
+        CompileUnit {
+            source: source.source.clone(),
+            package_name: admitted_unit.name().to_owned(),
+            path: source.path,
+            bytes: source.bytes,
+        },
+        source.packages.iter().copied(),
+        source.dependencies,
+        source.limits.clone(),
+        source.replay_limits,
+    )
+    .map_err(CheckedFunctionError::Acquisition)
+}
+
+/// Convert the owner's nominal declaration views into the QSV composite declarations the
+/// generated `PreparedFunction::new` admits, refusing a member that does not match its
+/// declaration's form or an invalid union member identifier. Generated source and the
+/// Kani-harness entry share this one conversion.
+///
+/// # Errors
+/// Returns [`CheckedFunctionError::InvalidIdentity`] for such a malformed view.
+pub fn checked_composite_declarations(
+    owner: &[NominalDeclaration],
+) -> Result<Vec<quire_semantic_value::declaration::CompositeDeclaration>, CheckedFunctionError> {
+    use qsl_replay::NominalDeclarationForm as Form;
+    use quire_semantic_value::declaration::{
+        CompositeDeclaration, CompositeShape, FieldDeclaration, UnionMemberDeclaration,
+    };
+    let mut declarations = Vec::with_capacity(owner.len());
+    for view in owner {
+        let shape = match view.form() {
+            Form::Record => CompositeShape::Record(
+                view.members()
+                    .iter()
+                    .map(|member| match member {
+                        NominalDeclarationMember::RecordField {
+                            identifier,
+                            value_type,
+                            presence,
+                        } => Ok(FieldDeclaration::new(
+                            identifier.as_str(),
+                            value_type.clone(),
+                            *presence,
+                        )),
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    })
+                    .collect::<Result<_, _>>()?,
+            ),
+            Form::Tuple => CompositeShape::Tuple(
+                view.members()
+                    .iter()
+                    .map(|member| match member {
+                        NominalDeclarationMember::TuplePosition { value_type, .. } => {
+                            Ok(value_type.clone())
+                        }
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    })
+                    .collect::<Result<_, _>>()?,
+            ),
+            Form::Union => CompositeShape::Union(
+                view.members()
+                    .iter()
+                    .map(|member| match member {
+                        NominalDeclarationMember::UnionMember {
+                            member, payload, ..
+                        } => Ok(UnionMemberDeclaration::resolved(
+                            quire_exact::Identifier::new(member.identifier())
+                                .map_err(|_| CheckedFunctionError::InvalidIdentity)?,
+                            payload.clone(),
+                        )),
+                        _ => Err(CheckedFunctionError::InvalidIdentity),
+                    })
+                    .collect::<Result<_, _>>()?,
+            ),
+        };
+        declarations.push(CompositeDeclaration::new(
+            view.key().clone(),
+            view.qualified_name()
+                .iter()
+                .map(quire_exact::Identifier::as_str)
+                .collect::<Vec<_>>()
+                .join("."),
+            shape,
+        ));
+    }
+    Ok(declarations)
+}
+
 /// Acquire one genuine checked closure, bind a generated body, and run its selected callable.
 /// The returned inner `CallFailure` is the leaf's terminal result, never a CG reinterpretation.
 pub fn apply_checked_function<Factory, Build>(
@@ -513,19 +608,7 @@ where
         &CheckedFunctionResources,
     ) -> Result<Factory, CheckedFunctionError>,
 {
-    let acquired = acquire_checked_closure(
-        CompileUnit {
-            source: source.source,
-            package_name: admitted_unit.name().to_owned(),
-            path: source.path,
-            bytes: source.bytes,
-        },
-        source.packages.iter().copied(),
-        source.dependencies,
-        source.limits,
-        source.replay_limits,
-    )
-    .map_err(CheckedFunctionError::Acquisition)?;
+    let acquired = acquire_checked_source(admitted_unit, &source)?;
     let handle = acquired.handle();
     let selection = select_checked_callable(admitted_unit, declaring_package, function, &acquired)?;
     let factory = build_factory(&acquired, &selection, &source.body_resources)?;

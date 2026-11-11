@@ -344,7 +344,7 @@ required dependency or target path.
     input, a reader-`CatalogUnavailable` input and an acquisition or selection
     refusal, and a request whose selected body is a nested call (a control
     that fails if the entry emits a harness or returns success for it), and
-    require the five distinct typed refusals of AC-46 with no harness; inspect that the entry's signature has no admitted-package,
+    feed a request whose selected body is an unsupported operator (`KaniUnsupportedBody`) and require the six distinct typed refusals of AC-46 with no harness; inspect that the entry's signature has no admitted-package,
     `ExactFunctionDeclaration` or body-classification parameter, so no caller
     input can supply or override them (the AC-46 mutation row guards this). These
     are generation refusals, not differential controls. Inspect that no test,

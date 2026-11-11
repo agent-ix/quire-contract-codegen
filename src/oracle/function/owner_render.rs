@@ -121,6 +121,7 @@ use quire_contract_codegen::{
     apply_checked_function, select_checked_callable, selected_nested_call_site,
     CheckedFunctionError, CheckedFunctionSource,
 };
+#[cfg_attr(kani, allow(unused_imports))]
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use quire_eval::{self as eval, Body, BodyFactory, ChildRequest, FamilyOutcome, Resume, Transition};
 use quire_exact::{self as exact, Meter, Outcome, Refusal, Value};
@@ -133,6 +134,29 @@ fn evaluated(outcome: Outcome<Value>, location: &sv::location::ExpressionLocatio
     };
     eval::Evaluation { outcome: FamilyOutcome::Evaluated(outcome), location, losses: Vec::new() }
 }
+#[cfg(kani)]
+fn rebuilt<T, E>(result: Result<T, E>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(_) => {
+            kani::assert(false, "descriptor rebuild failed");
+            loop {}
+        }
+    }
+}
+#[cfg(kani)]
+enum ShapeDescriptor {
+    Record(Vec<(&'static str, exact::ValueType, exact::Presence)>),
+    Tuple(Vec<exact::ValueType>),
+    Union(Vec<(&'static str, exact::NodeKey, Vec<exact::ValueType>)>),
+}
+#[cfg(kani)]
+struct DeclarationDescriptor {
+    key: exact::NodeKey,
+    name: &'static str,
+    node: exact::NodeKey,
+    shape: ShapeDescriptor,
+}
 #[derive(Clone)]
 struct PreparedFunction {
     environment: Result<sv::declaration::TypeEnvironment, sv::declaration::EnvironmentFailure>,
@@ -142,6 +166,7 @@ struct PreparedFunction {
     cancel: exact::Cancel,
 }
 impl PreparedFunction {
+    #[cfg(not(kani))]
     fn new(
         declaring_package: &CheckedPackageV2,
         acquired: &qsl_replay::CheckedClosureCompilation,
@@ -150,32 +175,10 @@ impl PreparedFunction {
         location: sv::location::ExpressionLocation,
     ) -> Result<Self, CheckedFunctionError> {
         use qsl_replay::{NominalDeclarationForm as Form, NominalDeclarationMember as Member};
-        use sv::declaration::{CompositeDeclaration, CompositeShape, FieldDeclaration, UnionMemberDeclaration, TypeEnvironment};
+        use sv::declaration::TypeEnvironment;
         let owner = quire_contract_codegen::checked_function_declarations(declaring_package, acquired, selection)?;
-        let mut declarations = Vec::new();
-        for view in &owner {
-            let shape = match view.form() {
-                Form::Record => CompositeShape::Record(view.members().iter().map(|member| {
-                    match member {
-                        Member::RecordField { identifier, value_type, presence } => Ok(FieldDeclaration::new(identifier.as_str(), value_type.clone(), *presence)),
-                        _ => Err(CheckedFunctionError::InvalidIdentity),
-                    }
-                }).collect::<Result<_, _>>()?),
-                Form::Tuple => CompositeShape::Tuple(view.members().iter().map(|member| {
-                    match member {
-                        Member::TuplePosition { value_type, .. } => Ok(value_type.clone()),
-                        _ => Err(CheckedFunctionError::InvalidIdentity),
-                    }
-                }).collect::<Result<_, _>>()?),
-                Form::Union => CompositeShape::Union(view.members().iter().map(|member| {
-                    match member {
-                        Member::UnionMember { member, payload, .. } => Ok(UnionMemberDeclaration::resolved(exact::Identifier::new(member.identifier()).map_err(|_| CheckedFunctionError::InvalidIdentity)?, payload.clone())),
-                        _ => Err(CheckedFunctionError::InvalidIdentity),
-                    }
-                }).collect::<Result<_, _>>()?),
-            };
-            declarations.push(CompositeDeclaration::new(view.key().clone(), view.qualified_name().iter().map(exact::Identifier::as_str).collect::<Vec<_>>().join("."), shape));
-        }
+        #[allow(unused_mut)]
+        let mut declarations = quire_contract_codegen::checked_composite_declarations(&owner)?;
         let environment = TypeEnvironment::bounded_with_cancel(
                 declarations, [], resources.environment_limits, &resources.cancel)
         .and_then(|mut environment| {
@@ -194,6 +197,44 @@ impl PreparedFunction {
             environment, parameters: selection.signature().parameters().to_vec(),
             result: selection.signature().result().clone(), location, cancel: resources.cancel.clone(),
         })
+    }
+    /// Rebuild the prepared function from host-emitted literal descriptors through the
+    /// genuine environment constructors. A descriptor that does not rebuild fails the proof.
+    #[cfg(kani)]
+    fn from_descriptors(
+        declarations: Vec<DeclarationDescriptor>,
+        parameters: Vec<exact::ValueType>,
+        result: exact::ValueType,
+        location: sv::location::ExpressionLocation,
+        limits: sv::declaration::TypeEnvironmentLimits,
+        cancel: exact::Cancel,
+    ) -> Self {
+        use sv::declaration::{CompositeDeclaration, CompositeShape, FieldDeclaration, UnionMemberDeclaration};
+        let composites = declarations.iter().map(|declaration| {
+            let shape = match &declaration.shape {
+                ShapeDescriptor::Record(fields) => CompositeShape::Record(fields.iter().map(|(identifier, value_type, presence)| {
+                    FieldDeclaration::new(*identifier, value_type.clone(), *presence)
+                }).collect()),
+                ShapeDescriptor::Tuple(positions) => CompositeShape::Tuple(positions.clone()),
+                ShapeDescriptor::Union(members) => CompositeShape::Union(members.iter().map(|(identifier, _, payload)| {
+                    UnionMemberDeclaration::resolved(rebuilt(exact::Identifier::new(*identifier)), payload.clone())
+                }).collect()),
+            };
+            CompositeDeclaration::new(declaration.key.clone(), declaration.name, shape)
+        }).collect::<Vec<_>>();
+        let environment = sv::declaration::TypeEnvironment::bounded_with_cancel(composites, [], limits, &cancel)
+        .and_then(|mut environment| {
+            for declaration in &declarations {
+                if let ShapeDescriptor::Union(members) = &declaration.shape {
+                    let bindings = members.iter().map(|(identifier, binding, _)| {
+                        rebuilt(exact::UnionMember::from_admitted(binding.clone(), *identifier))
+                    }).collect();
+                    environment.seal_union_verified(declaration.key.clone(), declaration.node.clone(), bindings)?;
+                }
+            }
+            Ok(environment)
+        });
+        Self { environment, parameters, result, location, cancel }
     }
     fn ready(&self) -> Result<Option<eval::Evaluation>, eval::BodyFailure> {
         match &self.environment {

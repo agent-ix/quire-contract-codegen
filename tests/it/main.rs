@@ -78,6 +78,7 @@ mod harness_generation;
 mod inline_integer_equality;
 mod integer_division_bounds;
 mod kani_batching;
+mod kani_function_harness;
 mod kani_gate;
 mod kani_generation;
 mod kani_obligations;
