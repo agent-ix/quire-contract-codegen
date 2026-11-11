@@ -68,3 +68,23 @@ Round 1, head d094b87a.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | medium | FR-033-AC-16 stays `PLANNED (IR-814; verified by Inspection ...)` and tests.md/TC-048 call it planned, but its Inspection is performable now (the single `.map_err(...Operands...)` in `selected_claim` that AC-17's test exercises); closing IR-814 would leave a PLANNED AC owned by a Done ticket | spec/replay/functional/FR-033-composite-parity-replay-binding.md:374, spec/replay/matrix/tests.md:37, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:239 |
+
+## Dispositions (round 2)
+
+Round 2, head a0e6976d (d094b87a..a0e6976d touches only spec/ and reviews/; no src change, so
+no build). Inspection judgment: both public entry points (`parity_packet`, `request_from_packet`)
+call `selected_claim` first. Its first fallible step is `composite_application_operands(...)`
+with `.map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?`, which converts every
+cause, `UnsupportedOperand { reason: InlineInteger }` included, without inspecting it. Nothing runs
+before it: no argument is built, and no QSL compile, recompile or settle happens. So AC-16's wording is
+satisfied by that Inspection. The new row text does not parse, however (FND-004).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-003 | still-open | The DELIVERED (Inspection) flip is correct in substance, but the edited FR-033-AC-16 row no longer parses as that criterion: see FND-004 |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The FR-033-AC-16 row quotes `.map_err(|cause| ...)` inside a Markdown table cell; the unescaped pipes split the row, so `quire matrix --format json` reads statement "DELIVERED (IR-814; verified by Inspection of the single `.map_err(", method "cause", status untagged (was method-without-symbol / Inspection). `make spec` still exits 0, so the gate does not catch it | spec/replay/functional/FR-033-composite-parity-replay-binding.md:374 |
