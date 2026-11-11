@@ -53,6 +53,13 @@ mod kani {
 }
 "#;
 
+const SECOND: &str = concat!(
+    "language \"ix:native\" edition \"1-draft\";\n",
+    "profile v = \"quire.value.complete/v1\";\n",
+    "function alpha using v(left: Int[0, 0], right: Int[0, 0]): Boolean pure { left = right }\n",
+    "function beta using v(left: Int[0, 0], right: Int[0, 0]): Boolean pure { left = right }\n",
+);
+
 const PATH: &str = "function-owner.native";
 
 fn identity() -> SourceIdentity {
@@ -131,11 +138,17 @@ fn host_prepared(
         }
         Ok(environment)
     });
-    // Both functions of the fixtures are the first in their source.
+    // The index is the function's position among the source's `function` declarations, read
+    // from the text independently of the entry under test.
+    let index = source
+        .lines()
+        .filter(|line| line.starts_with("function "))
+        .position(|line| line.starts_with(&format!("function {name} ")))
+        .expect("the named function is declared in the source");
     let location = quire_semantic_value::location::ExpressionLocation::root(
         quire_semantic_value::location::ExpressionOwner::Body {
             function: name.to_owned(),
-            index: 0,
+            index,
         },
     );
     let text = format!(
@@ -304,4 +317,26 @@ fn kani_probe() {
         expected.contains("Holder"),
         "the environment holds the declarations: {expected}"
     );
+}
+
+/// FR-021-AC-44: a function that is not first in its source is located at its own non-zero body
+/// index; the comparison fails if the emitted index is wrong.
+#[trace("TC-031", "FR-021-AC-44")]
+#[test]
+fn a_later_function_rebuilds_with_its_own_body_index() {
+    let probe = r#"
+#[cfg(kani)]
+#[test]
+fn kani_probe() {
+    let prepared = kani_factory_beta().0.clone();
+    println!("PROBE:{:?}|{:?}|{:?}|{:?}", prepared.environment, prepared.parameters, prepared.result, prepared.location);
+}
+"#;
+    let (expected, observed) = run_probe("kani-harness-second", SECOND, "beta", probe);
+    assert!(
+        expected.contains("index: 1"),
+        "the fixture's function is at index 1: {expected}"
+    );
+    assert_eq!(observed, expected);
+    assert_ne!(observed, expected.replace("index: 1", "index: 0"));
 }

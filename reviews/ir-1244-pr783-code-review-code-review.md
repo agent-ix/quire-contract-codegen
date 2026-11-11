@@ -46,6 +46,18 @@ The findings below are spec-gap or test-strength issues and documentation overcl
 | FND-004 | low | `cancel_source` renders a fresh `Cancel::new()`, optionally pre-cancelled. A `Cancel::observing` link is silently dropped and the function has no doc comment stating the limitation (PR decision c). The proof models only the uncancelled or pre-cancelled state, which should be stated in code and noted for the spec's "Cancel sources" wording. | src/oracle/function/kani_harness.rs:188-200 |
 | FND-005 | low | The PR body says "AC-42/44/46 flips left to the reviewer", and spec/oracle/matrix/tests.md:63 still reads "Planned (spec first, code follows)" after S1 code lands. The reviewer does not flip statuses. The row should be made honest by the coder as PARTIAL (S1 landed; AC-45, AC-47 and TC-031 step 16 PLANNED in S2), with AC-44 and AC-46 not claimed complete. | spec/oracle/matrix/tests.md:63 |
 
+## Dispositions
+
+Round 1, verified at 05c93d40 (rebased onto origin/main ea6c0826). Focused tests: it 12 passed, lib `kani_` 57 passed (16 kani_harness + 3 kani_descriptor), 1 ignored. `make spec` exit 0 (only pre-existing warnings); `quoin matrix`: AC-44 8 binders, AC-46 11, AC-45/AC-47 untagged (S2).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New `OracleGenerationError::KaniUnsupportedBody { reason: KaniUnsupportedReason::{BodyShape, QualifiedName, SourceIndex} }`; `InvalidPlanState` remains only for renderer-internal faults (JSON name). FR-021-AC-46 now lists six causes and its mutation row covers this one. Tests: `an_unsupported_body_is_its_own_typed_refusal` (an `x < y` body) and `name_and_index_failures_are_typed_unsupported_reasons`. |
+| FND-002 | fixed | The entry doc, PR body and FR-021 Behavior now say the entry runs `checked_composite_declarations`, that the genuine `PreparedFunction::new` host run belongs to AC-45 (S2), and that no generation-time environment failure is claimed. AC-46 now names `checked_composite_declarations` instead of `PreparedFunction::new`. |
+| FND-003 | fixed | The nested-call refusal now comes right after `classify_selected_body`, before the declarations and the name, index and JSON lookups. `single_segment_name` uses the slice pattern `[only]`. Test: `the_nested_call_refusal_precedes_the_name_and_index_lookups` (structural). |
+| FND-004 | fixed | `cancel_source` now has a doc comment stating that an observing link is not rendered. FR-021 Behavior states the same limitation. Test: `limits_and_cancel_sources_are_emitted_literally` (limits 7/11, a fresh `Cancel::new()`, and Deadline pre-cancelled). |
+| FND-005 | fixed | tests.md:63 now reads "Partial (IR-1244 S1 landed ...)" with AC-45, AC-47 and TC-031 step 16 still PLANNED (S2). TC-031 step 16 now says six refusals. AC-44/AC-46 are not claimed complete. |
+
 ## Scope
 
 | Unit | Role | Excerpt |

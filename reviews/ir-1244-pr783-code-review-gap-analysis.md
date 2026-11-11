@@ -39,6 +39,23 @@ The tagged tests were executed by the reviewer and passed: 12 `it` tests in the 
 | FND-003 | low | The integration differential prints and compares only environment, parameters and result. The result location and `TypeEnvironmentLimits` are in the Behavior descriptor set but are not compared. Its "genuine" side also re-implements `PreparedFunction::new`'s environment assembly in the test instead of running the emitted constructor; that part is S2/AC-45, so it should be stated as such in the test doc. | tests/it/kani_function_harness.rs:96-133, tests/it/kani_function_harness.rs:253 |
 | FND-004 | low | The kani_descriptor round-trip scratch crate runs `cargo run --offline --quiet` without `--locked`, so drift from the seeded Cargo.lock is not caught. The `it` scratch crates use `--locked --offline`. | src/oracle/function/kani_descriptor/tests.rs:199-203 |
 
+## Dispositions
+
+Round 1, verified at 05c93d40. Mutation control: removing the `self.0.finish(..)` wrap from the emitted body template in owner_render.rs makes `the_driven_body_keeps_ready_finish_and_the_admits_guard` FAIL (missing `self.0.finish(`). The behavioural probe `rebuilt_scalar_equality_matches_the_genuine_path_and_runs` still passes, as expected, because a Boolean result is always admitted. The mutation was reverted.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New positive inspection `the_driven_body_keeps_ready_finish_and_the_admits_guard`, with an injected-removal control for each of ready, finish and admits. The reviewer's mutation (finish removed) was killed. AC-44's method is Inspection, Test and its mutation row concerns the text of the driven items, so the inspection meets the row. A behavioural control needs a result type that can fail membership, which is AC-45/AC-47 territory (S2). |
+| FND-002 | fixed | The selection assertion now pins `FacadeLookup`. `every_owner_path_call_maps_to_the_owner_path_cause` inspects all four owner-path calls for `.map_err(owner_path)` and has an injected-removal control. Value tests are impossible because `qsl_replay::NominalDeclaration` (434869e application.rs:88) has private fields and no public constructor, so inspection is the right evidence. |
+| FND-003 | fixed | The probe now prints and compares location as well. Limits are asserted on the emitted text (7/11). The module doc says the genuine side is a re-implementation and that the real `PreparedFunction::new` run is AC-45 (S2). |
+| FND-004 | fixed | The round-trip crate uses a per-label package name, adapts the lock offline with `cargo metadata`, then runs `cargo run --locked --offline`. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | In the integration differential the expected location is hand-built as `Body { function: name, index: 0 }` ("both functions of the fixtures are the first in their source"), not derived from the genuine source order. The location comparison therefore checks against a constant and cannot catch a wrong non-zero index. Derive it from the existing generator's location for the same function, or add a fixture whose function is not first; or defer explicitly to S2/AC-45, where the genuine host entry supplies the location. | tests/it/kani_function_harness.rs:134-140 |
+
 ## Scope
 
 | Unit | Role | Excerpt |
