@@ -26,6 +26,7 @@ use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 
+use super::kani_collection_operation as collection_operation;
 use super::kani_obligations_state_frame::native_twin::{playback_text_for_path, Twin};
 use ix_trace_rs::trace;
 
@@ -373,8 +374,10 @@ fn tc_035_invariant_replay_returns_the_executor_result_unchanged() {
             .expect("the replay returns Ok");
         assert!(direct.get().is_some());
         let result = replay.replay().expect("a satisfying playback is Ok too");
-        assert_eq!(settled(&result), settled(&through));
-        assert_eq!(result.clause_node(), through.clause_node());
+        assert_eq!(
+            result, through,
+            "the executor's result is returned unchanged"
+        );
         if violating {
             assert_violation(&result);
         } else {
@@ -788,5 +791,142 @@ fn tc_035_bank_invariant_mutants_settle_a_violation() {
             .err()
             .expect("refused"),
         StateClauseReplayError::OutOfDomain { .. }
+    ));
+}
+
+/// FR-024-AC-62: the remaining CG-side refusals of the decoder and the constructor.
+#[trace("TC-035", "FR-024-AC-62")]
+#[test]
+fn tc_035_the_remaining_invariant_refusals_are_typed() {
+    let twin = strengthened();
+    let fixture = generate(&twin, CLAUSE);
+    let object = fixture.object();
+    let good = fixture.playback(&[0]);
+    let identity = &fixture.harness.identity;
+    let parsed = parse_assertion_playback(
+        &good,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("parses");
+    let decode = |harness: &KaniV2ClauseObligationHarness| {
+        let mut inputs = twin.invariant_inputs(
+            &fixture.package,
+            &fixture.clause,
+            &object,
+            CLAUSE,
+            &["balance"],
+        );
+        inputs.decode_falsification(
+            StateClauseHarness::V2Clause(harness),
+            &parsed,
+            crate::unbounded_decode_limits(),
+        )
+    };
+
+    // A collection harness is no scalar invariant harness, whatever its other members say.
+    let package = collection_operation::fixture(
+        &collection_operation::document(),
+        "pre Ready using v on M::Node::step { forall(item in self.z_items: item >= 1) }",
+    );
+    let ids = collection_operation::clauses(&package);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = collection_operation::negotiate(&package, &ids)
+    else {
+        panic!("valid request")
+    };
+    let collection = v2_clause_harnesses
+        .iter()
+        .find(|harness| {
+            harness.identity.collection_precondition.is_some()
+                && harness.identity.collection_operation.is_some()
+        })
+        .expect("a collection precondition harness");
+    let mut with_precondition = fixture.harness.clone();
+    with_precondition.identity.collection_precondition =
+        collection.identity.collection_precondition.clone();
+    let mut with_operation = fixture.harness.clone();
+    with_operation.identity.collection_operation = collection.identity.collection_operation.clone();
+    for harness in [&with_precondition, &with_operation] {
+        assert!(matches!(
+            decode(harness),
+            Err(StateClauseReplayError::NotInvariantHarness)
+        ));
+    }
+
+    // An edited public field no longer matches what the generator sealed.
+    let mut edited = fixture.harness.clone();
+    edited.identity.subject_path = "crate::edited".to_owned();
+    assert!(matches!(
+        decode(&edited),
+        Err(StateClauseReplayError::Decode(cause))
+            if cause.code == "cg_witness_harness_provenance_mismatch"
+    ));
+    assert!(decode(&fixture.harness).is_ok());
+
+    // An invariant that reads no field draws none: the object cannot be derived.
+    let constant = Twin::with_bank_invariants(&[("Constant", "1 >= 0")], (0, 100));
+    let none = generate(&constant, "Constant");
+    assert!(none.harness.identity.state_fields.is_empty());
+    let none_object = none.clause.clone();
+    let mut inputs =
+        constant.invariant_inputs(&none.package, &none.clause, &none_object, "Constant", &[]);
+    let none_identity = &none.harness.identity;
+    let none_text = none.playback(&[]);
+    let none_parsed = parse_assertion_playback(
+        &none_text,
+        none_identity.harness_symbol.as_str(),
+        none_identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("parses");
+    assert!(matches!(
+        inputs.decode_falsification(
+            StateClauseHarness::V2Clause(&none.harness),
+            &none_parsed,
+            crate::unbounded_decode_limits()
+        ),
+        Err(StateClauseReplayError::HarnessMismatch {
+            member: StateClauseHarnessMember::StateFields
+        })
+    ));
+
+    // The constructor itself refuses an object declaration that is not a model object, or that
+    // does not declare a drawn field, without calling the executor.
+    let mut wrong = fixture
+        .decoded(
+            &twin,
+            &object,
+            CLAUSE,
+            &good,
+            StateClauseHarness::V2Clause(&fixture.harness),
+        )
+        .expect("decodes");
+    wrong.object_node = &fixture.clause;
+    assert!(matches!(
+        StateClauseReplay::new_invariant(wrong)
+            .err()
+            .expect("refused"),
+        StateClauseReplayError::ModelFields { .. }
+    ));
+    let mut absent = fixture
+        .decoded(
+            &twin,
+            &object,
+            CLAUSE,
+            &good,
+            StateClauseHarness::V2Clause(&fixture.harness),
+        )
+        .expect("decodes");
+    absent.state_fields = vec!["ghost".to_owned()];
+    assert!(matches!(
+        StateClauseReplay::new_invariant(absent).err().expect("refused"),
+        StateClauseReplayError::ModelFields { cause: quire_contract_codegen::StateClauseModelFieldsCause::Absent { field }, .. }
+            if field == "ghost"
     ));
 }

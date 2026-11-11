@@ -181,23 +181,39 @@ impl InvariantReplayInputs<'_> {
             .into_iter()
             .zip(&identity.state_fields)
             .map(|((name, value), field)| {
-                let failure = |code| {
+                // The `i64` binding the decoder types yields only an integer within `i64`, so
+                // this refusal is the decoder contract's guard, not a reachable input.
+                let integer = match value {
+                    WitnessValue::Integer(integer) => i64::try_from(integer).ok(),
+                    _ => None,
+                }
+                .ok_or_else(|| {
                     StateClauseReplayError::Decode(DecodeFailure::new(
-                        code,
+                        "kani_witness_unsupported_value",
                         identity.harness_symbol.as_str(),
                         &name,
                     ))
-                };
-                let WitnessValue::Integer(integer) = value else {
-                    return Err(failure("kani_witness_unsupported_value"));
-                };
-                let integer =
-                    i64::try_from(integer).map_err(|_| failure("kani_witness_i64_overflow"))?;
+                })?;
                 Ok((field.field_name.clone(), integer))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(())
     }
+}
+
+/// The documents the request provides: the domain packages, then the one current snapshot. The
+/// shared duplicate-identity guard (FR-024-AC-52) runs here, before the request is built.
+fn request_documents<'a>(
+    packages: &'a [ProvidedDocument],
+    snapshot: &'a [u8],
+) -> Result<Vec<&'a [u8]>, StateClauseReplayError> {
+    let documents = packages
+        .iter()
+        .map(|document| document.bytes.as_slice())
+        .chain(std::iter::once(snapshot))
+        .collect::<Vec<_>>();
+    ensure_unique_documents(&documents)?;
+    Ok(documents)
 }
 
 impl StateClauseReplay {
@@ -294,12 +310,7 @@ impl StateClauseReplay {
             },
             witness: None,
         };
-        let documents = packages
-            .iter()
-            .map(|document| document.bytes.as_slice())
-            .chain(std::iter::once(snapshot.bytes.as_slice()))
-            .collect::<Vec<_>>();
-        ensure_unique_documents(&documents)?;
+        let documents = request_documents(&packages, &snapshot.bytes)?;
         let wire = run.wire(
             raw_package,
             RequestTargetWire::state_clause(selected.clone()),
@@ -335,8 +346,7 @@ mod tests {
     use super::*;
 
     /// FR-024-AC-62: documents sharing the snapshot's identity labels return
-    /// `DuplicateDocumentIdentity`, and `new_invariant` checks them after the snapshot is encoded
-    /// and before the request is built. The domain package QSL admits has no top-level identity
+    /// `DuplicateDocumentIdentity` at the seam `new_invariant` builds its documents through. The domain package QSL admits has no top-level identity
     /// member, so the public path has no second document that can collide; the guard is the one
     /// the postcondition path shares.
     #[trace("FR-024-AC-62", "TC-035")]
@@ -361,28 +371,24 @@ mod tests {
         };
         let snapshot = encode_document(&document).expect("the snapshot encodes");
         let twin = br#"{"identity":{"authority":"test","identity":"twin-current"},"x":1}"#;
-        for second in [snapshot.bytes.as_slice(), twin.as_slice()] {
-            let error = ensure_unique_documents(&[snapshot.bytes.as_slice(), second])
-                .expect_err("repeated labels refuse regardless of bytes");
-            assert!(
-                matches!(error, StateClauseReplayError::DuplicateDocumentIdentity { identity }
-                    if identity.authority == "test" && identity.identity == "twin-current")
-            );
-        }
-        let production = include_str!("invariant.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("the production part");
-        let check = production
-            .find("ensure_unique_documents(&documents)?")
-            .expect("the duplicate guard is called");
+        // A supplied package declaring the snapshot's labels collides with it.
+        let colliding = [ProvidedDocument {
+            bytes: twin.to_vec(),
+        }];
+        let error = request_documents(&colliding, &snapshot.bytes)
+            .expect_err("the seam refuses the repeated labels");
         assert!(
-            production
-                .find("let snapshot = encode_document")
-                .expect("encoded")
-                < check
-                && check < production.find("run.wire(").expect("the request is built"),
-            "the guard runs after the snapshot is encoded and before the request"
+            matches!(error, StateClauseReplayError::DuplicateDocumentIdentity { identity }
+                if identity.authority == "test" && identity.identity == "twin-current")
+        );
+        let distinct = [ProvidedDocument {
+            bytes: br#"{"package":{"identity":"p","version":"1"}}"#.to_vec(),
+        }];
+        assert_eq!(
+            request_documents(&distinct, &snapshot.bytes)
+                .expect("distinct labels pass")
+                .len(),
+            2
         );
     }
 }
