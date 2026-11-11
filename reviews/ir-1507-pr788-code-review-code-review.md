@@ -41,3 +41,11 @@ Rust idioms and repo conventions: the new code follows them. It uses the existin
 | src/kani/generate/clause/v2.rs | examined | src/kani/generate/clause/v2.rs:645-685 | seal_claimed_harness / seal_with_selected |
 | src/kani/generate/collection.rs | examined | src/kani/generate/collection.rs:612-663 | operation_selected_reads |
 | src/lib.rs | examined | src/lib.rs:271-276 | new public re-exports |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head b1fa48c8: the record now holds `V2ClauseParameter` (declared name and domain) and `V2ClauseRead` (declaring node, field name and domain). `mismatch()` compares sorted selections of those, with no generated identifier. Both routes derive the parameter name from the declaration (`ClauseOracleInput.declared_name`, `parameter.name`). The test `a_correct_claim_is_accepted_whatever_identifiers_the_harness_generates` passes. |
+| FND-002 | fixed | Round 1: `classify_v2_clause` computes `LoweredV2Clause::selection()` / `operation_selection()` and compares every record field before any render. The seal-time check is removed. `a_record_mismatch_is_reported_ahead_of_a_render_refusal` passes. |
+| FND-003 | fixed | Round 1: `selected` is kept, and its doc now says it is CG's diagnostic selection and that copying it back proves nothing. The AC-48 tests now use hand-written records. The remaining non-AC-48 helpers still bootstrap, which was ruled acceptable scaffolding. |

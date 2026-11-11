@@ -47,3 +47,13 @@ Rulings on the five author gaps:
 | FR-015-AC-47 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:859 | Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity record (as FR-015-AC-10 states). |
 | FR-015-statement-AC-48 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:504-507 | The generator shall carry the QSL producer-issued structural `ObligationIdentity` of a V2 clause claim unchanged, compare its source occurrence, kind and argument identities and domains separately on the obligation record, and keep it distinct from the harness identity record (AD-003 E-1; FR-015-AC-48). |
 | tests.md-FR-015-V2 | context_only | spec/kani/matrix/tests.md:46 | FR-015-AC-38 through FR-015-AC-43, FR-015-AC-46 through FR-015-AC-49 ... Planned/partial V2 clause-family work (... IR-1507 for AC-48 ...) |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head b1fa48c8: AC-48 now says that a parameter is identified by its checked declaration node id (equivalently its declared name), never by a generated identifier, and that a state-field read is compared on its declaring node id, field name and inclusive domain only. The code matches. |
+| FND-002 | deferred | IR-1515 (Backlog) covers the read domain of a sequence-valued field and whether an unread drawn field counts as a read. The AC-48 row names the current cardinality-range choice as open under IR-1515, and the whole-object test pins it. |
+| FND-003 | deferred | IR-1515 covers whether the carried NodeKey must denote the selected clause node. The AC-48 row says that the code does not check it. |
+| FND-004 | fixed | Round 1: AC-48 now reads 'The occurrence compared is its node id, occurrence role and ordinal; the source span is not compared.' |
+| FND-005 | fixed | Round 1: the AC-48 status is now PARTIAL. It names what is implemented and tested on both routes and what stays open under IR-1515. tests.md:46 no longer lists AC-48 as Planned. |
