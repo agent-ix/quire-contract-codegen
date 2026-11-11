@@ -39,3 +39,11 @@ APPROVE, with one low finding. What is right:
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | `CompositeBuildError::UnsupportedNodeOperation` is documented as "The selected node has no supported structural equality operation". After this PR its only producers are composite_artifact.rs:77/79, which raise it when no generated origin entry matches (or more than one does). Nothing in src/ or tests/ asserts the variant any more: the deleted unit test was the only test that referenced it. Fix: reword the doc to the artifact-binding meaning (no unique generated origin entry for the node, operator and operand types), and optionally add a test for that path. | src/replay/composite_builder.rs:86-87 |
+
+## Dispositions
+
+Round 1. This is a read-only check at head 030f7ffd92e603f037f18e0204fb046edc1ba861: fix commit 030f7ffd on a70f29af, with origin/main d7e0505f. No cargo was run.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The doc now reads "No single generated origin entry matches the selected node, operator and operand types. Produced by the composite artifact selection, not by operator reading." This matches composite_artifact.rs:77/79. The optional test for that path was not added. The variant is still unasserted by any test, which is acceptable here: it is an existing producer outside this ticket's scope. |
