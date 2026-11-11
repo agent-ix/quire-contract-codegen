@@ -354,9 +354,11 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     invocation document and post snapshot, and the snapshot anchor against the selection's
     (FR-024-AC-57). Mutation control: building `Invocation` instead of `Current` fails the
     observation-form assertion of this step.
-40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback and
-    read the snapshot's fields (FR-024-AC-58). Mutation control: a builder that binds every
-    declared field returns `MissingField` for `audit` and fails this step.
+40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback
+    (FR-024-AC-58). The result is `StateClauseReplayError::Refused` holding QSL's `missing-member`
+    refusal for `audit`, and CG supplied no value for it. Mutation controls: a builder that binds
+    every declared field returns `MissingField` for `audit` and fails; a builder that invents a
+    value for `audit` settles a result instead of `Refused` and fails.
 41. Over the two-invariant `Positive`/`Capped` unit, replay `balance = 0` for each clause
     (FR-024-AC-59). The two settle differently (`violation`; `inconclusive`/`Verdicts`) with their
     own nodes and occurrences. Mutation control: a builder selecting the first declared invariant
@@ -369,12 +371,15 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     and supply another harness's playback, each asserting its distinct variant and an uncalled
     executor (FR-024-AC-61). Mutation control: reading the range from the unmutated package makes
     the widened `balance = -1` playback of step 45 return `OutOfDomain` and fails step 45.
-44. Supply a postcondition, a frame and a precondition harness, a mismatched obligation, a
-    mismatched assertion, an undeclared clause, a wrong snapshot anchor and a duplicate document
-    identity, each asserting its variant (`NotInvariantHarness`, `HarnessMismatch`,
-    `AssertionMismatch`, `CallSite`, `Refused`, `DuplicateDocumentIdentity`) and an uncalled
-    executor for the CG-side ones (FR-024-AC-62). Mutation control: the postcondition builder
-    accepting an invariant harness fails the `NotInvariantHarness` assertion.
+44. Supply a postcondition, a frame and a precondition harness to the invariant builder, a
+    mismatched obligation, a failed check that is not the generated invariant assertion, an
+    undeclared clause, a clause node other than the harness's and a duplicate document identity,
+    each asserting its variant (`NotInvariantHarness`, `HarnessMismatch`, `AssertionMismatch`,
+    `CallSite`, `ClauseSelectionMismatch`, `DuplicateDocumentIdentity`) and an uncalled executor.
+    Then, through `replay_through`, replace the built snapshot document with one declaring a
+    different anchor and call `replay_state_clause`: the result is `Refused` holding QSL's refusal
+    (FR-024-AC-62). Mutation control: the invariant builder accepting a postcondition, frame or
+    precondition harness fails the `NotInvariantHarness` assertion.
 45. Read the transcript's operation name and the payload's witness member (FR-024-AC-63). Then
     replay the FR-024-AC-64 fixture: `balance = 0` against the strengthened invariant, `balance =
     -1` against the widened package, and `balance = 0` against the unmutated package. The first

@@ -38,3 +38,9 @@ CHANGES REQUIRED (driven by the integrity contradiction, see the integrity SR). 
 | TC-035-step-40 | examined | spec/replay/matrix/TC-035-counterexample-envelope-intake.md:361 | 40. Over the `Bank`/`Account` fixture of FR-024-AC-58, replay `balance = 0` against the strengthened `balance >= 1` invariant, `balance = -1` against the widened-field package, and `balance = 0` against the unmutated invariant. The first two settle `reproduced-with-evaluated-witness`, `violation`; the third does not. A mutant that evaluates the unmutated text for the first playback fails the first assertion. |
 | tests.md-TC-035-row | examined | spec/replay/matrix/tests.md:49 | / TC-035 / Verify counterexample submission in QSL's counterexample envelope / ... FR-024-AC-57, FR-024-AC-58 / 🚧 Planned (IR-1505 for AC-57/58) / |
 | FR-015-AC-129 | context_only | spec/kani/functional/FR-015-bounded-kani-obligations.md:937 | ... Two invariant mutants each classify the invariant harness `Falsified` with a concrete in-domain counterexample from the FR-017-AC-63 witness phase, and replaying that counterexample through `qsl_replay::replay_state_clause` settles a reproduced violation of the same clause: the invariant text strengthened to `balance >= 1`, counterexample `balance = 0`; and the domain package's field widened to `Int[-1, 100]` with the invariant text unchanged, counterexample `balance = -1`. |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at 551d1486. Verified in the fix commit: FR-024-AC-57 (observation form and single current snapshot), AC-58 (fields drawn), AC-59 (by-name selection, two-invariant fixture), AC-60 (pass-through and settlements), AC-61 (playback refusals), AC-62 (closed refusal set), AC-63 (Witness arm and transcript), AC-64 (Bank mutants): one obligation each, TC-035 steps 39-45 one per AC. |
