@@ -69,6 +69,7 @@ CHANGES REQUIRED. The central conclusion is sound and verified against the vendo
 | FND-006 | fixed | fixed in f658b703 |
 | FND-007 | fixed | fixed in 2c2ccd0e |
 | FND-008 | fixed | fixed in 872aa074 and 86014daf |
+| FND-009 | fixed | fixed in 0c87d2a0 |
 
 ## New findings (disposition pass 2)
 
