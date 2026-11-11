@@ -41,8 +41,9 @@ bound its time and clean up its processes; it is not expected to be a sandbox.
 The runner is minimal and sandbox-free.
 
 1. CG starts Kani as the leader of its own process group, keeps the wall-clock timeout, and on
-   timeout, output overflow or normal exit kills that process group so that no started process
-   remains. This is the behavior [FR-017](../kani/functional/FR-017-kani-execution-evidence.md)
+   timeout, output overflow or normal exit kills that process group, signalling it before the
+   launcher is reaped so that the unreaped launcher still reserves the group id. The kill reaches
+   the processes in that group. This is the behavior [FR-017](../kani/functional/FR-017-kani-execution-evidence.md)
    already states (the launcher group kill, `kani_output_over_limit`, no survivors).
 2. CG reports the peak memory of a run only when the environment provides it, and reports none
    otherwise.
@@ -53,11 +54,16 @@ The runner is minimal and sandbox-free.
    dependency (no bubblewrap, namespace, procfs or pidfd).
 5. The former FR-034 and TC-049 are retired. The criteria that remain real requirements already live
    in FR-017 and FR-028 and stay; new criteria for the minimal design are FR-017-AC-65 to
-   FR-017-AC-67 and FR-028-AC-25, and FR-028-AC-21 is reworded as an environmental requirement.
+   FR-017-AC-68 and FR-028-AC-25, FR-028-AC-21 is reworded as an environmental requirement, and
+   FR-028-AC-3 is retired with FR-028-AC-25 as its replacement.
 
-Caller death before the process group is armed is not guarded. A caller killed with SIGKILL after
-the launch leaves a Kani process group running until its own wall-clock bound or the environment's
-cleanup ends it. That is the accepted cost of the minimal design.
+Two costs are accepted. First, caller death is not guarded: a caller killed with SIGKILL after the
+launch leaves its Kani process group running, and any bound on that orphan is the caller's
+environment's (a single run has no Kani-side time bound, and a batch's `--harness-timeout` is per
+member). Second, a descendant that calls `setsid` or `setpgid` leaves the process group and survives
+the group kill; nothing in Kani's process tree does so today. When an environment memory kill also
+takes `kani-driver` down, no report is written, the run is `NoVerdict` and its terminal value is
+`Failed`, not `Incomplete(ResourceExhausted)`.
 
 ## Options not taken
 
@@ -76,9 +82,15 @@ cleanup ends it. That is the accepted cost of the minimal design.
   current code, and loses the unnamed `/proc/self/fd/N` storage that only the guardian design needed.
   FR-017-AC-54 to FR-017-AC-56 (diagnostics of the namespace owner) are retired with the namespace
   owner.
-- FR-028-AC-3 stays: a memory stop is now the environment's and is recognised from the backend's
-  report (FR-028-AC-25), so the runner-measured `Inconclusive` with `MemoryExhausted` path goes away.
+- FR-028-AC-3 is retired with replacement FR-028-AC-25: a memory stop is the environment's and is
+  recognised only from the backend's report, so the runner-measured `Inconclusive` with
+  `MemoryExhausted` path goes away. The statements that assumed it are amended (FR-017 Behavior,
+  AC-21 and AC-58; FR-028 Behavior and AC-24; FR-029-AC-34; TC-027, TC-039, TC-043).
 - The harness identity keeps recording the memory ceiling (FR-028-AC-1), now a declared value the
   environment is expected to enforce.
-- IR-1510 deletes the namespace/bubblewrap path and the procfs sampler. IR-639, IR-652 and IR-655
+- IR-1510 owns the code: AC-25 as the only memory classification; removing `MemoryExhausted`,
+  `BatchMemoryExhausted`, `MemoryObservationFailed`, `MemoryMechanismUnavailable`, the playback
+  `MemoryExhausted` outcome and `LinuxPidNamespaceProcfsTreeRss`; deleting the namespace/bubblewrap
+  path and the procfs sampler; retagging or deleting the tests tagged FR-028-AC-3, FR-028-AC-21 and
+  FR-017-AC-55; and the structural scan of FR-017-AC-67 in `make ci`. IR-639, IR-652 and IR-655
   are the superseded design.

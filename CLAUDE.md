@@ -27,14 +27,18 @@ it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--
 
 ## Bounded Kani execution
 
-The bounded execution API starts Kani as the leader of its own process group, keeps a wall-clock
-timeout and kills the group on timeout, and reports peak memory only when the environment provides
-it (ADR-007; FR-017-AC-65 to AC-67, FR-028-AC-21). The caller's environment owns any memory cap, for
-example `systemd-run -p MemoryMax=16G`; the runner does no cap check. It needs no namespace,
-bubblewrap, procfs or pidfd support and runs on Linux and macOS. `make tools` installs the Rust and
-Kani tools. IR-1510 removes the earlier bubblewrap/namespace path; until it lands, the code still
-requires Linux, bubblewrap and permission to create user and PID namespaces, and a run killed with
-its caller can leave the backend running.
+Today the bounded execution API requires Linux, readable procfs RSS and task `children` files
+(`CONFIG_PROC_CHILDREN`), pidfd support, and bubblewrap (`bwrap`) supporting `--unshare-user`,
+`--unshare-pid`, `--info-fd` and `--block-fd`, and the host must permit user and PID namespaces
+(AppArmor can deny this). `make tools` installs the Rust and Kani tools, not bubblewrap. Missing or
+denied support returns `MemoryMechanismUnavailable` before backend dispatch. A caller killed before
+the startup gate is armed can leave the backend running.
+
+Planned (ADR-007, IR-1510; not yet in the code): the runner will start Kani as the leader of its own
+process group, keep a wall-clock timeout that kills the group, and report peak memory only when the
+environment provides it, with any memory cap left to the caller's environment (for example
+`systemd-run -p MemoryMax=16G`). That removes the namespace, bubblewrap, procfs and pidfd
+requirements and runs on Linux and macOS (FR-017-AC-65 to AC-68, FR-028-AC-21).
 
 ## Safety scaffolding
 

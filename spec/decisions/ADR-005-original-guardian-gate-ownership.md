@@ -23,7 +23,8 @@ choice was open, when its status was "Proposed, awaiting a product architecture 
 This is the IR-717 decision record, not an implemented gate, a conformance finding, or permission to
 activate IR-652 or IR-655. IR-717 could **not** establish a supported safe descriptor owner or a
 finite kernel/native bound for the original-gate design. The exact failed premises are stated in
-[Decision](#decision) and the choice they forced is in the option table there. FR-034 and TC-049 were
+[Decision](#decision) and the choice they forced is in the option table under
+[Product architecture choice](#product-architecture-choice). FR-034 and TC-049 were
 not amended by this record: no decision was established that would support an amendment.
 
 ## Context

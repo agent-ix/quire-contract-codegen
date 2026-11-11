@@ -16,9 +16,10 @@ truncated, that a capture failure is refused, and that no launcher descendant ou
 (IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
 `NoVerdict` group never feeds classification (FR-017-AC-36), and that a batch member's CBMC failure
 cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
-FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 17, planned
+FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 18, planned
 under IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
-with its descendants, and that the launch path has no Linux-only dependency. The former
+with its descendants and signals it before the launcher is reaped, and that the launch path has no
+Linux-only construct. The former
 namespace-confirmation diagnostics (FR-017-AC-54 to FR-017-AC-56) are retired with the namespace
 owner.
 
@@ -31,7 +32,7 @@ owner.
 4. Build N = 1, 10 and 50 harnesses with equal option vectors and identity `ProofCeilings`
    (`wall_clock` T and `memory_bytes` M), and read the launch's argument vector and the number of
    launcher processes a stand-in counts; mix two option vectors, two wall-clock ceilings and two
-   memory ceilings and count the processes. Drive one grouped process tree above M.
+   memory ceilings and count the processes.
 5. Build a batch whose T is `Duration::MAX` and read its argument vector; in the `make kani` lane
    run a batch at 4294967295 seconds and confirm it runs.
 6. Run batch stand-ins that exit successfully with no report, and unsuccessfully with no report (an
@@ -69,19 +70,23 @@ owner.
 13. (FR-029-AC-33, planned under IR-848.) Pass the evidence of `c::check` and of `d::check` from
     step 12 to `run_terminal_value`.
 15. (FR-017-AC-65, planned under IR-1510.) Launch a launcher stand-in that prints its own process
-    id and process group id, and one that sleeps. Read the process group id of each and of the
-    test process. Kill the sleeping stand-in's group through the run's group kill and read that the
-    test process is still running.
+    id and process group id, and read its group id beside the process id and the group id of the
+    test process. Launch a second stand-in left in the caller's group as a control.
 16. (FR-017-AC-66, planned under IR-1510.) Under a 1 s wall-clock ceiling, launch a stand-in that
     starts a descendant in its group, which starts a grandchild in the same group, each appending one
     byte to its own heartbeat file every 50 ms, and then waits. Read the outcome and the elapsed time
     of the call, then the sizes of both heartbeat files and, after three heartbeat intervals, the sizes
-    again. Repeat with a stand-in whose descendant ends its own heartbeat by exiting before the
-    timeout, as a control that the files are read after a real stop.
-17. (FR-017-AC-67, planned under IR-1510.) Search `src/kani/run/` for `bwrap`, `unshare`,
-    `pidfd`, `rustix::process::pidfd`, `CLONE_NEW`, `/proc/` and `cgroup`, and run
-    `cargo check --target aarch64-apple-darwin --lib`. Then copy the directory to scratch, add each
-    of those tokens in turn as a use or literal in the launch path, and repeat both reads.
+    again. Repeat with a descendant that holds the output pipe open for 5 seconds. Repeat with a
+    stand-in whose descendant ends its own heartbeat by exiting before the timeout, as a control that
+    the files are read after a real stop.
+17. (FR-017-AC-67, planned under IR-1510.) Run the structural scan: parse the non-test, non-comment
+    source of `src/kani/run/` and search its identifiers and string literals for the one token list
+    `bwrap`, `bubblewrap`, `unshare`, `CLONE_NEW`, `pidfd`, `procfs`, `/proc`, `cgroup`, `namespace`.
+    Run the scan also over a fixture file holding `Path::new("/proc")` in code, the same literal in
+    a `#[cfg(test)]` module, and `cgroup` in a comment.
+18. (FR-017-AC-68, planned under IR-1510.) Through the launch test seam that records the group
+    signal and the reap, kill a stand-in's group on a timeout and read the order of the two
+    operations.
 
 ## Expected Results
 
@@ -93,11 +98,11 @@ owner.
 4. One process for each group, with one `--harness <module::harness> --exact` pair per member in
    request order, `--harness-timeout` T and then the shared options; fewer than N processes for
    N > 1 compatible harnesses; differing identity wall-clock or memory ceilings, launcher, crate
-   directory or target directory form separate groups. The grouped process tree has one aggregate
-   M ceiling; exceeding it kills and refuses the whole group with no member classified. The outer
+   directory or target directory form separate groups. The group's one M is the declared cap the
+   environment enforces, and nothing is refused for it. The outer
    wall-clock bound is N times T (a group that runs longer than T and inside N times T completes),
    and a group killed at it is refused as timed out with no member classified (FR-017-AC-21;
-   FR-028-AC-21 covers the memory enforcement mechanism).
+   FR-028-AC-21 states that the cap is the environment's).
 5. The `Duration::MAX` batch carries no `--harness-timeout` and its outer bound does not elapse; the
    batch at 4294967295 seconds runs (FR-017-AC-21, FR-028-AC-12).
 6. The successful exit with no report is refused with the missing-report refusal and no member is
@@ -139,18 +144,22 @@ owner.
     `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
 13. Both are `Incomplete(TimedOut)`: `c::check` through the timed-out row, `d::check` through its
     cause `timeout` (FR-029-AC-33).
-15. Each stand-in's process group id equals its own process id and differs from the test
-    process's; the test process is still running after the group kill. A launcher left in the
-    caller's group (its group id equals the test process's) fails this step (FR-017-AC-65).
-16. The call returns `TimedOut` within the 1 s ceiling plus the fixed constant. Both heartbeat
+15. The stand-in's group id equals its own process id and differs from the test process's. The
+    control left in the caller's group reports the test process's group id and fails (FR-017-AC-65).
+16. The call returns `TimedOut` within the 1 s ceiling plus `RETURN_ALLOWANCE` (1 s). Both heartbeat
     files stop growing: their sizes after three further intervals equal their sizes at return. The
-    control's files stop at its descendant's own exit. Killing only the launcher's process id leaves
-    both heartbeat files growing and fails this step (FR-017-AC-66).
-17. The search finds none of the tokens and the macOS-target check compiles. Each of the seven
-    injected tokens makes the search find it, and the injected pidfd use makes the macOS-target check
-    fail. On main as of this specification, the search finds `bwrap`, `unshare` and `pidfd` in
-    `namespace.rs`, `owners.rs` and `memory.rs`, so the step fails until IR-1510 lands
-    (FR-017-AC-67).
+    pipe-holding descendant case returns inside the allowance, not after 5 seconds. The control's files
+    stop at its descendant's own exit. Killing only the launcher's process id leaves both heartbeat
+    files growing and fails; a wait on the descendants before returning exceeds the allowance and
+    fails (FR-017-AC-66).
+17. The scan finds none of the tokens in the launch path and exactly one finding in the fixture (the
+    `Path::new("/proc")` literal in code); the test-module literal and the comment are not findings.
+    A scanner that skips string literals finds none in the fixture, and one that includes test
+    modules or comments finds three, so each fails. On main as of this specification the scan finds
+    `bwrap`, `unshare`, `pidfd` and `procfs` in `namespace.rs`, `owners.rs` and `memory.rs`, so the
+    step fails until IR-1510 lands (FR-017-AC-67).
+18. The group signal is recorded before the reap. A mutant that reaps the launcher first records the
+    reap first and fails (FR-017-AC-68).
 
 ## Implementation
 
@@ -204,13 +213,14 @@ Step 12 (FR-017-AC-39) is covered by
 `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
 `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
-Steps 15 to 17 are planned under IR-1510 and are not written. The shell-script launcher stand-ins
+Steps 15 to 18 are planned under IR-1510 and are not written. The shell-script launcher stand-ins
 of `batch_tests` and the `tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` test
 (step 3) are the models: step 16 is the same stand-in with a wall-clock ceiling in place of the
 launcher's own exit, and its heartbeat files are read through the filesystem, never by a PID reopen.
-Step 17 is an Analysis control: a `scripts/` check run by `make ci` with the scratch-copy mutants
-beside it. The macOS-target check needs the target's standard library installed
-(`rustup target add aarch64-apple-darwin`); it compiles and links nothing, so it needs no macOS host.
+Step 17 is an Analysis control: a `syn` scan (a test-only dependency already common in Rust tooling)
+run as a test or `scripts/` check in `make ci`; it needs no cross-compilation and no macOS host. The
+property that the launch path has no Linux-only dependency is verified when the suite also runs on a
+macOS host; the Linux CI does not claim it. Step 18 uses the same seam as step 16.
 
 ## Status
 
@@ -220,4 +230,4 @@ covered by `unequal_identity_memory_ceilings_run_in_separate_backend_processes` 
 `src/kani/run/execute.rs`. The runner-measured grouped memory exhaustion once covered under TC-039
 (FR-028-AC-21) is withdrawn with the runner-side mechanism (ADR-007).
 
-Steps 15 to 17 (FR-017-AC-65 to FR-017-AC-67, ADR-007) are PLANNED/UNRUN under IR-1510.
+Steps 15 to 18 (FR-017-AC-65 to FR-017-AC-68, ADR-007) are PLANNED/UNRUN under IR-1510.

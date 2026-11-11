@@ -52,9 +52,11 @@ A shadow proof is never reported without its refinement obligation.
 - Every harness is bounded. Its symbolic arguments carry inclusive bounds from their declared model
   domains, and an item with no finite bound gets no harness, which settles `requires-bound`
   (FR-015, FR-025).
-- Every harness identity records a memory ceiling and a wall-clock ceiling. A run is held to both.
+- Every harness identity records a memory ceiling and a wall-clock ceiling. A run is held to the
+  wall-clock ceiling; the memory ceiling is the cap the caller's environment enforces (ADR-007,
+  which amends this bullet).
 - A run that exceeds its wall-clock ceiling settles `inconclusive` with its own timed-out reason. A
-  run that exceeds its memory ceiling settles `inconclusive` with its own memory-exhausted reason.
+  run the environment ends for memory is classified from the backend's report (FR-028-AC-25).
   Neither is ever reported as verified or falsified.
 - The evidence of every run records the bounds and the ceilings it ran under.
 - Coverage is reportable per family. Every harness identity, refusal and execution evidence names

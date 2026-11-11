@@ -10,8 +10,9 @@ relationships:
 
 ## Description
 
-Verify that every harness identity records its ceilings, that a run exceeding either ceiling settles
-with its own inconclusive reason, that evidence records the bounds and ceilings used, that every
+Verify that every harness identity records its ceilings, that a run exceeding its wall-clock ceiling settles
+inconclusive with the timed-out reason and an environment memory kill is classified from the backend's
+report (steps 23 to 26), that evidence records the bounds and ceilings used, that every
 identity, refusal and evidence names its family, and that the proof subject and a narrowed bound are
 recorded as FR-028 states. Verify the shadow contract (steps 11 to 22): a shadow's independence from
 the code it stands for, its refinement obligation and the class and strength of its run, the
@@ -23,7 +24,7 @@ must catch.
 1. Generate one harness at two memory ceilings and at two wall-clock ceilings.
 2. Run a harness whose run cannot finish inside a small wall-clock ceiling.
 3. Run a harness whose backend the caller's environment ends for exceeding a small memory
-   ceiling (step 23).
+   ceiling (step 23; FR-028-AC-3 is retired and FR-028-AC-25 replaces it).
 4. Read the evidence of a verified run and of each run above.
 5. Read the family named in a harness identity, a generation refusal and an execution evidence.
 6. Generate a family with no supplied shadow.
@@ -89,15 +90,15 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 23. Run a launcher stand-in whose report states the harness entry with exit status `out_of_memory`
     (the shape Kani writes when CBMC is killed by SIGKILL), and a stand-in that is killed by SIGKILL
     and writes no report. Read each run's outcome.
-24. Run a launcher stand-in that allocates and exits, with a peak-memory source that returns
-    123456789 bytes named `test_peak_source`, and read the evidence. Run it again with a source that
-    returns nothing, and read the evidence and the outcome.
-25. Run a launcher stand-in whose memory use would exceed the identity's memory ceiling if a runner
-    sampled it (it allocates twice the ceiling and exits successfully with a verified report) and
-    read the outcome. Run a run on a stand-in environment that offers no memory interface at all,
-    and read that it is not refused.
-26. Build the crate for `aarch64-apple-darwin` (`cargo check --target aarch64-apple-darwin --lib`)
-    and search the memory-evidence path for `/proc/`, `pidfd`, `rustix` and `cgroup`.
+24. Run a launcher stand-in that exits with a verified report, through the `PeakMemorySource` seam
+    (FR-028-AC-21) injected with a source named `test_peak_source` that returns 123456789 bytes, and
+    read the evidence. Inject a source that reports 1048576 KiB and read the evidence. Inject a source
+    that returns nothing and read the evidence and the outcome.
+25. Run a launcher stand-in with an identity memory ceiling of 1 MiB that allocates 64 MiB and exits
+    with a verified report, and read the outcome. Run a run on a stand-in environment that offers no
+    memory interface at all, and read that it is not refused.
+26. Run the structural scan of TC-043 step 17, with its one token list, over the memory-evidence
+    files of `src/kani/run/`.
 
 ## Expected Results
 
@@ -105,7 +106,7 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 2. The run is stopped and is `inconclusive` with the timed-out reason naming the ceiling, never
    verified or falsified (FR-028-AC-2).
 3. See step 23: the environment's memory stop is classified from the backend's report, naming the
-   ceiling, and never as `timed_out` or as a verdict (FR-028-AC-3, FR-028-AC-25).
+   ceiling, and never as `timed_out` or as a verdict (FR-028-AC-25; FR-028-AC-3 is retired).
 4. Each evidence records every argument's bounds and both ceilings (FR-028-AC-4).
 5. Each names the family (FR-028-AC-5).
 6. The harness records proof subject `production` (FR-028-AC-6).
@@ -153,19 +154,23 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 
 23. The run with the `out_of_memory` report is `FailedWithoutCounterexample` with `failureCause`
     `out_of_memory`, and its terminal value is `Incomplete(ResourceExhausted)`; it is not `TimedOut`
-    and not a verdict. The SIGKILLed run with no report is `NoVerdict` (FR-028-AC-25).
-24. With the source returning 123456789, the evidence records exactly 123456789 and the name
-    `test_peak_source`. With the source returning nothing, the evidence records no peak (the member
-    is absent or null, not zero), and the run is not refused and classifies as it otherwise would.
-    A peak taken from the launcher process's own resident size, an estimate, or a zero fails
-    this step (FR-028-AC-21).
+    and not a verdict. The SIGKILLed run with no report is `NoVerdict` with terminal value `Failed`,
+    not `Incomplete(ResourceExhausted)` (FR-028-AC-25, FR-029-AC-34). The classification half passes
+    on main as of this specification; the control that the runner measures nothing is step 25.
+24. With the first source, the evidence records exactly 123456789 bytes and the name
+    `test_peak_source`; with the KiB source it records exactly 1073741824 bytes (a mutant that stores
+    1048576 fails); with the source returning nothing it records no peak (the member is absent or
+    null, not zero), and the run is not refused and classifies as it otherwise would. A peak taken
+    from the launcher process's own resident size, an estimate, or a zero fails this step
+    (FR-028-AC-21).
 25. The over-allocating stand-in is `Verified`: the runner measured nothing and killed nothing, so
     the environment, not the runner, is the only thing that could stop it. The stand-in environment
     with no memory interface runs and is not refused with `MemoryMechanismUnavailable`
     (FR-028-AC-21). Both fail on main as of this specification.
-26. The crate compiles for the macOS target and the memory-evidence path contains none of the four
-    tokens. On main as of this specification the search finds `/proc/`, `pidfd` and `rustix` in
-    `memory.rs`, so the step fails until IR-1510 lands (FR-028-AC-21, FR-017-AC-67).
+26. The scan finds none of the tokens. On main as of this specification it finds `procfs` and
+    `pidfd` in `memory.rs`, so the step fails until IR-1510 lands (FR-028-AC-21, FR-017-AC-67). The
+    macOS property is verified when the suite runs on a macOS host and is not claimed by the Linux
+    CI.
 
 ## Status
 

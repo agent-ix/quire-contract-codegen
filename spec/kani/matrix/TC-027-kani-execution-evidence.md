@@ -31,11 +31,12 @@ prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only
 (`Inconclusive`, `WitnessDisagreed`) and, separately, fails the same class at another location and
 the same location in another class (each `WitnessDisagreed`), fails the matching check plus one
 more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
-stopped at its wall-clock ceiling and at its memory ceiling (`TimedOut`, `MemoryExhausted`, no
-third launch), and a stand-in that would finish with a verifying report only at 1.5 times each
-ceiling. Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in and
-`MemoryExhausted` for the memory one, killed at the unchanged ceiling, with the ceilings recorded
-for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
+stopped at its wall-clock ceiling (`TimedOut`, no third launch), or writes a report whose entry
+states the exit status `out_of_memory` (`FailedWithoutCounterexample` with cause `out_of_memory`,
+FR-028-AC-25; the runner-measured `MemoryExhausted` of the former control is withdrawn by ADR-007),
+and a stand-in that would finish with a verifying report only at 1.5 times the wall-clock ceiling.
+Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in, killed at the unchanged
+ceiling, with the ceilings recorded for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
 finishes, the outcome is `WitnessDisagreed` or another verifying outcome, and the recorded
 ceiling is larger than the proof launch's, so the case fails;
 (d) matches the check but prints no playback (`FailedWithoutCounterexample`), exits with no report
@@ -45,10 +46,10 @@ fails an unwinding assertion beside an assertion, a Failure entry listing no fai
 verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
 and no `concrete-playback` in its argument vector. Run a three-member batch
 whose proof report fails the middle member and read that only it is relaunched, as a single
-witness run; make that run exceed the memory ceiling and read `MemoryExhausted` (not a refusal).
+witness run; make that run exceed its wall-clock ceiling and read `TimedOut` (not a refusal).
 Then run a four-member batch whose proof report fails the two middle members (equal witness
-vectors and ceilings), read that they form one witness group, and make the group exceed the memory
-ceiling: expected `WitnessPhaseRefused` wrapping `BatchMemoryExhausted` and both members' proof
+vectors and ceilings), read that they form one witness group, and make the group exceed its outer
+wall-clock bound: expected `WitnessPhaseRefused` wrapping `BatchTimedOut` and both members' proof
 evidence in member order, with the outer members' results unchanged.
 Mutants: classify at the proof phase; compare only class, only location or neither; accept a
 superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
@@ -237,7 +238,7 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    `kani playback --lib -Z function-contracts -Z concrete-playback -- <test_name> --exact --nocapture`
    launch. With a launcher stand-in that reports the named test as the sole
    pass, require `Completed { succeeded: true }`, the actual exit code,
-   complete bounded stdout/stderr and observed memory; do not classify it as
+   complete bounded stdout/stderr and the peak only where the environment provides one; do not classify it as
    `Verified` (FR-017-AC-58, FR-017-AC-59).
 2. Submit each non-V2 harness kind (Contract, Scalar, StateFrame and Collection)
    and require `ConcretePlaybackUnsupportedHarness { harness_path }` before
@@ -263,10 +264,12 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    code and bounded streams, but neither raw outcome alone attributes failure
    to a generated assertion or claims a proof verdict (FR-017-AC-59).
 4. Reuse the existing bounded-launch controls for wall-clock timeout,
-   cancellation, memory exhaustion, output over-limit/unread and owned
-   teardown with the concrete-playback entry. Require distinct `TimedOut`,
-   `Cancelled { source, memory }`, `MemoryExhausted` and existing typed output
-   refusals; verify the backend tree is gone and no case is classified as a
+   cancellation, output over-limit/unread and owned
+   teardown with the concrete-playback entry, and a stand-in killed by SIGKILL
+   as an environment memory kill. Require distinct `TimedOut`,
+   `Cancelled { source, memory }`, `Completed { succeeded: false }` with no exit
+   code for the SIGKILLed stand-in (no `MemoryExhausted` outcome; ADR-007,
+   IR-1510) and existing typed output refusals; verify the backend tree is gone and no case is classified as a
    proof outcome (FR-017-AC-58).
 5. With installed Kani, call this exact public entry for a healthy V2 clause
    playback and for the plus-one owner mutant's `amount_current = 999`
@@ -279,7 +282,7 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    failure cannot satisfy this control. Bind the mutant's restored sealed
    generated source and body, identity record, oracle bytes, clause identity
    and native expectation to TC-025 step 11's unconstrained mutant run.
-   Retain bounded output and memory observations and prove
+   Retain bounded output and the peak where the environment provides one and prove
    owned teardown after each run. Inspect the installed command and require
    `-Z function-contracts`, the option present in this harness's proof-time
    `adapter_options`. Keep the mutant's separate unconstrained Kani Falsified
