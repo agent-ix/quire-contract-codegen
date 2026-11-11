@@ -31,11 +31,12 @@ prints a playback (`Falsified`, playback verbatim); (b) verifies, and fails only
 (`Inconclusive`, `WitnessDisagreed`) and, separately, fails the same class at another location and
 the same location in another class (each `WitnessDisagreed`), fails the matching check plus one
 more, reports cover-unsatisfied, or fails an unwinding assertion (each `WitnessDisagreed`); (c) is
-stopped at its wall-clock ceiling and at its memory ceiling (`TimedOut`, `MemoryExhausted`, no
-third launch), and a stand-in that would finish with a verifying report only at 1.5 times each
-ceiling. Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in and
-`MemoryExhausted` for the memory one, killed at the unchanged ceiling, with the ceilings recorded
-for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
+stopped at its wall-clock ceiling (`TimedOut`, no third launch), or writes a report whose entry
+states the exit status `out_of_memory` (`FailedWithoutCounterexample` with cause `out_of_memory`,
+FR-028-AC-25; the runner-measured `MemoryExhausted` of the former control is withdrawn by ADR-007),
+and a stand-in that would finish with a verifying report only at 1.5 times the wall-clock ceiling.
+Expected, correct code: `TimedOut` for the 1.5 times wall-clock stand-in, killed at the unchanged
+ceiling, with the ceilings recorded for the witness launch equal to the proof launch's. Expected, raise-ceiling mutant: the stand-in
 finishes, the outcome is `WitnessDisagreed` or another verifying outcome, and the recorded
 ceiling is larger than the proof launch's, so the case fails;
 (d) matches the check but prints no playback (`FailedWithoutCounterexample`), exits with no report
@@ -45,10 +46,10 @@ fails an unwinding assertion beside an assertion, a Failure entry listing no fai
 verified one, a cover-unsatisfied one and a no-report failure, and read exactly one launch each
 and no `concrete-playback` in its argument vector. Run a three-member batch
 whose proof report fails the middle member and read that only it is relaunched, as a single
-witness run; make that run exceed the memory ceiling and read `MemoryExhausted` (not a refusal).
+witness run; make that run exceed its wall-clock ceiling and read `TimedOut` (not a refusal).
 Then run a four-member batch whose proof report fails the two middle members (equal witness
-vectors and ceilings), read that they form one witness group, and make the group exceed the memory
-ceiling: expected `WitnessPhaseRefused` wrapping `BatchMemoryExhausted` and both members' proof
+vectors and ceilings), read that they form one witness group, and make the group exceed its outer
+wall-clock bound: expected `WitnessPhaseRefused` wrapping `BatchTimedOut` and both members' proof
 evidence in member order, with the outer members' results unchanged.
 Mutants: classify at the proof phase; compare only class, only location or neither; accept a
 superset witness; relaunch after the unwinding failure; raise a ceiling for the witness launch;
@@ -69,46 +70,20 @@ Per-check view (FR-017-AC-20): classify the falsified and the exhausted-unwind c
 check's id, class, file, line and status; a line of `unknown` is absent and a non-numeric line is refused; serialize a view and read the keys
 `id`, `class`, `location { file, line }` and `status`.
 
-Unnamed report storage (FR-017-AC-19): verify exact actual argv order and descriptor locator
-`-Z unstable-options --export-json /proc/self/fd/N`, with actual N >= 5. Concurrent launches sharing
-one target directory retain distinct descriptor authority; stale named files are untouched and
-never read. Run genuine installed Kani 0.68 export through cargo inheritance into the mapped pipe,
-including normal compiler outputs, proving the export neither seeks nor rereads its destination.
-A failed pipe roundtrip stops CODE delivery and requires a measured spec revision; no runtime
-named/direct-memfd fallback is permitted. These roundtrip tests are UNRUN, not satisfied by captured
-JSON or source inspection of Kani's `std::fs::write` export.
-
-Write exactly the report cap and then beyond it before Completed; inspect collector bounds and
-concurrent pipe-capacity/kernel-backing charge, including unmapped backing. Over-limit writes must
-cancel owned execution and yield single-run `KaniRunOutcome::Inconclusive` with
-`KaniInconclusiveReason::MemoryExhausted`; record the report cap separately from the identity memory
-ceiling. Batches retain whole-batch memory-exhausted refusal with no member classification. FR-029
-maps ResourceExhausted; neither Failed nor truncated acceptance is allowed. Slow the collector and
-fill the pipe while control and deadline events remain live; both slow and over-cap cases must end
-within the original deadline without writer/collector wait cycles. Verify every writer copy,
-including reopened procfd handles and descendants, closes before actual EOF, including O's closed
-spawn writer and M termination/reap; no idle interval substitutes for EOF. Assert ordering of
-authenticated Completed, original lease closure, confirmed inner teardown, bounded drain,
-WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS check and final OwnedFd handoff/read. The
-separate report/control channel remains usable after lease closure. Fail consumer reading before
-Completed and require bounded cancellation of O/I and final kernel storage release. Kill caller,
-launcher, outer supervisor and guardian in separate and all-owner cases; kernel storage has no
-pathname residue and is reclaimed after the last actual descriptor closes. Concurrent accounting,
-seal races, inheritance/EOF and all-owner-death assertions are mandatory UNRUN CODE gates. Test
-zero-byte EOF with successful and unsuccessful exits: missing-report refusal and NoVerdict
-respectively, retaining independently established resource stops. Test partial/malformed nonempty
-bytes before backend death without an established resource/deadline stop: typed report refusal,
-never NoVerdict merely from nonzero exit. Repeat partial writes with independently established
-memory/resource and deadline stops: preserve the existing single-run source outcomes and
-whole-batch memory-exhausted/timed-out refusal without member classification. Test
-valid nonempty report with normal/nonzero exits against existing classification rules. Reject a
-received descriptor missing each seal independently before any consumer read. Compare actual owned
-RSS plus finite caller-run buffers, reserved page-rounded pipe capacity and maximum memfd backing to
-the original ceiling; attempt writer pipe resizing beyond the reservation and require capability
-refusal if its bound cannot be enforced. No undercount is accepted from i_size, st_blocks, sparse
-backing, unmapped pages or absent/overflowed accounting quantities. A success report listing a
-failed, errored, undetermined or unknown check remains refused under FR-017-AC-18; class spelling
-remains governed by FR-017-AC-20.
+Report storage (FR-017-AC-19): with launcher stand-ins that write the report where `--export-json`
+names, read the exact argument order `-Z unstable-options --export-json <path>` and that `<path>` lies
+in the target directory. Launch twice from one process into one directory and read two distinct
+paths; leave a stale file under the second launch's exact name and read that it is removed before the
+launch, so a stand-in that exports nothing is a missing report (successful exit) or `NoVerdict`
+(unsuccessful exit), never the stale content, and that a file under another launch's name is
+untouched. Write a report of exactly 16 MiB and read it whole, then one byte more and read the typed
+`TooLarge` refusal with no classification. Write a partial report beside an independently
+established deadline stop and read the existing resource outcome. Mutants: one name for every
+launch (the concurrent launch reads the other's report), skipping the stale removal, truncating an
+over-limit report and classifying it, reading a sibling launch's file. The unit test
+`tc_027_the_report_is_read_bounded_and_refused_not_truncated` in `src/kani/run/report_file.rs`
+covers the bound and the removal, and `tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports`
+in `src/kani/run/execute.rs` the distinct launch names.
 
 NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35). In the `make kani` lane,
 assemble a crate whose `src/lib.rs` holds a generated harness byte for byte and, beside it, a
@@ -263,7 +238,7 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    `kani playback --lib -Z function-contracts -Z concrete-playback -- <test_name> --exact --nocapture`
    launch. With a launcher stand-in that reports the named test as the sole
    pass, require `Completed { succeeded: true }`, the actual exit code,
-   complete bounded stdout/stderr and observed memory; do not classify it as
+   complete bounded stdout/stderr and the peak only where the environment provides one; do not classify it as
    `Verified` (FR-017-AC-58, FR-017-AC-59).
 2. Submit each non-V2 harness kind (Contract, Scalar, StateFrame and Collection)
    and require `ConcretePlaybackUnsupportedHarness { harness_path }` before
@@ -289,10 +264,13 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    code and bounded streams, but neither raw outcome alone attributes failure
    to a generated assertion or claims a proof verdict (FR-017-AC-59).
 4. Reuse the existing bounded-launch controls for wall-clock timeout,
-   cancellation, memory exhaustion, output over-limit/unread and owned
-   teardown with the concrete-playback entry. Require distinct `TimedOut`,
-   `Cancelled { source, memory }`, `MemoryExhausted` and existing typed output
-   refusals; verify the backend tree is gone and no case is classified as a
+   cancellation, output over-limit/unread and owned
+   teardown with the concrete-playback entry, and a stand-in killed by SIGKILL
+   as an environment memory kill. Require distinct `TimedOut`,
+   `Cancelled { source, memory }`, `Completed { succeeded: false }` with the exit
+   code observed (none for a stand-in whose launcher is SIGKILLed; 101 for one whose child dies and
+   whose launcher exits 101) and no `MemoryExhausted` outcome (ADR-007,
+   IR-1510), and existing typed output refusals; verify the backend tree is gone and no case is classified as a
    proof outcome (FR-017-AC-58).
 5. With installed Kani, call this exact public entry for a healthy V2 clause
    playback and for the plus-one owner mutant's `amount_current = 999`
@@ -305,7 +283,7 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    failure cannot satisfy this control. Bind the mutant's restored sealed
    generated source and body, identity record, oracle bytes, clause identity
    and native expectation to TC-025 step 11's unconstrained mutant run.
-   Retain bounded output and memory observations and prove
+   Retain bounded output and the peak where the environment provides one and prove
    owned teardown after each run. Inspect the installed command and require
    `-Z function-contracts`, the option present in this harness's proof-time
    `adapter_options`. Keep the mutant's separate unconstrained Kani Falsified
@@ -574,7 +552,7 @@ tests for FR-017-AC-12 and FR-017-AC-18, with
 `src/kani/run/report_file.rs` test `tc_027_the_report_is_read_bounded_and_refused_not_truncated`
 and the `src/kani/classify.rs` test
 `tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 (none of
-them covers FR-017-AC-19, which is Planned), with the `src/kani/classify.rs` test
+them carry the FR-017-AC-19 tag; with the rewritten AC-19 they are its current-code tests), with the `src/kani/classify.rs` test
 `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified` (FR-017-AC-18) and the
 `src/kani/output/report.rs` test `tc_027_a_class_spelled_cover_or_unwind_is_never_other`
 (FR-017-AC-20); and `tests/it/kani_obligations.rs` for the refusals, the
@@ -614,21 +592,12 @@ autoref probe; and, in the `make kani` lane, by
 `tests/it/kani_obligations.rs`, which runs real Kani on a crate whose manifest hands CBMC
 `--no-such-option`.
 
-The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
-not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current
-main executable test covers FR-017-AC-27 to AC-31; those paired-run and mutation-control tests are
-required as part of the IR-791 implementation, not credited by this specification amendment.
-
-
-Evidence staging follows TC-049's explicit delivery allocation. Slice 1 uses ordinary normal-library
-report/export, collector and kernel descriptor seams without fixture extension. Slices are internal
-commit stages of ONE lifecycle CODE PR, not separate merges. IR-655 SPEC may use real unmerged O
-source but must merge before its fixture CODE and the single CODE PR merge. All internal stages
-and required pre-PR/full gates remain mandatory. Its assertions do not tag a mixed FR-034
-collector/lifetime criterion whose O-origin or independent termination
-witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual export or unit-test
-compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
-override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
+The report storage of FR-017-AC-19 is the current named launch-unique file. The unnamed
+`/proc/self/fd/N` storage, pipe collector, kernel-backing accounting and sealed descriptor handoff
+that this matrix once listed as UNRUN were part of the guardian design and are withdrawn under
+ADR-007. No current main executable test covers FR-017-AC-27 to AC-31; those paired-run and mutation-control
+tests are required as part of the IR-791 implementation, not credited by this specification
+amendment.
 
 Staged scalar custody and meter limits (FR-017-AC-45 to AC-50), **Planned / UNRUN**:
 Run the paired runner on a genuine routed `x + 1` package. Assert that the receipt contains no generated-content `DigestRecord` or scalar proof-content digest. Compare the ten captured staged entries with the AC-46 path set and original emitted bytes under the rename map. Mutate, replace or add an entry before and after each execution boundary and require a typed refusal with no receipt. Verify that the entries remain readable after snapshot cleanup, that cleanup failure only adds a diagnostic, and that no entry accessor reads the filesystem. Compare driver-owned originals directly by path and bytes. Verify the meter-observed `ScalarLimits` equal the request and `scalar_limits()`; a helper reporting a different limit yields `NativeResult` / `EnvironmentFault` and no receipt. These extensions remain Planned; current test names or trace tags do not establish that they ran.

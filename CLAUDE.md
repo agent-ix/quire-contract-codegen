@@ -25,17 +25,20 @@ make ci               # every local gate above except build and clean
 targets that resolve dependencies (`lint`, `test`, `build`, `msrv`, `kani`, `rustdoc`); override
 it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--locked` wrong.
 
-## Bounded Kani execution prerequisites
+## Bounded Kani execution
 
-The bounded execution API requires Linux, readable procfs RSS and task `children` files
+Today the bounded execution API requires Linux, readable procfs RSS and task `children` files
 (`CONFIG_PROC_CHILDREN`), pidfd support, and bubblewrap (`bwrap`) supporting `--unshare-user`,
-`--unshare-pid`, `--info-fd` and `--block-fd`. The host must permit creation of user and PID
-namespaces; AppArmor restrictions can deny this even when bubblewrap is present. `make tools`
-installs the Rust/Kani tools; it does not install bubblewrap or alter host namespace policy.
-Missing or denied support returns `MemoryMechanismUnavailable` before backend dispatch;
-unsupported setup never dispatches the backend. In-process conclusions and startup errors
-confirm owned teardown. Caller SIGKILL/abort/OOM before the startup gate/PDEATH chain is fully
-armed can still release an unowned backend; IR-639 owns the deferred caller-death supervisor.
+`--unshare-pid`, `--info-fd` and `--block-fd`, and the host must permit user and PID namespaces
+(AppArmor can deny this). `make tools` installs the Rust and Kani tools, not bubblewrap. Missing or
+denied support returns `MemoryMechanismUnavailable` before backend dispatch. A caller killed before
+the startup gate is armed can leave the backend running.
+
+Planned (ADR-007, IR-1510; not yet in the code): the runner will start Kani as the leader of its own
+process group, keep a wall-clock timeout that kills the group, and report peak memory only when the
+environment provides it, with any memory cap left to the caller's environment (for example
+`systemd-run -p MemoryMax=16G`). That removes the namespace, bubblewrap, procfs and pidfd
+requirements and runs on Linux and macOS (FR-017-AC-65 to AC-68, FR-028-AC-21).
 
 ## Safety scaffolding
 

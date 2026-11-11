@@ -11,7 +11,7 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-018
     type: references
-  - target: ix://agent-ix/quire-contract-codegen/FR-034
+  - target: ix://agent-ix/quire-contract-codegen/ADR-007
     type: references
   - target: ix://agent-ix/quire-contract-codegen/ADR-003
     type: references
@@ -23,8 +23,10 @@ relationships:
 ## Description
 
 The code generator shall bound every Kani harness so that its run can finish: each harness identity
-records a memory ceiling and a wall-clock ceiling, a run that exceeds either settles `inconclusive`
-with its own reason, and the evidence records the bounds and ceilings the run used. Proof coverage
+records a memory ceiling and a wall-clock ceiling, a run that exceeds its wall-clock ceiling settles
+`inconclusive` with the timed-out reason, a run that the caller's environment ends for memory is
+classified from the backend's report (FR-028-AC-25), and the evidence records the bounds and ceilings
+the run used. Proof coverage
 is maximised per family. A family proves the production code where its harness verifies within the
 ceilings, and a bounded shadow together with a refinement obligation where it does not
 ([ADR-003](../../decisions/ADR-003-kani-tractability.md)).
@@ -38,10 +40,11 @@ the machinery must catch. They are written for any family: where a criterion nee
 it names the family's observables and gives composite equality's as the first. [FR-015](./FR-015-bounded-kani-obligations.md) states the first family that uses
 them, composite equality over records and tuples (IR-264, FR-015-AC-69 to FR-015-AC-76), and
 [FR-018](../../oracle/functional/FR-018-composite-equality-oracles.md) states what the production
-oracle owes that family (FR-018-AC-21 and FR-018-AC-22). FR-028-AC-1 to FR-028-AC-12 stay as they
-were. The current contract, scalar and state-frame execution entries implement the resource-ceiling
-portion of AC-21; caller-death supervision during startup (IR-639), refinement executions and the limit-only
-stand-in remain planned, as
+oracle owes that family (FR-018-AC-21 and FR-018-AC-22). FR-028-AC-1, FR-028-AC-2 and FR-028-AC-4 to
+FR-028-AC-12 stay as they were; FR-028-AC-3 is retired and FR-028-AC-25 replaces it. The current contract, scalar and state-frame execution entries implement the resource-ceiling
+portion of AC-21 as it stood before [ADR-007](../../decisions/ADR-007-minimal-kani-run-ownership.md); ADR-007
+makes AC-21 environmental (the caller's environment owns the memory cap; IR-1510 removes the runner's own
+measurement), and refinement executions remain planned, as
 [TC-039 Status](../matrix/TC-039-bounded-proof-ceilings.md#status) records.
 
 A shadow is not a stub. A stub replaces a callee inside a proof of the production code, so the proof
@@ -67,8 +70,8 @@ other.
 - Three request-level refinement values: a case cap, a positive integer, above which a refinement
   domain is sampled and no longer enumerated; a sample size, a positive integer, the number of
   seeded cases a sampled run adds; and a seed, a `u64` the request carries and never taken from the
-  clock (FR-028-AC-16). The refinement run is also held to the memory and wall-clock ceilings of
-  the harness identity (FR-028-AC-24).
+  clock (FR-028-AC-16). The refinement run is also held to the wall-clock ceiling of the harness
+  identity, and its memory ceiling is the declared cap the environment enforces (FR-028-AC-24).
 
 ## Outputs
 
@@ -87,15 +90,18 @@ other.
 
 - The generator shall record the request's memory ceiling and wall-clock ceiling in every harness
   identity.
-- When a harness runs, the generator shall hold the backend process tree to the memory ceiling and
-  the wall-clock ceiling its identity records. Each launch of a two-phase run (FR-017-AC-63) is
-  held to both ceilings separately and neither is raised for the witness phase, so a two-phase run
-  may take up to twice the wall-clock ceiling end to end (IR-1022).
+- When a harness runs, the generator shall hold the backend process tree to the wall-clock ceiling
+  its identity records.
+- Each launch of a two-phase run (FR-017-AC-63) is held to the wall-clock ceiling separately and the
+  ceiling is not raised for the witness phase, so a two-phase run may take up to twice the
+  wall-clock ceiling end to end (IR-1022). The identity's memory ceiling is the declared cap the
+  caller's environment is to enforce, applied to each launch alike (FR-028-AC-21).
 - If a run exceeds its wall-clock ceiling, then the generator shall stop it and classify it
   `inconclusive` with the timed-out reason, naming the ceiling.
-- If a run exceeds its memory ceiling, then the generator shall stop it and classify it
-  `inconclusive` with the memory-exhausted reason, naming the ceiling.
-- The generator shall never classify a run that exceeded a ceiling as verified or falsified.
+- If the backend's report states the `out_of_memory` exit status, then the generator shall classify
+  the run as FR-028-AC-25 states, naming the declared ceiling in the evidence.
+- The generator shall never classify a run that exceeded the wall-clock ceiling, or that the
+  environment ended for memory, as verified or falsified.
 - Where FR-017 runs several harnesses in one launcher process, the generator shall hold each
   member to the group's wall-clock budget T through the backend's own per-harness timeout, except
   that when T rounded up to whole seconds exceeds 4294967295, the most the backend accepts (it exits
@@ -168,25 +174,28 @@ other.
   bound, `unsupported` with a named capability for a shape with no shadow) and emit no harness,
   and shall never invent a bound or fall back to a production harness it has no ceiling for
   (FR-028-AC-20).
-- The generator shall hold the backend process tree to its memory ceiling by a mechanism that
-  observes or limits the tree's memory, and shall record the mechanism in the execution evidence
-  of every run, with the tree's peak resident memory where the mechanism observes it. If the
-  platform offers it no such mechanism, then the generator shall refuse the run with a typed
-  reason and shall not run the backend without a memory ceiling (FR-028-AC-21).
-- If a run exceeds its memory ceiling, then the generator shall classify it inconclusive with the
-  `MemoryExhausted` reason, serialized `memory_exhausted`, which is a variant of
-  `KaniInconclusiveReason` distinct from every existing reason (FR-028-AC-3, FR-028-AC-21).
+- The generator shall leave the memory cap of the backend process tree to the caller's environment (a
+  cgroup, `systemd-run` with `MemoryMax`, a container), with no runner-side check of that cap, no
+  refusal of a run for lacking a memory mechanism and no stop of a run for its memory (FR-028-AC-21;
+  ADR-007).
+- Where the environment provides the peak resident memory of the finished run, the generator shall
+  record it in the execution evidence with the name of its source (FR-028-AC-21).
+- Where the environment provides no peak, the generator shall record no peak and no estimate
+  (FR-028-AC-21).
+- If the backend's report states the `out_of_memory` exit status, then the generator shall classify
+  the run by FR-017's failure-cause rule, which FR-029 maps to `Incomplete(ResourceExhausted)`
+  (FR-028-AC-25).
+- If an environment memory kill leaves no report, then the generator shall classify the run
+  `NoVerdict`, which FR-029 maps to `Failed` (FR-028-AC-25).
 - The generator shall record in the execution evidence of every run the Kani, Rust and solver
   versions the run used, and every option of each launched phase's option vector (FR-028-AC-23).
 
-### Native refinement lifecycle ownership (planned IR-639)
+### Native refinement lifecycle ownership (planned IR-241)
 
-The typed native refinement entry shall use FR-034's guardian ownership path for each run.
-[FR-034](./FR-034-caller-death-ownership.md) supplies AC-24's caller-death lifecycle authority;
-all existing AC-24 memory/wall ceilings, evidence fields and refinement classes remain intact.
-Criterion-level implementation order is FR-017 launcher, AC-21's preceding containment code
-slice (PR #295), FR-034 ownership, then AC-24 native refinement. The FR-034 specification may
-merge before containment code; completing all parent IR-241 is not a prerequisite.
+The typed native refinement entry shall run each refinement through FR-017's launcher, with the same
+minimal run ownership (own process group, wall-clock timeout and group kill, FR-017-AC-65 and
+FR-017-AC-66) and the same environment-owned memory cap (FR-028-AC-21). All existing AC-24 ceilings,
+evidence fields and refinement classes remain intact.
 
 ### Parity settlement projection (planned IR-806)
 
@@ -203,7 +212,7 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 |----|----------|--------------|
 | FR-028-AC-1 | Every harness identity records the request's memory ceiling and wall-clock ceiling, and changing either ceiling changes the identity. | Test (TC-039) |
 | FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. For a two-phase run (IR-1022) the ceiling bounds each launch separately, so a run may take up to twice it, and a witness phase that exceeds it is `Inconclusive` with the same reason, with no raise and no retry (FR-017-AC-63). | Test (TC-039) |
-| FR-028-AC-3 | A backend Kani run that exceeds its memory ceiling is stopped and classified KaniRunOutcome::Inconclusive with the memory-exhausted reason naming the ceiling, distinct from timed-out and never verified or falsified. FR-029 maps it to final QSL Incomplete(ResourceExhausted); FR-028-AC-24 governs the separate refinement run. | Test (TC-039) |
+| FR-028-AC-3 | RETIRED WITH REPLACEMENT FR-028-AC-25 (ADR-007). It required the generator to stop a run that exceeded its memory ceiling and classify it `Inconclusive` with `MemoryExhausted`; the runner no longer measures or stops memory, so no run can meet it. IR-1510 rewrites to the AC-25 outcome or deletes the tests tagged FR-028-AC-3 (`src/kani/run/execute.rs:2086`, `src/kani/run/execute/two_phase_tests.rs:353`, `:633` and `:679`), which assert `MemoryExhausted`. | Not applicable |
 | FR-028-AC-4 | Every execution evidence records the bounds of each symbolic argument and the two ceilings the run was held to. | Test (TC-039) |
 | FR-028-AC-5 | Every harness identity, generation refusal and execution evidence names its family. | Test (TC-039) |
 | FR-028-AC-6 | A harness of a family with no supplied shadow records proof subject `production`. | Test (TC-039) |
@@ -219,13 +228,14 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 | FR-028-AC-18 | A harness identity of a shadow family lists each abstraction the shadow makes by name with the evidence that discharges it (a Kani check of the harness or a refinement comparison), each behaviour of the production subject the proof does not exercise, and each helper the shadow shares with its expectation, marked `value_bearing` (it returns a bound, a presence, a member set or a count the comparison reads) or `order_only` (it returns only an order the compared observables do not read, as FR-149's conjunction and node count do not read field order), with the reason for each `order_only`; a shadow holding an abstraction no evidence discharges is refused with a typed reason naming it and emits no harness; and a mutation of each `value_bearing` helper that changes what it returns fails the shadow harness, the refinement run or the family's independent check of that helper (FR-018-AC-23 for the composite closure), at least one of them. An `order_only` helper is exempt from that mutation rule. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-19 | A refinement domain that does not contain every case the shadow harness's assumptions admit (a bound narrower on any argument) is refused with a typed reason naming the argument, with no harness; and the domain a shadow harness draws from equals the declared domain, or the narrowed bound FR-028-AC-8 records. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-20 | An item whose shape lies outside its family's shadow support is refused: a missing bound as `requires_bound` naming the unbounded node, a shape no shadow covers as `unsupported` naming the family and the capability, a shape over the family's size budget as `unsupported` naming the size and the budget; none emits a harness, none invents a bound, and none falls back to a `production` harness; siblings of a refused item settle as they do alone. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-21 | The backend process tree of every run is held to the harness identity's memory ceiling by a mechanism that observes or limits the tree's memory (the choice is the code change's, Open Questions); every execution evidence records the mechanism and, where it observes memory, the tree's peak resident memory; a tree that exceeds the ceiling is killed whole and settles as FR-028-AC-3 states, with `KaniInconclusiveReason::MemoryExhausted`, serialized `memory_exhausted`, a variant distinct from every existing reason; a FR-017 batch's launcher process tree is held to the ceiling as one group, killed whole when it exceeds it and refused as memory-exhausted with no member classified (the report is written only at the end); and on a platform where the generator has no mechanism that observes or limits that memory, the run is refused with a typed reason before the backend starts. PARTIAL: current contract, scalar and state-frame execution entries; startup caller-death supervision (IR-639), refinement runs and the limit-only stand-in remain planned (IR-241; TC-039 Status). | Test (TC-039) |
+| FR-028-AC-21 | ENVIRONMENTAL (ADR-007). The caller's environment owns the memory cap of the backend process tree; the harness identity's memory ceiling (FR-028-AC-1) is the value that cap is expected to enforce. The generator performs no runner-side cap check, never refuses a run for lack of a memory mechanism and never stops a run for its memory itself. The peak the evidence records is the largest resident set of any one process in the run's backend tree, in bytes, as reported by a named peak-memory source (the `PeakMemorySource` seam that IR-1510 provides; a source that reports another unit, such as KiB, is converted to bytes inside the seam, so the evidence is always bytes). Where the source provides a peak, the evidence records it with the source's name; where it provides none, the evidence records no peak, and no estimate, zero or launcher-only figure stands in for it. A run without a peak is not refused and classifies as it otherwise would. The path needs only process-group and wall-clock facilities, so it runs on macOS as on Linux (FR-017-AC-67). PLANNED (IR-1510): the current code still observes memory with a Linux PID-namespace and procfs sampler and refuses with `MemoryMechanismUnavailable`; IR-1510 removes both and retags or deletes the tests that carry FR-028-AC-21 for that mechanism (`memory.rs`, `namespace.rs:648-713`, `launch.rs:1080` and `:1789`, `execute.rs:2086-5327`), none of which is evidence for this criterion. Refinement runs remain planned (IR-241; TC-039 Status). | Test (TC-039) |
 | FR-028-AC-22 | A shadow family's machinery catches each seeded mutant: a shadow harness over a mutated shadow is `Falsified` with a concrete playback, a refinement run over a mutated production subject settles `refinement_failed` naming the first disagreeing case, a mutant of a `value_bearing` shared helper that the production subject reads independently settles `refinement_failed`, one that it reads through the same helper is caught by the family's independent check of that helper (FR-018-AC-23 for the composite closure), and the unmutated family verifies with its cover satisfied and a refinement run that agrees; the mutant set of the first family is FR-015-AC-75's. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-23 | Every execution evidence records the Kani version, the Rust compiler version, the solver name and version, the unwind bound and the complete option vector of each phase the run launched (IR-1022: the proof vector, and the witness vector when the witness phase launched), for a `production` harness and a `bounded_shadow` harness alike, and a refinement evidence records the Rust compiler version and the production subject's crate version. A run that classified through both phases retains both phases' evidence bound to the same harness identity, so a `Falsified` or `WitnessDisagreed` verdict names the vector that produced each part of it. The per-phase vectors are covered over launcher stand-ins (IR-1022, #776); PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-24 | The refinement run is a native process launched through one typed refinement execution entry that reuses FR-017's launcher and FR-028's ceilings: it is held to the memory and wall-clock ceilings its harness identity records, its evidence (class, case count, cases run, seed, both ceilings, mechanism, peak where observed, outcome, versions) is recorded beside the shadow run's evidence, and a run that reaches either ceiling is stopped, records the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run` or `refinement_failed`. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-24 | The refinement run is a native process launched through one typed refinement execution entry that reuses FR-017's launcher and FR-028's wall-clock ceiling: it is held to the wall-clock ceiling its harness identity records and the memory ceiling is the declared cap the caller's environment enforces (FR-028-AC-21); its evidence (class, case count, cases run, seed, both declared ceilings, the peak where the environment provides one, outcome, versions) is recorded beside the shadow run's evidence; and a run that reaches the wall-clock ceiling, or that the environment ends by a signal, is stopped or recorded as ended, records the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run` or `refinement_failed`. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-25 | PLANNED (IR-1510; ADR-007), replacing FR-028-AC-3. The classification half is current code (`src/kani/output/report.rs` parses `out_of_memory`; `src/kani/terminal.rs` maps `FailedWithoutCounterexample` with cause `out_of_memory` to `Incomplete(ResourceExhausted)`); what IR-1510 adds is the removal of the runner's own memory stop, so this is the only memory classification. A report whose entry for the harness states the exit status `out_of_memory` (CBMC killed by SIGKILL, by whatever sent it) is classified as FR-017's failure-cause rule classifies it: `FailedWithoutCounterexample` with `failureCause` `out_of_memory`, which FR-029 maps to `Incomplete(ResourceExhausted)`, never to a verdict, never to `TimedOut`. A launcher stand-in that is killed by SIGKILL and exports no report, as when the environment also takes `kani-driver` down, is `NoVerdict`, which FR-029 maps to `Failed`: the generator holds no evidence of the cause, so this run reads `Failed` and not `Incomplete(ResourceExhausted)`, and that is accepted. If the environment kills the caller too, no classification happens. The generator measures nothing itself to tell these cases apart. | Test (TC-039) |
 ### Mutations these criteria detect
 
-Each of FR-028-AC-13 to FR-028-AC-24 is recorded with the mutation it exists to catch.
+Each of FR-028-AC-13 to FR-028-AC-25 is recorded with the mutation it exists to catch.
 
 | ID | Mutation that breaks it |
 |----|-------------------------|
@@ -237,8 +247,9 @@ Each of FR-028-AC-13 to FR-028-AC-24 is recorded with the mutation it exists to 
 | FR-028-AC-18 | Leave an abstraction undischarged (for example the omitted payload of an absent slot) and pass; or let the shadow and its expectation share one bound-reading helper and list none, so a mutation of that helper moves both and the proof holds vacuously (ADR-011 FB-10); or mark a bound-reading helper `order_only` to escape the mutation rule. |
 | FR-028-AC-19 | Refine over a smaller integer range than the shadow draws, so the cases the shadow proves and the production subject was never compared on coincide only in the cases that were. |
 | FR-028-AC-20 | Treat an unbounded integer leaf as the whole `i64`, a recursive declaration as depth one, or an unsupported family as a production harness, so a harness exists that neither covers the declared domain nor says it does not. |
-| FR-028-AC-21 | Enforce the ceiling on the launcher process alone (CBMC runs as a child and holds the memory), classify a memory kill as `timed_out` or `no_verdict`, or run the backend unbounded when the platform offers no mechanism, or record a peak that was never observed. |
+| FR-028-AC-21 | Refuse a run for lack of a memory mechanism, kill a run on a runner-side RSS check, record a zero, a launcher-only or an estimated figure as the peak when the environment gave none, drop a peak the environment did give, record a source's KiB figure as bytes, or depend on a Linux-only facility so the path fails on macOS. |
 | FR-028-AC-24 | Run the refinement in the test process with no ceiling, so an unbounded domain hangs the lane; or report a refinement that hit a ceiling as `not_run` or `sampled`, so a run that never finished reads as one that did. |
+| FR-028-AC-25 | Classify an environment memory kill as `TimedOut` or as a verdict, classify from a figure the runner measured itself, or classify a SIGKILLed backend with no report as `Incomplete(ResourceExhausted)` by guessing the cause. |
 | FR-028-AC-22 | A suite that mutates only the production side, so a shadow that always answers `true` verifies; or only the shadow side, so a production subject that never compares a field agrees; or counts a permutation of an order-only helper as a mutant the machinery must catch. |
 | FR-028-AC-23 | Record the version of the first `kani` or `rustc` on `PATH` rather than the one the run launched, or omit the solver, so two runs under different backends read as one. |
 
@@ -332,16 +343,19 @@ None of these is decided here, and none is guessed.
   original-node/path/domain binding for FR-015 AC-70, while AC-7 still refuses the composite itself
   as a machine argument. FR-033 reconstruction remains gated on its implementation and the owning
   QSL APIs.
-- **Which memory mechanism, and which platforms (code change, owner for platform support).**
-  FR-028-AC-21 is mechanism-neutral: any mechanism that observes or limits the tree's memory
-  (polling resident memory, an address-space limit, a control group) meets it, the evidence names
-  the mechanism, and a platform with none is refused. The choice decides which platforms are
-  supported. An address-space limit is not a resident-memory limit (the Rationale's probe held a 12
-  GB cap while CBMC's resident memory was about 4 GB), so the mechanism's meaning is recorded.
+- **Which memory mechanism (decided, ADR-007).** None in the runner. The caller's environment
+  owns the cap (a cgroup, `systemd-run` with `MemoryMax`, a container), so no platform is excluded by
+  the runner and macOS needs nothing beyond a process group and a timeout. An address-space limit is
+  not a resident-memory limit (the Rationale's probe held a 12 GB cap while CBMC's resident memory was
+  about 4 GB), which is why the cap's meaning is the environment's to state, not the runner's to
+  assume. Which operating-system interface supplies the peak, where one exists (for example the
+  waited-for children's maximum resident size), is the code change's (IR-1510) and must be named in
+  the evidence.
 - **A batch's memory ceiling.** FR-017's batches run one launcher for N harnesses and write one
-  report at the end. FR-028-AC-21 holds the group's process tree to the ceiling, as the wall-clock
-  bound does (FR-028-AC-12); the group is killed whole and no member classified. Whether a
-  member-level ceiling is wanted is the owner's, as the batch rule's rationale says for time.
+  report at the end. The environment's cap covers the group's process tree as one; a batch whose
+  backend the environment kills yields whatever report Kani wrote, and the generator classifies each
+  member from it as FR-017 states, with no runner-side group memory refusal. Whether a member-level
+  ceiling is wanted is the owner's, as the batch rule's rationale says for time.
 - **The budget and the case cap (code change).** `SHADOW_PAIR_NODE_BUDGET` and the refinement case
   cap's default are set by the code change's measurement over growing shapes and recorded in
   TC-025's status, not stated here.

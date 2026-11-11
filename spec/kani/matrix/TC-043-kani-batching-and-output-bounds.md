@@ -16,9 +16,12 @@ truncated, that a capture failure is refused, and that no launcher descendant ou
 (IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
 `NoVerdict` group never feeds classification (FR-017-AC-36), and that a batch member's CBMC failure
 cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
-FR-028-AC-12, verified by TC-039. The planned IR-877 observational slice checks owned namespace
-nonconfirmation diagnostics and unchanged cleanup/refusal semantics (FR-017-AC-54/55); it does not
-claim a natural recurrence or causal fix for the intermittent failure.
+FR-028-AC-12, verified by TC-039. The minimal run ownership of ADR-007 (steps 15 to 18, planned
+under IR-1510) checks that the launcher leads its own process group, that a timeout kills the group
+with its descendants and signals it before the launcher is reaped, and that those files have no
+Linux-only construct. The former
+namespace-confirmation diagnostics (FR-017-AC-54 to FR-017-AC-56) are retired with the namespace
+owner.
 
 ## Test Procedure
 
@@ -29,7 +32,7 @@ claim a natural recurrence or causal fix for the intermittent failure.
 4. Build N = 1, 10 and 50 harnesses with equal option vectors and identity `ProofCeilings`
    (`wall_clock` T and `memory_bytes` M), and read the launch's argument vector and the number of
    launcher processes a stand-in counts; mix two option vectors, two wall-clock ceilings and two
-   memory ceilings and count the processes. Drive one grouped process tree above M.
+   memory ceilings and count the processes.
 5. Build a batch whose T is `Duration::MAX` and read its argument vector; in the `make kani` lane
    run a batch at 4294967295 seconds and confirm it runs.
 6. Run batch stand-ins that exit successfully with no report, and unsuccessfully with no report (an
@@ -66,17 +69,23 @@ claim a natural recurrence or causal fix for the intermittent failure.
     same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
 13. (FR-029-AC-33, planned under IR-848.) Pass the evidence of `c::check` and of `d::check` from
     step 12 to `run_terminal_value`.
-14. (FR-017-AC-54/55, planned under IR-877.) Drive the real public execution entry with a
-    launcher stand-in and a genuine owned namespace, using the existing confirmation
-    `PollOperation` seam. First run an unchanged control delegating to real poll. In two adverse
-    modes, delegate the first confirmation to real poll on the supplied pidfd and timeout, record
-    its positive count and `IN`, then clear revents and return respectively zero or the genuine
-    positive count. These modes are injected observation omissions. Delegate the subsequent
-    `Drop` confirmation unchanged to real poll. For each adverse mode submit cancellation both
-    before and after the cleanup barrier, retaining the first failed observation. Keep the existing
-    real-poll-delegating errno control as a regression. Record supplied timeout, owned identities
-    and state and actual backend disappearance; do not sleep for five seconds, alter the allowance,
-    reopen a PID or rescan host state to fill fields.
+15. (FR-017-AC-65, planned under IR-1510.) Launch a launcher stand-in that prints its own process
+    id and process group id, and read its group id beside the process id and the group id of the
+    test process. Launch a second stand-in left in the caller's group as a control.
+16. (FR-017-AC-66, planned under IR-1510.) Under a 1 s wall-clock ceiling, launch a stand-in that
+    starts a descendant in its group, which starts a grandchild in the same group, each appending one
+    byte to its own heartbeat file every 50 ms, and then waits. Read the outcome and the elapsed time
+    of the call, then the sizes of both heartbeat files and, after three heartbeat intervals, the sizes
+    again. Repeat with a descendant that holds the output pipe open for 5 seconds. Repeat with a
+    stand-in whose descendant ends its own heartbeat by exiting before the timeout, as a control that
+    the files are read after a real stop.
+17. (FR-017-AC-67, planned under IR-1510.) Run the structural scan: parse the non-test, non-comment source files of `src/kani/run/` (`#[cfg(test)]` modules, comments and `#[doc]` attributes excluded) and search its identifiers and string literals for the one token list
+    `bwrap`, `bubblewrap`, `unshare`, `CLONE_NEW`, `pidfd`, `procfs`, `/proc`, `cgroup`, `namespace`.
+    Run the scan also over a fixture file holding `Path::new("/proc")` in code, the same literal in
+    a `#[cfg(test)]` module, and `cgroup` in a comment.
+18. (FR-017-AC-68, planned under IR-1510.) Through the launch test seam that records the group
+    signal and the reap, kill a stand-in's group on a timeout and read the order of the two
+    operations.
 
 ## Expected Results
 
@@ -88,11 +97,11 @@ claim a natural recurrence or causal fix for the intermittent failure.
 4. One process for each group, with one `--harness <module::harness> --exact` pair per member in
    request order, `--harness-timeout` T and then the shared options; fewer than N processes for
    N > 1 compatible harnesses; differing identity wall-clock or memory ceilings, launcher, crate
-   directory or target directory form separate groups. The grouped process tree has one aggregate
-   M ceiling; exceeding it kills and refuses the whole group with no member classified. The outer
+   directory or target directory form separate groups. The group's one M is the declared cap the
+   environment enforces, and nothing is refused for it. The outer
    wall-clock bound is N times T (a group that runs longer than T and inside N times T completes),
    and a group killed at it is refused as timed out with no member classified (FR-017-AC-21;
-   FR-028-AC-21 covers the memory enforcement mechanism).
+   FR-028-AC-21 states that the cap is the environment's).
 5. The `Duration::MAX` batch carries no `--harness-timeout` and its outer bound does not elapse; the
    batch at 4294967295 seconds runs (FR-017-AC-21, FR-028-AC-12).
 6. The successful exit with no report is refused with the missing-report refusal and no member is
@@ -134,23 +143,22 @@ claim a natural recurrence or causal fix for the intermittent failure.
     `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
 13. Both are `Incomplete(TimedOut)`: `c::check` through the timed-out row, `d::check` through its
     cause `timeout` (FR-029-AC-33).
-14. The normal control preserves its original public result and real confirmed cleanup. Both
-    controlled omissions return typed `MemoryObservationFailed`, including when cancellation
-    competes on either side of the barrier. The detail retains `namespace cleanup failed:` and
-    `namespace teardown was not confirmed` and decodable labelled fields for count, raw revents,
-    poll elapsed duration/unit, captured init PID/start ticks, wrapper PID or explicit absence,
-    init-handle presence, gate presence and cleaned state. The fields match the exact first failed
-    attempt: count zero or the recorded real positive count respectively, missing `IN`, existing
-    captured identities, handle present, gate unchanged and cleaned false. Assert a nonnegative
-    measured elapsed duration without a wall-clock lower bound. The seam independently observes
-    real positive readiness before injection and real confirmation on the next `Drop` attempt;
-    the later success does not overwrite the returned failure detail. The same claimed pidfd,
-    one `(5, 0)` poll per cleanup invocation and original public errno refusal remain unchanged.
-    Actual backend processes and namespace are gone when the call returns. No proof is accepted
-    after nonconfirmation. This
-    establishes diagnostic plumbing and unchanged refusal semantics only, not a kernel timeout,
-    host-state diagnosis, causal fix or completion of IR-877 (FR-017-AC-54/55;
-    [FR-040](../functional/FR-040-cancellation-producer.md) AC-4).
+15. The stand-in's group id equals its own process id and differs from the test process's. The
+    control left in the caller's group reports the test process's group id and fails (FR-017-AC-65).
+16. The call returns `TimedOut` within the 1 s ceiling plus `RETURN_ALLOWANCE` (1 s). Both heartbeat
+    files stop growing: their sizes after three further intervals equal their sizes at return. The
+    pipe-holding descendant case returns inside the allowance, not after 5 seconds. The control's files
+    stop at its descendant's own exit. Killing only the launcher's process id leaves both heartbeat
+    files growing and fails; a wait on the descendants before returning exceeds the allowance and
+    fails (FR-017-AC-66).
+17. The scan finds none of the tokens in those files and exactly one finding in the fixture (the
+    `Path::new("/proc")` literal in code); the test-module literal and the comment are not findings.
+    A scanner that skips string literals finds none in the fixture, and one that includes test
+    modules or comments finds three, so each fails. On main as of this specification the scan finds
+    `bwrap`, `unshare`, `pidfd` and `procfs` in `namespace.rs`, `owners.rs` and `memory.rs`, so the
+    step fails until IR-1510 lands (FR-017-AC-67).
+18. The group signal is recorded before the reap. A mutant that reaps the launcher first records the
+    reap first and fails (FR-017-AC-68).
 
 ## Implementation
 
@@ -204,14 +212,21 @@ Step 12 (FR-017-AC-39) is covered by
 `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
 `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
-Step 14 is planned under IR-877; its new observation criteria are not implemented or qualified by
-this specification amendment. Existing cleanup and cancellation controls remain regressions, not
-evidence that the new successful-poll/no-`IN` branch is already covered.
+Steps 15 to 18 are planned under IR-1510 and are not written. The shell-script launcher stand-ins
+of `batch_tests` and the `tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` test
+(step 3) are the models: step 16 is the same stand-in with a wall-clock ceiling in place of the
+launcher's own exit, and its heartbeat files are read through the filesystem, never by a PID reopen.
+Step 17 is an Analysis control: a `syn` scan (`syn` is already a normal dependency, `Cargo.toml`)
+run as a test or `scripts/` check in `make ci`; it needs no cross-compilation and no macOS host. The
+property that those files have no Linux-only dependency is verified when the suite also runs on a
+macOS host; the Linux CI does not claim it. Step 18 uses the same seam as step 16.
 
 ## Status
 
 Implemented for FR-017 batching and output bounds (IR-277). Identity memory-ceiling separation is
 covered by `unequal_identity_memory_ceilings_run_in_separate_backend_processes` and
 `unequal_memory_ceilings_plan_separate_groups_with_their_own_selections` in
-`src/kani/run/execute.rs`; grouped aggregate memory exhaustion is covered under TC-039
-(FR-028-AC-21).
+`src/kani/run/execute.rs`. The runner-measured grouped memory exhaustion once covered under TC-039
+(FR-028-AC-21) is withdrawn with the runner-side mechanism (ADR-007).
+
+Steps 15 to 18 (FR-017-AC-65 to FR-017-AC-68, ADR-007) are PLANNED/UNRUN under IR-1510.
