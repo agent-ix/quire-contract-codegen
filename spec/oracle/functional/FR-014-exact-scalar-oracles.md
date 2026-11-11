@@ -289,15 +289,15 @@ rational `add`, `sub`, `mul`, `negate` and `div` (both operands
 integers, or both rationals); `lt`, `le`, `gt` and `ge` over integers,
 rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
 `numeric.convert_rounding` to a decimal; IEEE `float32` and `float64` `add`,
-`sub`, `mul`, `div`, `sqrt` and `fma`, `numeric_equal`, `total_order`, `bit_identical`,
-`to_float32` and `to_float64`; every `text` and `enum` comparison;
+`sub`, `mul`, `div`, `numeric_equal`, `total_order`, `bit_identical`,
+`to_float32` and `to_float64` (and, PLANNED (IR-1502), `sqrt` and `fma` at both widths: FR-014-AC-72..80); every `text` and `enum` comparison;
 `quantity` `add`, `sub`, `mul`, `div`, `pow` and every comparison; and
 `quire.op.quantity.convert`, whose `type_argument` retains either an exact
 unit target or a bounded carried quantity target with its placement mode
 (FR-014-AC-48 and FR-014-AC-62..65). Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
 are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
-`ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
-`rational.narrow` and `text.size` (each read against the operation catalog).
+`ieee.from_exact`, `ieee.to_rational`, `ieee.float32.negate`, `ieee.float64.negate`, `numeric.narrow`,
+`rational.narrow` and `text.size` (each read against the operation catalog); until IR-1502 is delivered `ieee.float32.sqrt`, `ieee.float64.sqrt`, `ieee.float32.fma` and `ieee.float64.fma` are also refused this way.
 
 On the derived path the descriptor is built from the node's own identity, laws
 and mode, so the comparison of the descriptor with the node always agrees and a
@@ -348,19 +348,24 @@ otherwise.
   failure — see `ExactScalarRefusal` for the closed set of checks and their
   reasons — and emit no code for it, without changing any other item's
   output.
-- For `quire.op.ieee.float32.sqrt`, `quire.op.ieee.float64.sqrt`,
-  `quire.op.ieee.float32.fma` and `quire.op.ieee.float64.fma` (IR-1502), the
-  generator shall derive the descriptor and generate the oracle exactly as for
-  IEEE `add`, with these differences. `sqrt` takes one operand and `fma` takes three,
-  and every operand and the result shall have the identity's float width; any
-  other operand count, operand form or width is `operand_forms_not_derivable`.
-  The rounding bound, mode and result-bound rules are those of IEEE `add`. The
-  oracle takes the operands in argument order and calls
-  `evaluate_ieee(IeeeOperation::SquareRoot(a))` or
+- PLANNED (IR-1502). When a requested node carries `operation.identity`
+  `quire.op.ieee.float32.sqrt`, `quire.op.ieee.float64.sqrt`,
+  `quire.op.ieee.float32.fma` or `quire.op.ieee.float64.fma`, the generator shall
+  derive the descriptor from the identity (width), the `float_rounding`
+  bound and the mode, as it does for IEEE `add`, and shall accept the catalogued
+  `call` body operator with one argument (`sqrt`) or three (`fma`), the form
+  QSL emits as `quire::value::ieee::sqrt` and `fma` calls; IEEE `add`'s binary
+  shape is not reused. Derivation reads no operand count or width: operand
+  count, width and form defects are refused by the Contract IR strict reader,
+  and at CG's defensive seam in generation as `BodyMismatch`,
+  `OperandTypeMismatch` or `ResultTypeMismatch` (FR-014-AC-79). A mode unequal
+  to the rounding bound is `mode_not_derivable`; a missing bound keeps IEEE
+  `add`'s refusals (FR-014-AC-78). The oracle takes the operands in argument
+  order and calls `evaluate_ieee(IeeeOperation::SquareRoot(a))` or
   `evaluate_ieee(IeeeOperation::FusedMultiplyAdd(a, b, c))`, the owner's single
-  rounding of `a * b + c`, never a multiplication followed by an addition. The
-  owner's value, flags, charges, consumed counters and typed stops are returned
-  unchanged. The Kani harness for these identities is FR-053's.
+  rounding of `a * b + c`, and returns the owner's value, flags, charges,
+  consumed counters and typed stops unchanged. The Kani harness for these
+  identities is FR-053's.
 - Generated quantity oracles shall receive each quantity operand as QSV
   `UnitQuantity<'_>`, obtained by the caller through `UnitTable::resolve` or
   `UnitScope::resolve` over the kernel `Quantity`'s own unit id. CG shall not
@@ -719,12 +724,17 @@ otherwise.
 | FR-014-AC-67 | For strict-reader-admitted `quire.op.ieee.numeric_equal`, `quire.op.ieee.total_order` and `quire.op.ieee.bit_identical` nodes, CG accepts the genuine QSL-emitted `expression`/`call` semantic form with the catalogued `call` body operator, including numeric equality emitted from `a = b` and each `quire::value::ieee::*` intrinsic. Existing reader-admitted binary-semantic-form fixtures with that same catalogued call operator remain supported. Derivation and generation retain operand order, float width, Boolean result, operation identity, laws and mode, and dispatch the selected owner IEEE operation. | Test |
 | FR-014-AC-68 | Acceptance of these carried operands and IEEE call forms preserves the existing strict-reader and CG boundaries. Unadmitted operation/body pairings and reader-invalid arity, types, identity, laws or mode remain reader refusals. Admitted shapes, arity, operand/result types, unitless quantity literals and unsupported semantic forms that CG previously refused retain typed refusal, no oracle and supported-sibling isolation. A same-lowering-shape descriptor identity, law or mode mismatch retains the existing FR-014-AC-12 and FR-038-AC-3 behavior: where generation was permitted, its operation remains `CallerDeclared` and unconfirmed rather than gaining `ir_confirmed` provenance. This extension admits neither arbitrary call forms nor arbitrary scalar families as quantity operands and introduces no new descriptor-mismatch generation policy. | Test |
 | FR-014-AC-69 | Qualification of AC-66 and AC-67 emits genuine QSL source through the public facade, passes its unchanged emitted bytes through the strict Contract IR reader, derives descriptors and generates, compiles and executes the resulting native scalar oracles. Tests assert completed conversion values and units and IEEE true and false values, including signed-zero and NaN cases that distinguish numeric equality, total order and bit identity according to the owner contract. Generated and direct owner executions agree in complete, refused or incomplete outcome, ordered admitted charges and consumed counters at the same limits, including a denied charge. Each defect's genuine-source test fails on the preceding lowerer and passes after the fix; native execution claims neither proof nor QSL value-authority agreement. | Test |
-
 | FR-014-AC-70 | Each generated lazy And, Or and Implies scalar oracle accepts its right operand as a function of the caller's mutable exact Meter. A reached right operand runs exactly once on that same meter after any admitted caller prefix and before the single parent boolean result-retention charge. A left-decided result skips the right operand and retains only the parent result. A right Refused or Incomplete outcome propagates unchanged without parent result retention; parent-retention denial preserves the complete owner Incomplete record. No replacement meter, charge subtraction, replay or duplicate charge occurs. Eager decided-operand oracles are unchanged. | Test (TC-024) |
 | FR-014-AC-71 | A compiled generated crate exercises lazy And, Or and Implies with both left values, actual metered owner Boolean equality on the right, and a nonempty admitted caller-meter prefix. Compared with an independently sequenced owner reference, it checks values or complete typed stops, ordered admitted charges and every consumed counter at generous limits and every denied next-charge boundary, including right-evaluation denial and parent-retention denial. Skipped right closures have zero invocations and charges; reached closures have exactly one invocation. The controls fail for the old no-meter right signature, a fresh right meter, eager skipped evaluation or omitted parent retention. These controls qualify CG owner agreement, while IR-842 owns QSL source-backed agreement. | Test (TC-024) |
-| FR-014-AC-72 | When a strict-reader-admitted application node carries `operation.identity` `quire.op.ieee.float32.sqrt` or `quire.op.ieee.float64.sqrt` over one operand, or `quire.op.ieee.float32.fma` or `quire.op.ieee.float64.fma` over three operands, each operand and the result of the identity's width, and a `float_rounding` bound whose rounding equals `operation.mode`, then `derive_exact_scalar_items` shall return an item for it and its descriptor shall name the identity's operation and width, and `generate_exact_scalar_oracles` shall mark its operation `ir_confirmed`. The exhaustive identity matches of derivation and of the descriptor check shall cover all four identities and the round-trip test shall walk them. | Test (TC-024) |
-| FR-014-AC-73 | The generated oracle for each of the four identities of FR-014-AC-72 shall call `evaluate_ieee` with `IeeeOperation::SquareRoot(a)` or `IeeeOperation::FusedMultiplyAdd(a, b, c)` in argument order under the descriptor's rounding and the caller's `Meter`, and shall return the owner's result, ordered admitted charges, consumed counters and typed stops unchanged. | Test (TC-024) |
-| FR-014-AC-74 | If a `sqrt` or `fma` node of FR-014-AC-72 has the wrong operand count, an operand of a different float width or of a non-float form, a mode unequal to its rounding bound, or no reachable `float_rounding` bound, then derivation shall return the same typed refusal IEEE `add` returns for that defect (`operand_forms_not_derivable`, `mode_not_derivable` or `RequiresBound`), and generation shall emit no oracle for it and leave every other item unchanged. A descriptor naming a different catalogued operation for the node is not `ir_confirmed` (FR-014-AC-12). `quire.op.ieee.from_exact`, `quire.op.ieee.to_rational`, `quire.op.ieee.float32.negate` and `quire.op.ieee.float64.negate` remain `OperationNotDerivable`. | Test (TC-024) |
+| FR-014-AC-72 | PLANNED (IR-1502). For genuine QSL-emitted `quire::value::ieee::sqrt` and `quire::value::ieee::fma` calls, passed unchanged through Contract IR's strict reader, over parameters typed `Float32[r]` or `Float64[r]` with a `float_rounding` bound `r` equal to `operation.mode`, `derive_exact_scalar_items` returns an item for `quire.op.ieee.float32.sqrt`, `quire.op.ieee.float64.sqrt`, `quire.op.ieee.float32.fma` and `quire.op.ieee.float64.fma`, accepting the `expression`/`call` semantic form with the catalogued `call` body operator, one argument for `sqrt` and three for `fma`, and also accepting the same operations in a reader-admitted fixture with that call operator. | Test (TC-024) |
+| FR-014-AC-73 | PLANNED (IR-1502). Generation for each item derived under FR-014-AC-72 marks its operation `ir_confirmed` with the identity, laws and mode read from the node. | Test (TC-024) |
+| FR-014-AC-74 | PLANNED (IR-1502). Each of the four identities of FR-014-AC-72 maps to a descriptor naming its operation and width, and that descriptor maps back to the same identity; a `sqrt` descriptor does not map to an `fma` identity or the reverse, and a width does not map to the other width. | Test (TC-024) |
+| FR-014-AC-75 | PLANNED (IR-1502). The generated `sqrt` oracle returns the value and flags of the owner's `evaluate_ieee(IeeeOperation::SquareRoot(a), rounding, meter)`, and the generated `fma` oracle returns those of `evaluate_ieee(IeeeOperation::FusedMultiplyAdd(a, b, c), rounding, meter)` with `a`, `b` and `c` in argument order and one rounding of `a * b + c`, under the descriptor's rounding. | Test (TC-024) |
+| FR-014-AC-76 | PLANNED (IR-1502). For the same operands and the same caller `Meter`, the generated `sqrt` and `fma` oracles return the owner's ordered admitted charges, consumed counters and typed stops unchanged, including at every next-charge denial boundary. | Test (TC-024) |
+| FR-014-AC-77 | PLANNED (IR-1502). Calling a generated `sqrt` or `fma` oracle with an `IeeeValue` of the other float width stops as the owner's width refusal (FR-014-AC-9) before any charge and leaves every consumed counter unchanged. | Test (TC-024) |
+| FR-014-AC-78 | PLANNED (IR-1502). Derivation of an admitted `sqrt` or `fma` node whose mode differs from its `float_rounding` bound's rounding returns `mode_not_derivable`, and derivation of one with a missing, repeated or unreadable `float_rounding` bound returns the same `MissingBound`, `AmbiguousBound`, `IncompleteContext` or `UnreadableBound` refusal IEEE `add` returns; generation emits no oracle for either item and leaves every other item unchanged. | Test (TC-024) |
+| FR-014-AC-79 | PLANNED (IR-1502). A descriptor for a `sqrt` or `fma` operation presented against a node of a different shape (wrong body operator, wrong operand count, a different float width or a non-float operand, or a wrong result type) is refused at CG's defensive seam as `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`, with no oracle; the Contract IR strict reader refuses wrong arity, a cross-width or non-float operand and a wrong `fma` result family as `ill_typed` or `operator-ineligible` before CG receives the package, and that refusal is tested at the Contract IR boundary and not claimed by CG. | Test (TC-024) |
+| FR-014-AC-80 | PLANNED (IR-1502). `quire.op.ieee.from_exact`, `quire.op.ieee.to_rational`, `quire.op.ieee.float32.negate` and `quire.op.ieee.float64.negate` keep the `OperationNotDerivable` refusal. | Test (TC-024) |
 
 ## Dependencies
 

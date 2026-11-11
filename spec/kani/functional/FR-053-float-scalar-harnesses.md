@@ -77,7 +77,8 @@ P3.
   CG's own defensive check and nothing upstream backs it.
 - P3 (ticket IR-1502) is the FR-014 extension that derives and generates an oracle
   for `quire.op.ieee.float32.sqrt`, `.float64.sqrt`, `.float32.fma` and `.float64.fma`.
-  FR-014 refuses these four identities as `OperationNotDerivable` today, so no oracle
+  FR-014's code refuses these four identities as `OperationNotDerivable` today (FR-014-AC-72..80
+  specify the derivation and are planned), so no oracle
   exists to prove. The owner supports both (`IeeeOperation::SquareRoot`,
   `IeeeOperation::FusedMultiplyAdd`), and Contract IR catalogues both identities, so
   the missing piece is CG's descriptor, derivation and renderer. Without P3 the `sqrt`
@@ -365,8 +366,10 @@ parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 are conditional on P3 (I
 
 - [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) owns the IEEE
   oracle semantics and the derivable operation list (add, sub, mul, div, the three
-  comparisons and the two width conversions); its oracle agreement is not this proof.
-  It refuses `sqrt` and `fma` as `OperationNotDerivable`, which is why P3 is needed.
+  comparisons, the two width conversions and, planned under IR-1502, `sqrt` and `fma`); its oracle agreement is not this proof.
+  FR-014 lists `sqrt` and `fma` as derivable (FR-014-AC-72..80, planned under
+  IR-1502), but CG's code still refuses them as `OperationNotDerivable` until
+  IR-1502 delivers, which is why P3 is needed.
 - The float carrier (IR-1446) is prerequisite P1, the Contract IR float
   `requires_bound` ruling (IR-69) is P2, and the FR-014 `sqrt` and `fma` derivation
   (IR-1502) is P3. The IR-1436 design review (D4) fixes the carrier contract and gates the
