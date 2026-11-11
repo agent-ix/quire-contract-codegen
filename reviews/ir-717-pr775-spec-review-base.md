@@ -67,9 +67,16 @@ CHANGES REQUIRED. The central conclusion is sound and verified against the vendo
 | FND-004 | fixed | fixed in ac5beeeb |
 | FND-005 | fixed | fixed in ac5beeeb |
 | FND-006 | fixed | fixed in f658b703 |
+| FND-007 | fixed | fixed in 2c2ccd0e |
 
 ## New findings (disposition pass 2)
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-007 | low | Option 4's P1 column still reads 'Addressed for the holder's own table'. The residual alias that the round-2 fix now states for option 3 applies here too. Any separate holder of S and the lease releases on C's instruction, over a C-held channel endpoint that every foreign fork of C copies, so a fork child of a live C can still trigger an early release. Mirror option 3's wording: P1 is not addressed for the release-instruction endpoint, and only the dead-caller variant goes away. Low because the ticket already excludes option 4 as a new custodian. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:212 |
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | Option 6's P1 column says 'Not addressed (combine with 2 or 3)', and the preamble calls 3 a 'P1 option'. Since rounds 2 and 3, options 3 and 4 both read 'Not addressed for the release endpoint', so combining option 6 with option 3 does not address P1 either. It only removes the dead-caller variant and takes S out of C's table. Say 'combine with 2 for P1; 3 narrows it to the release-instruction endpoint', or drop 3 from the combination. Wording only: no option is selected and nothing is overclaimed elsewhere. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:214 |
