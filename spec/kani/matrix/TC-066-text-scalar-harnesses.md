@@ -104,17 +104,36 @@ Execute generated proofs only with the authorized runner and budget.
     shipped `compare_text` over the step 2 enumeration for all six operators, at zero,
     exact and short budgets, and assert equal outcome, ordered charges, denied next
     charge and counters. Repeat over a fixed long-payload family: per supported profile
-    a stated host `TextType` and the largest admitted length L = min(P, C) and L - 1
-    (`unicode-scalars` with all four-byte scalars), with pairs differing only in the
+    a stated host `TextType` at the declared `max` and the attained length L = A
+    (step 13; not P) and the lower length L_b (`unicode-scalars` with all four-byte
+    scalars), with pairs differing only in the
     payload's own final byte (position L, or L - 1 for the shorter payloads; a continuation byte of a multibyte last scalar, or a
     one-byte final scalar, never a differing lead byte), only in the first byte, and
     only in length. For a payload of C + 1 bytes assert the carrier's encoding
     refusal, not agreement. Confirm the carrier makes its replacement callable from
     the host build (P1). Mutate the replacement's ordering, charge sequence and
-    outcome, plus an ordering loop bounded at L - 1 (which must fail the final-byte
+    outcome, plus an ordering loop bounded at L - 1 or earlier (which must fail the final-byte
     pair) and a charge from a truncated length; each must fail the differential
     (AC-12). The result covers the enumerated and boundary payloads, not every payload
-    up to C.
+    up to C. For `nfc` and `nfkc` assert that the host search finds a final-byte pair
+    at L (the check fails if it finds none), record an absent first-byte pair as
+    absent, and confirm every family payload is admitted by `TextType::admits`.
+13. Compute A on the host for `binary-utf8`, `unicode-scalars`, `nfd`, `nfkd`, `nfc`
+    and `nfkc` at `max` of 1, 2 and 8 by the quire-exact FR-400-AC-6 construction
+    (for `nfc` and `nfkc`: the first stable scalar, in scalar order, with the most
+    `nfd` or `nfkd` UTF-8 bytes, its decomposition repeated `max` times, admitted by
+    `Text[max, max]`; for the other four the payload of P bytes). Assert A is at most
+    P, A is below P for `nfc` and `nfkc` at `max` of 1, A equals `max` times the
+    independently enumerated maximum decomposition length, and L_b is L - 1 for the
+    four profiles whose A equals P. Run the mutants: the family built at P for `nfc`
+    at `max` of 1 (a P-byte payload, refused by `Text[1, 1]`), the stability filter
+    dropped for `nfkc` at `max` of 1 (U+FDFA, refused), `nfkd` taken for `nfc` at
+    `max` of 1 (U+FDFA, refused), the unit not repeated at `max` of 2 under `nfc`
+    (one retained scalar, below `min` 2, refused), and the first multi-scalar
+    decomposition (U+00C0) instead of the longest at `max` of 1 under `nfc` (admitted,
+    fails the equality with the enumerated maximum). Each must fail (AC-13). Assert
+    support is unchanged: an item with P above C stays `unsupported` (step 3) even
+    when A is at most C.
 
 ## Expected Results
 
@@ -125,7 +144,7 @@ agreement.
 
 ## Status
 
-PLANNED: all twelve FR-052 criteria are unimplemented and untagged. No missing
+PLANNED: all thirteen FR-052 criteria are unimplemented and untagged. No missing
 carrier capability (IR-1445), `Text` constructor (IR-1499), stated payload-byte bound (IR-1500), loop-free normalization (IR-1501), replay route or generated-proof result
 is waived. No capacity C is known to verify within a request's ceilings; TC-050
 recorded a 1 GiB bound exceeded and the IR-1436 review records 2.6 GiB.
