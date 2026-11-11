@@ -406,6 +406,32 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     assertion (FR-024-AC-66). A harness differing in both identity and field order must return
     `ObligationIdentityMismatch`, which fails a mutant that checks field order first.
     The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`.
+47. (PLANNED, IR-1520.) With I_c, I_f and I_c2 as in TC-025 step 54 and the `contract` and
+    `frame` harnesses of one clause generated with I_c and I_f: replay the falsified `contract`
+    (postcondition) harness through `StateClauseReplayInputs::decode_falsification` with I_c:
+    accepted, and the packet and the request `StateClauseReplay::new` builds carry I_c member for
+    member (FR-024-AC-72). Then supply I_c2 (ordinal only), an I_c with only the node changed, an I_c
+    with only the model changed, and I_f: each returns `StateClauseReplayError::
+    ObligationIdentityMismatch`, never `HarnessMismatch`, with the executor uncalled and no
+    document built; a harness differing in both identity and a state field returns
+    `ObligationIdentityMismatch` (FR-024-AC-71). The `frame` harness given to
+    `decode_falsification` returns `NotPostconditionHarness`. Mutants: ignoring the caller identity
+    (site: the comparison in the postcondition `decode_falsification`) fails every refusal
+    assertion; comparing `node` and `model` only fails the I_c2 assertion; mapping the difference to
+    `HarnessMismatch` fails the variant assertion; replacing the caller identity with the
+    harness's own never refuses and fails the same assertions; a default identity refuses the
+    matching case and fails the accept assertion; checking state fields first fails the both-differ
+    case; one identity stored for both roles fails the I_f assertion. Then replay the falsified
+    `frame` harness through `FrameReplay::new` against QSL's selected site: with the harness
+    carrying the minted identity it is accepted and the request and packet carry it member for
+    member (FR-024-AC-74); with the `contract` harness's identity I_c, with an ordinal-only change
+    and with a node-only change, it returns `FrameReplayError::ObligationIdentityMismatch` before
+    any request is built (FR-024-AC-73), and that variant maps to `ReplaySettlement::CgDefect`
+    (FR-024-AC-75). Frame mutants: no comparison in `FrameReplay::new` (site: after `frame_identity`)
+    fails the refusal cases; comparing before the minted identity exists is not expressible, so a
+    comparison against the harness's own identity never refuses and fails them; mapping the new
+    variant to a non-defect settlement fails FR-024-AC-75; mapping it to `ClaimMismatch` fails the
+    variant assertion.
 
 ## Status
 
@@ -447,7 +473,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142) is planned for IR-1520 and claims no CG implementation or tagged test yet. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)
