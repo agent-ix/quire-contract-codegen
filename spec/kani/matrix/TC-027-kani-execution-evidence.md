@@ -310,7 +310,9 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    `-Z function-contracts`, the option present in this harness's proof-time
    `adapter_options`. Keep the mutant's separate unconstrained Kani Falsified
    run and in-domain playback under TC-025 step 11; neither this native test
-   nor a stand-in supplies that proof verdict (FR-015-AC-41, FR-017-AC-60).
+   nor a stand-in supplies that proof verdict (FR-015-AC-41, FR-017-AC-60). For the Int[0,1000]
+   clause the accepted stand-in for that verdict is the exhaustive concrete enumeration of TC-025
+   step 51 (FR-015-AC-132), enumeration evidence and not a proof (FR-017-AC-64).
 
 ## Expected Results
 
