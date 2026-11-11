@@ -53,3 +53,5 @@ FAIL ON MEDIUMS. The NaN, invalid and charge-denial cases are delegated to the o
 | FND-002 | fixed | verified at be0daf1b |
 | FND-003 | still-open | New this round: AC-79 closed set omits FormMismatch, which generation reports before BodyMismatch for a node of another semantic form. |
 | FND-004 | still-open | New this round: AC-72 places the float_rounding bound on the parameters; derivation reads the result bound (AC-21). |
+| FND-003 | fixed | verified at db09f7ad (round 2) |
+| FND-004 | fixed | verified at db09f7ad (round 2) |

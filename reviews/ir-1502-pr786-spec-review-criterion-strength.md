@@ -59,3 +59,4 @@ FAIL ON MEDIUMS. Controls (a) through (d) can fail at binary32, and each names a
 | FND-002 | fixed | verified at be0daf1b |
 | FND-003 | fixed | verified at be0daf1b |
 | FND-004 | still-open | New this round: AC-77 attributes the width stop to the owner; it is CG's rendered OperandWidth stop. |
+| FND-004 | fixed | verified at db09f7ad (round 2) |
