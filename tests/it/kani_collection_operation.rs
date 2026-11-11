@@ -7,7 +7,8 @@ use quire_contract_codegen::{
     negotiate_kani_obligations, CollectionKindIdentity, KaniObligationOutcome,
     KaniObligationRequest, KaniV2ClauseObligationHarness, ObligationDisposition, ObligationItem,
     ObligationKind, RequirementOccurrence, UnsupportedObligation, V2ClauseClaimField,
-    V2ClauseObligationClaim, V2ClauseObligationRecord, V2ClauseParameter, V2ClauseRead,
+    V2ClauseElementDomain, V2ClauseObligationClaim, V2ClauseObligationRecord, V2ClauseParameter,
+    V2ClauseRead,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -1076,6 +1077,14 @@ fn hand_written_claim(
         field_name: field.to_owned(),
         minimum,
         maximum,
+        element: None,
+    };
+    let sequence = |field: &str, minimum: i64, maximum: i64, low: i64, high: i64| V2ClauseRead {
+        element: Some(V2ClauseElementDomain {
+            minimum: low,
+            maximum: high,
+        }),
+        ..read(field, minimum, maximum)
     };
     let parameter = |name: &str, minimum: i64, maximum: i64| V2ClauseParameter {
         name: name.to_owned(),
@@ -1097,7 +1106,7 @@ fn hand_written_claim(
             kind: ObligationKind::Postcondition,
             parameters: vec![parameter("limit", 0, 3), parameter("enabled", 0, 1)],
             state_reads: vec![
-                read("z_items", 0, 3),
+                sequence("z_items", 0, 3, 0, 3),
                 read("a_unread", 0, 1),
                 read("m_count", 0, 3),
             ],
@@ -1138,7 +1147,7 @@ fn field_of(outcome: &KaniObligationOutcome) -> Option<V2ClauseClaimField> {
 }
 
 #[test]
-#[trace("TC-025", "FR-015-AC-48")]
+#[trace("TC-025", "FR-015-AC-48", "FR-015-AC-134")]
 fn whole_object_claim_is_carried_and_every_record_member_is_cross_checked() {
     let package = fixture(&document(), "");
     let [clause] = clauses(&package).try_into().expect("one postcondition");
@@ -1219,4 +1228,225 @@ fn a_record_mismatch_is_reported_ahead_of_a_render_refusal() {
     changed.record.parameters[1].maximum = 2;
     let outcome = collection_outcome(&package, &clause, &changed, 1);
     assert_eq!(field_of(&outcome), Some(V2ClauseClaimField::Parameters));
+}
+
+/// The selected clause's state reads, from a record mismatch's `selected` diagnostic.
+fn selected_reads(outcome: &KaniObligationOutcome) -> Option<Vec<V2ClauseRead>> {
+    match &outcome.records()[0].disposition {
+        ObligationDisposition::Unsupported {
+            reason:
+                UnsupportedObligation::V2ClauseClaimMismatch {
+                    selected: Some(selected),
+                    ..
+                },
+        } => Some(selected.state_reads.clone()),
+        _ => None,
+    }
+}
+
+fn assert_refused_on_state_reads(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    changed: &V2ClauseObligationClaim,
+    what: &str,
+) -> Vec<V2ClauseRead> {
+    let outcome = collection_outcome(package, clause, changed, 8);
+    assert_eq!(
+        field_of(&outcome),
+        Some(V2ClauseClaimField::StateReads),
+        "{what}"
+    );
+    assert!(
+        matches!(
+            &outcome,
+            KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.is_empty()
+        ),
+        "{what}: no harness"
+    );
+    selected_reads(&outcome).expect("the refusal carries the selected reads")
+}
+
+/// The base document with `z_items` (cardinality 0..=3) holding elements `Int[1, 9]`: an element
+/// domain with a nonzero minimum and a range distinct from the cardinality range.
+fn element_document() -> Value {
+    let mut doc = document();
+    let item = "ix://ir1091.operation/domain/Item";
+    let mut ty = doc["types"][0].clone();
+    ty["identity"] = json!(item);
+    ty["displayName"] = json!("Item");
+    ty["origin"] = origin(item);
+    ty["constraints"][0]["identity"] = json!(format!("{item}/min"));
+    ty["constraints"][0]["operands"]["value"] = json!("1");
+    ty["constraints"][1]["identity"] = json!(format!("{item}/max"));
+    ty["constraints"][1]["operands"]["value"] = json!("9");
+    doc["types"].as_array_mut().unwrap().push(ty);
+    doc["types"][1]["fields"][0]["typeRef"] = json!(item);
+    doc
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-133")]
+fn sequence_field_read_domain_is_cardinality_range_plus_element_domain() {
+    let package = fixture(&element_document(), "");
+    let [clause] = clauses(&package).try_into().expect("one postcondition");
+    let mut claim = hand_written_claim(&package, &clause);
+    let element = |low: i64, high: i64| {
+        Some(V2ClauseElementDomain {
+            minimum: low,
+            maximum: high,
+        })
+    };
+    // The record is written by hand: `z_items` has cardinality 0..=3 and elements Int[1, 9];
+    // the scalar reads carry no element domain.
+    claim.record.state_reads[0].element = element(1, 9);
+    assert_eq!(claim.record.state_reads.len(), 3);
+    assert_eq!(
+        (
+            claim.record.state_reads[0].minimum,
+            claim.record.state_reads[0].maximum
+        ),
+        (0, 3)
+    );
+    assert!(claim.record.state_reads[1..]
+        .iter()
+        .all(|read| read.element.is_none()));
+
+    // (a) control: the matching record is admitted and a harness is generated.
+    assert!(matches!(
+        collection_outcome(&package, &clause, &claim, 8),
+        KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.len() == 1
+    ));
+
+    // (b) element maximum 9 -> 8, cardinality unchanged.
+    let mut maximum = claim.clone();
+    maximum.record.state_reads[0].element = element(1, 8);
+    let selected = assert_refused_on_state_reads(&package, &clause, &maximum, "element maximum");
+    // The refusal's selected diagnostic carries the element domain (nonzero minimum, range
+    // distinct from the cardinality range), and none for a scalar.
+    assert_eq!(selected[0].element, element(1, 9));
+    assert_eq!(
+        (selected[0].minimum, selected[0].maximum),
+        (0, 3),
+        "cardinality range is kept apart"
+    );
+    assert!(selected[1..].iter().all(|read| read.element.is_none()));
+
+    // (c) element Int[1, 9] -> the Boolean pair, cardinality unchanged.
+    let mut boolean = claim.clone();
+    boolean.record.state_reads[0].element = element(0, 1);
+    assert_refused_on_state_reads(&package, &clause, &boolean, "Boolean element");
+
+    // (d) cardinality maximum 3 -> 2, element domain unchanged.
+    let mut cardinality = claim.clone();
+    cardinality.record.state_reads[0].maximum = 2;
+    assert_refused_on_state_reads(&package, &clause, &cardinality, "cardinality");
+
+    // (f) element minimum 1 -> 2, maximum unchanged.
+    let mut minimum = claim.clone();
+    minimum.record.state_reads[0].element = element(2, 9);
+    assert_refused_on_state_reads(&package, &clause, &minimum, "element minimum");
+
+    // (g) the cardinality range copied into the element domain.
+    let mut copied = claim.clone();
+    copied.record.state_reads[0].element = element(0, 3);
+    assert_refused_on_state_reads(&package, &clause, &copied, "cardinality copied as element");
+
+    // A sequence field recorded without an element domain, and a scalar field given one.
+    let mut missing = claim.clone();
+    missing.record.state_reads[0].element = None;
+    assert_refused_on_state_reads(&package, &clause, &missing, "missing element domain");
+    let mut invented = claim.clone();
+    invented.record.state_reads[2].element = element(1, 9);
+    assert_refused_on_state_reads(&package, &clause, &invented, "scalar given an element");
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-133")]
+fn boolean_element_domain_is_the_pair_zero_and_one() {
+    let mut doc = document();
+    doc["types"][1]["fields"][0]["typeRef"] = json!("ix://quire/native/Boolean");
+    doc["types"][1]["fields"][0]["multiplicity"]["upper"] = json!(2);
+    let package = fixture_with_body(&doc, "", "exists(flag in self.z_items: flag != false)");
+    let [clause] = clauses(&package).try_into().expect("one postcondition");
+    let mut claim = hand_written_claim(&package, &clause);
+    claim.record.state_reads[0].maximum = 2;
+    claim.record.state_reads[0].element = Some(V2ClauseElementDomain {
+        minimum: 0,
+        maximum: 1,
+    });
+    assert!(matches!(
+        collection_outcome(&package, &clause, &claim, 8),
+        KaniObligationOutcome::Emitted { v2_clause_harnesses, .. } if v2_clause_harnesses.len() == 1
+    ));
+    let mut wider = claim.clone();
+    wider.record.state_reads[0].element = Some(V2ClauseElementDomain {
+        minimum: 0,
+        maximum: 2,
+    });
+    assert_refused_on_state_reads(&package, &clause, &wider, "wider than the Boolean pair");
+}
+
+/// The base document plus a drawn field `grid` of type `grid_type` (a sequence type when nested).
+fn document_with_grid(nested: bool) -> Value {
+    let mut doc = document();
+    let grid = "ix://ir1091.operation/domain/Grid";
+    if nested {
+        doc["types"].as_array_mut().unwrap().push(json!({"identity":grid,"displayName":"Grid","kind":"sequence","items":SMALL,"roles":[],"origin":origin(grid),"extensions":[],"unknownPolicy":"reject","constraints":[]}));
+    }
+    let mut field = doc["types"][1]["fields"][1].clone();
+    field["identity"] = json!(format!("{OBJECT}/grid"));
+    field["name"] = json!("grid");
+    field["typeRef"] = json!(if nested { grid } else { SMALL });
+    field["multiplicity"] = json!({"lower":0,"upper":2,"ordered":true,"unique":false});
+    doc["types"][1]["fields"]
+        .as_array_mut()
+        .unwrap()
+        .push(field);
+    doc
+}
+
+fn refusal_reason(
+    package: &CheckedPackageV2,
+) -> Option<quire_contract_codegen::CollectionUnsupportedReason> {
+    let [clause] = clauses(package).try_into().expect("one postcondition");
+    // A hand-written record that omits `grid`: a record comparison would name StateReads.
+    let claim = hand_written_claim(package, &clause);
+    match &collection_outcome(package, &clause, &claim, 8).records()[0].disposition {
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered { reason, .. },
+        } => Some(reason.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+#[trace("TC-025", "FR-015-AC-133")]
+fn nested_sequences_stay_refused_ahead_of_any_record_comparison() {
+    use quire_contract_codegen::CollectionUnsupportedReason as Reason;
+    // Control: a one-level `grid` is a drawn field that this record omits, so it is compared
+    // and refused as a record mismatch, not as an unsupported shape.
+    let one_level = fixture(&document_with_grid(false), "");
+    let [clause] = clauses(&one_level).try_into().expect("one postcondition");
+    let claim = hand_written_claim(&one_level, &clause);
+    assert_eq!(
+        field_of(&collection_outcome(&one_level, &clause, &claim, 8)),
+        Some(V2ClauseClaimField::StateReads)
+    );
+    assert_eq!(refusal_reason(&one_level), None);
+    // (e) a drawn field whose element is itself a sequence: UnsupportedObjectState.
+    let nested = fixture(&document_with_grid(true), "");
+    assert_eq!(
+        refusal_reason(&nested),
+        Some(Reason::UnsupportedObjectState)
+    );
+    // (e2) the quantified field has a sequence element: UnsupportedFieldType.
+    let quantified = fixture_with_body(
+        &document_with_grid(true),
+        "",
+        "forall(row in self.grid: true)",
+    );
+    assert_eq!(
+        refusal_reason(&quantified),
+        Some(Reason::UnsupportedFieldType)
+    );
 }

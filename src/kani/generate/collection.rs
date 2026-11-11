@@ -31,7 +31,8 @@ use crate::{
             CollectionPreconditionIdentity, CollectionPredicateIdentity,
             KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
             ProofDependencySnapshot, ScalarIntegerRepresentation, SymbolicBounds,
-            V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead, V2ClauseSelection,
+            V2ClauseElementDomain, V2ClauseObligationIdentity, V2ClauseParameter, V2ClauseRead,
+            V2ClauseSelection,
         },
     },
 };
@@ -622,7 +623,8 @@ pub(super) fn render_collection_operation(
 
 impl LoweredCollectionClaim {
     /// The whole-object clause's parameters and state reads, as a claim states them. A
-    /// sequence-valued field's domain is its inclusive cardinality range (IR-1515).
+    /// sequence-valued field's domain is its inclusive cardinality range plus its element domain
+    /// (FR-015-AC-133).
     pub(super) fn operation_selection(&self) -> Option<V2ClauseSelection> {
         let context = &self.operation.as_ref()?.spec.identity;
         Some(operation_selected_reads(context))
@@ -654,23 +656,40 @@ fn operation_selected_reads(
             .fields
             .iter()
             .map(|field| {
-                let (minimum, maximum) = match &field.bounds {
-                    SymbolicBounds::Boolean => (0, 1),
-                    SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum),
+                let (minimum, maximum, element) = match &field.bounds {
+                    SymbolicBounds::Boolean => (0, 1, None),
+                    SymbolicBounds::Integer { minimum, maximum } => (*minimum, *maximum, None),
                     SymbolicBounds::Sequence {
                         minimum_length,
                         maximum_length,
-                        ..
-                    } => (*minimum_length, *maximum_length),
+                        element,
+                    } => (*minimum_length, *maximum_length, element_domain(element)),
                 };
                 V2ClauseRead {
                     declaring_node_id: field.declaring_node_id.clone(),
                     field_name: field.field_name.clone(),
                     minimum,
                     maximum,
+                    element,
                 }
             })
             .collect(),
+    }
+}
+
+/// The inclusive element domain of a one-level sequence field. A nested sequence element is
+/// refused before any record comparison (`UnsupportedObjectState`), so it has no domain here.
+fn element_domain(element: &SymbolicBounds) -> Option<V2ClauseElementDomain> {
+    match element {
+        SymbolicBounds::Boolean => Some(V2ClauseElementDomain {
+            minimum: 0,
+            maximum: 1,
+        }),
+        SymbolicBounds::Integer { minimum, maximum } => Some(V2ClauseElementDomain {
+            minimum: *minimum,
+            maximum: *maximum,
+        }),
+        SymbolicBounds::Sequence { .. } => None,
     }
 }
 
