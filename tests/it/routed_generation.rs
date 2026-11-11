@@ -25,6 +25,7 @@ use quire_contract_model::{
 
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
+use crate::common::requirements;
 use crate::kani_obligations::{package, routed_scalar_package, scalar_package};
 
 fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
@@ -95,10 +96,10 @@ struct Fixture {
     unrendered: CheckedNodeId,
 }
 
-struct AdmittedRoutingInput<'a> {
-    source: &'a CheckedPackageV2,
-    package: ContractPackageV1,
-    positions: Vec<ContractRequestPosition>,
+pub(crate) struct AdmittedRoutingInput<'a> {
+    pub(crate) source: &'a CheckedPackageV2,
+    pub(crate) package: ContractPackageV1,
+    pub(crate) positions: Vec<ContractRequestPosition>,
 }
 
 fn generate_routed(
@@ -128,13 +129,21 @@ fn generate_routed(
             },
         )
         .collect::<Vec<_>>();
-    generate_routed_impl(source, package, positions, &bound, contexts)
+    let requirements = requirements::project(source, positions);
+    let records = requirements::records(&requirements);
+    generate_routed_impl(
+        source,
+        package,
+        positions,
+        &requirements::bind(bound, &requirements),
+        &requirements::with_records(contexts, &records),
+    )
 }
 
 /// Lower the complete indexed driver request once and read its FR-330 package.
 /// Unrouted positions remain in accounting; sparse routed indexes are still
 /// their original driver indexes, not positions in the routed subset.
-fn admitted_routing_input<'a>(
+pub(crate) fn admitted_routing_input<'a>(
     checked: &'a CheckedPackageV2,
     routed: &[RoutedGenerationItem],
 ) -> AdmittedRoutingInput<'a> {
@@ -363,7 +372,7 @@ fn kani_backend() -> Candidate {
     }
 }
 
-fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem {
+pub(crate) fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem {
     RoutedGenerationItem::from_descriptor(
         request_index,
         node_id.clone(),
@@ -539,12 +548,13 @@ fn routed_item_constructor_refuses_mismatched_and_unknown_linked_descriptors() {
     );
 }
 
-fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
+pub(crate) fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
             ceilings: crate::common::proof_ceilings::proof_ceilings(),
             subject_path,
             unwind,
+            requirement_records: &requirements::NO_RECORDS,
         }),
     }
 }
@@ -609,14 +619,21 @@ fn routed_scalar_selection_must_match_admitted_driver_position() {
         input.package.wire().package.source,
         other_package.package.wire().package.source
     );
-    let bound_elsewhere =
-        route(0, &fixture.rendered[0]).with_scalar_selection(&other_package.package, selection);
+    let requirement = requirements::requirement_for(input.source, &selection)
+        .expect("the fixture selects an own result");
+    let records = requirements::records(&std::collections::BTreeMap::from([(
+        0,
+        requirement.clone(),
+    )]));
+    let bound_elsewhere = route(0, &fixture.rendered[0])
+        .with_scalar_selection(&other_package.package, selection)
+        .with_requirement(requirement);
     let accepted = generate_routed_impl(
         input.source,
         &input.package,
         &input.positions,
         std::slice::from_ref(&bound_elsewhere),
-        &context,
+        &requirements::with_records(&context, &records),
     )
     .expect("the same source provenance and exact result selection remain valid");
     assert_eq!(accepted.items.len(), 1);
@@ -685,6 +702,7 @@ fn fr015(
     let items = nodes
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &fixture.package,
             package: &admitted.package,
             claim_map,
@@ -724,7 +742,9 @@ fn fr015(
     }
 }
 
-fn kani_parts(output: &KindOutput) -> (&ObligationRecord, Option<&KaniScalarObligationHarness>) {
+pub(crate) fn kani_parts(
+    output: &KindOutput,
+) -> (&ObligationRecord, Option<&KaniScalarObligationHarness>) {
     match output {
         KindOutput::Kani { record, harness } => (record, harness.as_deref()),
         KindOutput::PackageRefused => panic!("expected Kani output, got IR refusal"),
@@ -2571,6 +2591,136 @@ fn tc_033_unauthenticated_view_refusal_uses_lowest_request_index() {
             }) if node_id == *division
         ));
     }
+}
+
+/// The record checks run before the per-item operation-view check, so a requirement with no
+/// record on the view-independent item refuses before the view-dependent item can.
+#[trace("FR-022-AC-37", "TC-033")]
+#[test]
+fn tc_033_record_refusals_precede_the_unauthenticated_view_refusal() {
+    let derived = derived();
+    let division = &derived
+        .package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| operation_identity(&node.body) == Some("quire.op.integer.div"))
+        .expect("genuine integer division")
+        .node_id;
+    let integer = derived.generated.first().expect("genuine integer add");
+    let routed = [route(0, integer), route(1, division)];
+    let input = admitted_routing_input(&derived.package, &routed);
+    let roots = input
+        .positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = derived
+        .package
+        .lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain V1 package must admit: {other:?}"),
+    };
+    let selections = input
+        .positions
+        .iter()
+        .filter_map(|position| match position {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let bind = |index: usize, with_requirement: bool| {
+        let item = routed[index]
+            .clone()
+            .with_scalar_selection(&plain, selections[index].clone());
+        match requirements::requirement_for(input.source, &selections[index]) {
+            Some(requirement) if with_requirement => item.with_requirement(requirement),
+            _ => item,
+        }
+    };
+    let contexts = kani_context("crate::subject", 1);
+
+    // The integer item is `OwnResult` and carries a requirement with no record.
+    assert!(matches!(
+        selections[0],
+        ContractDriverResultSelection::OwnResult { .. }
+    ));
+    let requirement = requirements::requirement_for(input.source, &selections[0])
+        .expect("an own-result requirement");
+    assert_eq!(
+        generate_routed_impl(
+            input.source,
+            &plain,
+            &input.positions,
+            &[bind(0, true), bind(1, false)],
+            &contexts,
+        ),
+        Err(RoutedGenerationError::RequirementRecord {
+            request_index: 0,
+            occurrence: Some(requirement.occurrence.clone()),
+            mismatch: Box::new(quire_contract_codegen::RequirementRecordMismatch::RecordMissing),
+        })
+    );
+
+    // With its record present, only the view-dependent item refuses.
+    let projected = requirements::project(input.source, &input.positions);
+    let records = requirements::records(&projected);
+    assert!(matches!(
+        generate_routed_impl(
+            input.source,
+            &plain,
+            &input.positions,
+            &[bind(0, true), bind(1, true)],
+            &requirements::with_records(&contexts, &records),
+        ),
+        Err(RoutedGenerationError::UnauthenticatedOperationView {
+            request_index: 1,
+            ..
+        })
+    ));
+
+    // The view-independent item routed `NotApplicable` while carrying a requirement refuses as
+    // `OccurrenceNotSelected` at its lower index, ahead of the division's view refusal.
+    let mut positions = input.positions.clone();
+    let mut driver_seen = 0;
+    for position in &mut positions {
+        if let ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } = position
+        {
+            if driver_seen == 0 {
+                *result_selection = ContractDriverResultSelection::NotApplicable;
+            }
+            driver_seen += 1;
+        }
+    }
+    let not_applicable = routed[0]
+        .clone()
+        .with_scalar_selection(&plain, ContractDriverResultSelection::NotApplicable)
+        .with_requirement(requirement.clone());
+    assert_eq!(
+        generate_routed_impl(
+            input.source,
+            &plain,
+            &positions,
+            &[not_applicable, bind(1, true)],
+            &requirements::with_records(&contexts, &records),
+        ),
+        Err(RoutedGenerationError::RequirementRecord {
+            request_index: 0,
+            occurrence: Some(requirement.occurrence.clone()),
+            mismatch: Box::new(
+                quire_contract_codegen::RequirementRecordMismatch::OccurrenceNotSelected
+            ),
+        })
+    );
 }
 
 /// `RoutedGeneration.claim_map` holds the four generated package claims and the

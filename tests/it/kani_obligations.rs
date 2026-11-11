@@ -20,7 +20,8 @@ use quire_contract_codegen as scalar_fixture_types;
 use quire_contract_codegen::{
     generate_routed, Artifact, BackendDescriptor, Candidate, ContractDriverResultSelection,
     ContractRequestPosition, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
-    RoutedGenerationItem,
+    RequirementOccurrence, RequirementRecordInput, RequirementRecords, RoutedGenerationItem,
+    RoutedRequirement,
 };
 use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 
@@ -111,6 +112,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let node = ids.resolve(&code_id(1001));
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -339,6 +341,7 @@ pub(super) fn boolean_implies_scalars_from(
     let items = nodes
         .iter()
         .map(|node| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &package,
             package: &admitted,
             claim_map: &oracles.claim_map,
@@ -591,6 +594,7 @@ fn scalar_records(
     let items = ids
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: package,
             package: &admitted,
             claim_map,
@@ -622,6 +626,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     let node_1001 = ids.resolve(&code_id(1001));
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -681,6 +686,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let node_1001 = ids.resolve(&code_id(1001));
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -811,6 +817,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
     let items = generated
         .iter()
         .map(|claim| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -945,6 +952,7 @@ fn tc_025_scalar_source_lookup_preserves_multiple_occurrences_per_node() {
     let items = nodes
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &checked,
             package: &admitted,
             claim_map: &claim_map,
@@ -1004,6 +1012,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
     let items = node_ids
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1035,6 +1044,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
     let control_admitted = admitted_scalar_claims(&control_package, &control_claims);
     let control_node = control_ids.resolve(&code_id(1001));
     let control_item = ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &control_package,
         package: &control_admitted,
         claim_map: &control_claims,
@@ -1117,6 +1127,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
 
     let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &package,
         package: &admitted,
         claim_map: &claim_map,
@@ -1238,6 +1249,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
 
     let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &package,
         package: &admitted,
         claim_map: &claim_map,
@@ -1309,6 +1321,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
         let items = generated
             .iter()
             .map(|claim| ObligationItem::ScalarClaim {
+                path_condition: &[],
                 source: &scalar,
                 package: &admitted,
                 claim_map: &claim_map,
@@ -1377,6 +1390,7 @@ fn admitted_integer_division_is_unrendered_and_emits_no_harness() {
     );
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -1428,27 +1442,87 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
         }
     );
     let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
-    let items = [ObligationItem::ScalarClaim {
-        source: &package,
-        package: &admitted,
-        claim_map: &oracles.claim_map,
-        node_id: &mismatched,
-        claim_index: claim_index(&oracles.claim_map, &mismatched),
-        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
-    let (records, scalar_harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    assert!(scalar_harnesses.is_empty());
-    match unsupported(&records[0]) {
-        UnsupportedObligation::CallerDeclaredOperation {
-            operation_identity,
-            blocked_on,
-            ..
-        } => {
-            assert_eq!(operation_identity, "integer.add domain=[-1000,1000]");
-            assert_eq!(*blocked_on, UpstreamBlocker::OperationIdentityNotConsumed);
+    // A guard changes neither the refusal nor its precedence over the guard refusal.
+    for guarded in [false, true] {
+        let path_condition = if guarded {
+            vec![quire_contract_codegen::RequirementGuard {
+                occurrence: quire_contract_codegen::RequirementOccurrence {
+                    node_id: mismatched.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                holds: true,
+            }]
+        } else {
+            Vec::new()
+        };
+        let items = [ObligationItem::ScalarClaim {
+            path_condition: &path_condition,
+            source: &package,
+            package: &admitted,
+            claim_map: &oracles.claim_map,
+            node_id: &mismatched,
+            claim_index: claim_index(&oracles.claim_map, &mismatched),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        }];
+        let (records, scalar_harnesses) =
+            emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+        assert!(scalar_harnesses.is_empty());
+        match unsupported(&records[0]) {
+            UnsupportedObligation::CallerDeclaredOperation {
+                operation_identity,
+                blocked_on,
+                ..
+            } => {
+                assert_eq!(operation_identity, "integer.add domain=[-1000,1000]");
+                assert_eq!(*blocked_on, UpstreamBlocker::OperationIdentityNotConsumed);
+            }
+            other => panic!("expected CallerDeclaredOperation, got {other:?}"),
         }
-        other => panic!("expected CallerDeclaredOperation, got {other:?}"),
+    }
+}
+
+/// An unsatisfiable bound is settled while the claim's bounds are derived, before any guard is
+/// considered, so a guarded item over it keeps `unsatisfiable_bound`.
+#[trace("FR-022-AC-37", "TC-033")]
+#[test]
+fn tc_033_an_unsatisfiable_bound_precedes_the_guard_refusal() {
+    let (package, claim_map, ids) = scalar_package();
+    let node = ids.resolve(&code_id(UNSATISFIABLE));
+    let admitted = admitted_scalar_claims(&package, &claim_map);
+    for guarded in [false, true] {
+        let path_condition = if guarded {
+            vec![quire_contract_codegen::RequirementGuard {
+                occurrence: quire_contract_codegen::RequirementOccurrence {
+                    node_id: node.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                holds: true,
+            }]
+        } else {
+            Vec::new()
+        };
+        let items = [ObligationItem::ScalarClaim {
+            path_condition: &path_condition,
+            source: &package,
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id: &node,
+            claim_index: claim_index(&claim_map, &node),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        }];
+        let (records, harnesses) =
+            emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+        assert!(harnesses.is_empty());
+        assert!(
+            matches!(
+                unsupported(&records[0]),
+                UnsupportedObligation::UnsatisfiableBound { .. }
+            ),
+            "guarded={guarded}: {:?}",
+            records[0]
+        );
     }
 }
 
@@ -1468,6 +1542,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let unbounded = ids.resolve(&code_id(UNBOUNDED));
     let items = [
         ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1476,6 +1551,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             result_selection: &ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1484,6 +1560,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             result_selection: &ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1492,6 +1569,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             result_selection: &ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
+            path_condition: &[],
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1560,6 +1638,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let node = code_id(1001);
     let admitted = admitted_scalar_claims(&scalar, &foreign_map);
     let items = [ObligationItem::ScalarClaim {
+        path_condition: &[],
         source: &scalar,
         package: &admitted,
         claim_map: &foreign_map,

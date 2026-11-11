@@ -328,9 +328,8 @@ diagnostic-string parsing.
 
 ## Scoped evidence status (IR-1316)
 
-FR-022-AC-26/27/28 and AC-31 to AC-38 are Planned (IR-304): the production routed item carries
-no typed QSL occurrence-record/path-condition intake. Slice (a) covers AC-26, AC-28 and AC-36 to
-AC-38; slice (b) covers AC-27 and AC-31 to AC-35 and retires AC-38 (FR-022, "Scoped evidence status"). Same-node selected-bound
-controls do not establish record-key association, ordered guards or typed missing/mismatched-record
-refusal. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
+FR-022-AC-26, AC-28, AC-36 and AC-38 are covered (IR-304 slice (a)), and AC-37 is covered except
+its two-guard `j` case. AC-27 and AC-31 to AC-35, with the two-guard case of AC-37, are Planned
+for slice (b), which also retires AC-38 (FR-022, "Scoped evidence status"). Same-node selected-bound
+controls alone do not establish ordered guards, which slice (b) lowers. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
 recorded in FR-022 and receives no backend-execution credit.

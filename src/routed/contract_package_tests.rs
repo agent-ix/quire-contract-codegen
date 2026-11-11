@@ -14,6 +14,9 @@ mod tests {
         routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
         PackageItem, PackageItems, PackageRequestError,
     };
+    use crate::core::requirement::{
+        RequirementOccurrence, RequirementRecordInput, RequirementRecords, RoutedRequirement,
+    };
     use crate::routed::capability::{
         negotiate_backend_provider, negotiate_contract_package, BackendDescriptor,
         BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, ContractItemSettlement,
@@ -21,8 +24,8 @@ mod tests {
         RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
     };
     use crate::routed::generate::{
-        generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
-        RoutedGenerationItem,
+        generate_routed as generate_routed_impl, GenerationContexts, KaniGenerationContext,
+        KindOutput, RoutedGeneration, RoutedGenerationError, RoutedGenerationItem,
     };
     use ix_trace_rs::trace;
     use qsl_replay::{
@@ -39,6 +42,98 @@ mod tests {
     };
 
     use super::exact_function_fixture;
+
+    /// The explicit statement that a package has no requirement record.
+    static NO_RECORDS: RequirementRecords =
+        RequirementRecords::new(std::collections::BTreeMap::new());
+
+    /// The QSL requirement item and record for every `OwnResult` driver position: the result
+    /// bound is the semantic type of the selected conversion, or of the application when there is
+    /// none, and the path condition is empty.
+    fn projected_requirements(
+        checked: &CheckedPackageV2,
+        positions: &[ContractRequestPosition],
+    ) -> std::collections::BTreeMap<usize, RoutedRequirement> {
+        let semantic_type = |node: &CheckedNodeId| {
+            checked
+                .resolved_graph()
+                .nodes
+                .iter()
+                .find(|candidate| &candidate.node_id == node)
+                .map(|candidate| candidate.semantic_type.clone())
+        };
+        positions
+            .iter()
+            .filter(|position| !matches!(position, ContractRequestPosition::ContextRoot { .. }))
+            .enumerate()
+            .filter_map(|(index, position)| {
+                let ContractRequestPosition::DriverItem {
+                    result_selection:
+                        ContractDriverResultSelection::OwnResult {
+                            application,
+                            conversion,
+                        },
+                    ..
+                } = position
+                else {
+                    return None;
+                };
+                let result_bound =
+                    semantic_type(&conversion.as_ref().unwrap_or(application).node_id)?;
+                Some((
+                    index,
+                    RoutedRequirement {
+                        occurrence: RequirementOccurrence::from(application),
+                        result_bound,
+                        conversion_context: conversion.as_ref().map(RequirementOccurrence::from),
+                        path_condition: Vec::new(),
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// `generate_routed` with each `OwnResult` item carrying its projected requirement and the
+    /// context reading the matching records.
+    fn generate_routed(
+        source: &CheckedPackageV2,
+        package: &quire_contract_model::ContractPackageV1,
+        positions: &[ContractRequestPosition],
+        routed: &[RoutedGenerationItem],
+        contexts: &GenerationContexts<'_>,
+    ) -> Result<RoutedGeneration, RoutedGenerationError> {
+        let requirements = projected_requirements(source, positions);
+        let records = RequirementRecords::new(
+            requirements
+                .values()
+                .map(|requirement| {
+                    (
+                        requirement.occurrence.clone(),
+                        RequirementRecordInput {
+                            result_bound: requirement.result_bound.clone(),
+                            conversion_context: requirement.conversion_context.clone(),
+                            path_condition: requirement.path_condition.clone(),
+                        },
+                    )
+                })
+                .collect(),
+        );
+        let bound = routed
+            .iter()
+            .cloned()
+            .map(|item| match requirements.get(&item.request_index) {
+                Some(requirement) => item.with_requirement(requirement.clone()),
+                None => item,
+            })
+            .collect::<Vec<_>>();
+        let contexts = GenerationContexts {
+            kani: contexts.kani.map(|kani| KaniGenerationContext {
+                requirement_records: &records,
+                ..kani
+            }),
+        };
+        generate_routed_impl(source, package, positions, &bound, &contexts)
+    }
 
     fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
         let CheckedTerm::Application { operation, .. } = &node.body else {
@@ -1863,6 +1958,7 @@ mod tests {
                     },
                     subject_path: "crate::subject",
                     unwind: 1,
+                    requirement_records: &NO_RECORDS,
                 }),
             };
             let mut positions = drivers(&requested);
@@ -2390,6 +2486,7 @@ mod tests {
                     },
                     subject_path: "crate::subject",
                     unwind: 1,
+                    requirement_records: &NO_RECORDS,
                 }),
             },
         )
@@ -2452,6 +2549,7 @@ mod tests {
                         },
                         subject_path: "crate::subject",
                         unwind: 1,
+                        requirement_records: &NO_RECORDS,
                     }),
                 },
             ),
@@ -2475,6 +2573,7 @@ mod tests {
                     },
                     subject_path: "crate::subject",
                     unwind: 1,
+                    requirement_records: &NO_RECORDS,
                 }),
             },
         )
@@ -3312,6 +3411,7 @@ mod tests {
                 },
                 subject_path: "crate::subject",
                 unwind: 1,
+                requirement_records: &NO_RECORDS,
             }),
         };
         let generated = generate_routed(&checked, &admitted, &positions, &routed, &contexts)

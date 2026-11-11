@@ -1,6 +1,9 @@
 //! Private orchestration controls for scalar-native cleanup after real execution.
 #[path = "../exact_scalar_support/package.rs"]
 mod package;
+use crate::core::requirement::{
+    RequirementOccurrence, RequirementRecordInput, RequirementRecords, RoutedRequirement,
+};
 use crate::{
     core::artifact::Artifact,
     kani::{

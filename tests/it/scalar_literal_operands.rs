@@ -130,6 +130,12 @@ fn assert_generated(
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR admits the routed scalar package: {other:?}"),
     };
+    let requirement = crate::common::requirements::requirement_for(package, &selection)
+        .expect("an own-result requirement");
+    let records = crate::common::requirements::records(&std::collections::BTreeMap::from([(
+        0,
+        requirement.clone(),
+    )]));
     let route = RoutedGenerationItem::from_descriptor(
         0,
         node.node_id.clone(),
@@ -145,7 +151,8 @@ fn assert_generated(
         },
     )
     .unwrap()
-    .with_scalar_selection(&admitted, selection);
+    .with_scalar_selection(&admitted, selection.clone())
+    .with_requirement(requirement);
     let generated = generate_routed(
         package,
         &admitted,
@@ -156,6 +163,7 @@ fn assert_generated(
                 ceilings: proof_ceilings(),
                 subject_path: "crate::subject",
                 unwind: 3,
+                requirement_records: &records,
             }),
         },
     )

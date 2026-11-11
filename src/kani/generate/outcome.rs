@@ -12,6 +12,7 @@ use serde::{Serialize, Serializer};
 use crate::{
     core::contract_package::ContractDriverResultSelection,
     core::identity::HarnessSymbol,
+    core::requirement::{RequirementGuard, RequirementOccurrence},
     kani::identity::{
         KaniCollectionObligationHarness, KaniScalarObligationHarness,
         KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness,
@@ -117,6 +118,8 @@ pub enum ObligationItem<'a> {
         claim_index: usize,
         /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
         result_selection: &'a ContractDriverResultSelection,
+        /// The occurrence's path condition, outermost guard first; empty for a direct claim.
+        path_condition: &'a [RequirementGuard],
     },
     /// One selected forall/exists occurrence in an admitted V2 function or state-clause body.
     /// Only invariant state clauses currently have standalone collection proofs.
@@ -360,6 +363,14 @@ pub enum UnsupportedObligation {
         /// The greatest exact result over the operand ranges, canonical decimal.
         reachable_upper: String,
     },
+    /// A guard of the item's path condition is not lowered into the harness, so the harness
+    /// would test the claim off its path. FR-022 owns when this arises.
+    PathGuardNotLowered {
+        /// The first guard, outermost first, that is not lowered.
+        guard: RequirementOccurrence,
+        /// Why the guard is not lowered.
+        reason: PathGuardRefusal,
+    },
     /// A reachable node family has no finite encoding.
     NoFiniteEncoding {
         /// The node.
@@ -417,6 +428,15 @@ pub enum UnsupportedObligation {
         /// The engine's refusal.
         refusal: StateFrameRefusal,
     },
+}
+
+/// Why a guard of an item's path condition is not lowered.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathGuardRefusal {
+    /// Guard lowering is not implemented yet, so no guard of any form is lowered.
+    GuardLoweringNotImplemented,
 }
 
 /// Why an item is not a valid request.
