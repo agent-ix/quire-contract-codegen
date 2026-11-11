@@ -66,3 +66,4 @@ CHANGES REQUIRED. Status, premise table, controls and consequences are consisten
 | FND-003 | fixed | fixed in ac5beeeb |
 | FND-004 | fixed | fixed in ac5beeeb |
 | FND-005 | fixed | fixed in ac5beeeb |
+| FND-006 | fixed | fixed in f658b703 |

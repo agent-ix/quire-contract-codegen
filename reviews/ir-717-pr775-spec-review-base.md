@@ -66,3 +66,10 @@ CHANGES REQUIRED. The central conclusion is sound and verified against the vendo
 | FND-003 | fixed | fixed in ac5beeeb |
 | FND-004 | fixed | fixed in ac5beeeb |
 | FND-005 | fixed | fixed in ac5beeeb |
+| FND-006 | fixed | fixed in f658b703 |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | Option 4's P1 column still reads 'Addressed for the holder's own table'. The residual alias that the round-2 fix now states for option 3 applies here too. Any separate holder of S and the lease releases on C's instruction, over a C-held channel endpoint that every foreign fork of C copies, so a fork child of a live C can still trigger an early release. Mirror option 3's wording: P1 is not addressed for the release-instruction endpoint, and only the dead-caller variant goes away. Low because the ticket already excludes option 4 as a new custodian. | spec/decisions/ADR-005-original-guardian-gate-ownership.md:212 |
