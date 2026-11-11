@@ -22,14 +22,13 @@ its later `quire-eval` expectation path.
    the live source applications before loading the bundle. Run
    `make evaluator-corpus EVALUATOR_CORPUS_DIR=<dir>` and load `cases.jsonl`
    through `quire_eval_corpus::load` and QSL's FR-402 admission. Assert exact
-   `quire.evaluator-case/v1` fields, ascending case ids, four source labels,
+   `quire.evaluator-case/v1` fields, ascending case ids, two source labels,
    dependency units, `package_id` from compilation, callable function,
    arguments, decimal-string limits, `object_environment: null`, sorted
    `generated_bodies: []` and `expected: null` while `quire-eval`
    cannot yet execute registered bodies. Change authority, identity and
    valid source text one at a time without recompiling `package_id` and assert
-   `package_mismatch`; change only revision labels and assert admission with
-   the same `package_id` (FR-044-AC-1).
+   `package_mismatch` (FR-044-AC-1).
 2. Export twice from the same admitted cases and compare exact bytes. Compare
    the independently enumerated case ids with the loaded bundle, then remove
    one record and assert a census failure. Perturb the callable, argument,

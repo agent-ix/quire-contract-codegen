@@ -67,12 +67,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     that clause name. Confirm both other target members are absent and the request carries no
     `arguments` or `occurrence_key`. Request an undeclared clause name.
 11. Read the invocation document and its pre and post snapshots from the raw entries of
-    `ReplayRequestWire.documents`. Confirm the `identity` member of each document has four labels
+    `ReplayRequestWire.documents`. Confirm the `identity` member of each document has two labels (authority and identity)
     and the two-label source `byte_provision` has no state document. Replay `BalanceNeverDrops`
     with pre balance 10 and post balance 9. Keeping all labels fixed, change only the playback's
     pre balance to 9, then restore it and change only the caller's post balance to 10; replay each
     variant and read the selected document values, evaluation and settlement. Omit a referenced
-    snapshot, supply it under different labels, and supply two documents with the same four labels,
+    snapshot, supply it under different labels, and supply two documents with the same two labels,
     first with equal bytes and then with different bytes. Record the typed outcomes and whether
     the CG request builder or QSL replay was called.
 12. Build the document value of FR-024-AC-53 (unsorted members, escaped characters, a large
@@ -220,7 +220,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     identities equal that clause's `ClauseSite` node and occurrence, and the undeclared name returns
     `StateClauseReplayError::CallSite` with the executor not called (FR-024-AC-12).
 11. The pre snapshot holds the playback's values and the post snapshot the supplied post-state
-    values; each self-declares four labels in `ReplayRequestWire.documents`, the invocation names
+    values; each self-declares two labels in `ReplayRequestWire.documents`, the invocation names
     those labels, and its model names the admitted package identity. QSL evaluates `false` and
     settles a reproduced violation for pre 10/post 9; it evaluates `true` and settles
     inconclusive with cause `Verdicts` for pre 9/post 9 and pre 10/post 10. Every replay selects
@@ -391,6 +391,21 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     `inconclusive`, `Verdicts`. Mutation controls: building the request from the unmutated unit
     or package instead of the supplied mutant makes the first playback settle `Verdicts` and fails
     the first assertion; ignoring the playback and binding `0` fails the `balance = -1` case.
+46. Over the step 45 invariant harness, supply a caller `obligation_identity` equal to the
+    harness's `obligation` and assert `decode_falsification` accepts it and the packet and
+    request carry the identity member for member (FR-024-AC-66). Then supply an identity that
+    differs from the harness's only in its ordinal and assert `ObligationIdentityMismatch` with
+    the executor uncalled and no document built, and assert the variant is not `HarnessMismatch`
+    (FR-024-AC-65). Mutation controls: a `decode_falsification` that ignores the caller identity
+    returns `Ok` for the differing identity and fails the `ObligationIdentityMismatch` assertion
+    of this step; one that compares only the identity's `node` and `model` accepts the ordinal-only
+    difference and fails the same assertion; one that maps the difference to `HarnessMismatch`
+    fails the variant assertion of this step; one that replaces the caller's identity with the
+    harness's own before comparing never refuses and fails the same assertion; one that
+    replaces it with a default identity refuses the matching case and fails the accept
+    assertion (FR-024-AC-66). A harness differing in both identity and field order must return
+    `ObligationIdentityMismatch`, which fails a mutant that checks field order first.
+    The refusal site is the identity comparison in `InvariantReplayInputs::decode_falsification`.
 
 ## Status
 
@@ -432,7 +447,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 46 (FR-024-AC-65 and FR-024-AC-66) is planned for IR-1519. Steps 39 to 45 (FR-024-AC-57 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)
