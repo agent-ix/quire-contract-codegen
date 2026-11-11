@@ -53,11 +53,13 @@ fn generate_with(twin: &Twin, clause: &str, native: bool) -> Fixture {
     } else {
         negotiate_kani_obligations
     };
+    let claims = crate::common::v2_claim::claims_for(&package, std::slice::from_ref(&node));
     let outcome = negotiate(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings(),
         items: &[ObligationItem::V2Clause {
             package: &package,
             clause: &node,
+            claim: &claims[0],
             dependencies: None,
         }],
         subject_path: SUBJECT,
