@@ -574,7 +574,7 @@ referenced operators and an inline Boolean literal. Other V2 controls retain the
     or state-field read declaring node, field name or domain refuses with the named record member
     and no harness, on the scalar route and on the whole-object collection route, including ahead
     of a render refusal. The sequence-field element domain and the NodeKey binding are specified
-    by steps 52 and 53 below (planned); the unread drawn field is evidenced by the AC-134 test above.
+    by steps 52 (planned) and 53 (implemented, IR-1518) below; the unread drawn field is evidenced by the AC-134 test above.
 15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
@@ -905,7 +905,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     and for the phrase `enumeration evidence`; a record renderer printing `Proved` must fail. The
     symbolic proof remains IR-1509.
 
-## AC-48 obligation-record gaps (planned, IR-1515 spec; code IR-1517, IR-1518)
+## AC-48 obligation-record gaps (IR-1515 spec; code IR-1517 planned, IR-1518 implemented)
 
 52. Whole-object collection clause, FR-015-AC-133 (AC-134 is evidenced by the existing test
     named in its row). Author a fixture like the one in `tests/it/kani_collection_operation.rs`
@@ -932,8 +932,12 @@ with the required author `make kani-gate`; independent review and final acceptan
     B's key: refuses `UnsupportedObligation::V2ClauseNodeKeyMismatch` naming A, no harness, and
     the refusal holds neither key nor a selection; (c) A's record with A's key but a different
     node ordinal in the `NodeKey`: refuses `V2ClauseNodeKeyMismatch`; (d) A's claim with B's key
-    and also a changed parameter domain: refuses `V2ClauseNodeKeyMismatch`, not
-    `V2ClauseClaimMismatch`; (e) the resolver-returns-none branch has no hand-built fixture that
+    and also a changed state-read domain (the two-clause fixture has no parameters), and, on the
+    single-clause parameter fixtures, a claim with another clause's key and a changed parameter
+    domain: refuses `V2ClauseNodeKeyMismatch`, not `V2ClauseClaimMismatch`, while the same
+    changed record under the resolved key is the record refusal; (d2) a clause whose lowering
+    refuses (an unbounded second parameter) with another clause's key refuses
+    `V2ClauseNodeKeyMismatch`, the resolved key reaching the lowering refusal; (e) the resolver-returns-none branch has no hand-built fixture that
     reaches classification (a clause node without a structural key fails admission earlier), so
     it is evidenced by the same comparison form `resolved.as_ref() != Some(&claim_key)` read in
     review, not by a runtime case. Mutants at the new comparison in `classify_v2_clause`

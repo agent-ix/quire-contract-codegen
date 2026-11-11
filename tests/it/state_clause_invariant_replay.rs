@@ -129,8 +129,9 @@ impl Fixture {
     ) -> Result<quire_contract_codegen::InvariantReplayInputs<'a>, StateClauseReplayError> {
         let mut inputs =
             twin.invariant_inputs(&self.package, &self.clause, object, clause, &["balance"]);
-        // The caller names the obligation the harness was generated for (FR-024-AC-65).
-        inputs.obligation_identity = self.harness.obligation.clone();
+        // The inputs hold QSL's own call-site identity, which equals the harness's now that a
+        // claim's NodeKey is the clause's resolved key (FR-024-AC-65).
+        assert_eq!(inputs.obligation_identity, self.harness.obligation);
         let identity = &self.harness.identity;
         let parsed = parse_assertion_playback(
             text,
@@ -590,7 +591,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
     let two = generate(&other_clause, "Other");
     let mut inputs =
         other_clause.invariant_inputs(&two.package, &two.clause, &object, "Other", &["balance"]);
-    inputs.obligation_identity = two.harness.obligation.clone();
+    assert_eq!(inputs.obligation_identity, two.harness.obligation);
     let two_text = two.playback(&[0]);
     let parsed_two = parse_assertion_playback(
         &two_text,
@@ -635,7 +636,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
         CLAUSE,
         &["balance", "audit"],
     );
-    inputs.obligation_identity = fixture.harness.obligation.clone();
+    assert_eq!(inputs.obligation_identity, fixture.harness.obligation);
     let error = inputs
         .decode_falsification(v2, &parsed, crate::unbounded_decode_limits())
         .err()
@@ -657,7 +658,7 @@ fn tc_035_the_refusal_set_is_closed_and_typed() {
         CLAUSE,
         &["balance"],
     );
-    inputs.obligation_identity = fixture.harness.obligation.clone();
+    assert_eq!(inputs.obligation_identity, fixture.harness.obligation);
     let error = inputs
         .decode_falsification(v2, &parsed, crate::unbounded_decode_limits())
         .err()
@@ -842,7 +843,7 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
             CLAUSE,
             &["balance"],
         );
-        inputs.obligation_identity = fixture.harness.obligation.clone();
+        assert_eq!(inputs.obligation_identity, fixture.harness.obligation);
         inputs.decode_falsification(
             StateClauseHarness::V2Clause(harness),
             &parsed,
@@ -899,7 +900,7 @@ fn tc_035_the_remaining_invariant_refusals_are_typed() {
     let none_object = none.clause.clone();
     let mut inputs =
         constant.invariant_inputs(&none.package, &none.clause, &none_object, "Constant", &[]);
-    inputs.obligation_identity = none.harness.obligation.clone();
+    assert_eq!(inputs.obligation_identity, none.harness.obligation);
     let none_identity = &none.harness.identity;
     let none_text = none.playback(&[]);
     let none_parsed = parse_assertion_playback(

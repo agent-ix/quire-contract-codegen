@@ -312,6 +312,19 @@ fn legacy_fixture_never_invents_scalar_authority() {
     );
 }
 
+/// The producer identity a V2 clause claim carries for `clause`: the key CG resolves for it from
+/// `package` (FR-015-AC-135). For fixtures that do not exercise the binding itself.
+pub(crate) fn clause_obligation(
+    package: &quire_contract_model::CheckedPackageV2,
+    clause: &quire_contract_model::CheckedNodeId,
+) -> qsl_replay::ObligationIdentity {
+    let node = package
+        .structural_key(clause)
+        .and_then(crate::core::ir::node_key::checked_node_key)
+        .expect("admitted clause node has a structural key");
+    qsl_replay::ObligationIdentity::new(node, None, 0)
+}
+
 /// A producer identity for fixtures that do not exercise FR-015-AC-48.
 pub(crate) fn fixture_obligation() -> qsl_replay::ObligationIdentity {
     let node = qsl_replay::NodeKey::new(

@@ -9,6 +9,16 @@ use quire_contract_codegen::{
 use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment, CheckedPackageV2, CheckedTerm};
 use quire_exact::{NodeKey, PathSegment};
 
+/// The key CG's resolver yields for `clause`: the package's structural key for the node,
+/// rebuilt as a `NodeKey` (FR-015-AC-135). Fixtures that are not exercising the binding use it.
+pub fn resolved_key(package: &CheckedPackageV2, clause: &CheckedNodeId) -> NodeKey {
+    node_key(
+        package
+            .structural_key(clause)
+            .expect("admitted clause node has a structural key"),
+    )
+}
+
 fn node_key(id: &CheckedNodeId) -> NodeKey {
     let path = id
         .path
@@ -112,7 +122,7 @@ fn bare_claim(package: &CheckedPackageV2, clause: &CheckedNodeId) -> V2ClauseObl
         _ => ObligationKind::Precondition,
     };
     V2ClauseObligationClaim {
-        obligation: ObligationIdentity::new(node_key(clause), None, 0),
+        obligation: ObligationIdentity::new(resolved_key(package, clause), None, 0),
         record: V2ClauseObligationRecord {
             occurrence,
             kind,

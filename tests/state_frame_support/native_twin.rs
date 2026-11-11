@@ -608,6 +608,25 @@ impl Twin {
         self
     }
 
+    /// Two QSL preconditions on different operations of `Account`, each reading one state
+    /// field: `ClauseA` on `deposit` reads `balance` (range `-5..=10`) and `ClauseB` on
+    /// `transfer` reads `audit` (range `50..=60`) (FR-015-AC-135).
+    pub fn with_preconditions_on_two_operations() -> Self {
+        let mut twin = Self::with_field_ranges((-5, 10), (50, 60));
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let header = source
+            .lines()
+            .take(3)
+            .map(|line| format!("{line}\n"))
+            .collect::<String>();
+        twin.unit = format!(
+            "{header}pre ClauseA using v on Bank::Account::deposit {{ self.balance >= 0 }}\n\
+             pre ClauseB using v on Bank::Account::transfer {{ self.audit >= 55 }}\n"
+        )
+        .into_bytes();
+        twin
+    }
+
     /// A source-authored precondition over one bounded operation parameter and no state field.
     pub fn with_bounded_other_precondition() -> Self {
         Self::with_bounded_other_precondition_condition("other < 1000")
