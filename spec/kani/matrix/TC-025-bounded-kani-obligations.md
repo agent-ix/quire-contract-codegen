@@ -942,15 +942,32 @@ with the required author `make kani-gate`; independent review and final acceptan
     (here B), fails 53(a) and 53(b); M6, resolving the key from the claim itself, fails 53(b);
     M7, comparing path only and not the node ordinal, fails 53(c); M8, running the record
     comparison first, fails 53(d) (FR-015-AC-135, FR-015-AC-136).
-54. (PLANNED, IR-1520.) State-frame identity member, FR-015-AC-137. Build one `StateFrameRequest`
-    for a postcondition clause with `obligation_identities` I_c (contract) and I_f (frame) that
-    differ in node, model and ordinal, taken from hand-written literals. Generate both roles:
-    each harness's `obligation` equals its role's identity member for member, and its record
-    serialises it. Regenerate with I_c and I_f swapped: the harness sources are byte-identical
-    and the records differ. Parse a record with the member removed: `StateFrameRecordError`.
-    Mutants: a generator that stores I_c on both harnesses fails the `frame` equality; one that
-    swaps the roles fails both; one that omits the member from the record fails the parse
-    assertion; one that folds the identity into the harness source fails byte-identity.
+54. (PLANNED, IR-1520.) State-frame identity member, FR-015-AC-137 to FR-015-AC-142. Take two
+    hand-written identities I_c and I_f that differ in node, model and ordinal, and a third I_c2
+    that equals I_c except for its ordinal. Cases: (a) `generate_state_frame_role` for each role
+    with its identity: the harness's `obligation` equals it member for member; and
+    `generate_state_frame_obligations` with the pair carries I_c on the `contract` harness and
+    I_f on the `frame` harness (FR-015-AC-137). (b) Round trip: `StateFrameIdentity::from_record`
+    of each harness's record returns an `obligation` equal to the generated one member for member
+    (FR-015-AC-138). (c) A record with `obligation` removed, one with `node` removed and one with
+    `ordinal` removed each return `StateFrameRecordError` (FR-015-AC-139). (d) Generate with I_c
+    and then with I_c2: sources byte-identical, records differ only in `obligation`
+    (FR-015-AC-140). (e) A negotiated request holding a `contract` item with I_c and a `frame`
+    item with I_f for one clause returns each in `state_frame_harnesses` carrying its own
+    identity; classifying the same item with I_c and with I_f gives equal results and the routed
+    preflight builds no identity (FR-015-AC-141). (f) `StateFrameRoleIdentities::new(I_c, I_c)`
+    returns `SharedIdentity`; `new(I_c, I_f)` and `new(I_c, I_c2)` build (FR-015-AC-142).
+    Mutants and the assertion each fails: M1, `generate_state_frame_role` storing a default
+    identity, fails (a); M2, `generate_state_frame_obligations` storing I_c on both harnesses (site:
+    the pair splitting in that function), fails the `frame` equality of (a); M3, swapping the
+    roles, fails both of (a); M4, the record writer dropping the `ordinal` (site:
+    the record serialiser), keeps (a) and fails the round trip (b) and nothing weaker; M5, the
+    record writer dropping the whole member, fails (b); M6, `from_record` defaulting a missing
+    member (site: the parser), fails (c); M7, folding the identity into the harness source or
+    symbol (site: the renderer), fails (d); M8, negotiate passing a placeholder identity to the
+    item's harness (site: the `ObligationItem::StateFrame` arm), fails (e); M9, classification
+    reading the identity so that results differ, fails (e); M10, the pair constructor comparing
+    only `node`, refuses I_c2 and fails (f), and one accepting equal identities fails (f).
 
 ## Blocked
 
