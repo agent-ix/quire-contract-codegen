@@ -1068,8 +1068,10 @@ with the required author `make kani-gate`; independent review and final acceptan
     regeneration reproduces the artifact and record, run it on the host against the plus-one kernel mutant
     and require it to pass as an expected panic on the generated arithmetic assertion's message; run the
     same test against the unmutated owner and the `amount + 2` subject and require each to fail. Executed
-    verdicts are in `docs/qualification/ir1509-kani-clause-controls.md`. The Kani-backed playback through
-    `execute_kani_concrete_playback` is FR-017-AC-60 (IR-917).
+    verdicts are in `docs/qualification/ir1509-kani-clause-controls.md`. Require the `amount + 2` playback
+    control to fail at the produced-result comparison, not at a preamble. PLANNED: the subject compiled by
+    the pipeline (blocked on QSL operation bodies) and the Kani-backed playback through
+    `execute_kani_concrete_playback` (FR-017-AC-60, owner IR-917).
 
 ## Blocked
 

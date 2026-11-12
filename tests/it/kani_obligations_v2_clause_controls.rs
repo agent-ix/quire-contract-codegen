@@ -23,8 +23,8 @@ use std::{
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
     execute_kani_obligation, negotiate_kani_native_obligations, KaniExecutionRequest,
-    KaniInstallation, KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome,
-    KaniV2ClauseObligationHarness, ObligationItem, ProofCeilings,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationOutcome, KaniObligationRequest,
+    KaniRunOutcome, KaniV2ClauseObligationHarness, ObligationItem, ProofCeilings,
 };
 
 use super::kani_obligations_state_frame::native_twin::Twin;
@@ -93,8 +93,18 @@ const ENUMERATION_TEST: &str = r#"
 /// normally, then the sealed harness body runs on that value and must fail the generated
 /// arithmetic assertion by its message.
 fn playback_test() -> String {
+    playback_test_with(true)
+}
+
+/// The playback test, with or without the preamble that first runs the compiled subject at 999.
+fn playback_test_with(subject_preamble: bool) -> String {
+    let preamble = if subject_preamble {
+        "        assert!(crate::subject::check(999), \"the unchanged subject returns normally at 999\");\n"
+    } else {
+        ""
+    };
     format!(
-        "    #[test]\n    #[should_panic(expected = \"{ARITHMETIC_MESSAGE}\")]\n    fn playback_999() {{\n        assert!(crate::subject::check(999), \"the unchanged subject returns normally at 999\");\n        crate::kani::concrete_playback_run(vec![999_i64.to_le_bytes().to_vec()], prove_clause);\n    }}\n"
+        "    #[test]\n    #[should_panic(expected = \"{ARITHMETIC_MESSAGE}\")]\n    fn playback_999() {{\n{preamble}        crate::kani::concrete_playback_run(vec![999_i64.to_le_bytes().to_vec()], prove_clause);\n    }}\n"
     )
 }
 
@@ -559,9 +569,21 @@ fn a_record_renderer_that_prints_a_banned_token_fails_the_wording_check() {
     let record = enumeration_record(&visits_of(0..=1000), "clause");
     assert_record_wording(&render_record(&record));
     for token in BANNED_TOKENS {
-        let tainted = render_record(&record).replace("enumeration evidence", token);
+        // The required phrase stays, so only the banned-token check can reject the record.
+        let tainted = render_record(&record).replace(
+            "enumeration evidence",
+            &format!("enumeration evidence, {token}"),
+        );
+        assert!(tainted.contains("enumeration evidence"));
         let result = std::panic::catch_unwind(|| assert_record_wording(&tainted));
-        assert!(result.is_err(), "`{token}` must fail the wording check");
+        let message = *result
+            .expect_err("a banned token must fail the wording check")
+            .downcast::<String>()
+            .expect("formatted panic message");
+        assert!(
+            message.contains("the record must not contain"),
+            "`{token}` is rejected by the banned-token check: {message}"
+        );
     }
     let symbolic =
         render_record(&record).replace("\"symbolic_proof\":false", "\"symbolic_proof\":true");
@@ -613,16 +635,34 @@ fn the_sealed_playback_at_999_fails_the_generated_arithmetic_assertion_under_the
         "{output}"
     );
 
-    // A mutant that fails some other check does not satisfy it: the compiled-subject `+ 2` mutant
-    // fails the produced-result comparison, not the arithmetic assertion.
+    // A mutant that fails some other check does not satisfy it. The compiled-subject `+ 2` mutant
+    // runs the sealed harness body without the preamble, so it reaches the produced-result
+    // comparison, which is not the expected arithmetic assertion.
+    let appended = playback_test_with(false);
+    let with_bare_test = append_inside_module(sealed, &appended);
+    assert_eq!(remove_appended(&with_bare_test, &appended), *sealed);
     let other_lib = format!(
         "{}{HOST_KANI}{}",
-        host_source(&with_test),
+        host_source(&with_bare_test),
         subject_module("quire_contract_runtime::operators::implies_short_circuit(amount < 1000, || amount + 2 <= 1000)")
     );
     let other = ScratchCrate::new("ir1509-playback-other-check", &other_lib, None);
     let (success, output) = other.host_test("playback_999");
     assert!(!success, "{output}");
+    assert!(
+        output.contains(
+            "the produced V2 Boolean result agrees with the independent checked condition"
+        ),
+        "the +2 subject fails the produced-result comparison: {output}"
+    );
+    assert!(
+        output.contains("playback_999 - should panic ... FAILED"),
+        "{output}"
+    );
+    assert!(
+        output.contains("panic did not contain expected string"),
+        "{output}"
+    );
 }
 
 // ---- kani lane ---------------------------------------------------------------------------
@@ -667,12 +707,25 @@ fn run_installed(scratch: &ScratchCrate, harness: &KaniV2ClauseObligationHarness
         serde_json::to_vec_pretty(&evidence).unwrap(),
     )
     .unwrap();
+    let failed_checks = evidence
+        .checks
+        .iter()
+        .filter(|check| format!("{:?}", check.status) == "Failure")
+        .map(|check| format!("{}:{:?}", check.id, check.class))
+        .collect::<Vec<_>>();
     println!(
-        "IR1509 {name}: outcome={:?} wall={:.1}s peak_resident={:?} proof_phase={}",
-        std::mem::discriminant(&evidence.outcome),
+        "IR1509 {name}: outcome={} wall={:.1}s runner_peak_resident={:?} success_checks={} checks={} failed_checks={failed_checks:?} two_phase={} proof_phase_outcome={:?}",
+        match &evidence.outcome {
+            KaniRunOutcome::Verified => "Verified".to_owned(),
+            KaniRunOutcome::Falsified { .. } => "Falsified".to_owned(),
+            other => format!("{other:?}"),
+        },
         wall.as_secs_f64(),
         evidence.memory.peak_resident_bytes,
-        evidence.proof_phase.is_some()
+        evidence.success_checks,
+        evidence.checks.len(),
+        evidence.proof_phase.is_some(),
+        evidence.proof_phase.as_ref().map(|proof| &proof.outcome)
     );
     InstalledRun { evidence }
 }
@@ -735,6 +788,13 @@ fn assert_two_phase_falsified(
         "equal ceilings across the phases"
     );
     assert_eq!(evidence.ceilings, harness.identity.ceilings);
+    assert_eq!(
+        proof.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::FailedWithoutCounterexample
+        },
+        "the proof vector prints no playback"
+    );
     assert!(
         counterexample.contains(check),
         "the failing check names `{check}`:\n{counterexample}"
@@ -745,6 +805,7 @@ fn assert_two_phase_falsified(
         values.iter().all(|value| (0..=1000).contains(value)),
         "in-domain playback: {values:?}"
     );
+    println!("IR1509 playback values={values:?} failing check `{check}`");
     values
 }
 
@@ -763,9 +824,16 @@ fn tc_025_real_kani_runner_verifies_the_healthy_clause() {
         "a verified proof makes one launch"
     );
     assert!(run.evidence.success_checks > 0);
+    assert!(
+        run.evidence
+            .checks
+            .iter()
+            .any(|check| format!("{:?}", check.status) == "Satisfied"),
+        "the final cover is satisfied"
+    );
 }
 
-#[trace("FR-015-AC-151", "FR-015-AC-41", "FR-017-AC-63", "TC-025")]
+#[trace("FR-015-AC-151", "FR-017-AC-63", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_runner_falsifies_the_exact_999_subject_mutant_at_999() {

@@ -43,44 +43,58 @@ tokens.
 Enumeration mutants: omitting 999 gives `checked` 1000 and `sequence_exact` false; visiting 998 twice and
 omitting 999 gives `checked` 1001 and `sequence_exact` false; a descending visit is not exact. A record
 renderer that prints `Proved`, `proved`, `Verified`, `verified` or `Kani proof`, or sets `symbolic_proof` true,
-fails the wording check. All seven default-lane tests of the module ran in 10.07 s.
+fails the wording check. The eight default-lane tests of the module ran in 11.42 s.
 
 ## Sealed playback at 999
 
 The playback test is appended inside the generated module before its closing brace and expects the panic
 message of the generated arithmetic assertion (`arithmetic subterm agrees with independent i128 expectation`).
 Against the plus-one kernel mutant it passes (`playback_999 - should panic ... ok`). Against the unmutated
-owner it fails (`test did not panic as expected`), and against the `amount + 2` subject mutant it fails too (that
-mutant fails the produced-result comparison, not the arithmetic assertion). It runs on the host through the stand-in
-above, not through Kani's `concrete_playback_run`; the Kani-backed playback via `execute_kani_concrete_playback`
-is FR-017-AC-60 (IR-917).
+owner it fails (`test did not panic as expected`). The compiled-subject `amount + 2` mutant, run without the
+preamble that first calls the subject at 999, reaches the sealed harness body and fails with the
+produced-result message (`the produced V2 Boolean result agrees with the independent checked condition`) and
+`panic did not contain expected string`, so it does not satisfy the control. It runs on the host through the
+stand-in above, not through Kani's `concrete_playback_run`; the Kani-backed playback via
+`execute_kani_concrete_playback` is FR-017-AC-60 (PLANNED, owner IR-917, to be rebuilt on current main after
+IR-1509 merges).
 
 ## Installed Kani runs through CG's runner (FR-015-AC-151)
 
 `execute_kani_obligation` (the FR-017-AC-63 two-phase run) with Kani 0.68.0 (CBMC 6.11.0), rustc
-nightly-2026-08-21, `-Z function-contracts --exact --unwind 3 --solver cadical`, one run at a time under the
-cargo slot lock, each in its own `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0` with a
-`timeout 1800` cap. Wall is the whole test (both phases) after the test binary was built. Peak is the scope's
-cgroup `memory.peak` sampled every 2 s; the runner records no memory observation without an environment source,
-so the evidence has none.
+nightly-2026-08-21, `-Z function-contracts --exact --unwind 3 --solver cadical`. The `Makefile` kani target
+applies no memory cap and the runner enforces none (ADR-007); the cap below was applied by the harness script
+that ran each test, one run at a time under the cargo slot lock:
 
-| Run | Verdict | Failing check | Playback | Wall | cgroup peak |
-| --- | --- | --- | --- | --- | --- |
-| healthy | `Verified`, one proof-phase launch, 2458 successful checks | none | none | 44.1 s | 2.80 GB |
-| exact-999 subject mutant `amount + 2 <= 1000` | `Falsified` (witness phase) | produced V2 Boolean result agrees with the independent checked condition | 999 | 129.2 s | 11.61 GB |
-| kernel `left.0.checked_add(right.0)?.checked_add(1)` | `Falsified` (witness phase) | arithmetic subterm agrees with independent i128 expectation | 2 | 135.0 s | 11.73 GB |
-| kernel `Some(left.0)` | `Falsified` (witness phase) | arithmetic subterm agrees with independent i128 expectation | 0 | 125.3 s | 11.19 GB |
-| helper body returns `false` | `Falsified` (witness phase) | produced V2 Boolean result agrees with the independent checked condition | 1000 | 116.8 s | 10.65 GB |
+    flock /tmp/cargo-slot.lock systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0 \
+        timeout 1800 <it test binary> --ignored --exact <module>::<test> --nocapture --test-threads=1
 
-For each `Falsified` run the test requires: the proof phase nested in the evidence (its outcome is
-`Inconclusive` `FailedWithoutCounterexample`, since the proof vector prints no playback), `concrete-playback`
-only in the witness vector, equal ceilings in both phases and equal to the identity's, one harness path, the named
-failing check in the counterexample, and every playback value within 0..=1000. The backend picks the
-in-domain counterexample (2 and 0 for the kernel mutants); the deterministic 999 control is the sealed playback.
+The test binary was built first, outside the scope. Wall is the whole test process after the build, both phases
+(the in-test wall is a second or two lower). Peak is the scope's cgroup `memory.peak` sampled every 2 s; the
+runner records no memory observation without an environment source, so the evidence has none. Recorded run of
+2026-11-12 (the first run of 2026-11-11 gave the same verdicts and playbacks within 5 s and 0.2 GB).
+
+| Run | Verdict | Failing check (id) | Playback | Successful checks of total | Wall | cgroup peak |
+| --- | --- | --- | --- | --- | --- | --- |
+| healthy | `Verified`, one proof-phase launch, cover satisfied | none | none | 2458 of 2485 | 43.5 s | 2.80 GB |
+| exact-999 subject mutant `amount + 2 <= 1000` | `Falsified` (witness phase) | produced V2 Boolean result agrees with the independent checked condition (350) | 999 | 2457 of 2485 | 129.8 s | 11.60 GB |
+| kernel `left.0.checked_add(right.0)?.checked_add(1)` | `Falsified` (witness phase) | arithmetic subterm agrees with independent i128 expectation (74) | 2 | 2457 of 2485 | 131.1 s | 11.64 GB |
+| kernel `Some(left.0)` | `Falsified` (witness phase) | arithmetic subterm agrees with independent i128 expectation (71) | 0 | 2457 of 2485 | 125.1 s | 11.19 GB |
+| helper body returns `false` | `Falsified` (witness phase) | produced V2 Boolean result agrees with the independent checked condition (131) | 1000 | 2449 of 2478 | 119.6 s | 10.45 GB |
+
+Each test logs one `IR1509` line with the outcome, the successful and total check counts, the failed check
+ids and the proof-phase outcome, and one line with the playback values; the table is taken from those lines.
+For each `Falsified` run the test asserts: the proof phase nested in the evidence with outcome `Inconclusive`
+`FailedWithoutCounterexample` (the proof vector prints no playback), `concrete-playback` only in the witness
+vector, equal ceilings in both phases and equal to the identity's, one harness path, the named failing check in
+the counterexample, and every playback value within 0..=1000 (exactly 999 for the exact-999 mutant, below 1000
+for the kernel mutants). The backend picks the in-domain counterexample (2 and 0 for the kernel mutants, 1000 for
+the helper); the deterministic 999 control is the sealed playback. The healthy test asserts `Verified`, no
+proof-phase evidence and a satisfied cover. The check counts and the helper playback are logged, not asserted.
 
 ## Not established
 
 - The 16 GiB cap itself was not exercised; the runs used the 24 GiB cgroup the planner and owner allowed.
 - Program-step counts are not part of the runner's evidence and were not recorded.
-- The subject is test-written, not emitted from QSL source (see above).
-- The 999 playback is a host stand-in run (see above), not a Kani playback.
+- PLANNED, blocked on QSL operation bodies: a subject compiled by the pipeline. The subject is test-written;
+  no CG or QSL step emits one because a QSL operation cannot carry a body (planner ruling 2026-11-12).
+- PLANNED, owner IR-917: the Kani-backed 999 playback (FR-017-AC-60). The 999 playback here is a host stand-in run.
