@@ -755,7 +755,7 @@ fn step_13_each_reachable_setup_error_is_classified_and_pairs_as_specified() {
             &implies.identity,
             body,
             &fixture.artifacts,
-            &ok_transcript,
+            &transcript(&implies.identity, &[1, 1]),
         )
         .unwrap_err();
     assert!(

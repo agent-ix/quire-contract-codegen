@@ -21,7 +21,7 @@ failure from source-property refutation. Partial native evidence exists (IR-1184
 `scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
 a compiled generated artifact, without a Kani run. `scalar_settlement.rs` implements the
 settlement steps 10 to 14 (IR-631), and `kani_obligations.rs` implements the descriptor-level
-bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence, single-member binding, stale-dependency and invented-membership checks (steps 3, 6 and 8, FR-032-AC-2, AC-6, AC-12, AC-17, AC-18). Steps 1, 7 and 9 and the real-Kani run of step 2 remain
+bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence (step 3, with the absent capability last), single-member binding (step 6), stale-dependency and invented-membership (the membership half of step 8, FR-032-AC-12) checks. Steps 1, 7 and 9, the rest of step 8 (the canonical preimage members, the unencodable-preimage `IdentityEncodeError` path and a changed range or kind under a retained digest) and the real-Kani run of step 2 remain
 Planned, as does any real falsified Kani run through the route. No
 passing proof-driven replay is claimed.
 
@@ -142,7 +142,7 @@ passing proof-driven replay is claimed.
    refusal before replay. An invented occurrence sent to the facade instead reaches its
    earlier membership refusal; do not fabricate a private Encoding report. Keep original function/clause carry-only behavior and existing
    function/frame encodings.
-   These are planned, unrun CG conformance checks.
+   The invented-membership and stale-digest checks are run by `scalar_replay_acceptance.rs`; the other checks of this step are planned, unrun CG conformance checks.
 9. For FR-032-AC-19, decode synthetic Kani playback against the identity of a guarded
    FR-022-AC-33 harness with one integer guard input and of an FR-022-AC-27 harness with one
    Boolean guard input: valid entries, one entry short, an integer guard entry of four bytes, a

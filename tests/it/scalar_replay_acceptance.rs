@@ -4,6 +4,7 @@
 //! retained body members (AC-18), invented membership refused before comparison (AC-12).
 //! Native controls only: no Kani proof or backend falsification.
 
+use super::kani_obligations::boolean_implies_scalar;
 use super::scalar_playback::{replay_fixture, transcript, ReplayFixture};
 use super::scalar_replay_binding::{context, observe, plan};
 use ix_trace_rs::trace;
@@ -84,9 +85,10 @@ fn scalar_identity(report: &OperatorParityReport) -> &ScalarIdentityMismatch {
 }
 
 /// Setup steps refuse in the stated order: context/identity/schema, selected playback bytes,
-/// adapter block/harness/arity/width, then operand domain. Each defect alone gives its own
-/// refusal; each earlier defect wins over every later one present with it.
-#[trace("TC-047", "FR-032-AC-2")]
+/// adapter block/harness/arity/width/comment, operand domain, then capability availability.
+/// Each defect alone gives its own refusal; each earlier defect wins over a later one present
+/// with it; an absent capability refuses only when nothing earlier is wrong.
+#[trace("TC-047", "FR-032-AC-1", "FR-032-AC-2")]
 #[test]
 fn setup_refusal_precedence_follows_the_stated_step_order() {
     let fixture = sum_fixture();
@@ -95,54 +97,60 @@ fn setup_refusal_precedence_follows_the_stated_step_order() {
     let run = |artifacts: &[quire_contract_codegen::Artifact], text: &str| {
         context(&fixture).plan(&fixture.harness, identity, body, artifacts, text)
     };
+    let rename = |text: &str| {
+        text.replace(
+            &format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+            "other::harness",
+        )
+    };
+    let pad = |text: &str| format!("{text}\n//{}", "x".repeat(SCALAR_PLAYBACK_BYTES));
     let good = transcript(identity, &[2, 4]);
-    let wrong_harness = good.replace(
-        &format!("{}::{}", identity.module_symbol, identity.harness_symbol),
-        "other::harness",
-    );
-    let oversize = format!("{wrong_harness}\n//{}", "x".repeat(SCALAR_PLAYBACK_BYTES));
-    let out_of_domain = transcript(identity, &[10, 4]);
-    let short_and_out_of_domain = transcript(identity, &[10]);
-    let narrow_and_out_of_domain =
+    let oversize = pad(&good);
+    let wrong_harness = rename(&good);
+    let short = transcript(identity, &[10]);
+    let long = transcript(identity, &[2, 4, 4]);
+    let narrow =
         transcript(identity, &[2, 10]).replacen("[2, 0, 0, 0, 0, 0, 0, 0]", "[2, 0, 0, 0]", 1);
+    let comment = transcript(identity, &[12, 4]).replacen("// 12\n", "// 2\n", 1);
+    let out_of_domain = transcript(identity, &[10, 4]);
     assert!(run(&fixture.artifacts, &good).is_ok(), "control");
 
     // Each defect alone.
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &oversize)),
-        "cg_witness_decode_bytes_limit"
-    );
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &wrong_harness)),
-        "cg_witness_harness_identity_mismatch"
-    );
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &short_and_out_of_domain)),
-        "kani_witness_arity_mismatch"
-    );
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &narrow_and_out_of_domain)),
-        "kani_witness_width_mismatch"
-    );
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &out_of_domain)),
-        "cg_scalar_witness_operand_out_of_domain"
-    );
+    let alone = [
+        (&oversize, "cg_witness_decode_bytes_limit"),
+        (&wrong_harness, "cg_witness_harness_identity_mismatch"),
+        (&short, "kani_witness_arity_mismatch"),
+        (&long, "cg_witness_decode_values_limit"),
+        (&narrow, "kani_witness_width_mismatch"),
+        (&comment, "kani_witness_comment_mismatch"),
+        (&out_of_domain, "cg_scalar_witness_operand_out_of_domain"),
+    ];
+    for (text, code) in alone {
+        assert_eq!(playback_code(run(&fixture.artifacts, text)), code);
+    }
 
-    // Playback bytes beat the adapter checks that the same transcript would also fail.
-    assert_eq!(
-        playback_code(run(&fixture.artifacts, &oversize)),
-        "cg_witness_decode_bytes_limit",
-        "oversize and wrong harness together"
-    );
-    // The adapter's checks beat the operand domain.
-    assert_eq!(
-        playback_code(run(
-            &fixture.artifacts,
-            &wrong_harness.replace("// 2\n", "// 12\n")
-        )),
-        "cg_witness_harness_identity_mismatch"
-    );
+    // Each earlier playback defect wins over every later one present with it.
+    let pairs = [
+        (
+            pad(&rename(&out_of_domain)),
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            rename(&out_of_domain),
+            "cg_witness_harness_identity_mismatch",
+        ),
+        (
+            rename(&transcript(identity, &[10])),
+            "cg_witness_harness_identity_mismatch",
+        ),
+        (
+            transcript(identity, &[12, 10]).replacen("// 12\n", "// 2\n", 1),
+            "kani_witness_comment_mismatch",
+        ),
+    ];
+    for (text, code) in &pairs {
+        assert_eq!(playback_code(run(&fixture.artifacts, text)), *code);
+    }
 
     // Context/identity/schema defects beat every playback defect.
     let mut changed = identity.clone();
@@ -163,6 +171,58 @@ fn setup_refusal_precedence_follows_the_stated_step_order() {
         run(&changed_artifacts, &oversize),
         Err(ScalarBuildError::Artifacts)
     ));
+
+    // Step 5: an absent capability (the Boolean `Implies` harness) never hides an earlier
+    // refusal and is the refusal when nothing earlier is wrong.
+    let (implies, _, _) = boolean_implies_scalar();
+    let implies_identity = &implies.identity;
+    let unavailable = |text: &str| {
+        context(&fixture).plan(&implies, implies_identity, body, &fixture.artifacts, text)
+    };
+    let implies_good = transcript(implies_identity, &[1, 1]);
+    assert!(matches!(
+        unavailable(&implies_good),
+        Err(ScalarBuildError::Authority(
+            ScalarAuthorityError::Unavailable
+        ))
+    ));
+    assert_eq!(
+        playback_code(unavailable(&pad(&implies_good))),
+        "cg_witness_decode_bytes_limit"
+    );
+    assert_eq!(
+        playback_code(unavailable(&rename_implies(
+            implies_identity,
+            &implies_good
+        ))),
+        "cg_witness_harness_identity_mismatch"
+    );
+    assert!(
+        matches!(unavailable("garbage"), Err(ScalarBuildError::Playback(_))),
+        "a malformed block is an adapter refusal, not an absent capability"
+    );
+    let mut changed_implies = implies_identity.clone();
+    changed_implies.node_id.ordinal += 1;
+    assert!(matches!(
+        context(&fixture).plan(
+            &implies,
+            &changed_implies,
+            body,
+            &fixture.artifacts,
+            &implies_good
+        ),
+        Err(ScalarBuildError::BodyMismatch)
+    ));
+}
+
+fn rename_implies(
+    identity: &quire_contract_codegen::ScalarObligationIdentity,
+    text: &str,
+) -> String {
+    text.replace(
+        &format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+        "other::harness",
+    )
 }
 
 /// Hold the genuine report fixed per member: every other retained member equal, change exactly
@@ -294,13 +354,41 @@ fn qsl_refuses_a_changed_node_identity_as_stale_dependency() {
     );
 }
 
-/// A retained body or record that lacks its kind or an operand identity gives a typed setup
-/// refusal with no plan, no identity and no settlement.
+/// A caller body that lacks a retained operand is refused against the retained body, and a
+/// retained record whose typed body lost its kind or an operand identity is refused by the
+/// generator seal. The record check shows the seal only: `ScalarReplayBody.kind` is a typed
+/// single-variant field and the record's `kind` text is never read for authority, so an absent
+/// kind is not otherwise observable.
 #[trace("TC-047", "FR-032-AC-18")]
 #[test]
-fn absent_retained_kind_or_operand_identity_refuses_setup() {
+fn a_body_or_record_missing_a_retained_member_refuses_setup() {
     let fixture = sum_fixture();
     let body = fixture.harness.scalar_replay_body().unwrap();
+    let playback = transcript(&fixture.harness.identity, &[2, 4]);
+    for member in 0..2 {
+        let mut missing = body.clone();
+        match member {
+            0 => missing.operands.clear(),
+            1 => {
+                missing.operands.pop();
+            }
+            _ => unreachable!(),
+        }
+        let refusal = context(&fixture)
+            .plan(
+                &fixture.harness,
+                &fixture.harness.identity,
+                &missing,
+                &fixture.artifacts,
+                &playback,
+            )
+            .expect_err("missing operand");
+        assert!(
+            matches!(refusal, ScalarBuildError::BodyMismatch),
+            "{refusal:?}"
+        );
+        assert!(refusal.setup_settlement().is_none());
+    }
     for member in 0..2 {
         let mut harness = fixture.harness.clone();
         let mut record: serde_json::Value =
@@ -328,7 +416,7 @@ fn absent_retained_kind_or_operand_identity_refuses_setup() {
                 &fixture.artifacts,
                 &transcript(&harness.identity, &[2, 4]),
             )
-            .expect_err("absent authority");
+            .expect_err("sealed record");
         assert!(
             matches!(
                 refusal,
@@ -338,6 +426,67 @@ fn absent_retained_kind_or_operand_identity_refuses_setup() {
         );
         assert!(refusal.setup_settlement().is_none());
     }
+}
+
+/// Operands are retained in draw order, not identifier order, and an enclosing parameter the
+/// application does not read contributes no position.
+#[trace("TC-047", "FR-032-AC-15")]
+#[test]
+fn draw_order_is_kept_and_unrelated_enclosing_parameters_are_excluded() {
+    let fixture = replay_fixture(
+        "quire.op.integer.sub",
+        "x: Int[10, 20], y: Int[0, 9], z: Int[50, 60]",
+        "Int[-20, -1]",
+        "y - x",
+    );
+    let body = fixture.harness.scalar_replay_body().unwrap();
+    let identity = &fixture.harness.identity;
+    assert_eq!(
+        identity.arguments.len(),
+        2,
+        "the unused parameter z is not drawn"
+    );
+    let ranges: Vec<_> = body
+        .operands
+        .iter()
+        .map(|operand| (operand.range.lower, operand.range.upper))
+        .collect();
+    assert_eq!(
+        ranges,
+        [(0, 9), (10, 20)],
+        "draw order y then x, not declaration or identifier order; z absent"
+    );
+    let admitted = fixture
+        .checked
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == body.node)
+        .unwrap();
+    assert_eq!(
+        body.operands,
+        fixture
+            .checked
+            .scalar_application_operands(&admitted.node_id, &body.occurrence)
+            .unwrap(),
+        "the body is the IR reader's positional body"
+    );
+    let original = plan(&fixture, &[3, 15]);
+    assert_eq!(original.operands(), [3, 15]);
+    let observation = observe(&fixture, &original, false);
+    assert_eq!(
+        observation.outcome,
+        qsl_replay::NativeOutcome::Completed(Integer::from(-12_i64))
+    );
+    let (wire, claim, limits) = original.complete(observation).unwrap().request();
+    let ScalarOperation::Subtract { left, right } = &claim.operation else {
+        panic!("subtraction")
+    };
+    assert_eq!((left.value, right.value), (3, 15));
+    assert!(matches!(
+        qsl_replay::replay_operator_parity(wire, claim, limits).result(),
+        OperatorParityResult::Agrees { .. }
+    ));
 }
 
 /// A self-consistent claim, reminted under the public owning mint, that invents an occurrence

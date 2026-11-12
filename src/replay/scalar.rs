@@ -38,7 +38,12 @@ pub fn decode_scalar_falsification(
     identity: &ScalarObligationIdentity,
     playback: &Playback<'_>,
 ) -> Result<Vec<i64>, DecodeFailure> {
-    let arity = validate_schema(identity)?;
+    // An operation outside the integer profile has no persisted schema to check; its refusal
+    // follows the byte ceiling and the harness identity.
+    let arity = integer_scalar_operand_count(&identity.operation_identity);
+    if arity.is_some() {
+        validate_schema(identity)?;
+    }
     let harness = identity.harness_symbol.as_str();
     let module = identity.module_symbol.as_str();
     let failure = |code, context: &str| DecodeFailure::new(code, harness, context);
@@ -56,6 +61,12 @@ pub fn decode_scalar_falsification(
             playback.harness,
         ));
     }
+    let arity = arity.ok_or_else(|| {
+        failure(
+            "cg_scalar_witness_operation_unsupported",
+            &identity.operation_identity,
+        )
+    })?;
     if playback.entries.len() != arity {
         return Err(failure("kani_witness_arity_mismatch", playback.check_text));
     }

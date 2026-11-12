@@ -212,6 +212,32 @@ mod tests {
         OccurrenceKey::new(node, Origin::new(Role::new("declaration"), ordinal))
     }
 
+    #[trace("TC-047", "FR-032-AC-14")]
+    #[test]
+    fn function_identity_is_the_producer_identity_for_every_kind_and_argument_list() {
+        let function = node("function");
+        let declaration = occurrence(function.clone(), 3);
+        let producer = ObligationIdentity::new(function.clone(), None, 3);
+        let argument = ContractArgument {
+            identifier: "x".to_owned(),
+            parameter: node("x"),
+            domain: ArgumentDomain::IntegerRange {
+                minimum: "0".to_owned(),
+                maximum: "9".to_owned(),
+            },
+        };
+        for kind in [ObligationKind::Postcondition, ObligationKind::Frame] {
+            for arguments in [&[][..], std::slice::from_ref(&argument)] {
+                assert_eq!(
+                    function_contract_identity(&producer, &declaration, kind, arguments)
+                        .expect("producer identity"),
+                    producer,
+                    "neither kind nor positional arguments enter a function identity"
+                );
+            }
+        }
+    }
+
     #[trace("FR-016-AC-26", "TC-026")]
     #[test]
     fn large_declaration_ordinal_preserves_producer_identity() {

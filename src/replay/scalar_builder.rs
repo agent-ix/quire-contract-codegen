@@ -94,19 +94,26 @@ impl OriginalScalarContext {
         artifacts: &[Artifact],
         playback: &str,
     ) -> Result<ScalarReplayPlan, ScalarBuildError> {
-        let original = harness
-            .scalar_replay_body()
-            .map_err(ScalarBuildError::Authority)?;
-        if identity != &harness.identity || original != body {
+        // Capability availability is the last setup step: an absent capability never hides an
+        // earlier context, byte-ceiling, adapter or domain refusal.
+        let original = match harness.scalar_replay_body() {
+            Ok(original) => Some(original),
+            Err(ScalarAuthorityError::Unavailable) => None,
+            Err(cause) => return Err(ScalarBuildError::Authority(cause)),
+        };
+        if identity != &harness.identity || original.is_some_and(|retained| retained != body) {
             return Err(ScalarBuildError::BodyMismatch);
         }
-        let original_package = harness
-            .scalar_original_package()
-            .map_err(ScalarBuildError::Authority)?;
-        if original_package.as_ref() != self.context.original.as_ref() {
-            return Err(ScalarBuildError::BodyMismatch);
+        if original.is_some() {
+            let original_package = harness
+                .scalar_original_package()
+                .map_err(ScalarBuildError::Authority)?;
+            if original_package.as_ref() != self.context.original.as_ref() {
+                return Err(ScalarBuildError::BodyMismatch);
+            }
         }
-        if !harness.matches_artifact_package(artifacts) {
+        // A harness without replay authority retains no artifact package to compare against.
+        if original.is_some() && !harness.matches_artifact_package(artifacts) {
             return Err(ScalarBuildError::Artifacts);
         }
         let parsed = crate::kani::output::playback::parse_assertion_playback(
@@ -117,8 +124,19 @@ impl OriginalScalarContext {
             identity.arguments.len(),
         )
         .map_err(|cause| ScalarBuildError::Playback(DecodeFailure::from(cause)))?;
-        let values =
-            decode_scalar_falsification(identity, &parsed).map_err(ScalarBuildError::Playback)?;
+        let decoded = decode_scalar_falsification(identity, &parsed);
+        if original.is_none() {
+            return Err(match decoded {
+                Err(failure) if failure.code != "cg_scalar_witness_operation_unsupported" => {
+                    ScalarBuildError::Playback(failure)
+                }
+                _ => ScalarBuildError::Authority(ScalarAuthorityError::Unavailable),
+            });
+        }
+        let values = decoded.map_err(ScalarBuildError::Playback)?;
+        let original_package = harness
+            .scalar_original_package()
+            .map_err(ScalarBuildError::Authority)?;
         let context_error = |cause| ScalarBuildError::Context(Box::new(cause));
         let node = wire_node(original_package, &body.node).map_err(context_error)?;
         let occurrence = origin(&body.occurrence);
