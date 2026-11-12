@@ -87,3 +87,27 @@ and focused tests and layout are green.
 | FND-003 | low | The differential tightens only `ValueOccurrences`, `WorkUnits` and `ResultUnits`. The other seven `KINDS` hit `_ => continue` without asserting their spend is zero, so "at each tightened limit" is complete only on an unstated premise. Assert `spend == 0` for the skipped kinds or tighten them too | tests/it/native_boolean_equality_differential.rs:104-118 |
 | FND-004 | low | The native `IntegerOutOfDomain`/`Refused` split in `THIN_MEASURED_HELPER` is pinned only by source-text `contains` checks (M2 is killed by a `contains` assertion). No host test executes a native oracle to a stop. The native out-of-domain behaviour rests on the installed-Kani lane alone | src/oracle/clause.rs:684-707, tests/it/kani_obligations_state_frame.rs:1370-1410 |
 | FND-005 | low | `HarnessSpec` validation returns `HarnessSpecError::AssertBeforeCall` for a top-level `Forget` of an unbound name, and `InvalidExpression` for one inside a probe. Neither names the defect, which is an unbound or unknown forget target | src/kani/generate/spec.rs:559-563, src/kani/generate/spec.rs:575 |
+
+## Dispositions
+
+Round 1, fix head 4a2849b9 (one commit on 2a45f2e8). origin/main is still cd660b50 and
+`git merge-tree` is clean. Checked against `git diff 2a45f2e8..4a2849b9` and the code. The only
+`src/` changes are `HarnessSpecError::ForgetBeforeCall`/`ForgetUnbound` in
+`src/kani/generate/spec.rs` and their mapping in `collection.rs`. Both are validation-only and
+change no rendered statement. The twin fixture refactor keeps the same condition string, so the
+generated harness text, and with it the earlier Kani numbers, is unchanged.
+
+One batched job in an own worktree under the cargo lock: fmt clean; clippy -D warnings clean;
+`--lib` 541 passed; `--test it` with the focused filters plus the new tests 252 passed, 21 ignored;
+the new scratch-crate test passes in 5.2 s (5.3 s on rerun, `--locked --offline` with a seeded
+lock). Reviewer M1 re-run now FAILS `generated_native_boolean_equality_matches_the_typed_route`.
+Reviewer M3 re-run now FAILS
+`general_clause_harness_forgets_the_outcome_and_the_meter_after_the_cover`. Both reverted.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The hand-written differential is deleted. `generated_native_boolean_equality_matches_the_typed_route` compiles the generator's real native oracle source for a `result = ..` and a `result != ..` clause in a scratch crate. It runs the `quire.op.boolean.eq`/`ne` helpers against `check_equality(..).evaluate(..)` and fails by name under M1. |
+| FND-002 | fixed | `general_clause_harness_forgets_the_outcome_and_the_meter_after_the_cover` asserts `forget(outcome)` and `forget(meter)` once each, after the cover, in the general harness. It fails under M3. |
+| FND-003 | fixed | The scratch-crate test tightens all ten kinds (`tighten` covers every `LimitKind`, bounds 0..=spend) and asserts that the seven kinds outside value_occurrences/work_units/result_units spend 0. |
+| FND-004 | fixed | The same scratch crate calls the generated `measured` with a constructed `Refusal::IntegerOutOfDomain` and asserts `Err(IntegerOutOfDomain)`. An out-of-interval operand asserts `Err(Oracle)`. Owned by the new FR-015-AC-150. |
+| FND-005 | fixed | New `ForgetBeforeCall` and `ForgetUnbound(name)`, with the probe-local unbound case also `ForgetUnbound`. Unit test `forget_statement_refusals_name_their_own_errors` covers all three cases and the accepted case. |

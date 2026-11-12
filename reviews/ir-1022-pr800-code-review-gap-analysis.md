@@ -44,3 +44,13 @@ spec-review findings before the rows read Implemented.
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-015-AC-147 and FR-015-AC-148 read Implemented with verification method `Test (TC-025)`, but `quire matrix` shows them untagged (no binder). The evidence is a one-off manual `cargo kani` run outside the repo. Either add a kani-lane test tagged to them (ignored by default like the other real-Kani tests) or change the method to the evidence actually held (Demonstration/Analysis with a durable record) | spec/kani/functional/FR-015-bounded-kani-obligations.md:962-963 |
 | FND-002 | low | The constrained renderer's native per-shape arms (`completed_arms`, `stop_arms`, the native safety arm and the added `observation_lines` prefix `Ok(value) => assert!(value,`) are a behaviour change to generated constrained harnesses that no criterion owns. State in AC-145 (or a sibling) that constrained harnesses keep the same panic per stop kind with the native oracle | src/kani/generate/render/constrained.rs:199-216, src/kani/generate/render/constrained.rs:314-327, src/kani/generate/render/constrained.rs:470 |
+
+## Dispositions
+
+Round 1, fix head 4a2849b9. `quire matrix`: AC-143 to AC-146, AC-149 and AC-150 are tagged.
+AC-147/148 (Demonstration) and AC-151 (PLANNED) are untagged.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-147/148 now carry method `Demonstration`, which the spec-artifacts-process catalog declares (manifest verification methods: Test, Inspection, Analysis, Demonstration). The durable record is `docs/qualification/ir1022-kani-clause-measurements.md`. An untagged Demonstration row no longer claims a matrix test, and TC-025 step 55 says "a demonstration and not a matrix test". |
+| FND-002 | fixed | FR-015-AC-150 now owns the constrained native arms (with FR-048-AC-3/6), and `native_conditions_stop_the_method_without_becoming_a_boundary` (tests/it/constrained_method.rs:147) asserts the `Ok(false)` boundary, the `Ok(true)` continue, and the Undefined, IntegerOutOfDomain or Refused, and Incomplete stop arms. |

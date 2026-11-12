@@ -59,9 +59,11 @@ Failing checks and playback:
 - mutant 2: assertion "the V2 postcondition holds for the produced result"; playback `999`.
 - helper mutant: assertion "the produced V2 Boolean result agrees with the independent checked
   condition"; playback `1000`.
-- Each failing run prints a second playback with `amount_current = 1000` labelled
+- Mutants 1 and 2 each print a second playback with `amount_current = 1000` labelled
   `Check for cover: "the V2 result postcondition reaches its admitted domain"`; that is the witness
   of the satisfied cover, not a counterexample.
+- The helper mutant prints one playback only (`1000`), and that is the counterexample of the failed
+  assertion; its cover is unreachable (the helper always returns false), so it has no cover witness.
 
 Earlier history on the same harness shape: with the earlier bignum Boolean equality schedule the
 program was 1,971,414 steps and was killed in SAT conversion at the 24 GiB cap.

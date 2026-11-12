@@ -61,3 +61,36 @@ claim more than the evidence in kind (FND-001, FND-002) and leave older rows con
 | FND-004 | low | "peak RSS 2.77 GB" (and the mutants' "peak") is the cgroup's `memory.peak` (`kr.sh` reads `$CG/memory.peak`), which includes page cache. It is not process RSS. Say "cgroup peak memory" | spec/kani/functional/FR-015-bounded-kani-obligations.md:962-963 |
 | FND-005 | low | "the scratch shortcut `retain_boolean` is not delivered behavior" is ambiguous. The delivered harness still calls `rt::retain_boolean` on the implication's short-circuit branch (`scalar_9`). The shortcut meant is replacing the Boolean equality kernel by `retain_boolean(left == right, ..)` (the `diag` run). Say that | spec/kani/functional/FR-015-bounded-kani-obligations.md:962 |
 | FND-006 | low | TC-025 step 55 is headed "FR-015-AC-143 to FR-015-AC-145" but also carries AC-146 to AC-148. Its installed-Kani part omits the cgroup (24 GiB, swap 0), the crate setup (hand-written subject; isolated runtime checkout for the helper mutant) and the helper-calling healthy control, so it cannot be re-run as written | spec/kani/matrix/TC-025-bounded-kani-obligations.md:1022-1036 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The record says "Each failing run prints a second playback with `amount_current = 1000` labelled `Check for cover: ...`". That holds for mutant 1 and mutant 2 only. `helper.log` prints one playback (1000, the counterexample), and its cover is `0 of 1 cover properties satisfied (1 unreachable)`. AC-148 states this correctly ("in the first two runs"); the record should say "mutants 1 and 2" and note the helper mutant's cover is unreachable | docs/qualification/ir1022-kani-clause-measurements.md:62-64 |
+
+## Dispositions
+
+Round 1, fix head 4a2849b9. `make spec` exit 0 with the 6 pre-existing warnings. I checked every
+number in `docs/qualification/ir1022-kani-clause-measurements.md` against `ir1022-final/*.log`,
+`*.done`, `*.peak` and `ir1022-kani/healthy.log` plus journald:
+
+- Steps 675,940/675,979/675,940/675,938/675,937.
+- Symex 20.2/20.1/20.2/20.1/20.1 s.
+- Verification 38.5/38.2/87.9/87.3/75.8 s.
+- Wall 43.1/42.8/92.6/92.1/80.6 s.
+- memory.peak 2.77/2.77/11.8/11.7/10.8 GB.
+- Failing checks, playbacks 999/999/1000 and bytes 231,3.
+- Bignum run: 1,971,414 steps and oom-kill.
+- Toolchain nightly-2026-08-21.
+
+All match, except the playback sentence in new FND-007. The record cites no `/tmp` path and no
+commit hash, digest or pin (quire-exact is named as "the commit CG's `Cargo.lock` records").
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-147/148 now say: "Partial installed-Kani evidence, not the installed control of FR-015-AC-41 or FR-015-AC-126". They name the `test:state-frame-twin` fixture harness, the hand-written subject that does not call `implies_short_circuit`, raw `cargo kani` and the 24 GiB cgroup with swap 0, and they cite the helper-calling control. New PLANNED FR-015-AC-151 (owner: the IR lead, upgrade path IR-1509) lists CG's runner, the two-phase run and identity record, the pipeline subject and QSL regeneration, the kernel `+` mutants and the sealed 999 playback. |
+| FND-002 | fixed | Durable record `docs/qualification/ir1022-kani-clause-measurements.md` is committed: setup, exact command, results table, failing checks and playback, and what is not established. No `/tmp` path and no pin, hash or digest. Every number checked against the logs. |
+| FND-003 | fixed | AC-41 ("no healthy-proof fit is claimed for that meter harness" plus the IR-1022 partial-evidence sentence), AC-126 (24 GiB cap, 2.77 GB, does not discharge the 16 GiB sentence), AC-132 (`TimedOut` at 16 GiB; the later partial measurements do not replace the controls) and FR-017-AC-63 are reconciled, and none claims more than the evidence. |
+| FND-004 | fixed | AC-147/148 and the record say "cgroup `memory.peak`" and "(not process RSS)". |
+| FND-005 | fixed | The `retain_boolean` sentence is removed from AC-147. |
+| FND-006 | fixed | TC-025 step 55 is headed "FR-015-AC-143 to FR-015-AC-150". It names the scratch-crate test and the M1 site, and gives the installed-Kani setup (generated crate, hand-written subject, command, 24 GiB cgroup with swap 0, playback flags) and the FR-015-AC-151 PLANNED items. |
