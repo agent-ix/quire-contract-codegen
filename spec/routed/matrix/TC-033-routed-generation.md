@@ -93,7 +93,7 @@ For FR-022-AC-36, route an existing `NotApplicable` item with no record for its 
 unchanged control. Then route the FR-022-AC-27 `x + 1` node, whose records carry `p` guards,
 with a `NotApplicable` selection, without and then with one occurrence's requirement; expect
 `OccurrenceNotSelected` for both. Route the same node with an `OwnResult` selection and its
-requirement and check it reaches FR-022-AC-38 (slice a) or FR-022-AC-27 (slice b).
+requirement and check it reaches the guard handling of FR-022-AC-27.
 
 For FR-022-AC-37, over RR-16 combine a `ScalarSelectionMismatch` at the higher request index
 with a `RecordMissing` at the lower; in the FR-022-AC-30 plain-read package give the
@@ -101,15 +101,11 @@ view-independent integer item a requirement with no record beside the view-depen
 in one RR-16 item, set a wrong result bound with a wrong path condition, then the other recorded
 occurrence's ordinal with a wrong conversion context, then an ordinal with no record. Read the
 single reported refusal each time. In the IR-304 guarded package, route `k`'s `x + m` and `c`'s
-`n >= 0` with valid records in both slices, and in slice (b) `j`'s `x + 100` item, whose record
+`n >= 0` with valid records, and `j`'s `x + 100` item, whose record
 carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]` with both guard nodes as context roots;
 read each disposition.
 
-For FR-022-AC-38 (slice a only), make one `generate_routed` call over the IR-304 guarded package
-routing `f`'s then item, `h`'s `x + 100` and `g`'s `x + 1` with valid records, and read each
-disposition, reason and harness.
-
-For FR-022-AC-27 and AC-31 to AC-35 (slice b), route the QSL-emitted packages named in each
+For FR-022-AC-27 and AC-31 to AC-35, route the QSL-emitted packages named in each
 criterion, with each guard's node as a `ContextRoot` in its item's context span. Inspect each
 harness's `Statement::Assume` list and order, symbolic input ranges, `guard_inputs`,
 `path_condition` and `requirement_occurrence`, and the persisted record JSON. For AC-27, also
@@ -314,7 +310,7 @@ diagnostic-string parsing.
     `Integer { minimum: 0, maximum: 9 }`, with no harness, also for `20 < x`; the Boolean case
     names the inner `p` guard, `p` and `Boolean`; the unguarded control remains
     `result_bound_unreachable` (FR-022-AC-34).
-28. Planned: Kani 0.68.0 was run on the infeasible-guard harness and gave no verdict in 30 minutes (docs/qualification/ir304-kani-guard-cover-attempt.md). The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
+28. Planned (owner IR-304, which delivers a native-integer routed scalar harness next): Kani 0.68.0 was run on the infeasible-guard harness and gave no verdict in 30 minutes (docs/qualification/ir304-kani-guard-cover-attempt.md). The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
     (FR-022-AC-35).
 29. The `NotApplicable` control keeps its result; the recorded node and the attached requirement
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).

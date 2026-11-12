@@ -298,7 +298,17 @@ pub(super) fn lower_scalar_claim(
         return Err(ScalarLoweringRefusal::NoRenderer);
     };
     // Guards are checked after every refusal that does not depend on the path (FR-022
-    // "Per-item precedence"): a claim FR-014 refuses or that has no renderer is reported first.
+    // "Per-item precedence"): a claim FR-014 refuses or that has no renderer is reported first,
+    // including an operand bound this generator's claim map does not carry.
+    operation.operands(|position| match operand_ranges.get(position) {
+        Some(OperandRange::Bound(id)) if !generated.checked_bounds.contains(id) => {
+            Err(ScalarLoweringRefusal::NoRenderer)
+        }
+        Some(OperandRange::Bound(id)) if range_of(id).is_none() => {
+            Err(ScalarLoweringRefusal::NoRenderer)
+        }
+        _ => Ok((0, 0)),
+    })?;
     let plan = guards
         .as_ref()
         .map_err(|refusal| ScalarLoweringRefusal::GuardNotLowered(refusal.clone()))?;
@@ -455,14 +465,22 @@ impl LoweredScalarClaim {
         if body.operation_identity != self.operation_identity {
             return Err(ScalarAuthorityError::Operation);
         }
+        // The retained body carries the admitted ranges QSL's operator parity runs over. Guards
+        // narrow the harness's operand ranges inside them, so a witness in a narrowed range is
+        // an input of the admitted range; without guards the ranges are equal.
+        let guarded = self.guards.is_some();
         if body.operands.len() != self.operands.len()
             || body
                 .operands
                 .iter()
                 .zip(&self.operands)
                 .any(|(operand, (lower, upper))| {
-                    operand.range.lower != i128::from(*lower)
-                        || operand.range.upper != i128::from(*upper)
+                    let (lower, upper) = (i128::from(*lower), i128::from(*upper));
+                    if guarded {
+                        lower < operand.range.lower || upper > operand.range.upper
+                    } else {
+                        operand.range.lower != lower || operand.range.upper != upper
+                    }
                 })
         {
             return Err(ScalarAuthorityError::Ranges);
@@ -1494,6 +1512,51 @@ mod tests {
                 "checked bounds {:?}",
                 generated.checked_bounds
             );
+        }
+    }
+
+    /// An operand bound this generator's claim map does not carry is `operation_not_rendered`
+    /// before any guard refusal: the guard is only considered for a claim that can be rendered.
+    #[trace("FR-022-AC-37", "TC-033")]
+    #[test]
+    fn a_foreign_operand_bound_precedes_the_guard_refusal() {
+        let (bound, listed, unlisted) = (
+            checked_node_id("7"),
+            checked_node_id("8"),
+            checked_node_id("9"),
+        );
+        let derived = vec![DerivedDomain::IntegerRange {
+            bound: bound.clone(),
+            lower: "0".to_owned(),
+            upper: "9".to_owned(),
+        }];
+        let unlowered: Result<guard::GuardPlan, guard::GuardRefusal> = Err(Box::new((
+            crate::core::requirement::RequirementOccurrence {
+                node_id: checked_node_id("5"),
+                role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                ordinal: 0,
+            },
+            crate::kani::generate::outcome::PathGuardRefusal::UnsupportedGuardForm,
+        )));
+        // A bound outside `checked_bounds`, and one listed with no derived range.
+        for (checked_bounds, foreign) in [
+            (vec![bound.clone()], unlisted),
+            (vec![bound.clone(), listed.clone()], listed),
+        ] {
+            let claim = add_claim(checked_bounds);
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("built as Generated above");
+            };
+            let ranges = [OperandRange::Bound(foreign), OperandRange::Result];
+            for guards in [&Ok(guard::GuardPlan::default()), &unlowered] {
+                assert!(
+                    matches!(
+                        lower_scalar_claim(&claim, generated, &derived, &ranges, guards),
+                        Err(ScalarLoweringRefusal::NoRenderer)
+                    ),
+                    "a foreign operand bound is not rendered"
+                );
+            }
         }
     }
 

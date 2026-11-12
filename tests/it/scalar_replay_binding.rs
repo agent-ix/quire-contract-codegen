@@ -1,6 +1,6 @@
 //! Driver-owned native scalar controls: no Kani proof or backend falsification credit.
 use super::scalar_playback::{
-    replay_fixture, replay_fixture_with_extra, transcript, ReplayFixture,
+    replay_fixture, replay_fixture_guarded, replay_fixture_with_extra, transcript, ReplayFixture,
 };
 use ix_trace_rs::trace;
 use qsl_replay::{NativeOutcome, OperatorParityResult, ReplayLimits};
@@ -504,4 +504,81 @@ fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
         completed.settlement(&sent, Some(&report)).unwrap(),
         quire_contract_codegen::ScalarSettlement::Parity(result) if std::ptr::eq(result, report.result())
     ));
+}
+
+fn plan_error(fixture: &ReplayFixture, values: &[i64]) -> ScalarBuildError {
+    context(fixture)
+        .plan(
+            &fixture.harness,
+            &fixture.harness.identity,
+            fixture
+                .harness
+                .scalar_replay_body()
+                .expect("a guarded harness retains the admitted replay body"),
+            &fixture.artifacts,
+            &transcript(&fixture.harness.identity, values),
+        )
+        .expect_err("the playback is refused")
+}
+
+fn playback_code(error: &ScalarBuildError) -> &str {
+    match error {
+        ScalarBuildError::Playback(failure) => failure.code.as_str(),
+        other => panic!("expected a playback refusal, got {other:?}"),
+    }
+}
+
+/// A harness narrowed by its guard keeps the admitted replay body, so a witness inside the
+/// narrowed range reaches the parity plan and one outside it is refused.
+#[trace("FR-032-AC-19", "FR-022-AC-33", "TC-047")]
+#[test]
+fn a_narrowed_guarded_harness_plans_witnesses_inside_its_narrowed_range() {
+    let fixture = replay_fixture_guarded(
+        "quire.op.integer.add",
+        "x: Int[0, 9]",
+        "Int[0, 200]",
+        "if x > 5 then x + 100 else 0",
+        "",
+        Some(("quire.op.integer.gt", true)),
+    );
+    let arguments = fixture
+        .harness
+        .identity
+        .arguments
+        .iter()
+        .map(|argument| (argument.minimum, argument.maximum))
+        .collect::<Vec<_>>();
+    assert_eq!(arguments, [(6, 9), (100, 100)]);
+    let planned = plan(&fixture, &[6, 100]);
+    assert_eq!(planned.operands(), [6_i64, 100]);
+    assert_eq!(
+        playback_code(&plan_error(&fixture, &[5, 100])),
+        "cg_scalar_witness_operand_out_of_domain"
+    );
+}
+
+/// The builder reads the guard inputs of a real guarded harness: its playback holds the operands
+/// and then the guard input, which never becomes an operand of the parity plan.
+#[trace("FR-032-AC-19", "FR-022-AC-33", "TC-047")]
+#[test]
+fn a_guard_input_playback_plans_through_the_builder() {
+    let fixture = replay_fixture_guarded(
+        "quire.op.integer.add",
+        "x: Int[0, 9], y: Int[0, 9]",
+        "Int[0, 200]",
+        "if x < y then x + 100 else 0",
+        "",
+        Some(("quire.op.integer.lt", true)),
+    );
+    assert_eq!(fixture.harness.identity.guard_inputs.len(), 1);
+    let planned = plan(&fixture, &[3, 100, 9]);
+    assert_eq!(planned.operands(), [3_i64, 100]);
+    assert_eq!(
+        playback_code(&plan_error(&fixture, &[3, 100])),
+        "kani_witness_arity_mismatch"
+    );
+    assert_eq!(
+        playback_code(&plan_error(&fixture, &[3, 100, 10])),
+        "cg_scalar_witness_guard_out_of_domain"
+    );
 }

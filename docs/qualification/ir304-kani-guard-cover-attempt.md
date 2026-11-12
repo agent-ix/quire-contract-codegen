@@ -33,3 +33,5 @@ native machine integers, finished in under 100 s; this harness shape does not.
 - Neither the `CoverUnsatisfied` nor the `Verified` verdict of FR-022-AC-35 was observed.
 - The feasible-guard run was not started: it has the same program shape and the infeasible run
   had already exhausted the cap.
+
+FR-022-AC-35 stays with IR-304, which delivers a native-integer routed scalar harness next.

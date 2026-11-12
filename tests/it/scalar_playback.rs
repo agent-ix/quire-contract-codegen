@@ -74,6 +74,19 @@ pub(super) fn replay_fixture_with_extra(
     expression: &str,
     extra: &str,
 ) -> ReplayFixture {
+    replay_fixture_guarded(operation, parameters, result, expression, extra, None)
+}
+
+/// A routed fixture whose item carries one path guard: the single node whose operation is the
+/// given comparison, with its `holds`.
+pub(super) fn replay_fixture_guarded(
+    operation: &str,
+    parameters: &str,
+    result: &str,
+    expression: &str,
+    extra: &str,
+    guard: Option<(&str, bool)>,
+) -> ReplayFixture {
     let source = format!(
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n{extra}"
     );
@@ -144,7 +157,19 @@ pub(super) fn replay_fixture_with_extra(
         application: occurrence(&node_id),
         conversion: Some(occurrence(&conversion.node_id)),
     };
-    let positions = [
+    let guard_node = guard.map(|(comparison, holds)| {
+        let comparisons = checked
+            .resolved_graph()
+            .nodes
+            .iter()
+            .filter(|node| operation_identity(&node.body) == Some(comparison))
+            .collect::<Vec<_>>();
+        let [comparison] = comparisons.as_slice() else {
+            panic!("one authored guard comparison")
+        };
+        (comparison.node_id.clone(), holds)
+    });
+    let mut positions = vec![
         ContractRequestPosition::DriverItem {
             node_id: node_id.clone(),
             result_selection: selection.clone(),
@@ -153,10 +178,14 @@ pub(super) fn replay_fixture_with_extra(
             node_id: conversion.node_id.clone(),
         },
     ];
-    let lowered = checked.lower(
-        &[node_id.clone(), conversion.node_id.clone()],
-        &routed_contract_lowering_profile(),
-    );
+    let mut roots = vec![node_id.clone(), conversion.node_id.clone()];
+    if let Some((guard_id, _)) = &guard_node {
+        positions.push(ContractRequestPosition::ContextRoot {
+            node_id: guard_id.clone(),
+        });
+        roots.push(guard_id.clone());
+    }
+    let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
     let admitted = match ContractPackageWireV1::read(
         lowered.package.canonical_bytes().unwrap(),
         CheckedPackageReadLimits::bounded(),
@@ -165,8 +194,14 @@ pub(super) fn replay_fixture_with_extra(
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR admits routed package: {other:?}"),
     };
-    let requirement = crate::common::requirements::requirement_for(&checked, &selection)
+    let mut requirement = crate::common::requirements::requirement_for(&checked, &selection)
         .expect("an own-result requirement");
+    if let Some((guard_id, holds)) = &guard_node {
+        requirement.path_condition = vec![quire_contract_codegen::RequirementGuard {
+            occurrence: crate::common::requirements::occurrence(&occurrence(guard_id)),
+            holds: *holds,
+        }];
+    }
     let records = crate::common::requirements::records(&std::collections::BTreeMap::from([(
         0,
         requirement.clone(),
@@ -768,6 +803,63 @@ fn guard_transcript(identity: &ScalarObligationIdentity, entries: &[(&str, &[u8]
         "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"scalar parity\"\nfn playback() {{\nlet concrete_vals: Vec<Vec<u8>> = vec![\n{entries}];\nkani::concrete_playback_run(concrete_vals, harness);\n}}",
         identity.module_symbol, identity.harness_symbol,
     )
+}
+
+/// A guard input is part of the schema: a repeated identifier or an inverted integer range is
+/// refused before any value is read.
+#[trace("FR-032-AC-19")]
+#[test]
+fn a_malformed_guard_input_schema_is_refused() {
+    use quire_contract_codegen::{ScalarGuardDomain, ScalarGuardInput};
+    let base = sum();
+    let guard = |identifier: &str, domain| ScalarGuardInput {
+        identifier: identifier.to_owned(),
+        parameter: base.node_id.clone(),
+        domain,
+    };
+    let three = 3_i64.to_le_bytes();
+    let seventeen = 17_i64.to_le_bytes();
+    let nine = 9_i64.to_le_bytes();
+    let integer = |minimum, maximum| ScalarGuardDomain::Integer { minimum, maximum };
+
+    let mut inverted = base.clone();
+    inverted.guard_inputs = vec![guard("guard_0", integer(9, 0))];
+    refusal(
+        &inverted,
+        &guard_transcript(
+            &inverted,
+            &[("3", &three), ("17", &seventeen), ("9", &nine)],
+        ),
+        "cg_scalar_witness_schema_range_invalid",
+    );
+
+    let mut twice = base.clone();
+    twice.guard_inputs = vec![
+        guard("guard_0", integer(0, 9)),
+        guard("guard_0", integer(0, 9)),
+    ];
+    let entries = [
+        ("3", &three[..]),
+        ("17", &seventeen[..]),
+        ("9", &nine[..]),
+        ("9", &nine[..]),
+    ];
+    refusal(
+        &twice,
+        &guard_transcript(&twice, &entries),
+        "cg_scalar_witness_schema_duplicate_binding",
+    );
+
+    let mut shadowing = base.clone();
+    shadowing.guard_inputs = vec![guard(&base.arguments[0].identifier, integer(0, 9))];
+    refusal(
+        &shadowing,
+        &guard_transcript(
+            &shadowing,
+            &[("3", &three), ("17", &seventeen), ("9", &nine)],
+        ),
+        "cg_scalar_witness_schema_duplicate_binding",
+    );
 }
 
 #[trace("FR-032-AC-19")]

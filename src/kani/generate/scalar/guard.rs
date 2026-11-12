@@ -407,3 +407,77 @@ fn assumption(guard: &ResolvedGuard, readers: &[Vec<String>]) -> String {
     };
     terms.join(" && ")
 }
+
+#[cfg(test)]
+mod tests {
+    use ix_trace_rs::trace;
+    use serde_json::json;
+
+    use super::*;
+
+    fn node(digit: &str) -> CheckedNodeId {
+        serde_json::from_value(json!({"package": "guard-test", "path": [digit], "ordinal": 0}))
+            .expect("node id")
+    }
+
+    /// One guard `x <operator> literal` over `x: Int[0, 9]`.
+    fn plan(operator: Comparison, literal: i64, holds: bool) -> GuardPlan {
+        GuardPlan {
+            path_condition: Vec::new(),
+            parameters: vec![GuardParameter {
+                node: node("x"),
+                declared: DeclaredDomain::Integer {
+                    lower: "0".to_owned(),
+                    upper: "9".to_owned(),
+                },
+                operand_positions: vec![0],
+            }],
+            guards: vec![ResolvedGuard {
+                occurrence: RequirementOccurrence {
+                    node_id: node("g"),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal: 0,
+                },
+                holds,
+                form: GuardForm::Compare {
+                    operator,
+                    left: GuardSide::Parameter(0),
+                    right: GuardSide::Literal(literal),
+                },
+            }],
+        }
+    }
+
+    fn narrowed_range(plan: &GuardPlan) -> Option<(i64, i64)> {
+        let narrowed = plan.narrow().ok()?;
+        let mut ranges = [(0, 9)];
+        plan.narrow_operands(&narrowed, &mut ranges);
+        Some(ranges[0])
+    }
+
+    /// `=` keeps the value it names; `!=` removes it only from an endpoint, and a negated `=` or
+    /// `!=` is the opposite. These forms need a plan of their own because QSL converts an `=`
+    /// literal, so no authored guard reaches them.
+    #[trace("FR-022-AC-33", "TC-033")]
+    #[test]
+    fn equality_guards_narrow_by_the_value_they_name() {
+        for (operator, literal, holds, expected) in [
+            (Comparison::Eq, 5, true, Some((5, 5))),
+            (Comparison::Eq, 5, false, Some((0, 9))),
+            (Comparison::Eq, 0, false, Some((1, 9))),
+            (Comparison::Eq, 9, false, Some((0, 8))),
+            (Comparison::Eq, 20, true, None),
+            (Comparison::Ne, 0, true, Some((1, 9))),
+            (Comparison::Ne, 9, true, Some((0, 8))),
+            (Comparison::Ne, 5, true, Some((0, 9))),
+            (Comparison::Ne, 9, false, Some((9, 9))),
+            (Comparison::Ne, 20, false, None),
+        ] {
+            assert_eq!(
+                narrowed_range(&plan(operator, literal, holds)),
+                expected,
+                "{operator:?} {literal} holds={holds}"
+            );
+        }
+    }
+}

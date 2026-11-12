@@ -291,8 +291,10 @@ Otherwise the item settles `unsupported` with no harness, as
 `path_guard_not_lowered`). `guard` is the guard's `RequirementOccurrence`, and
 `reason` is one `PathGuardRefusal` (snake-case wire names):
 
-- `GuardRootNotLowered` (`guard_root_not_lowered`): the guard's context root
-  has a non-`lowered` accounting record, for example a guard reading a model
+- `GuardRootNotLowered` (`guard_root_not_lowered`): the guard's node is not an
+  admitted `lowered` context root of the call: its context root has a
+  non-`lowered` accounting record, or, for a direct FR-015 caller, the node
+  is not admitted at all, for example a guard reading a model
   member, whose closure reaches a `model` node outside the routed profile.
 - `UnsupportedGuardForm` (`unsupported_guard_form`): the lowered guard is
   neither form, for example arithmetic inside the guard, a call or a negation
@@ -326,7 +328,8 @@ The generator reports the first that applies, in this order:
 3. `path_guard_not_lowered`, for the first guard in outermost-first order that
    is not lowered, with reasons checked in the order `GuardRootNotLowered`,
    `UnsupportedGuardForm`, `UnboundedGuardOperand`, `GuardLiteralNotI64`;
-4. `domain_not_representable_in_i64` for an operand bound or literal;
+4. `domain_not_representable_in_i64` for an operand bound or literal, or for the
+   declared domain of a guard parameter that does not fit `i64`;
 5. `path_condition_unsatisfiable`;
 6. `result_bound_unreachable`.
 
@@ -346,6 +349,12 @@ operand keeps its wider range, so the proof covers a superset of the guarded
 executions. The harness draws the operand inputs in call order and then the
 guard inputs in `guard_inputs` order: by first read in the path condition,
 outermost guard first, left operand before right.
+
+A narrowed harness keeps the replay body of the admitted claim: the retained body carries the
+admitted operand ranges QSL's operator parity runs over, and each narrowed operand range of the
+harness lies inside the matching admitted range, so a falsifying witness of the guarded harness is
+an input of the admitted claim and reaches parity like an unguarded one. An unguarded harness
+keeps equal ranges.
 
 Every lowered guard is emitted as one `Statement::Assume` in outermost-first
 order, after all symbolic inputs and before the oracle call. `holds = false`
@@ -693,7 +702,7 @@ IR-815.
 | FR-022-AC-32 | A routed item whose guard is a lowerable form (a Boolean parameter reference, or an integer `lt`/`le`/`gt`/`ge`/`eq`/`ne` comparison between bounded-integer parameter references or such a reference and an `i64` literal) generates a harness with that guard's `Statement::Assume`. Otherwise the item settles `unsupported` as `path_guard_not_lowered` naming the guard occurrence, with no harness and its sibling item unaffected, and with reason: `UnsupportedGuardForm` for `x + 1 > 5`; `UnboundedGuardOperand` naming `n` for `n >= 0` over a plain-Integer parameter `n` (which lowers, since the routed profile has `require_bounds: false`); `GuardLiteralNotI64` naming the value for `x < 10^23`; and `GuardRootNotLowered` for a guard root whose accounting record is not `lowered`, for a guard reading a model member, whose closure reaches a `model` node outside the routed profile's `supported_tags` and so lowers as `unsupported`. A guard whose node is not a context root in the item's context span refuses the whole call as `RequirementRecord` with `GuardContextMissing` naming the guard. | Test (TC-033) |
 | FR-022-AC-33 | For QSL-emitted `if x > 5 then x + 100 else 0` over `x: Int[0, 9]` into `Int[0, 200]`, the guarded `x + 100` item is `Supported` with arguments `[6, 9]` and `[100, 100]`, a `Statement::Assume` of `x > 5`, and a result assertion against `[0, 200]`. The same item with the guard's `holds=false` has arguments `[0, 5]` and `[100, 100]`. For `if x < y then x + 1 else 0` over `x: Int[0, 9]` and `y: Int[0, 9]` into `Int[0, 10]`, a comparison between two parameters, the argument `x` keeps `[0, 9]`, `y` is a guard input over `[0, 9]`, and the harness assumes `x < y`. | Test (TC-033) |
 | FR-022-AC-34 | For QSL-emitted `f(x: Int[0, 9]): Int[0, 10] { if x > 20 then x + 100 else 0 }`, the guarded `x + 100` item settles `unsupported` as `path_condition_unsatisfiable` naming the `x > 20` guard occurrence, the parameter `x` and its declared `Integer { minimum: 0, maximum: 9 }`, with no harness; it is not `result_bound_unreachable`. The same `x + 100` into `Int[0, 10]` with an empty path condition still settles `result_bound_unreachable` with reachable `[100, 109]` (FR-015-AC-18). The literal-left guard `20 < x` gives the same outcome. For `f(p: Boolean, x: Int[0, 9]): Int[0, 10] { if p then (if p then 0 else x + 1) else 0 }`, the `x + 1` item settles `path_condition_unsatisfiable` naming the inner `p` guard, the parameter `p` and `Boolean`. | Test (TC-033) |
-| FR-022-AC-35 | PLANNED (installed Kani gave no verdict in the 30-minute cap; see docs/qualification/ir304-kani-guard-cover-attempt.md). For a guarded item whose guards are jointly infeasible but not emptied by narrowing (`if x < y then x + 1 else 0` with `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`), CG emits a harness whose `completed` cover follows the guard assumptions, and FR-017 execution under installed Kani reports `CoverUnsatisfied`, not `Verified`. The same harness with the guard `x > y` reports `Verified`. | Test (TC-033) |
+| FR-022-AC-35 | PLANNED (owner IR-304, which delivers a native-integer routed scalar harness next; installed Kani gave no verdict in the 30-minute cap; see docs/qualification/ir304-kani-guard-cover-attempt.md). For a guarded item whose guards are jointly infeasible but not emptied by narrowing (`if x < y then x + 1 else 0` with `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`), CG emits a harness whose `completed` cover follows the guard assumptions, and FR-017 execution under installed Kani reports `CoverUnsatisfied`, not `Verified`. The same harness with the guard `x > y` reports `Verified`. | Test (TC-033) |
 | FR-022-AC-36 | A routed Kani item with a `NotApplicable` selection at a node with no record in `requirement_records` and no requirement keeps its existing result with no guard. A `NotApplicable` item at the FR-022-AC-27 `x + 1` node, whose two records carry the guards `(p, holds=true)` and `(p, holds=false)`, refuses the whole call as `RequirementRecord` with `OccurrenceNotSelected`, both without a requirement and when it carries the `RoutedRequirement` of one of that node's occurrences. Routing the same node with an `OwnResult` selection and its own requirement is accepted and reaches the guard handling of FR-022-AC-27. A check comparing only the requirement's `node_id` with the item's would accept both refused inputs. | Test (TC-033) |
 | FR-022-AC-37 | Over the RR-16 input of FR-022-AC-26: an input with a `ScalarSelectionMismatch` at the higher request index and a `RecordMissing` at the lower one refuses as `ScalarSelectionMismatch` naming the higher index; in the FR-022-AC-30 plain-read package, giving the view-independent integer item a requirement with no record, beside the view-dependent item that alone refuses as `UnauthenticatedOperationView`, refuses as `RequirementRecord` (`RecordMissing` for an `OwnResult` selection, `OccurrenceNotSelected` for `NotApplicable`). In one item, a wrong result bound together with a wrong path condition refuses with `ResultBoundMismatch`; an occurrence ordinal changed to the other recorded occurrence's ordinal together with a wrong conversion context refuses with `ApplicationMismatch`, while an ordinal with no record refuses with `RecordMissing`. Per item, in the IR-304 guarded package: `if p then x + m else 0` with a plain-Integer `m` settles `requires_bound`, and `if flag then true else n >= 0` (`n >= 0` under `(flag, holds=false)`) settles `operation_not_rendered`, rather than a guard reason; `j`'s `x + 100`, under `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`, settles `path_guard_not_lowered` rather than `path_condition_unsatisfiable`. | Test (TC-033) |
 | FR-022-AC-38 | ~~Retired by IR-304 slice (b): the interim `guard_lowering_not_implemented` settlement of slice (a) no longer exists. Its replacement outcomes are FR-022-AC-27 and FR-022-AC-33.~~ | Inspection |

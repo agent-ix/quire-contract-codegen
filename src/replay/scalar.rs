@@ -159,5 +159,23 @@ fn validate_schema(identity: &ScalarObligationIdentity) -> Result<usize, DecodeF
             ));
         }
     }
+    for input in &identity.guard_inputs {
+        let inverted = matches!(
+            input.domain,
+            ScalarGuardDomain::Integer { minimum, maximum } if minimum > maximum
+        );
+        if inverted {
+            return Err(failure(
+                "cg_scalar_witness_schema_range_invalid",
+                &input.identifier,
+            ));
+        }
+        if !seen.insert(input.identifier.as_str()) {
+            return Err(failure(
+                "cg_scalar_witness_schema_duplicate_binding",
+                &input.identifier,
+            ));
+        }
+    }
     Ok(arity)
 }
