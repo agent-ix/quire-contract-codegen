@@ -34,3 +34,12 @@ Status flips are consistent across FR-024, TC-035, both matrices, FR-029-AC-16 a
 "Declared order" is handled correctly in the merged AC: AC-69 says the snapshot object is
 name-keyed and asserts no order, so the reviewer's order-reversal mutant surviving is expected and
 not a claim gap. One medium spec gap (refusal precedence).
+
+## Dispositions
+
+Round 1 at 63602773 (merge-tree clean against origin/main cd660b50): fmt --check, clippy --all-targets -D warnings clean; --test it state_clause_invariant_replay/terminal_map/layout 52 passed (11/32/8); --lib 540 passed, 7 ignored; make spec 6 pre-existing warnings.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | Precedence stated in AC-70, interface-001 and TC-035 step 49 and pinned by four cases. The coder's M2a (duplicate after range) and M2b (drawn-or-read after range) and a reviewer M6 (MissingField before the entry checks) each fail tc_035_each_unread_value_refusal_is_a_distinct_variant_before_any_document (lines 540, 536, 532). The reviewer's original M2 (duplicate, undeclared, drawn-or-read) still passes, but it is an equivalent mutant: a repeat needs an earlier same-name entry, which already failed the same name check, and an undeclared name cannot be drawn or read (ensure_declaring_object), so those three checks are never jointly observable. Every observable pair is pinned. |
+| FND-002 | fixed | Doubled 'and' removed. |

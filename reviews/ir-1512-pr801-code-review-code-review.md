@@ -62,3 +62,20 @@ constructions go through `Twin::invariant_inputs`, which sets `unread_values: Ve
 existing invariant tests over `with_bank_invariants` (every field read) pass unchanged, which is
 the regression. Both new variants map to `CgDefect` and are in the `terminal_map` list.
 No `unwrap`, `panic!` or `unsafe` in `src`; no hash, digest or pin change.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-005 | low | The doc comment of ensure_declaring_object does not say it now returns the names of the fields the clause reads (introduced by the FND-004 fix); non-blocking | src/replay/state_clause/invariant.rs:217-221 |
+
+## Dispositions
+
+Round 1 at 63602773 (merge-tree clean against origin/main cd660b50): fmt --check, clippy --all-targets -D warnings clean; --test it state_clause_invariant_replay/terminal_map/layout 52 passed (11/32/8); --lib 540 passed, 7 ignored; make spec 6 pre-existing warnings.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | Int[-5, 10] fixture: -5 and 10 accepted, -6 and 11 OutOfDomain. Reviewer M3 (minimum.max(0)) now fails tc_035_each_unread_value_refusal_is_a_distinct_variant_before_any_document at line 560. |
+| FND-002 | fixed | Unbounded-integer and string unread audit added to the no-range cases: supplied -> UnreadFieldNotRanged, omitted -> MissingField; the test passes. |
+| FND-003 | fixed | Closure parameter renamed to bound; no shadowing. |
+| FND-004 | fixed | ensure_declaring_object returns the read names from its one read_clause parse; clause_read_fields is removed (no remaining reference; clippy clean, no dead code). The only failure of the removed second parse was the same HarnessMismatch{Object} that ensure_declaring_object already returns earlier, so no behaviour change; all 11 invariant replay tests pass. |

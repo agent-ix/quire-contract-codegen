@@ -218,7 +218,8 @@ impl InvariantReplayInputs<'_> {
 /// is declared by `object_node`, and the node is the model object whose address the snapshot
 /// names. A different model object that happens to declare a field of the same name, or an
 /// address that is not `object_node`'s, would otherwise lend its field set and range to the
-/// replay.
+/// replay. The clause is parsed once here, and the names of the fields it reads are returned for
+/// the unread-value checks.
 fn ensure_declaring_object(
     graph: &ClauseGraphView<'_>,
     clause_node: &CheckedNodeId,

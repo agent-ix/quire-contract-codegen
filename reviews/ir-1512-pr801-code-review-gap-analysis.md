@@ -36,3 +36,12 @@ Every clause of AC-58, AC-69 and AC-70 that names an outcome has an executed ass
 from the negative-range and string/unbounded sub-cases recorded in the code-review SR. Step 40, 48
 and 49's mutation controls match what the tests kill (confirmed by the coder's list and the
 reviewer's M4/M5).
+
+## Dispositions
+
+Round 1 at 63602773 (merge-tree clean against origin/main cd660b50): fmt --check, clippy --all-targets -D warnings clean; --test it state_clause_invariant_replay/terminal_map/layout 52 passed (11/32/8); --lib 540 passed, 7 ignored; make spec 6 pre-existing warnings.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | through() decodes the snapshot fields and transcript inside the replay_through executor closure from the wire it receives, and that same executor calls replay_state_clause, so the asserted document is the captured request; the snapshot_fields helper on replay.wire is removed from this test. |
+| FND-002 | fixed | The refusal test, which asserts the omitted-unread MissingField, is now also tagged FR-024-AC-58; quire matrix lists AC-58 on both tests (:342, :488). |
