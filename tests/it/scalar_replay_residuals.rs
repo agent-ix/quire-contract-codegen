@@ -9,7 +9,7 @@ use quire_contract_codegen::{ScalarBuildError, ScalarSentRequest};
 use quire_contract_model::{CheckedOccurrenceRole, CheckedScalarOperandChild};
 use quire_exact::Integer;
 
-#[trace("TC-047")]
+#[trace("TC-047", "FR-032-AC-1", "FR-032-AC-5", "FR-032-AC-15", "FR-032-AC-16")]
 #[test]
 fn each_integer_operator_and_literal_keep_the_public_reader_body_and_real_route() {
     let cases = [
@@ -111,7 +111,7 @@ fn each_integer_operator_and_literal_keep_the_public_reader_body_and_real_route(
     }
 }
 
-#[trace("TC-047")]
+#[trace("TC-047", "FR-032-AC-15")]
 #[test]
 fn source_span_changes_preserve_identity_but_native_results_remain_independently_bound() {
     let first = replay_fixture(
@@ -177,7 +177,7 @@ fn source_span_changes_preserve_identity_but_native_results_remain_independently
     assert_ne!(first_claim.generated, second_claim.generated);
 }
 
-#[trace("TC-047")]
+#[trace("TC-047", "FR-032-AC-15", "FR-032-AC-18")]
 #[test]
 fn missing_retained_operands_and_changed_occurrences_refuse_before_replay() {
     let fixture = replay_fixture(

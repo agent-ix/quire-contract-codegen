@@ -252,7 +252,7 @@ fn node_key_of_entry_name(name: &str) -> qsl_replay::NodeKey {
     convert(serde_json::from_str(name).expect("a witness entry name spells a structural key"))
 }
 
-#[trace("FR-016-AC-9", "TC-026")]
+#[trace("FR-016-AC-9", "FR-032-AC-14", "TC-026", "TC-047")]
 #[test]
 fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
     let result =

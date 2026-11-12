@@ -21,7 +21,7 @@ failure from source-property refutation. Partial native evidence exists (IR-1184
 `scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
 a compiled generated artifact, without a Kani run. `scalar_settlement.rs` implements the
 settlement steps 10 to 14 (IR-631), and `kani_obligations.rs` implements the descriptor-level
-bounded-addition check of step 2. Steps 1 and 7 to 9 and the real-Kani run of step 2 remain
+bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence, single-member binding, stale-dependency and invented-membership checks (steps 3, 6 and 8, FR-032-AC-2, AC-6, AC-12, AC-17, AC-18). Steps 1, 7 and 9 and the real-Kani run of step 2 remain
 Planned, as does any real falsified Kani run through the route. No
 passing proof-driven replay is claimed.
 

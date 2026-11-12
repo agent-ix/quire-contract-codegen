@@ -64,7 +64,7 @@ fn with_record(harness: &StateFrameHarness, edit: impl FnOnce(&mut Value)) -> St
 }
 
 /// FR-015-AC-137: each role's harness carries its role's identity, member for member.
-#[trace("TC-025", "FR-015-AC-137")]
+#[trace("TC-025", "FR-015-AC-137", "FR-032-AC-14", "TC-047")]
 #[test]
 fn tc_025_each_role_harness_carries_its_own_identity() {
     let twin = Twin::new();
@@ -561,7 +561,7 @@ fn tc_035_postcondition_decode_cross_checks_the_identity() {
 
 /// FR-024-AC-73 and FR-024-AC-74: the frame replay compares the harness's identity with the one
 /// QSL's selected site mints.
-#[trace("TC-035", "FR-024-AC-73", "FR-024-AC-74")]
+#[trace("TC-035", "FR-024-AC-73", "FR-024-AC-74", "FR-032-AC-14", "TC-047")]
 #[test]
 fn tc_035_frame_replay_cross_checks_the_minted_identity() {
     let twin = Twin::new();

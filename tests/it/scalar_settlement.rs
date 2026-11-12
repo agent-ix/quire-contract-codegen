@@ -652,7 +652,7 @@ fn small_input_context(fixture: &ReplayFixture) -> OriginalScalarContext {
     .expect("a small input budget is a plan-time refusal")
 }
 
-#[trace("TC-047", "FR-032-AC-24")]
+#[trace("TC-047", "FR-032-AC-1", "FR-032-AC-24")]
 #[test]
 fn step_13_each_reachable_setup_error_is_classified_and_pairs_as_specified() {
     let fixture = sum_fixture();
