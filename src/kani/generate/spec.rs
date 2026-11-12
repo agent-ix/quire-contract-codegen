@@ -23,6 +23,10 @@ pub(super) enum HarnessSpecError {
     InputAfterCall,
     AssumeAfterCall,
     AssertBeforeCall,
+    /// A `Forget` statement before the subject call.
+    ForgetBeforeCall,
+    /// A `Forget` statement naming a value no earlier statement bound in its scope.
+    ForgetUnbound(String),
     DuplicateBinding(String),
     InvalidIdentifier(String),
     InvalidDomain,
@@ -557,8 +561,11 @@ impl HarnessSpec {
                     message(text)?;
                 }
                 Statement::Forget(name) => {
-                    if !called || !names.contains(name) {
-                        return Err(HarnessSpecError::AssertBeforeCall);
+                    if !called {
+                        return Err(HarnessSpecError::ForgetBeforeCall);
+                    }
+                    if !names.contains(name) {
+                        return Err(HarnessSpecError::ForgetUnbound(name.clone()));
                     }
                 }
                 Statement::ConditionalProbe { body, .. } => {
@@ -573,6 +580,9 @@ impl HarnessSpec {
                             }
                             Statement::Assert { message: text, .. } => message(text)?,
                             Statement::Forget(name) if local.contains(name) => {}
+                            Statement::Forget(name) => {
+                                return Err(HarnessSpecError::ForgetUnbound(name.clone()));
+                            }
                             _ => return Err(HarnessSpecError::InvalidExpression),
                         }
                     }
@@ -914,6 +924,50 @@ mod tests {
             ),
             HarnessSpecError::AssertBeforeCall
         );
+    }
+
+    /// A `Forget` is refused with its own errors: before the call, of a value never bound, and
+    /// of a probe-local value the probe did not bind.
+    #[trace("FR-015-AC-143", "TC-025")]
+    #[test]
+    fn forget_statement_refusals_name_their_own_errors() {
+        assert_eq!(
+            error(
+                vec![input("x"), Statement::Forget("x".into()), call()],
+                vec![cover()],
+                1
+            ),
+            HarnessSpecError::ForgetBeforeCall
+        );
+        assert_eq!(
+            error(
+                vec![input("x"), call(), Statement::Forget("ghost".into())],
+                vec![cover()],
+                1
+            ),
+            HarnessSpecError::ForgetUnbound("ghost".into())
+        );
+        assert_eq!(
+            error(
+                vec![
+                    input("x"),
+                    call(),
+                    Statement::ConditionalProbe {
+                        condition: expression("true"),
+                        body: vec![Statement::Forget("x".into())],
+                    }
+                ],
+                vec![cover()],
+                1
+            ),
+            HarnessSpecError::ForgetUnbound("x".into())
+        );
+        assert!(construct(
+            vec![input("x"), call(), Statement::Forget("x".into())],
+            vec![cover()],
+            1
+        )
+        .is_ok());
     }
 
     #[trace("FR-015-AC-112", "TC-025")]

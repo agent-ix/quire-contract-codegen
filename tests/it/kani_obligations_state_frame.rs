@@ -1453,6 +1453,50 @@ fn native_clause_harness_forgets_fat_values_after_the_cover() {
     assert!(!text.contains("rt::Outcome::Completed(true)"));
 }
 
+/// The general (non-native) harness keeps the full runtime outcome, which is not `Copy`, so it
+/// forgets the outcome as well as the meter, after the cover.
+#[trace("TC-025", "FR-015-AC-143", "FR-015-AC-149")]
+#[test]
+fn general_clause_harness_forgets_the_outcome_and_the_meter_after_the_cover() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
+        dependencies: None,
+    };
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one harness");
+    };
+    let text = &harness.rust.contents;
+    syn::parse_file(text).expect("valid Rust");
+    let cover = text.find("kani::cover!(").unwrap();
+    for forgotten in ["outcome", "meter"] {
+        let call = format!("core::mem::forget({forgotten});");
+        assert_eq!(text.matches(&call).count(), 1, "{call} appears once");
+        assert!(
+            text.find(&call).unwrap() > cover,
+            "{call} comes after the cover"
+        );
+    }
+    assert!(text.contains("rt::Outcome::Completed(true)"));
+}
+
 #[trace("FR-015-AC-126", "TC-025")]
 #[test]
 fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation() {
@@ -7477,4 +7521,180 @@ fn qsl_constant_invariants_need_no_symbolic_input_or_subject() {
             .contents
             .contains("kani::cover!(matches!(invariant_domain, ()),"));
     }
+}
+
+/// Source of the generated scalar helper whose doc line names `operation`.
+fn generated_helper_name(source: &str, operation: &str) -> String {
+    let at = source
+        .find(&format!("/// `{operation}`.\npub fn "))
+        .expect("the generated oracle holds the helper");
+    let tail = &source[at..];
+    let name = &tail[tail.find("pub fn ").unwrap() + "pub fn ".len()..];
+    name[..name.find('(').unwrap()].to_owned()
+}
+
+/// The Boolean `=` and `!=` helpers the generator renders on the native path, compiled and run
+/// against the typed route they replace: value, outcome kind, every captured charge event and
+/// every counter, over the four Boolean pairs, unlimited and at every bound up to the spend of
+/// each of the ten limit kinds, and every limit kind a run does not spend is zero. The same
+/// crate drives the generated native clause oracle into its payload-free out-of-domain stop.
+#[trace("TC-025", "FR-015-AC-145", "FR-015-AC-146", "FR-015-AC-150")]
+#[test]
+fn generated_native_boolean_equality_matches_the_typed_route() {
+    let mut source = String::from("#![allow(dead_code)]\nuse quire_exact as rt;\nuse quire_semantic_value::declaration as sv;\n");
+    let mut cases = String::new();
+    for (index, (condition, operation, operator)) in [
+        (
+            "result = (amount < 1000 implies amount + 1 <= 1000)",
+            "quire.op.boolean.eq",
+            "Equal",
+        ),
+        (
+            "result != (amount < 1000 implies amount + 1 <= 1000)",
+            "quire.op.boolean.ne",
+            "NotEqual",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (package, clause) = Twin::with_bounded_amount_implication_condition(condition)
+            .emitted_package("BalanceNeverDrops");
+        let native = generate_v2_clause_native_oracle(&package, &clause).expect("native eligible");
+        let helper = generated_helper_name(&native.source, operation);
+        source.push_str(&format!(
+            "mod generated_{index} {{\n{}\npub fn classify_out_of_domain() -> Result<bool, ClauseStop> {{\n    measured(rt::Outcome::<bool>::Refused(rt::Refusal::IntegerOutOfDomain {{ target: Box::new(rt::IntegerInterval::new(rt::Integer::from(0i64), rt::Integer::from(1000i64)).expect(\"interval\")) }}))\n}}\n}}\n",
+            native.source
+        ));
+        cases.push_str(&format!(
+            "    check(sv::EqualityOperator::{operator}, &|l, r, m| generated_{index}::{helper}(l, r, m).expect(\"oracle\"));\n    stop_kind(generated_{index}::oracle_clause);\n    println!(\"CLASSIFY {{:?}}\", generated_{index}::classify_out_of_domain());\n"
+        ));
+    }
+    source.push_str(r#"
+const KINDS: [rt::LimitKind; 10] = [
+    rt::LimitKind::IntegerBits, rt::LimitKind::DecimalDigits, rt::LimitKind::ScaleExpansion,
+    rt::LimitKind::TextInputBytes, rt::LimitKind::TextScalars, rt::LimitKind::NormalizedScalars,
+    rt::LimitKind::UnitEdges, rt::LimitKind::ValueOccurrences, rt::LimitKind::WorkUnits,
+    rt::LimitKind::ResultUnits,
+];
+fn limits() -> rt::ScalarLimits {
+    rt::ScalarLimits {
+        integer_bits: u64::MAX, decimal_digits: u64::MAX, scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX, text_scalars: u64::MAX, normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX, value_occurrences: u64::MAX, work_units: u64::MAX,
+        result_units: u64::MAX,
+    }
+}
+fn tighten(mut l: rt::ScalarLimits, kind: rt::LimitKind, bound: u64) -> rt::ScalarLimits {
+    match kind {
+        rt::LimitKind::IntegerBits => l.integer_bits = bound,
+        rt::LimitKind::DecimalDigits => l.decimal_digits = bound,
+        rt::LimitKind::ScaleExpansion => l.scale_expansion = bound,
+        rt::LimitKind::TextInputBytes => l.text_input_bytes = bound,
+        rt::LimitKind::TextScalars => l.text_scalars = bound,
+        rt::LimitKind::NormalizedScalars => l.normalized_scalars = bound,
+        rt::LimitKind::UnitEdges => l.unit_edges = bound,
+        rt::LimitKind::ValueOccurrences => l.value_occurrences = bound,
+        rt::LimitKind::WorkUnits => l.work_units = bound,
+        rt::LimitKind::ResultUnits => l.result_units = bound,
+        _ => unreachable!(),
+    }
+    l
+}
+type Run = (rt::Outcome<bool>, Vec<rt::ChargeEvent>, Vec<u64>);
+fn run(l: rt::ScalarLimits, f: &dyn Fn(&mut rt::Meter) -> rt::Outcome<bool>) -> Run {
+    let mut meter = rt::Meter::new(l);
+    meter.enable_charge_capture(64, 256);
+    let outcome = f(&mut meter);
+    let counters = KINDS.iter().map(|k| meter.consumed(*k)).collect();
+    let events = match meter.disable_charge_capture() {
+        Some(Ok(capture)) => capture.events().to_vec(),
+        _ => panic!("charge capture missing or truncated"),
+    };
+    (outcome, events, counters)
+}
+fn typed(op: sv::EqualityOperator, l: bool, r: bool, m: &mut rt::Meter) -> rt::Outcome<bool> {
+    let env = sv::TypeEnvironment::default();
+    let Ok(checked) = env.check_equality(
+        op,
+        sv::EqualityOperand::typed(rt::ValueType::Boolean),
+        sv::EqualityOperand::typed(rt::ValueType::Boolean),
+        &quire_semantic_value::enumeration::EnumMemberIndex::default(),
+    ) else { panic!("well typed") };
+    checked.evaluate(&env, &rt::Value::Boolean(l), &rt::Value::Boolean(r), m)
+}
+fn check(op: sv::EqualityOperator, generated: &dyn Fn(bool, bool, &mut rt::Meter) -> rt::Outcome<bool>) {
+    for left in [false, true] {
+        for right in [false, true] {
+            let (outcome, events, counters) = run(limits(), &|m| typed(op, left, right, m));
+            let expected = (left == right) == matches!(op, sv::EqualityOperator::Equal);
+            assert_eq!(outcome, rt::Outcome::Completed(expected), "{op:?} {left} {right}");
+            assert_eq!(events.len(), 4);
+            assert_eq!(
+                run(limits(), &|m| generated(left, right, m)),
+                (outcome, events, counters.clone()),
+                "{op:?} {left} {right} unlimited"
+            );
+            for (kind, spend) in KINDS.iter().zip(&counters) {
+                if !matches!(kind, rt::LimitKind::ValueOccurrences | rt::LimitKind::WorkUnits | rt::LimitKind::ResultUnits) {
+                    assert_eq!(*spend, 0, "{kind:?} is not spent by Boolean equality");
+                }
+                for bound in 0..=*spend {
+                    let tight = tighten(limits(), *kind, bound);
+                    assert_eq!(
+                        run(tight, &|m| generated(left, right, m)),
+                        run(tight, &|m| typed(op, left, right, m)),
+                        "{op:?} {left} {right} {kind:?} {bound}"
+                    );
+                }
+            }
+        }
+    }
+}
+fn stop_kind<S: core::fmt::Debug + PartialEq>(
+    oracle: fn(&rt::NativeInteger, bool, &mut rt::Meter) -> Result<bool, S>,
+) {
+    for amount in [-5i128, 0, 999, 1000, i128::from(i64::MAX)] {
+        let mut meter = rt::Meter::new(limits());
+        let stop = oracle(&rt::NativeInteger::new(amount), true, &mut meter);
+        println!("STOP {amount} {stop:?}");
+    }
+}
+fn main() {
+"#);
+    source.push_str(&cases);
+    source.push_str("}\n");
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir1022-native-boolean-equality");
+    fs::write(directory.path.join("src/main.rs"), source).unwrap();
+    super::scratch_crate::write_manifest(
+        &directory.path,
+        &format!(
+            "[package]\nname = \"generated-native-boolean-equality\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE,
+        ),
+    );
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    let evaluated = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--locked", "--offline", "-j2", "--quiet"])
+        .env("CARGO_BUILD_JOBS", "2")
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .env("RUSTFLAGS", "--check-cfg=cfg(kani)")
+        .current_dir(&directory.path)
+        .output()
+        .expect("compile and run the generated Boolean equality helpers");
+    assert!(
+        evaluated.status.success(),
+        "generated Boolean equality disagrees with the typed route: {}",
+        String::from_utf8_lossy(&evaluated.stderr)
+    );
+    let stops = String::from_utf8_lossy(&evaluated.stdout);
+    assert!(
+        stops.contains("CLASSIFY Err(IntegerOutOfDomain)")
+            && stops.contains("STOP -5 Err(Oracle)")
+            && stops.contains("STOP 999 Ok("),
+        "the generated stop classifier keeps an out-of-domain refusal as its payload-free kind: {stops}"
+    );
+    eprintln!("{stops}");
 }

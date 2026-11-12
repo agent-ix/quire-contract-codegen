@@ -802,9 +802,14 @@ impl Twin {
 
     /// The original guarded arithmetic condition with the same declared bounds.
     pub fn with_bounded_amount_implication() -> Self {
-        let mut twin = Self::with_bounded_amount_condition(
+        Self::with_bounded_amount_implication_condition(
             "result = (amount < 1000 implies amount + 1 <= 1000)",
-        );
+        )
+    }
+
+    /// The same Boolean-result package with `condition` as the postcondition body.
+    pub fn with_bounded_amount_implication_condition(condition: &str) -> Self {
+        let mut twin = Self::with_bounded_amount_condition(condition);
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
         let account = domain["types"]
             .as_array_mut()
