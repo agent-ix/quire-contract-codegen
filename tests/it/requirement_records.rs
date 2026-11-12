@@ -1840,3 +1840,90 @@ fn an_unlowered_second_guard_precedes_unsatisfiability() {
         "{disposition}"
     );
 }
+
+/// The native-route harness of the FR-022-AC-35 scenario `if x OP y then x + 1 else 0` with
+/// `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`, guarded by `(x OP y, holds=true)`.
+fn ac35_native_harness(
+    comparison: &str,
+    identity: &'static str,
+) -> quire_contract_codegen::KaniScalarObligationHarness {
+    let scenario = guard_scenario(
+        "ac35",
+        &guard_fn(
+            "x: Int[5, 9], y: Int[0, 4]",
+            &format!("if x {comparison} y then x + 1 else 0"),
+        ),
+        &is_plus("1"),
+        &[(&op_is(identity), true)],
+    );
+    let records = RequirementRecords::new(scenario.records());
+    let generation = quire_contract_codegen::generate_routed_native(
+        &scenario.checked,
+        &scenario.package,
+        &scenario.positions,
+        &scenario.valid(),
+        &GenerationContexts {
+            kani: Some(KaniGenerationContext {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                subject_path: "crate::subject",
+                unwind: 3,
+                requirement_records: &records,
+            }),
+        },
+    )
+    .expect("the guarded item routes");
+    let (record, harness) = kani_record(&generation, 0);
+    harness
+        .unwrap_or_else(|| panic!("a harness, got {:?}", record.disposition))
+        .clone()
+}
+
+/// The routed scalar harness computes on native integers, never drops the meter or the outcome
+/// and ends with the one cover read from a plain `bool` (FR-022-AC-35, FR-015-AC-7).
+#[trace("FR-022-AC-35", "TC-033")]
+#[test]
+fn the_guarded_native_harness_is_thin_and_ends_with_its_cover() {
+    for (comparison, identity) in [("<", "quire.op.integer.lt"), (">", "quire.op.integer.gt")] {
+        let harness = ac35_native_harness(comparison, identity);
+        let source = &harness.rust.contents;
+        let proof = &source[source.find("#[kani::proof]").expect("the proof attribute")..];
+        assert_eq!(
+            harness.identity.integer_representation,
+            quire_contract_codegen::ScalarIntegerRepresentation::Native
+        );
+        assert!(
+            !proof.contains("rt::Integer"),
+            "no arbitrary-precision value: {proof}"
+        );
+        assert!(
+            proof.contains("nx::NativeInteger::new(i128::from(left))"),
+            "{proof}"
+        );
+        assert!(proof.contains("value.value() == exact"), "{proof}");
+        let assumption = format!("kani::assume(left_native {comparison} guard_0);");
+        assert_eq!(proof.matches(&assumption).count(), 1, "{proof}");
+        assert!(
+            proof.find(&assumption) < proof.find("let outcome = "),
+            "{proof}"
+        );
+        let tail = proof
+            .lines()
+            .rev()
+            .take(6)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+        assert!(
+            tail[0].starts_with("let cover_reached: bool = completed;"),
+            "{tail:?}"
+        );
+        assert_eq!(tail[1], "core::mem::forget(meter);");
+        assert_eq!(tail[2], "core::mem::forget(outcome);");
+        assert!(
+            tail[3].starts_with("kani::cover!(cover_reached, "),
+            "{tail:?}"
+        );
+        assert_eq!(proof.matches("kani::cover!(").count(), 1);
+    }
+}

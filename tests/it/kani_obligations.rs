@@ -853,7 +853,8 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
         "regression to the old, false, unconditional-totality assertion: {source}"
     );
     assert!(
-        source.contains("kani::cover!(completed,"),
+        source.contains("let cover_reached: bool = completed;")
+            && source.contains("kani::cover!(cover_reached,"),
         "the cover must gate on outcome reachability, as the FR-015-AC-7 non-vacuity guard, \
          never on a constant: {source}"
     );

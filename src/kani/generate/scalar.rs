@@ -786,6 +786,10 @@ pub(super) fn render_scalar(
             "matches!(outcome, Ok(rt::Outcome::Completed(_)))".to_owned(),
         )?),
     )));
+    // The meter and the outcome hold symbolic-discriminant sum types, one with a heap arm. The
+    // proof never drops them; the cover reads the plain `bool` above and stays the last statement.
+    body.push(Statement::Forget("meter".to_owned()));
+    body.push(Statement::Forget("outcome".to_owned()));
     let spec = HarnessSpec::new(
         format!("exact-scalar {} `{}`", super::clause::v2::message_safe_node_label(&lowered.node_id), lowered.operation_identity),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
@@ -1094,7 +1098,10 @@ mod {module} {{\n\
         }};\n\
         assert!(sound, \"the oracle must complete with exactly the native {operation} result when it lies in the checked domain, and refuse otherwise\");\n\
         let completed = matches!(outcome, Ok(rt::Outcome::Completed(_)));\n\
-        kani::cover!(completed, \"the generated oracle's Ok(Outcome::Completed(_)) branch is reachable within its checked domain\");\n\
+        let cover_reached: bool = completed;\n\
+        core::mem::forget(meter);\n\
+        core::mem::forget(outcome);\n\
+        kani::cover!(cover_reached, \"the generated oracle's Ok(Outcome::Completed(_)) branch is reachable within its checked domain\");\n\
     }}\n\
 }}\n",
         module = lowered.module_symbol,
