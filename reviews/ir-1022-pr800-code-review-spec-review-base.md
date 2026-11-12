@@ -94,3 +94,23 @@ commit hash, digest or pin (quire-exact is named as "the commit CG's `Cargo.lock
 | FND-004 | fixed | AC-147/148 and the record say "cgroup `memory.peak`" and "(not process RSS)". |
 | FND-005 | fixed | The `retain_boolean` sentence is removed from AC-147. |
 | FND-006 | fixed | TC-025 step 55 is headed "FR-015-AC-143 to FR-015-AC-150". It names the scratch-crate test and the M1 site, and gives the installed-Kani setup (generated crate, hand-written subject, command, 24 GiB cgroup with swap 0, playback flags) and the FR-015-AC-151 PLANNED items. |
+
+Round 2, head 9bbc7d89. `make spec` exit 0 with the 6 pre-existing warnings. FND-007 was fixed in
+1f071146. The re-measured numbers that 9bbc7d89 puts in AC-147, AC-148, AC-41, AC-126 and the
+record were each checked against `ir1022-final/r2{healthy,helperhealthy,mutant,oracle,helper}.{log,done}`:
+
+- Steps 675,942/675,981/675,942/675,940/675,939.
+- Symex 21.2/20.6/21.2/20.6/20.6 s.
+- Verification 39.9/39.0/95.3/90.5/78.2 s.
+- Wall 44.6/43.7/100.2/95.4/83.0 s.
+- `memory.peak` 2.78/2.78/11.8/11.7/10.7 GB.
+- Failing checks and playbacks 999/999/1000, and cover witness 1000 for mutants 1 and 2 only.
+- r2helper prints one playback and has its cover unreachable.
+- "Changed the step count by two" holds for every run.
+
+All match. The r2 crates differ from each other only by the stated mutation. AC-143 and AC-149
+and TC-025 step 55 now describe the cover-last order, and FR-015-AC-7/53/58 are unchanged.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-007 | fixed | The record now says "Mutants 1 and 2 each print a second playback with `amount_current = 1000` labelled `Check for cover: ...`". It adds that the helper mutant prints one playback (`1000`, the counterexample) and that its cover is unreachable, which matches `helper.log` and `r2helper.log`. |

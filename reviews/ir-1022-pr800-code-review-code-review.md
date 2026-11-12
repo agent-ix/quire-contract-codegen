@@ -111,3 +111,35 @@ Reviewer M3 re-run now FAILS
 | FND-003 | fixed | The scratch-crate test tightens all ten kinds (`tighten` covers every `LimitKind`, bounds 0..=spend) and asserts that the seven kinds outside value_occurrences/work_units/result_units spend 0. |
 | FND-004 | fixed | The same scratch crate calls the generated `measured` with a constructed `Refusal::IntegerOutOfDomain` and asserts `Err(IntegerOutOfDomain)`. An out-of-interval operand asserts `Err(Oracle)`. Owned by the new FR-015-AC-150. |
 | FND-005 | fixed | New `ForgetBeforeCall` and `ForgetUnbound(name)`, with the probe-local unbound case also `ForgetUnbound`. Unit test `forget_statement_refusals_name_their_own_errors` covers all three cases and the accepted case. |
+
+Round 2, head 9bbc7d89 (fix commits 1f071146 and 9bbc7d89 on 4a2849b9). origin/main is now
+04148fc7 and `git merge-tree` is clean. This round re-reviews the render change in
+`git diff 1f071146..9bbc7d89`. When a harness has forgets, the renderer now emits
+`let cover_reached: bool = <cover condition>;`, then the forgets, and ends with
+`kani::cover!(cover_reached, "<message>")`. Harnesses with no forgets keep the inline cover.
+
+- The cover is the single, last statement.
+- Every assertion comes before the `let` (top-level asserts are emitted in body order; the `let`,
+  forgets and cover come after the body loop).
+- The condition is evaluated at the same point as before: after every assertion and probe. Only
+  `forget` calls sit between the read and the cover, and they change neither control flow nor any
+  value the condition reads. So the cover's reachability-with-condition is unchanged, and the
+  `bool` carries no fat value.
+- The rendered r2 crates (scratchpad `r2/*/src/lib.rs`) have exactly this tail. Their first 236
+  lines are byte-identical to the round-1 crates.
+
+Gates, one batched job under the cargo lock: fmt clean, clippy `-D warnings` clean,
+`--lib kani::generate` 87 passed, `--test it` with the focused filters plus `cover_last`, `qsl_`
+and `layout` 273 passed, 22 ignored.
+
+Reviewer mutants on the pinned-text tests:
+
+- M7 restores the old order (inline cover, then the forgets). It fails five tests:
+  `cover_last::tc_025_every_emitted_harness_ends_with_exactly_one_cover`, the native and general
+  `*_before_the_final_cover` tests, `qsl_state_invariant_is_a_separate_v2_assertion_obligation`
+  and `qsl_constant_invariants_need_no_symbolic_input_or_subject`.
+- M8 puts the forgets before the cover-condition read. It fails
+  `native_clause_harness_forgets_fat_values_before_the_final_cover` and
+  `general_clause_harness_forgets_the_outcome_and_the_meter_before_the_final_cover`.
+
+Both reverted. No new findings; FND-001 to FND-005 stay fixed.
