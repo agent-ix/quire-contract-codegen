@@ -54,6 +54,7 @@ fn context(
             dependencies: vec![],
             accounting_limits: limits(),
             stage_limits: BTreeMap::new(),
+            supplied_limits: None,
             declared_domains: vec![],
             replay_limits: ReplayLimits::default(),
         },

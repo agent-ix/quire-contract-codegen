@@ -11,15 +11,16 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, witness_entry_name, CallSite, CallSiteRefusal, DeclaredDomain,
-    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DisagreementCause,
-    EnvelopeSource, FunctionSite, Identifier, MalformedTranscript, NoPayload, NodeKey,
-    NodeWireError, ObligationIdentity, OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal,
-    ReplayRequestWire, ReplayResult, ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits,
-    SourceIdentity, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope,
-    WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
+    call_site, replay, witness_entry_name, BackendId, CallSite, CallSiteRefusal,
+    CanonicalAssignment, DeclaredDomain, DependencyEntryWire, DependencyInput,
+    DependencyInputRefusal, DisagreementCause, EnvelopeSource, FunctionSite, Identifier,
+    MalformedTranscript, NoPayload, NodeKey, NodeWireError, ObligationIdentity, OccurrenceKey,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    SuppliedLibrary, ValueParitySite, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket,
+    WitnessRefusal, WitnessSettlement, WitnessValue,
 };
-use quire_semantic_value::catalog::Category;
+use quire_semantic_value::{catalog::Category, supplied_stop::SuppliedLimits};
 
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
@@ -365,6 +366,8 @@ pub struct ReplayInputs {
     pub accounting_limits: ScalarLimits,
     /// The proving run's named stage bounds. Omitted names use QSL's published defaults.
     pub stage_limits: BTreeMap<String, u64>,
+    /// The configured supplied-value ceilings. Absence selects QSL's published defaults.
+    pub supplied_limits: Option<SuppliedLimits>,
     /// The proving run's declared finite domains, keyed by their original proof positions.
     pub declared_domains: Vec<DeclaredDomain>,
     /// The configured reader bound for the replay request and envelopes.
@@ -497,8 +500,7 @@ impl ReplayInputs {
             state_environment: StateEnvironment::new(Vec::new()),
             accounting_limits: self.accounting_limits,
             stage_limits: self.stage_limits.clone(),
-            // This path has no caller-supplied helper ceilings; QSL resolves `None` to its published defaults.
-            supplied_limits: None,
+            supplied_limits: self.supplied_limits,
             declared_domains: self.declared_domains.clone(),
             byte_provision,
             documents: documents.iter().map(|bytes| bytes.to_vec()).collect(),
@@ -574,7 +576,7 @@ pub enum PacketClaimMember {
     Domains,
     /// The packet names a different backend producer.
     Backend,
-    /// A function falsification requires a backend witness.
+    /// The packet's source arm is not the one this request path requires.
     SourceArm,
     /// The packet named another obligation.
     Obligation,
@@ -591,6 +593,8 @@ pub enum FunctionPacketError {
     ProvingRunMismatch,
     /// The selected Kani identity did not bind to this function package.
     Identity(ObligationIdentityError),
+    /// This selected function has no non-Boolean value-parity claim.
+    NoValueParityClaim,
 }
 
 impl fmt::Display for FunctionPacketError {
@@ -607,11 +611,21 @@ impl fmt::Display for FunctionPacketError {
                 f.write_str("the Kani proving-run identity differs from this QSL twin")
             }
             Self::Identity(cause) => write!(f, "the selected claim identity failed: {cause}"),
+            Self::NoValueParityClaim => {
+                f.write_str("the selected function has no value-parity claim")
+            }
         }
     }
 }
 
 impl std::error::Error for FunctionPacketError {}
+
+/// The producer arm a function request path requires of its admitted packet.
+#[derive(Clone, Copy)]
+enum FunctionPacketArm {
+    Witness,
+    Input,
+}
 
 impl ReplayPackage {
     /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it.
@@ -883,6 +897,58 @@ impl ReplayPackage {
         ))
     }
 
+    /// Completes a value-parity producer packet from QSL's checked claim for this function, the
+    /// generated-code driver's provider identity and the observed canonical input assignments.
+    /// The obligation identity is the one QSL minted at [`call_site`]; the caller supplies none.
+    ///
+    /// # Errors
+    ///
+    /// [`FunctionPacketError::NoValueParityClaim`] if the selected function is Boolean.
+    pub fn value_parity_packet(
+        &self,
+        generator: &BackendId,
+        assignments: Vec<CanonicalAssignment>,
+    ) -> Result<WitnessPacket<NoPayload>, FunctionPacketError> {
+        let claim = self.value_parity_claim()?;
+        Ok(function_packet(
+            self,
+            FunctionPacketClaim {
+                obligation: claim.obligation_identity.clone(),
+                subject: self.site.site.function.clone(),
+                occurrence: self.site.site.declaration.clone(),
+            },
+            EnvelopeSource::Input(assignments),
+            generator.as_str(),
+            Vec::new(),
+        ))
+    }
+
+    /// Builds a value-parity request only after QSL admits the producer packet and this package
+    /// binds its target, declaration occurrence, subject, package, `Input` arm and obligation to
+    /// the independently selected checked function claim. A missing packet has no request path.
+    ///
+    /// # Errors
+    ///
+    /// [`FunctionPacketError`] when QSL refuses the packet or a packet member does not match the
+    /// selected claim.
+    pub fn value_parity_request(
+        &self,
+        packet: WitnessPacket<NoPayload>,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        let obligation = self.value_parity_claim()?.obligation_identity.clone();
+        let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
+            .map_err(FunctionPacketError::Admission)?;
+        self.request_from_envelope_for_arm(&envelope, obligation, FunctionPacketArm::Input)
+    }
+
+    fn value_parity_claim(&self) -> Result<&ValueParitySite, FunctionPacketError> {
+        self.site
+            .site
+            .value_parity
+            .as_ref()
+            .ok_or(FunctionPacketError::NoValueParityClaim)
+    }
+
     fn request_from_packet(
         &self,
         packet: WitnessPacket<NoPayload>,
@@ -890,6 +956,15 @@ impl ReplayPackage {
     ) -> Result<ReplayRequestWire, FunctionPacketError> {
         let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
             .map_err(FunctionPacketError::Admission)?;
+        self.request_from_envelope_for_arm(&envelope, obligation, FunctionPacketArm::Witness)
+    }
+
+    fn request_from_envelope_for_arm(
+        &self,
+        envelope: &WitnessEnvelope<NoPayload>,
+        obligation: ObligationIdentity,
+        arm: FunctionPacketArm,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
         if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Target,
@@ -915,17 +990,28 @@ impl ReplayPackage {
                 PacketClaimMember::Limits,
             ));
         }
-        if envelope.declared_domains() != self.inputs.declared_domains.as_slice() {
+        let expected_domains = match arm {
+            FunctionPacketArm::Witness => self.inputs.declared_domains.as_slice(),
+            FunctionPacketArm::Input => &[],
+        };
+        if envelope.declared_domains() != expected_domains {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Domains,
             ));
         }
-        if envelope.backend().as_str() != BACKEND_IDENTITY {
+        if matches!(arm, FunctionPacketArm::Witness)
+            && envelope.backend().as_str() != BACKEND_IDENTITY
+        {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Backend,
             ));
         }
-        if !matches!(envelope.source(), EnvelopeSource::Witness(_)) {
+        let expected_source = matches!(
+            (arm, envelope.source()),
+            (FunctionPacketArm::Witness, EnvelopeSource::Witness(_))
+                | (FunctionPacketArm::Input, EnvelopeSource::Input(_))
+        );
+        if !expected_source {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::SourceArm,
             ));
@@ -935,7 +1021,7 @@ impl ReplayPackage {
                 PacketClaimMember::Obligation,
             ));
         }
-        self.request_from_envelope(&envelope)
+        self.request_from_envelope(envelope)
     }
 
     fn request_from_envelope(
@@ -947,13 +1033,18 @@ impl ReplayPackage {
                 PacketClaimMember::Target,
             ));
         };
-        Ok(self.inputs.wire(
+        let mut request = self.inputs.wire(
             self.raw_package.clone(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
             envelope.obligation_identity(),
             &[],
-        ))
+        );
+        if matches!(envelope.source(), EnvelopeSource::Input(_)) {
+            request.backend = envelope.backend().as_str().to_owned();
+            request.supplied_limits = Some(self.inputs.supplied_limits.unwrap_or_default());
+        }
+        Ok(request)
     }
 
     #[cfg(test)]
@@ -1016,15 +1107,42 @@ fn backend_function_packet(
     occurrence: OccurrenceKey,
     source: EnvelopeSource,
 ) -> WitnessPacket<NoPayload> {
+    function_packet(
+        package,
+        FunctionPacketClaim {
+            obligation,
+            subject,
+            occurrence,
+        },
+        source,
+        BACKEND_IDENTITY,
+        package.inputs.declared_domains.clone(),
+    )
+}
+
+/// The checked claim members a function producer packet repeats.
+struct FunctionPacketClaim {
+    obligation: ObligationIdentity,
+    subject: NodeKey,
+    occurrence: OccurrenceKey,
+}
+
+fn function_packet(
+    package: &ReplayPackage,
+    claim: FunctionPacketClaim,
+    source: EnvelopeSource,
+    backend: &str,
+    declared_domains: Vec<DeclaredDomain>,
+) -> WitnessPacket<NoPayload> {
     WitnessPacket {
-        obligation_identity: Some(obligation),
-        occurrence_key: Some(occurrence),
-        clause_node: Some(subject),
+        obligation_identity: Some(claim.obligation),
+        occurrence_key: Some(claim.occurrence),
+        clause_node: Some(claim.subject),
         replay_target: qsl_replay::ReplayTargetMembers::function(package.selection.clone()),
         profile_selections: Some(Vec::new()),
         run_limits: Some(package.inputs.accounting_limits),
-        declared_domains: Some(package.inputs.declared_domains.clone()),
-        backend: Some(BACKEND_IDENTITY.to_owned()),
+        declared_domains: Some(declared_domains),
+        backend: Some(backend.to_owned()),
         trace_position: Some(None),
         source: Some(source),
         family_payload: Some(NoPayload),
@@ -1196,6 +1314,7 @@ fn compile_corpus_qsl_package(
                 result_units: maximum,
             },
             stage_limits: BTreeMap::new(),
+            supplied_limits: None,
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         },
@@ -1623,6 +1742,7 @@ mod tests {
             dependencies: Vec::new(),
             accounting_limits: limits,
             stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), 1 << 20)]),
+            supplied_limits: None,
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         };
@@ -1775,6 +1895,227 @@ mod tests {
             Err(FunctionPacketError::Admission(
                 WitnessRefusal::MissingMember("occurrence_key")
             ))
+        ));
+    }
+
+    const VALUE_UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
+        profile v = \"quire.value.complete/v1\";\n\
+        function f using v(x: Int[0, 9]): Integer pure { x + 1 }\n\
+        function g using v(x: Int[0, 9]): Integer pure { x + 2 }\n";
+
+    fn value_assignments(package: &ReplayPackage) -> Vec<CanonicalAssignment> {
+        vec![CanonicalAssignment {
+            parameter: package.site.site.parameters[0].1.clone(),
+            value: WitnessValue::Integer(4),
+        }]
+    }
+
+    fn value_obligation(package: &ReplayPackage) -> ObligationIdentity {
+        package
+            .site
+            .site
+            .value_parity
+            .as_ref()
+            .expect("non-Boolean claim")
+            .obligation_identity
+            .clone()
+    }
+
+    /// The value-parity request carries the Input packet's declaration occurrence, target and
+    /// QSL-minted obligation through typed readback and QSL's value-parity report.
+    #[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_request_binds_the_original_checked_claim() {
+        use qsl_replay::{
+            replay_value_parity, Integer, ScalarOutcome, Value, ValueClaim, ValueParityResult,
+        };
+
+        let package = package_from_source(VALUE_UNIT, "f");
+        let obligation = value_obligation(&package);
+        let generator = BackendId::new("generated-provider");
+        let assignments = value_assignments(&package);
+        let packet = package
+            .value_parity_packet(&generator, assignments.clone())
+            .expect("the function has a value claim");
+        let envelope = WitnessEnvelope::reconstruct(packet.clone(), package.inputs.replay_limits)
+            .expect("QSL admits the producer packet");
+        assert_eq!(envelope.occurrence_key(), &package.site.site.declaration);
+        assert!(
+            matches!(envelope.source(), EnvelopeSource::Input(values) if values == &assignments)
+        );
+
+        let wire = package
+            .value_parity_request(packet.clone())
+            .expect("the selected claim binds its packet");
+        assert_eq!(
+            wire.replay_target.occurrence_key.as_ref(),
+            packet.occurrence_key.as_ref()
+        );
+        assert_eq!(wire.obligation_identity, obligation);
+        assert_eq!(wire.backend, generator.as_str());
+        assert!(wire.declared_domains.is_empty());
+        let readback = ReplayRequest::decode(wire.clone(), package.inputs.replay_limits)
+            .expect("QSL reads the packet-backed value request");
+        assert_eq!(
+            readback
+                .replay_target()
+                .and_then(ReplayTarget::occurrence_key),
+            packet.occurrence_key.as_ref()
+        );
+        assert_eq!(readback.obligation_identity(), obligation);
+
+        let generated = ScalarOutcome::Value(Value::Integer(Integer::from(5_i64)));
+        let report = replay_value_parity(
+            wire,
+            ValueClaim {
+                generated: generated.clone(),
+            },
+            package.inputs.replay_limits,
+        );
+        assert_eq!(report.claim().function.as_ref(), Some(&package.selection));
+        assert_eq!(report.claim().obligation, obligation);
+        assert_eq!(report.claim().generated, generated);
+        assert!(matches!(report.result(), ValueParityResult::Agrees { .. }));
+    }
+
+    /// Configured supplied ceilings reach the value-parity request and QSL's report; an omitted
+    /// configuration produces the same complete object as the explicit defaults.
+    #[trace("FR-024-AC-44", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_request_carries_effective_supplied_limits() {
+        let generator = BackendId::new("generated-provider");
+        let defaults = SuppliedLimits::default();
+        let request_with = |supplied: Option<SuppliedLimits>| {
+            let mut package = package_from_source(VALUE_UNIT, "f");
+            package.inputs.supplied_limits = supplied;
+            let packet = package
+                .value_parity_packet(&generator, value_assignments(&package))
+                .expect("the function has a value claim");
+            let wire = package
+                .value_parity_request(packet)
+                .expect("the selected claim binds its packet");
+            (package, wire)
+        };
+
+        let (_, omitted) = request_with(None);
+        let (_, explicit) = request_with(Some(defaults));
+        assert_eq!(omitted.supplied_limits, Some(defaults));
+        assert_eq!(omitted.supplied_limits, explicit.supplied_limits);
+
+        let selected = defaults
+            .with_admission_work_units(defaults.admission_work_units() + 1)
+            .with_conversion_work_units(defaults.conversion_work_units() + 2)
+            .with_numeric_magnitude_bits(defaults.numeric_magnitude_bits() + 3);
+        let (package, wire) = request_with(Some(selected));
+        assert_eq!(wire.supplied_limits, Some(selected));
+        let readback = ReplayRequest::decode(wire, package.inputs.replay_limits)
+            .expect("QSL reads the complete supplied limits");
+        assert_eq!(readback.supplied_limits(), selected);
+    }
+
+    /// Holding the selected claim fixed, another admitted packet or a changed packet member
+    /// refuses with the mismatched member before any request exists.
+    #[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_refuses_packet_substitution_before_request() {
+        let package = package_from_source(VALUE_UNIT, "f");
+        let generator = BackendId::new("generated-provider");
+        let packet = package
+            .value_parity_packet(&generator, value_assignments(&package))
+            .expect("the function has a value claim");
+        let refused = |packet: WitnessPacket<NoPayload>| {
+            WitnessEnvelope::reconstruct(packet.clone(), package.inputs.replay_limits)
+                .expect("the substituted packet is itself admitted");
+            package.value_parity_request(packet)
+        };
+
+        let other = package_from_source(VALUE_UNIT, "g");
+        let other_packet = other
+            .value_parity_packet(&generator, value_assignments(&other))
+            .expect("the second function has a value claim");
+        assert_ne!(packet.obligation_identity, other_packet.obligation_identity);
+        assert!(matches!(
+            refused(other_packet),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Target
+            ))
+        ));
+
+        let mut alternate = packet.clone();
+        alternate.occurrence_key = Some(OccurrenceKey::new(
+            package.site.site.function.clone(),
+            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 1),
+        ));
+        assert!(matches!(
+            refused(alternate),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence
+            ))
+        ));
+
+        let mut wrong_subject = packet.clone();
+        wrong_subject.clause_node = Some(fixture_node("other"));
+        assert!(matches!(
+            refused(wrong_subject),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Subject
+            ))
+        ));
+
+        let mut wrong_arm = packet.clone();
+        wrong_arm.source = Some(EnvelopeSource::Witness(
+            render_witness("value_fixture", "falsified", &[]).expect("the fixture witness renders"),
+        ));
+        assert!(matches!(
+            refused(wrong_arm),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::SourceArm
+            ))
+        ));
+
+        let mut wrong_obligation = packet.clone();
+        wrong_obligation.obligation_identity = Some(ObligationIdentity::new(
+            fixture_node("other-obligation"),
+            None,
+            0,
+        ));
+        assert!(matches!(
+            refused(wrong_obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Obligation
+            ))
+        ));
+
+        let mut missing_occurrence = packet;
+        missing_occurrence.occurrence_key = None;
+        assert!(matches!(
+            package.value_parity_request(missing_occurrence),
+            Err(FunctionPacketError::Admission(
+                WitnessRefusal::MissingMember("occurrence_key")
+            ))
+        ));
+    }
+
+    /// A Boolean function has no QSL value claim, so no Input packet or request exists for it,
+    /// and a Witness-arm packet from the function path never builds a value-parity request.
+    #[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_boolean_function_has_no_value_parity_path() {
+        let boolean = package();
+        let generator = BackendId::new("generated-provider");
+        assert!(matches!(
+            boolean.value_parity_packet(&generator, Vec::new()),
+            Err(FunctionPacketError::NoValueParityClaim)
+        ));
+        let obligation = boolean
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        assert!(matches!(
+            boolean.value_parity_request(producer_packet(&boolean, obligation)),
+            Err(FunctionPacketError::NoValueParityClaim)
         ));
     }
 

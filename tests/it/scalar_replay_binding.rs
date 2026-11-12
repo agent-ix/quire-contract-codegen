@@ -35,6 +35,7 @@ pub(super) fn context(fixture: &ReplayFixture) -> OriginalScalarContext {
             dependencies: vec![],
             accounting_limits: fixture.harness.original_scalar_limits().unwrap(),
             stage_limits: BTreeMap::new(),
+            supplied_limits: None,
             declared_domains: vec![],
             replay_limits: ReplayLimits::default(),
         },
