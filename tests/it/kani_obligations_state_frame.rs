@@ -1409,10 +1409,39 @@ fn native_clause_oracle_stop_is_a_payload_free_copy_kind() {
         .contains("-> Result<rt::Outcome<bool>, ClauseStop>"));
 }
 
+/// The cover condition is read into a plain `bool` before the fat values are forgotten, each
+/// forget appears once, and the cover stays the last statement of the proof body.
+fn assert_forgets_between_cover_condition_and_cover(text: &str, forgotten: &[&str]) {
+    let reached = text
+        .find("let cover_reached: bool = ")
+        .expect("the cover condition is read before the forgets");
+    let cover = text
+        .find("kani::cover!(cover_reached, ")
+        .expect("the cover observes the local");
+    assert_eq!(text.matches("kani::cover!(").count(), 1);
+    for name in forgotten {
+        let call = format!("core::mem::forget({name});");
+        assert_eq!(text.matches(&call).count(), 1, "{call} appears once");
+        let at = text.find(&call).unwrap();
+        assert!(
+            reached < at && at < cover,
+            "{call} sits between the cover condition and the cover"
+        );
+    }
+    let after = &text[cover..];
+    let body_end = after.find(");\n").unwrap() + 3;
+    assert!(
+        after[body_end..].trim_start().starts_with('}'),
+        "nothing follows the cover inside the proof body"
+    );
+    let assertion = text.rfind("assert!(").unwrap();
+    assert!(assertion < reached, "every assertion precedes the forgets");
+}
+
 /// A generated native harness never drops a fat runtime value, and the cover still observes it.
 #[trace("TC-025", "FR-015-AC-143", "FR-015-AC-144")]
 #[test]
-fn native_clause_harness_forgets_fat_values_after_the_cover() {
+fn native_clause_harness_forgets_fat_values_before_the_final_cover() {
     let (package, clause) =
         Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
     let item = ObligationItem::V2Clause {
@@ -1440,11 +1469,7 @@ fn native_clause_harness_forgets_fat_values_after_the_cover() {
     };
     let text = &harness.rust.contents;
     syn::parse_file(text).expect("valid Rust");
-    let cover = text.find("kani::cover!(").unwrap();
-    let forget = text
-        .rfind("core::mem::forget(meter);")
-        .expect("the meter is forgotten");
-    assert!(forget > cover, "the meter is forgotten after the cover");
+    assert_forgets_between_cover_condition_and_cover(text, &["meter"]);
     // The native outcome is Copy, so forgetting it would be a no-op the compiler denies.
     assert!(!text.contains("core::mem::forget(outcome);"));
     assert!(text.contains("core::mem::forget(arithmetic_outcome_0);"));
@@ -1454,10 +1479,10 @@ fn native_clause_harness_forgets_fat_values_after_the_cover() {
 }
 
 /// The general (non-native) harness keeps the full runtime outcome, which is not `Copy`, so it
-/// forgets the outcome as well as the meter, after the cover.
+/// forgets the outcome as well as the meter, before the cover and after its condition is read.
 #[trace("TC-025", "FR-015-AC-143", "FR-015-AC-149")]
 #[test]
-fn general_clause_harness_forgets_the_outcome_and_the_meter_after_the_cover() {
+fn general_clause_harness_forgets_the_outcome_and_the_meter_before_the_final_cover() {
     let (package, clause) =
         Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
     let item = ObligationItem::V2Clause {
@@ -1485,15 +1510,7 @@ fn general_clause_harness_forgets_the_outcome_and_the_meter_after_the_cover() {
     };
     let text = &harness.rust.contents;
     syn::parse_file(text).expect("valid Rust");
-    let cover = text.find("kani::cover!(").unwrap();
-    for forgotten in ["outcome", "meter"] {
-        let call = format!("core::mem::forget({forgotten});");
-        assert_eq!(text.matches(&call).count(), 1, "{call} appears once");
-        assert!(
-            text.find(&call).unwrap() > cover,
-            "{call} comes after the cover"
-        );
-    }
+    assert_forgets_between_cover_condition_and_cover(text, &["outcome", "meter"]);
     assert!(text.contains("rt::Outcome::Completed(true)"));
 }
 
@@ -7029,7 +7046,11 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     assert!(harness
         .rust
         .contents
-        .contains("kani::cover!(invariant_domain_0,"));
+        .contains("let cover_reached: bool = invariant_domain_0;"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::cover!(cover_reached,"));
     let syntax = syn::parse_file(&harness.rust.contents).expect("valid generated invariant source");
     let proof = syntax
         .items
@@ -7053,13 +7074,7 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
             _ => None,
         })
         .expect("the selected invariant proof function");
-    // Fat runtime values are forgotten after the cover (FR-015-AC-143).
-    let is_forget = |statement: &&syn::Stmt| {
-        matches!(statement, syn::Stmt::Expr(syn::Expr::Call(call), _)
-            if matches!(&*call.func, syn::Expr::Path(path)
-                if path.path.segments.last().is_some_and(|segment| segment.ident == "forget")))
-    };
-    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.iter().rfind(|s| !is_forget(s)) else {
+    let Some(syn::Stmt::Macro(last)) = proof.block.stmts.last() else {
         panic!("the invariant's last statement must be its domain cover");
     };
     assert_eq!(last.mac.path.segments.last().unwrap().ident, "cover");
@@ -7516,10 +7531,13 @@ fn qsl_constant_invariants_need_no_symbolic_input_or_subject() {
                 .contents
                 .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
         }
-        assert!(harness
-            .rust
-            .contents
-            .contains("kani::cover!(matches!(invariant_domain, ()),"));
+        // A harness that forgets a meter reads its cover condition first and ends with the cover.
+        let cover = if oracle.descriptor.operation_identities.is_empty() {
+            "kani::cover!(matches!(invariant_domain, ()),"
+        } else {
+            "let cover_reached: bool = matches!(invariant_domain, ());"
+        };
+        assert!(harness.rust.contents.contains(cover), "{condition}");
     }
 }
 

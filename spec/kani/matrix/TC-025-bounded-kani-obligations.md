@@ -1024,13 +1024,14 @@ with the required author `make kani-gate`; independent review and final acceptan
 55. Native clause generation, FR-015-AC-143 to FR-015-AC-150. Generate the FR-015-AC-119 clause
     harness through the native route. Require the oracle's `ClauseStop` to be a `Copy` enumeration
     with no payload and `oracle_clause` to return `Result<bool, ClauseStop>`, the harness to
-    assert `matches!(&outcome, Ok(true))`, and `core::mem::forget` of the meter after the cover and
-    of each arithmetic probe's outcome and meter. Control: the general oracle keeps
+    assert `matches!(&outcome, Ok(true))`, and `core::mem::forget` of the meter after the assertions and
+    the cover-condition read, with the single cover still the last statement (FR-015-AC-7), and of each
+    arithmetic probe's outcome and meter. Control: the general oracle keeps
     `Runtime(rt::Outcome<bool>)`, and its harness also forgets the outcome (FR-015-AC-149).
     Mutants: restoring the `Runtime` variant in the thin stop type (site: `THIN_STOP_TYPE` in the
     clause generator), dropping the forget statements (site: `forget_fat_values` and the
     arithmetic probe body; the general-path outcome forget is the `!native` branch of
-    `forget_fat_values`) and emitting the forget before the cover (site: the statement renderer)
+    `forget_fat_values`) and emitting a forget after the cover or the cover not last (site: the statement renderer)
     each fail the tests of this step. FR-015-AC-146 is evidenced by
     `generated_native_boolean_equality_matches_the_typed_route`, which compiles the helpers the
     generator rendered for `==` and `!=`; the mutant at the `related == {equal}` site of

@@ -241,7 +241,8 @@ pub(super) enum Statement {
         message: String,
     },
     /// Leak a fat runtime value so no symbolic drop glue runs. At the top level the
-    /// renderer emits it after the cover, which still observes the value.
+    /// renderer reads the cover condition into a `bool` first, emits the forgets, and ends with the
+    /// cover, so the cover stays the last statement and still observes the value.
     Forget(String),
     /// A post-call probe executes only on the checked short-circuit path.
     ConditionalProbe {
