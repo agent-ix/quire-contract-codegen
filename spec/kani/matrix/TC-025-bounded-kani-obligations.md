@@ -885,7 +885,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     `WitnessDisagreed`, `NoVerdict`, `MissingCoverSummary` and timeout are `Inconclusive`, the
     control unmet, and the peak is reported (FR-015-AC-129).
 
-## Exhaustive concrete enumeration (IR-1022, planned)
+## Exhaustive concrete enumeration (IR-1022 specified, IR-1509 implemented)
 
 51. Build the FR-015-AC-119 clause crate from QSL source as in step 49, with no Kani launch, and run
     the host enumeration of FR-015-AC-132 over `amount_current = 0` through `1000`, evaluating all
@@ -903,7 +903,10 @@ with the required author `make kani-gate`; independent review and final acceptan
     fail the sequence check. Check the printed record and the status column of the FR-015-AC-132
     and FR-017-AC-64 rows of `tests.md` for the tokens listed in FR-017-AC-64 (none may appear)
     and for the phrase `enumeration evidence`; a record renderer printing `Proved` must fail. The
-    symbolic proof remains IR-1509.
+    symbolic runs of the same fixture are step 56. Implemented by the default-lane tests of
+    `tests/it/kani_obligations_v2_clause_controls.rs` (the healthy enumeration, the subject, helper and kernel
+    mutants, the sequence mutants, the record wording check); each mutant test names its exact
+    `failing_inputs` set.
 
 ## AC-48 obligation-record gaps (IR-1515 spec; code IR-1517 and IR-1518 implemented)
 
@@ -1044,9 +1047,29 @@ with the required author `make kani-gate`; independent review and final acceptan
     --solver cadical` inside a 24 GiB cgroup with swap 0; `Verified` for the healthy subject, then,
     with `-Z concrete-playback --concrete-playback print`, `Falsified` for the subject
     `amount + 2 <= 1000` (playback 999), the oracle `<=` to `<` and the runtime helper returning
-    `false`; the cover witness printed with a failure is not a counterexample. CG's runner, the
-    two-phase run, the identity record, QSL regeneration, the kernel `+` mutants and the sealed
-    playback are PLANNED (FR-015-AC-151).
+    `false`; the cover witness printed with a failure is not a counterexample. The installed
+    controls through CG's runner are step 56 (FR-015-AC-151).
+
+## Installed clause controls through CG's runner (IR-1509)
+
+56. FR-015-AC-151. Compile the FR-015-AC-119 clause package from QSL source, generate the sealed harness
+    and, one run at a time in a 24 GiB cgroup with swap 0 and a 30 minute cap, run CG's
+    `execute_kani_obligation` over a crate holding the sealed artifact and the `crate::subject` module.
+    Healthy: require `Verified` from one proof-phase launch. Then one run per mutant, each requiring
+    `Falsified` from the witness phase with the proof phase nested, `concrete-playback` only in the witness
+    vector, equal ceilings across phases, one harness path and an in-domain playback: in an isolated
+    copy of the locked quire-exact checkout `left.0.checked_add(right.0)` rewritten to
+    `left.0.checked_add(right.0)?.checked_add(1)` and separately to `Some(left.0)` (failing check: the
+    generated arithmetic assertion, playback below 1000); in the compiled subject the consequent
+    `amount + 2 <= 1000` (the produced-result comparison, playback exactly 999); in an isolated copy of
+    the locked quire-contract-runtime checkout the body of `implies_short_circuit` returning `false` (the
+    produced-result comparison). Append the 999 playback test inside the generated module before its
+    closing brace, require that removing the appended bytes restores the sealed artifact exactly and that
+    regeneration reproduces the artifact and record, run it on the host against the plus-one kernel mutant
+    and require it to pass as an expected panic on the generated arithmetic assertion's message; run the
+    same test against the unmutated owner and the `amount + 2` subject and require each to fail. Executed
+    verdicts are in `docs/qualification/ir1509-kani-clause-controls.md`. The Kani-backed playback through
+    `execute_kani_concrete_playback` is FR-017-AC-60 (IR-917).
 
 ## Blocked
 
