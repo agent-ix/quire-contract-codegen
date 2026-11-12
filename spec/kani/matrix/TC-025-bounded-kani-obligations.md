@@ -1073,6 +1073,45 @@ with the required author `make kani-gate`; independent review and final acceptan
     the pipeline (blocked on QSL operation bodies) and the Kani-backed playback through
     `execute_kani_concrete_playback` (FR-017-AC-60, owner IR-917).
 
+## Control construct lowering (IR-1447)
+
+57. FR-015-AC-152 to FR-015-AC-173 (PLANNED, IR-1447; FR-025-AC-19 is TC-036 step 19). Control construct lowering.
+    Generate a native V2 clause harness for each fixture of FR-015-AC-152 to FR-015-AC-155,
+    FR-015-AC-164, FR-015-AC-170 and FR-015-AC-173 (`let`, `if`, `case` over a three-member arity-0
+    union drawn as an `i64` member index, an `if` in an invariant collection `forall`, the nested
+    `let`/`if`, and the shadowing and nested-rebinding `let`, the last two as constructed packages
+    because QSL refuses shadowing) and require one harness each, the native `let`, `if` and `match`
+    forms (no wildcard arm for the `case`), the union parameter bound as one `i64` (FR-025-AC-19) and
+    the independent `i128` expectation, with each fixture's arithmetic-node bounds as its criterion states them
+    (the kernel checks an integer result only against the arithmetic node's own bound, never an `if`, `let` or
+    `case` node). Then, one Kani job at a time, run each fixture through CG's
+    `execute_kani_obligation` (FR-017-AC-63) and require the healthy subject `Verified` with the
+    cover satisfied, and each mutant `Falsified` from the witness phase at the step `the produced V2 Boolean result agrees with the independent checked condition` with the
+    named input: `let` subject `amount + 2 <= 1000`, `amount = 999`; `if` subject test
+    `amount <= 500`, `amount = 500`; `case` subject arm `B` as `amount * 3`, member index 1 and
+    `amount = 400`; nested subject test `amount <= 500`, `amount = 500`; shadowing subject
+    `amount <= 1000`, `amount = 999`; nested-rebinding subject `amount + 1 <= 1000`, `amount = 999`.
+    The collection fixture has no subject: its mutant is the generated oracle's element `if` with
+    else branch `501`, falsified at the direct harness's assertion that the admitted body holds,
+    with a collection holding an element of 500. Then run the laziness and refusal fixtures:
+    FR-015-AC-168 (`amount: Int[0, 999]`, the never-selected else branch `amount + 1000`: verifies,
+    and the eager oracle is falsified at `the V2 postcondition holds for the produced result` with amount 0), FR-015-AC-169
+    (`amount: Int[0, 1000]`, the selected else branch `amount + 1` at amount 1000: falsified at `the V2 postcondition holds for the produced result`
+    with the recorded stop `ClauseStop::IntegerOutOfDomain`, and the `false`-mapping mutant told
+    apart only by the recorded stop) and FR-015-AC-172 (the unread refusing `let` initializer at
+    amount 1000, with the skip-unread mutant verifying). Then the refusal fixtures of
+    FR-015-AC-160 to FR-015-AC-163 and FR-015-AC-171 (`unsupported` with
+    `V2ClauseControlNotSupported`, the exact control reason `LetValueNotNativeScalar`,
+    `IfBranchNotNativeScalar`, `CaseUnionPayloadNotSupported`, `CaseArmNotNativeScalar` or
+    `CaseScrutineeNotParameter` (the last from a union state field scrutinee), the node and
+    operation identity, no harness, and an unaffected supported sibling) and the precedence
+    fixtures of FR-015-AC-166 (an unsupported operator before a failing control, a failing control
+    before an unsupported operator, a `let` binding an option-typed parameter expecting
+    `LetValueNotNativeScalar`, a `let` binding `quire.op.option.value` of an Integer result decided
+    by FR-054, two failing controls) with the last-refusal-met mutant, and the collapse mutant of
+    FR-015-AC-167. The probe that fixed the tractability expectation is
+    `docs/qualification/ir1447-kani-control-probe.md`.
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
