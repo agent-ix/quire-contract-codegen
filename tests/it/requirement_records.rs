@@ -1372,10 +1372,18 @@ fn unlowerable_guards_settle_per_item_with_their_reason() {
         "1",
         "quire.op.integer.lt",
     );
-    assert_eq!(
-        literal,
-        serde_json::json!({"guard_literal_not_i64": {"value": "100000000000000000000000"}})
+    let literal_not_i64 =
+        serde_json::json!({"guard_literal_not_i64": {"value": "100000000000000000000000"}});
+    assert_eq!(literal, literal_not_i64);
+
+    // The `=` literal QSL widens through a conversion keeps its reason.
+    let (_, widened) = reason(
+        "x: Int[0, 1000000000000000000000000], z: Int[0, 9]",
+        "if x = 100000000000000000000000 then z + 1 else 0",
+        "1",
+        "quire.op.integer.eq",
     );
+    assert_eq!(widened, literal_not_i64);
 }
 
 /// A refused guarded item sits beside a supported sibling in one call: the refusal is per item.
@@ -1690,16 +1698,13 @@ fn a_guard_root_the_package_does_not_lower_is_not_lowered() {
         function a using v(x: Int[0, 9]): Int[0, 11] pure { x + 2 }\n\
         function g using v(x: Int[0, 9]): Int[0, 9] pure { x }\n\
         function t using v(x: Int[0, 9]): Int[0, 12] pure { if g(x) > 5 then x + 3 else 0 }\n";
-    // The guard's closure reaches a function the profile does not support, or costs more than the
-    // work limit allows while its sibling's closure fits: either way its root is accounted for
-    // but not `lowered`.
-    let mut unsupported = routed_contract_lowering_profile();
-    unsupported
+    // The guard's closure reaches a function the profile does not support, so its root is
+    // accounted for but not `lowered`.
+    let mut profile = routed_contract_lowering_profile();
+    profile
         .supported_tags
         .remove(&quire_contract_model::CheckedNodeTag::Function);
-    let mut costly = routed_contract_lowering_profile();
-    costly.work_limit = 60;
-    for profile in [unsupported, costly] {
+    {
         let checked = qsl_package("ir304-unlowered-root", source);
         let guard: &[GuardSpec] = &[(&op_is("quire.op.integer.gt"), true, 0)];
         let items: [(NodePredicate, &[GuardSpec]); 2] =

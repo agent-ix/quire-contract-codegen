@@ -286,7 +286,10 @@ A guard is lowerable in one of two forms:
   bounded domain, or an integer literal that fits `i64`, with at least one
   parameter reference. A literal that QSL widens through a
   `quire.op.numeric.narrow` conversion (as it does for `=` and `!=`) is read
-  as that literal.
+  as that literal, and a literal outside `i64` keeps its `GuardLiteralNotI64`
+  reason. QSL admits the conversion only after proving the literal lies in its
+  target range, so no range check is repeated. A conversion over a parameter is
+  not read as that parameter and refuses as `UnsupportedGuardForm`.
 
 Otherwise the item settles `unsupported` with no harness, as
 `UnsupportedObligation::PathGuardNotLowered { guard, reason }` (wire code

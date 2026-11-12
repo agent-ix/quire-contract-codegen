@@ -183,6 +183,15 @@ fn comparison(lookup: &ContractLookup<'_>, node: &CheckedNodeId) -> Option<Compa
     Some((operator, side(lookup, left), side(lookup, right)))
 }
 
+/// The side a conversion of `inner` is: only a literal passes through it, with a literal outside
+/// `i64` still reported as such; a conversion over a parameter is not that parameter.
+fn through_conversion(inner: Result<Side, Fault>) -> Result<Side, Fault> {
+    match inner {
+        literal @ (Ok(Side::Literal(_)) | Err(Fault::LiteralNotI64(_))) => literal,
+        _ => Err(Fault::Form),
+    }
+}
+
 fn side(lookup: &ContractLookup<'_>, term: &CheckedTerm) -> Result<Side, Fault> {
     let graph: &CheckedGraph<'_> = &lookup.graph;
     let literal = |term: &CheckedTerm| {
@@ -203,14 +212,13 @@ fn side(lookup: &ContractLookup<'_>, term: &CheckedTerm) -> Result<Side, Fault> 
             return literal(body);
         }
     }
-    // QSL widens a literal compared with a differently ranged operand through a conversion;
-    // narrowing an integer literal keeps its value, so the literal itself is the side.
+    // QSL widens a literal compared with a differently ranged operand through a conversion.
+    // QSL proves the literal lies in the conversion's target range before it admits the package
+    // (an out-of-range literal is an `Unproved(Range)` check refusal and no such package exists),
+    // so the conversion keeps the literal's value and needs no second range check here.
     if identity(graph.term(&node.node_id)) == Some("quire.op.numeric.narrow") {
         if let Some([argument]) = graph.arguments(&node.node_id) {
-            return match side(lookup, argument) {
-                literal @ (Ok(Side::Literal(_)) | Err(Fault::LiteralNotI64(_))) => literal,
-                _ => Err(Fault::Form),
-            };
+            return through_conversion(side(lookup, argument));
         }
     }
     let original = lookup.original_node(&node.node_id).ok_or(Fault::Form)?;
@@ -232,5 +240,50 @@ fn side(lookup: &ContractLookup<'_>, term: &CheckedTerm) -> Result<Side, Fault> 
         Err(Fault::Unbounded(original.clone()))
     } else {
         Err(Fault::Form)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ix_trace_rs::trace;
+    use serde_json::json;
+
+    use super::*;
+
+    fn node() -> CheckedNodeId {
+        serde_json::from_value(json!({"package": "guard-test", "path": ["x"], "ordinal": 0}))
+            .expect("node id")
+    }
+
+    /// A conversion reads through to a literal, keeps a non-`i64` literal's reason, and is never
+    /// the parameter or unbounded parameter it converts.
+    #[trace("FR-022-AC-32", "FR-022-AC-33", "TC-033")]
+    #[test]
+    fn a_conversion_passes_only_a_literal_through() {
+        assert!(matches!(
+            through_conversion(Ok(Side::Literal(5))),
+            Ok(Side::Literal(5))
+        ));
+        assert!(matches!(
+            through_conversion(Err(Fault::LiteralNotI64("100000000000000000000000".to_owned()))),
+            Err(Fault::LiteralNotI64(value)) if value == "100000000000000000000000"
+        ));
+        let parameter = Side::Parameter {
+            node: node(),
+            lower: "0".to_owned(),
+            upper: "9".to_owned(),
+        };
+        assert!(matches!(
+            through_conversion(Ok(parameter)),
+            Err(Fault::Form)
+        ));
+        assert!(matches!(
+            through_conversion(Err(Fault::Unbounded(node()))),
+            Err(Fault::Form)
+        ));
+        assert!(matches!(
+            through_conversion(Err(Fault::Form)),
+            Err(Fault::Form)
+        ));
     }
 }
