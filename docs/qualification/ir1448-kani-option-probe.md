@@ -48,7 +48,7 @@ payload 0; undefined_unguarded presence 0, payload 0; comp_mutant presence 1, `n
 present_lowering_mut and guarded_lowering_mut presence 0, payload 0. The `present_ok` second
 vector is a cover witness.
 
-Every form verified or was falsified in well under the 10 minute probe limit, so no option form
+Every form verified or was falsified in under 0.05 s of Kani time each, far inside the 10 minute probe limit, so no option form
 here needs a tractability refusal. The refusals of FR-054 are by shape (payload family, nesting,
 null state, unrecognised operation), not by cost.
 
