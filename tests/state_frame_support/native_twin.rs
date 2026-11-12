@@ -555,6 +555,7 @@ impl Twin {
                 identity: "twin-current".to_owned(),
             },
             playback: Vec::new(),
+            unread_values: Vec::new(),
             obligation_identity: self.clause_identity(clause),
         }
     }
@@ -583,6 +584,45 @@ impl Twin {
             .clone();
         quire_contract_codegen::StateFrameRoleIdentities::new(self.clause_identity(clause), frame)
             .expect("the clause and frame sites mint distinct identities")
+    }
+
+    /// This twin with its postcondition replaced by the invariant `BalanceNonnegative` over
+    /// `condition`, so `balance` is drawn and every other field is unread (FR-024-AC-58).
+    pub fn with_invariant_condition(self, condition: &str) -> Self {
+        Self::invariant_from(self, condition)
+    }
+
+    /// `Account` with `balance` and an unread `audit` of the given ranges, and the invariant
+    /// `BalanceNonnegative` over `condition` (FR-024-AC-69).
+    pub fn with_unread_audit_invariant(
+        balance: (i64, i64),
+        audit: (i64, i64),
+        condition: &str,
+    ) -> Self {
+        Self::invariant_from(Self::with_field_ranges(balance, audit), condition)
+    }
+
+    /// This twin with a second unread field `note`, `Int[0, 1000]`, declared after `audit`.
+    pub fn with_unread_note(mut self) -> Self {
+        let mut domain: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let types = domain["types"].as_array_mut().expect("types");
+        let audit_range = types
+            .iter()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type")
+            .to_string()
+            .replace(&range_type("audit"), &range_type("note"));
+        types.push(serde_json::from_str(&audit_range).expect("note value type"));
+        let account = types
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        account["fields"]
+            .as_array_mut()
+            .expect("fields")
+            .push(field(&account_type(), "note"));
+        self.domain = domain.to_string().into_bytes();
+        self
     }
 
     /// A QSL invariant over the selected model object's bounded `balance` field.
