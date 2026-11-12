@@ -224,6 +224,131 @@ pub(super) fn replay_fixture_with_extra(
     }
 }
 
+/// A routed Boolean `Implies` scalar harness: routed generation binds its artifact package like
+/// any scalar harness, but the family has no operator-parity route.
+pub(super) fn routed_implies_fixture() -> ReplayFixture {
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v(p: Boolean, q: Boolean): Boolean pure { p implies q }\n".to_owned();
+    let compiled = compile_package(
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "scalar-playback.native"),
+            package_name: "scalar-playback".to_owned(),
+            path: "scalar-playback.native",
+            bytes: source.as_bytes(),
+        },
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("QSL compiles the authored source");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let checked = match CheckedPackageV2::read(
+        compiled.bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    ) {
+        CheckedPackageV2ReadResult::Admitted(package) => package,
+        other => panic!("IR admits the emitted package: {other:?}"),
+    };
+    let application = checked
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| operation_identity(&node.body) == Some("quire.op.boolean.implies"))
+        .expect("one authored implication");
+    let node_id = application.node_id.clone();
+    let entries = checked
+        .source_map()
+        .iter()
+        .filter(|entry| entry.node_id == node_id && entry.role == CheckedOccurrenceRole::Expression)
+        .collect::<Vec<_>>();
+    let [entry] = entries.as_slice() else {
+        panic!("one authored expression occurrence")
+    };
+    let selection = ContractDriverResultSelection::OwnResult {
+        application: ContractOccurrenceKeyV1 {
+            node_id: node_id.clone(),
+            role: entry.role.clone(),
+            ordinal: entry.ordinal,
+        },
+        conversion: None,
+    };
+    let positions = [ContractRequestPosition::DriverItem {
+        node_id: node_id.clone(),
+        result_selection: selection.clone(),
+    }];
+    let lowered = checked.lower(
+        std::slice::from_ref(&node_id),
+        &routed_contract_lowering_profile(),
+    );
+    let admitted = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().unwrap(),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("IR admits routed package: {other:?}"),
+    };
+    let requirement = crate::common::requirements::requirement_for(&checked, &selection)
+        .expect("an own-result requirement");
+    let records = crate::common::requirements::records(&std::collections::BTreeMap::from([(
+        0,
+        requirement.clone(),
+    )]));
+    let route = RoutedGenerationItem::from_descriptor(
+        0,
+        node_id,
+        Candidate {
+            identity: "kani".to_owned(),
+        },
+        &BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: Vec::new(),
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: None,
+        },
+    )
+    .expect("linked Kani route")
+    .with_scalar_selection(&admitted, selection)
+    .with_requirement(requirement);
+    let generated = generate_routed(
+        &checked,
+        &admitted,
+        &positions,
+        &[route],
+        &GenerationContexts {
+            kani: Some(KaniGenerationContext {
+                ceilings: proof_ceilings(),
+                subject_path: "crate::subject",
+                unwind: 3,
+                requirement_records: &records,
+            }),
+        },
+    )
+    .expect("actual routed implication generation");
+    let [item] = generated.items.as_slice() else {
+        panic!("one routed item")
+    };
+    let KindOutput::Kani {
+        harness: Some(harness),
+        ..
+    } = &item.output
+    else {
+        panic!("routed implication harness: {:?}", item.output)
+    };
+    ReplayFixture {
+        harness: (**harness).clone(),
+        checked: *checked,
+        raw_package: qsl_replay::ReplayPackage::read(compiled.bytes(), u64::MAX).unwrap(),
+        source,
+        artifacts: generated
+            .oracle_artifacts
+            .expect("retained original scalar package"),
+    }
+}
+
 fn identity(
     operation: &str,
     parameters: &str,

@@ -41,3 +41,18 @@ Partial. Their tests assert the native observation tie and genuine `Agrees`, but
 proved-artifact observation (AC-4) and a QSL `Diverged` from changed generated arithmetic (AC-5,
 not the driver-asserted `Completed(7)` of step 10) are not exercised. Flipping them would have
 been wrong. AC-19 stays Planned as stated.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-004 | medium | The capability-last reorder makes a falsified run of a family with no operator-parity route produce a `Failed` terminal record. Measured at d851eea5: the routed `Implies` harness with a malformed playback returns `Playback(kani_witness_harness_missing)`, and `setup_settlement()` gives `Some(CgDefect)`, which the pair functions turn into `Failed`. FR-032-AC-24 and TC-047 step 13 say `CgDefect` applies only to a CG-raised failure on a supported scalar family, and that a falsified `Implies` run yields no terminal record. Before the fix the absent capability returned `Unavailable` and settled `None`. The precedence clause and AC-24 now conflict for this input; the code or the spec must say which family classification wins. | src/replay/scalar_builder.rs:127-135; src/replay/scalar_builder.rs:412 |
+| FND-005 | low | For a harness whose capability is `Unavailable`, `plan` now skips the staged-artifact comparison, which is part of step 1. The comment's justification ("A harness without replay authority retains no artifact package") holds for the test fixture, which comes from `negotiate_kani_obligations` directly. It does not hold for routed generation, which binds the artifact package to every scalar harness, Boolean ones included. A routed `Implies` harness with changed artifacts therefore refuses as `Unavailable` or `Playback`, not `Artifacts`. | src/replay/scalar_builder.rs:115-118; src/routed/generate.rs:816-818 |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | d851eea5: `plan` treats `Authority(Unavailable)` as deferred and reports it only after the identity, byte-ceiling, adapter and domain checks. `decode_scalar_falsification` checks the byte ceiling and harness name before `cg_scalar_witness_operation_unsupported`. The precedence test now asserts that an `Implies` harness with an oversize, renamed or garbage playback, or a changed identity, gets the earlier refusal, and `Unavailable` only for a clean request. For supported families the order is unchanged: the tamper seal comes first, then the body and package, then the artifacts. Focused run: 337 passed, 0 failed. FND-004 and FND-005 record what this reorder introduced. |
+| FND-002 | fixed | d851eea5 adds `draw_order_is_kept_and_unrelated_enclosing_parameters_are_excluded`: `y - x` with an unused `z` keeps the draw order y, x (ranges (0,9),(10,20)), so an identifier sort would fail it. `z` gets no position. The body equals the IR reader's positional body, and the genuine QSL route agrees. |
+| FND-003 | fixed | d851eea5 adds the `replay/obligation.rs` unit test `function_identity_is_the_producer_identity_for_every_kind_and_argument_list`, tagged FR-032-AC-14. It pins that neither the kind nor positional arguments enter a function identity. |

@@ -55,3 +55,10 @@ bodies: AC-1 (plan admission over four families; `Implies` reaches `Unavailable`
 invariance, changed occurrence), and AC-14 (function replay settles through the function route;
 frame identity is cross-checked against QSL's mint). Each asserts its AC. The AC-14 depth is in
 the gap-analysis SR.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | d851eea5 renames the test to `a_body_or_record_missing_a_retained_member_refuses_setup` and adds a caller body missing an operand, which is refused as `BodyMismatch` against the retained body. Its doc now says the record half shows the seal only, and the AC-18 cell is downgraded to PARTIAL, with the generation-time absent member left PLANNED. |
+| FND-002 | fixed | d851eea5 rewrites the precedence test. Each defect is asserted alone (bytes, harness, arity, values limit, width, comment, domain). The pairs now carry real later defects, for example `rename(out_of_domain)` gives a harness mismatch over an out-of-domain operand, and a padded rename of an out-of-domain transcript gives the byte limit. Step 5 is added. |

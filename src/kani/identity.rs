@@ -967,6 +967,12 @@ impl KaniScalarObligationHarness {
         self.generated_artifacts = Some(artifacts);
     }
 
+    /// Whether routing bound a generated artifact package to this harness.
+    #[must_use]
+    pub(crate) const fn retains_artifact_package(&self) -> bool {
+        self.generated_artifacts.is_some()
+    }
+
     /// Whether the caller-supplied artifacts still match the package captured during routing.
     #[must_use]
     pub(crate) fn matches_artifact_package(&self, artifacts: &[Artifact]) -> bool {

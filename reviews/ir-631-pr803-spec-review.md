@@ -37,3 +37,10 @@ AC-19 Planned. Whether each IMPLEMENTED cell is backed by code is judged in gap-
 SR-17940486709564847047727. AC-1 and AC-2 are not backed (FND-001 there), and AC-15 and AC-18
 overclaim. Leaving AC-4 and AC-5 Partial is correct. Leaving AC-19 Planned is correct and stated in
 both FR-032 and tests.md.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | d851eea5: the TC-047 Description now claims only "the membership half of step 8" and lists the canonical preimage members, the `IdentityEncodeError` path and a changed range or kind under a retained digest as Planned. Step 8 itself now says which checks run and that the others stay planned. |
+| FND-002 | fixed | d851eea5: the AC-4 and AC-5 rows now read "tagged `scalar_replay_binding.rs`" and "tagged `scalar_replay_residuals.rs`", and the stale "untagged until IR-631" clauses are gone. |

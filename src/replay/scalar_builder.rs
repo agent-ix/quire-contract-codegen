@@ -36,6 +36,9 @@ pub enum ScalarBuildError {
     Staging,
     /// Assertion playback does not match the selected scalar schema.
     Playback(DecodeFailure),
+    /// A refusal on a generated family with no operator-parity route. It keeps the earlier
+    /// refusal's cause and, like the absent capability itself, yields no terminal record.
+    UnavailableFamily(Box<ScalarBuildError>),
     /// The QSL-owned structural mint refused the original claim.
     Identity(qsl_replay::IdentityEncodeError),
     /// This generated family has no integer operator-parity observation route.
@@ -101,10 +104,19 @@ impl OriginalScalarContext {
             Err(ScalarAuthorityError::Unavailable) => None,
             Err(cause) => return Err(ScalarBuildError::Authority(cause)),
         };
+        // Every refusal on a family without a parity route yields no terminal record.
+        let available = original.is_some();
+        let refuse = |cause: ScalarBuildError| {
+            if available {
+                cause
+            } else {
+                ScalarBuildError::UnavailableFamily(Box::new(cause))
+            }
+        };
         if identity != &harness.identity || original.is_some_and(|retained| retained != body) {
-            return Err(ScalarBuildError::BodyMismatch);
+            return Err(refuse(ScalarBuildError::BodyMismatch));
         }
-        if original.is_some() {
+        if available {
             let original_package = harness
                 .scalar_original_package()
                 .map_err(ScalarBuildError::Authority)?;
@@ -112,9 +124,11 @@ impl OriginalScalarContext {
                 return Err(ScalarBuildError::BodyMismatch);
             }
         }
-        // A harness without replay authority retains no artifact package to compare against.
-        if original.is_some() && !harness.matches_artifact_package(artifacts) {
-            return Err(ScalarBuildError::Artifacts);
+        // A harness built outside routed generation retains no artifact package to compare.
+        if (available || harness.retains_artifact_package())
+            && !harness.matches_artifact_package(artifacts)
+        {
+            return Err(refuse(ScalarBuildError::Artifacts));
         }
         let parsed = crate::kani::output::playback::parse_assertion_playback(
             playback,
@@ -123,12 +137,12 @@ impl OriginalScalarContext {
             super::scalar::SCALAR_PLAYBACK_BYTES,
             identity.arguments.len(),
         )
-        .map_err(|cause| ScalarBuildError::Playback(DecodeFailure::from(cause)))?;
+        .map_err(|cause| refuse(ScalarBuildError::Playback(DecodeFailure::from(cause))))?;
         let decoded = decode_scalar_falsification(identity, &parsed);
-        if original.is_none() {
+        if !available {
             return Err(match decoded {
                 Err(failure) if failure.code != "cg_scalar_witness_operation_unsupported" => {
-                    ScalarBuildError::Playback(failure)
+                    refuse(ScalarBuildError::Playback(failure))
                 }
                 _ => ScalarBuildError::Authority(ScalarAuthorityError::Unavailable),
             });
@@ -409,6 +423,7 @@ impl ScalarBuildError {
                 | ScalarAuthorityError::Operands(_)
                 | ScalarAuthorityError::GeneratedArtifactChanged => None,
             },
+            Self::UnavailableFamily(_) => None,
             Self::Playback(_) | Self::Staging | Self::Identity(_) => {
                 Some(ScalarSettlement::CgDefect)
             }

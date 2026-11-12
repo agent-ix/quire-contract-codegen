@@ -577,6 +577,7 @@ fn expected_cg_defect(error: &ScalarBuildError) -> bool {
         ScalarBuildError::BodyMismatch
         | ScalarBuildError::Context(_)
         | ScalarBuildError::Artifacts
+        | ScalarBuildError::UnavailableFamily(_)
         | ScalarBuildError::Operation
         | ScalarBuildError::Observation
         | ScalarBuildError::Report

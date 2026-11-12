@@ -5,8 +5,9 @@
 //! Native controls only: no Kani proof or backend falsification.
 
 use super::kani_obligations::boolean_implies_scalar;
-use super::scalar_playback::{replay_fixture, transcript, ReplayFixture};
+use super::scalar_playback::{replay_fixture, routed_implies_fixture, transcript, ReplayFixture};
 use super::scalar_replay_binding::{context, observe, plan};
+use super::terminal_map::synthetic_evidence;
 use ix_trace_rs::trace;
 use qsl_replay::{
     Code, Domain, InconclusiveCause, NodeKey, OperandIdentity, OperatorClaim, OperatorParityReport,
@@ -14,8 +15,8 @@ use qsl_replay::{
     ReplayRequestWire, Role, ScalarIdentityMismatch, ScalarOperand, ScalarOperation, TerminalValue,
 };
 use quire_contract_codegen::{
-    CompletedScalarReplay, ScalarAuthorityError, ScalarBuildError, ScalarSentRequest,
-    SCALAR_PLAYBACK_BYTES,
+    scalar_run_terminal_value, CompletedScalarReplay, KaniRunOutcome, ScalarAuthorityError,
+    ScalarBuildError, ScalarSentRequest, TerminalPairError, SCALAR_PLAYBACK_BYTES,
 };
 use quire_exact::{Integer, IntegerInterval};
 
@@ -70,6 +71,7 @@ fn remint(wire: &mut ReplayRequestWire, claim: &OperatorClaim) {
 fn playback_code<T: std::fmt::Debug>(result: Result<T, ScalarBuildError>) -> String {
     match result {
         Err(ScalarBuildError::Playback(failure)) => failure.code.to_owned(),
+        Err(ScalarBuildError::UnavailableFamily(cause)) => playback_code::<T>(Err(*cause)),
         other => panic!("expected a playback refusal, got {other:?}"),
     }
 }
@@ -172,47 +174,103 @@ fn setup_refusal_precedence_follows_the_stated_step_order() {
         Err(ScalarBuildError::Artifacts)
     ));
 
-    // Step 5: an absent capability (the Boolean `Implies` harness) never hides an earlier
-    // refusal and is the refusal when nothing earlier is wrong.
-    let (implies, _, _) = boolean_implies_scalar();
-    let implies_identity = &implies.identity;
-    let unavailable = |text: &str| {
-        context(&fixture).plan(&implies, implies_identity, body, &fixture.artifacts, text)
+    // Step 5: an absent capability (a routed Boolean `Implies` harness, which binds its own
+    // artifact package) never hides an earlier refusal and is the refusal when nothing
+    // earlier is wrong.
+    let implies = routed_implies_fixture();
+    let implies_identity = &implies.harness.identity;
+    let unavailable = |artifacts: &[quire_contract_codegen::Artifact], text: &str| {
+        context(&fixture).plan(&implies.harness, implies_identity, body, artifacts, text)
     };
     let implies_good = transcript(implies_identity, &[1, 1]);
     assert!(matches!(
-        unavailable(&implies_good),
+        unavailable(&implies.artifacts, &implies_good),
         Err(ScalarBuildError::Authority(
             ScalarAuthorityError::Unavailable
         ))
     ));
     assert_eq!(
-        playback_code(unavailable(&pad(&implies_good))),
+        playback_code(unavailable(&implies.artifacts, &pad(&implies_good))),
         "cg_witness_decode_bytes_limit"
     );
     assert_eq!(
-        playback_code(unavailable(&rename_implies(
-            implies_identity,
-            &implies_good
-        ))),
+        playback_code(unavailable(
+            &implies.artifacts,
+            &rename_implies(implies_identity, &implies_good)
+        )),
         "cg_witness_harness_identity_mismatch"
     );
     assert!(
-        matches!(unavailable("garbage"), Err(ScalarBuildError::Playback(_))),
+        matches!(
+            unavailable(&implies.artifacts, "garbage"),
+            Err(ScalarBuildError::UnavailableFamily(cause)) if matches!(*cause, ScalarBuildError::Playback(_))
+        ),
         "a malformed block is an adapter refusal, not an absent capability"
     );
     let mut changed_implies = implies_identity.clone();
     changed_implies.node_id.ordinal += 1;
     assert!(matches!(
         context(&fixture).plan(
-            &implies,
+            &implies.harness,
             &changed_implies,
             body,
-            &fixture.artifacts,
+            &implies.artifacts,
             &implies_good
         ),
-        Err(ScalarBuildError::BodyMismatch)
+        Err(ScalarBuildError::UnavailableFamily(cause)) if matches!(*cause, ScalarBuildError::BodyMismatch)
     ));
+    let mut changed_artifacts = implies.artifacts.clone();
+    changed_artifacts[0].contents.push(' ');
+    assert!(
+        matches!(
+            unavailable(&changed_artifacts, &pad(&implies_good)),
+            Err(ScalarBuildError::UnavailableFamily(cause)) if matches!(*cause, ScalarBuildError::Artifacts)
+        ),
+        "changed artifacts of a routed harness refuse before the playback"
+    );
+}
+
+/// A refusal on a family with no operator-parity route never settles: a falsified run of the
+/// Boolean `Implies` harness yields no terminal record, whatever the playback is.
+#[trace("TC-047", "FR-032-AC-24")]
+#[test]
+fn every_refusal_on_an_unavailable_family_settles_nothing() {
+    let fixture = sum_fixture();
+    let body = fixture.harness.scalar_replay_body().unwrap();
+    let routed = routed_implies_fixture();
+    let (unrouted, _, _) = boolean_implies_scalar();
+    let falsified = synthetic_evidence(
+        KaniRunOutcome::Falsified {
+            counterexample: "#[test] fn kani_concrete_playback() {}".to_owned(),
+        },
+        0,
+    );
+    for (label, harness, artifacts) in [
+        ("routed", &routed.harness, &routed.artifacts),
+        ("unrouted", &unrouted, &fixture.artifacts),
+    ] {
+        let identity = &harness.identity;
+        let good = transcript(identity, &[1, 1]);
+        let oversize = format!("{good}\n//{}", "x".repeat(SCALAR_PLAYBACK_BYTES));
+        let wrong = rename_implies(identity, &good);
+        for text in [
+            good.as_str(),
+            oversize.as_str(),
+            wrong.as_str(),
+            "garbage",
+            "",
+        ] {
+            let refusal = context(&fixture)
+                .plan(harness, identity, body, artifacts, text)
+                .expect_err("no plan for a family without a parity route");
+            assert!(refusal.setup_settlement().is_none(), "{label}: {refusal:?}");
+            assert_eq!(
+                scalar_run_terminal_value(&falsified, refusal.setup_settlement()),
+                Err(TerminalPairError::MissingSettlement),
+                "{label}: {refusal:?}"
+            );
+        }
+    }
 }
 
 fn rename_implies(
