@@ -1031,8 +1031,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     `forget_fat_values` and the arithmetic probe body) and emitting the forget before the cover
     (site: the statement renderer) each fail the test of this step. The native Boolean equality
     route (FR-015-AC-146) is evidenced by the differential test
-    `native_boolean_equality_and_inequality_match_the_typed_route`; the installed `Verified` and
-    999 playback runs (FR-015-AC-147 and FR-015-AC-148) are PLANNED and unmet as measured.
+    `native_boolean_equality_and_inequality_match_the_typed_route`. Installed Kani (FR-015-AC-147 and FR-015-AC-148): run the harness with `--exact --unwind 3 --solver cadical -Z function-contracts` and require `Verified` for the healthy clause, then, with `-Z concrete-playback --concrete-playback print`, `Falsified` for the subject `amount + 2 <= 1000` (playback 999), the oracle `<=` to `<` and the runtime helper returning `false`; the cover witness printed with the failure is not a counterexample. The kernel `+` mutants of FR-015-AC-41 and the sealed playback are PLANNED.
 
 ## Blocked
 
