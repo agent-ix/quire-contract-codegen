@@ -114,8 +114,8 @@ assumptions exchange. For AC-31, generate the same scalar node through direct
 `negotiate_kani_obligations` and compare its record bytes with the committed golden
 `tests/fixtures/kani-scalar/direct-increment-record.json` that slice (a) captures from the
 unchanged generator. For AC-32,
-route `x + 1 > 5`, `n >= 0` over a plain-Integer `n`, `x < 10^23` and a guard reading a model
-member beside a lowerable sibling, then drop one guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
+route `x + 1 > 5`, `n >= 0` over a plain-Integer `n`, `x < 10^23` and a guard calling a function the
+profile does not support, each beside a lowerable sibling, then drop one guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
 the unguarded `x + 100` control, the literal-left `20 < x` guard, and the Boolean
 `f(p: Boolean, x: Int[0, 9]): Int[0, 10] { if p then (if p then 0 else x + 1) else 0 }` case. For AC-35, run both harnesses through FR-017 under installed
 Kani and read the evidence outcome.
@@ -300,7 +300,7 @@ diagnostic-string parsing.
     role and ordinal; the direct FR-015 record omits the field and equals the committed golden
     byte for byte (FR-022-AC-31).
 25. Lowerable guards produce their assumptions; `x + 1 > 5`, `n >= 0`, `x < 10^23` and the
-    model-member guard yield `path_guard_not_lowered` with `UnsupportedGuardForm`,
+    unsupported-function guard yield `path_guard_not_lowered` with `UnsupportedGuardForm`,
     `UnboundedGuardOperand`, `GuardLiteralNotI64` and `GuardRootNotLowered`, each without a
     harness and with the sibling unchanged; the missing guard root yields the whole-call
     `GuardContextMissing` (FR-022-AC-32).

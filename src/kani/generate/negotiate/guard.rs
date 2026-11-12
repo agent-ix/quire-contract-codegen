@@ -203,6 +203,16 @@ fn side(lookup: &ContractLookup<'_>, term: &CheckedTerm) -> Result<Side, Fault> 
             return literal(body);
         }
     }
+    // QSL widens a literal compared with a differently ranged operand through a conversion;
+    // narrowing an integer literal keeps its value, so the literal itself is the side.
+    if identity(graph.term(&node.node_id)) == Some("quire.op.numeric.narrow") {
+        if let Some([argument]) = graph.arguments(&node.node_id) {
+            return match side(lookup, argument) {
+                literal @ (Ok(Side::Literal(_)) | Err(Fault::LiteralNotI64(_))) => literal,
+                _ => Err(Fault::Form),
+            };
+        }
+    }
     let original = lookup.original_node(&node.node_id).ok_or(Fault::Form)?;
     if &*node.semantic_form != "parameter" {
         return Err(Fault::Form);

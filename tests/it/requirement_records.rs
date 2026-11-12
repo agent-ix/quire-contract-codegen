@@ -232,6 +232,14 @@ struct Scenario {
 
 impl Scenario {
     fn new(checked: CheckedPackageV2, specs: Vec<ItemSpec>) -> Self {
+        Self::with_profile(checked, specs, &routed_contract_lowering_profile())
+    }
+
+    fn with_profile(
+        checked: CheckedPackageV2,
+        specs: Vec<ItemSpec>,
+        profile: &quire_contract_model::CompleteLoweringProfileV2,
+    ) -> Self {
         let mut positions = Vec::new();
         for spec in &specs {
             positions.push(ContractRequestPosition::DriverItem {
@@ -256,7 +264,7 @@ impl Scenario {
             .iter()
             .map(|position| position.node_id().clone())
             .collect::<Vec<_>>();
-        let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
+        let lowered = checked.lower(&roots, profile);
         let package = admit(&checked, &lowered);
         let mut routes = Vec::new();
         let mut requirements = Vec::new();
@@ -1109,33 +1117,33 @@ fn find_node(checked: &CheckedPackageV2, predicate: NodePredicate) -> CheckedNod
     matches[0].clone()
 }
 
+fn item_spec(
+    checked: &CheckedPackageV2,
+    application: NodePredicate,
+    guards: &[GuardSpec],
+) -> ItemSpec {
+    let add = find_node(checked, application);
+    let conversion = narrow_of(checked, &add).first().map(|node| (*node).clone());
+    ItemSpec {
+        application: conv_occurrence(checked, &add, 0),
+        conversion: conversion.map(|node| conv_occurrence(checked, &node, 0)),
+        path: guards
+            .iter()
+            .map(|(predicate, holds, ordinal)| RequirementGuard {
+                occurrence: conv_occurrence(checked, &find_node(checked, *predicate), *ordinal),
+                holds: *holds,
+            })
+            .collect(),
+    }
+}
+
 /// A package whose routed items are the `+` applications selected by predicate, each converted to
 /// its declared result and routed under its guards.
 fn guard_items(name: &str, source: &str, items: &[(NodePredicate, &[GuardSpec])]) -> Scenario {
     let checked = qsl_package(name, source);
     let specs = items
         .iter()
-        .map(|(application, guards)| {
-            let add = find_node(&checked, *application);
-            let conversion = narrow_of(&checked, &add)
-                .first()
-                .map(|node| (*node).clone());
-            ItemSpec {
-                application: conv_occurrence(&checked, &add, 0),
-                conversion: conversion.map(|node| conv_occurrence(&checked, &node, 0)),
-                path: guards
-                    .iter()
-                    .map(|(predicate, holds, ordinal)| RequirementGuard {
-                        occurrence: conv_occurrence(
-                            &checked,
-                            &find_node(&checked, *predicate),
-                            *ordinal,
-                        ),
-                        holds: *holds,
-                    })
-                    .collect(),
-            }
-        })
+        .map(|(application, guards)| item_spec(&checked, *application, guards))
         .collect();
     Scenario::new(checked, specs)
 }
@@ -1456,8 +1464,7 @@ fn integer_guards_narrow_the_operand_domains() {
 #[test]
 fn every_comparison_narrows_by_the_values_that_falsify_it() {
     // (operator, name, literal, holds, narrowed range of `x`). QSL widens an `=` or `!=` literal
-    // through a conversion, which is not a lowered form: those two are covered on the plan itself
-    // by the unit test `equality_guards_narrow_by_the_value_they_name` in the guard module.
+    // through a conversion, which the lowering reads through to the literal.
     let cases = [
         ("<", "lt", "5", true, (0, 4)),
         ("<", "lt", "5", false, (5, 9)),
@@ -1467,6 +1474,13 @@ fn every_comparison_narrows_by_the_values_that_falsify_it() {
         (">=", "ge", "5", true, (5, 9)),
         (">=", "ge", "5", false, (0, 4)),
         ("<", "lt", "0", false, (0, 9)),
+        ("=", "eq", "5", true, (5, 5)),
+        ("=", "eq", "5", false, (0, 9)),
+        ("=", "eq", "0", false, (1, 9)),
+        ("!=", "ne", "0", true, (1, 9)),
+        ("!=", "ne", "9", true, (0, 8)),
+        ("!=", "ne", "5", true, (0, 9)),
+        ("!=", "ne", "9", false, (9, 9)),
     ];
     for (index, (symbol, name, rhs, holds, expected)) in cases.into_iter().enumerate() {
         let signature = "x: Int[0, 9]";
@@ -1662,6 +1676,115 @@ fn a_guard_whose_context_root_is_dropped_refuses_the_whole_call() {
                 guard: guard.occurrence
             }
         ))
+    );
+}
+
+/// A guard whose context root the package admits but accounts as not `lowered` (here its closure
+/// reaches a function the profile does not support) refuses that item with the guard named, and
+/// leaves its unguarded sibling alone.
+#[trace("FR-022-AC-32", "TC-033")]
+#[test]
+fn a_guard_root_the_package_does_not_lower_is_not_lowered() {
+    let source =
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n\
+        function a using v(x: Int[0, 9]): Int[0, 11] pure { x + 2 }\n\
+        function g using v(x: Int[0, 9]): Int[0, 9] pure { x }\n\
+        function t using v(x: Int[0, 9]): Int[0, 12] pure { if g(x) > 5 then x + 3 else 0 }\n";
+    // The guard's closure reaches a function the profile does not support, or costs more than the
+    // work limit allows while its sibling's closure fits: either way its root is accounted for
+    // but not `lowered`.
+    let mut unsupported = routed_contract_lowering_profile();
+    unsupported
+        .supported_tags
+        .remove(&quire_contract_model::CheckedNodeTag::Function);
+    let mut costly = routed_contract_lowering_profile();
+    costly.work_limit = 60;
+    for profile in [unsupported, costly] {
+        let checked = qsl_package("ir304-unlowered-root", source);
+        let guard: &[GuardSpec] = &[(&op_is("quire.op.integer.gt"), true, 0)];
+        let items: [(NodePredicate, &[GuardSpec]); 2] =
+            [(&is_plus("2"), &[]), (&is_plus("3"), guard)];
+        let specs = items
+            .iter()
+            .map(|(application, guards)| item_spec(&checked, application, guards))
+            .collect();
+        let scenario = Scenario::with_profile(checked, specs, &profile);
+        let (supported, _) = settle_at(&scenario, 0);
+        assert_eq!(supported["disposition"], "supported");
+        let (refused, harness) = settle_at(&scenario, 1);
+        assert!(harness.is_none());
+        assert_eq!(refused["reason"]["code"], "path_guard_not_lowered");
+        assert_eq!(refused["reason"]["reason"], "guard_root_not_lowered");
+        assert_eq!(
+            refused["reason"]["guard"],
+            json(&scenario.requirements[1].path_condition[0].occurrence)
+        );
+    }
+}
+
+/// A direct caller's guard names a node that is in the admitted package (inside the application's
+/// closure) but was not requested as a root, so its accounting is not `lowered`.
+#[trace("FR-022-AC-32", "TC-033")]
+#[test]
+fn a_guard_inside_the_closure_but_not_a_requested_root_is_not_lowered() {
+    let scenario = guard_scenario(
+        "ir304-direct",
+        &guard_fn("x: Int[0, 9]", "x + 1"),
+        &is_plus("1"),
+        &[],
+    );
+    let checked = &scenario.checked;
+    let node_id = find_node(checked, &is_plus("1"));
+    let item = derive_exact_scalar_items(checked, std::slice::from_ref(&node_id))
+        .into_iter()
+        .next()
+        .expect("one requested node is derived")
+        .expect("the increment has a source-derived descriptor");
+    let claim_map = generate_exact_scalar_oracles(checked, &[item])
+        .expect("the increment renders")
+        .claim_map;
+    let selection = scenario
+        .positions
+        .iter()
+        .find_map(|position| match position {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection),
+            _ => None,
+        })
+        .expect("a driver position");
+    let x = find_node(checked, &param_named("x"));
+    let path_condition = [RequirementGuard {
+        occurrence: conv_occurrence(checked, &x, 0),
+        holds: true,
+    }];
+    let items = [ObligationItem::ScalarClaim {
+        path_condition: &path_condition,
+        requirement_occurrence: None,
+        source: checked,
+        package: &scenario.package,
+        claim_map: &claim_map,
+        node_id: &node_id,
+        claim_index: 0,
+        result_selection: selection,
+    }];
+    let KaniObligationOutcome::Emitted { records, .. } =
+        negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &items,
+            subject_path: "crate::subject",
+            unwind: 1,
+        })
+        .expect("FR-015 accepts the request")
+    else {
+        panic!("the request is rejected");
+    };
+    let disposition = json(&records[0].disposition);
+    assert_eq!(disposition["reason"]["code"], "path_guard_not_lowered");
+    assert_eq!(disposition["reason"]["reason"], "guard_root_not_lowered");
+    assert_eq!(
+        disposition["reason"]["guard"],
+        json(&path_condition[0].occurrence)
     );
 }
 

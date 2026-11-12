@@ -456,8 +456,7 @@ mod tests {
     }
 
     /// `=` keeps the value it names; `!=` removes it only from an endpoint, and a negated `=` or
-    /// `!=` is the opposite. These forms need a plan of their own because QSL converts an `=`
-    /// literal, so no authored guard reaches them.
+    /// `!=` is the opposite, for every position of the value in the declared domain.
     #[trace("FR-022-AC-33", "TC-033")]
     #[test]
     fn equality_guards_narrow_by_the_value_they_name() {
