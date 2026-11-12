@@ -194,10 +194,12 @@ passing proof-driven replay is claimed.
     `setup_settlement` returns `None` for the tamper, unavailable-capability and binding
     variants and `Some(CgDefect)` for `Playback`, and that the pair functions give
     `MissingSettlement` and `Failed` respectively, so a falsified `Implies` run yields no
-    terminal record. A test-local exhaustive `match` over `ScalarBuildError` and over
+    terminal record. Give the `Implies` harness a malformed, oversize and wrong-harness playback
+    and changed artifacts: each refusal is `ScalarBuildError::UnavailableFamily` wrapping the
+    earlier cause, `setup_settlement` is `None` and the pair functions give `MissingSettlement`. A test-local exhaustive `match` over `ScalarBuildError` and over
     `ScalarAuthorityError` asserts the classification for the causes no public input reaches
-    (`Staging`, `Identity`, `ScalarBuildError::Operation` and the `Occurrence`, `Operands`,
-    `Operation`, `Ranges` and `Record` authority causes; `Staging`, `Identity`, and the `Operation`, `Ranges` and `Record` authority
+    (`Staging`, `Identity`, `ScalarBuildError::Operation`, `ScalarBuildError::UnavailableFamily` and the `Occurrence`, `Operands`,
+    `Operation`, `Ranges` and `Record` authority causes; `UnavailableFamily` is `None`; `Staging`, `Identity`, and the `Operation`, `Ranges` and `Record` authority
     causes are `CgDefect`, the rest `None`), so a new variant fails the build. Neither cause site
     of `Authority(Operation)` (a non-application generated node, or a harness operation that
     differs from the admitted node's) can be driven through the public API, because the harness
