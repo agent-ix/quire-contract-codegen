@@ -90,6 +90,7 @@ mod kani_run_scan;
 mod kani_stdout_capture;
 mod layout;
 mod model_enum_scalar;
+mod native_boolean_equality_differential;
 mod native_v2_helper_playback;
 mod no_generation_panics;
 mod oracle_arithmetic;

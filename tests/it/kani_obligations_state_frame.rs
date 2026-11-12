@@ -1367,7 +1367,7 @@ fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
 }
 
 /// The native proof oracle stops with a payload-free Copy kind; the general oracle is the control.
-#[trace("TC-025", "FR-015-AC-145")]
+#[trace("TC-025", "FR-015-AC-145", "FR-015-AC-146")]
 #[test]
 fn native_clause_oracle_stop_is_a_payload_free_copy_kind() {
     let (package, clause) =
@@ -1393,6 +1393,15 @@ fn native_clause_oracle_stop_is_a_payload_free_copy_kind() {
     assert!(native.source.contains("map_err(|_| ClauseStop::Oracle)"));
     assert!(native.source.contains("core::mem::forget(record);"));
     assert!(native.source.contains("ClauseStop::IntegerOutOfDomain"));
+    // Boolean equality on the native path is a generation-time fact plus the kernel.
+    assert!(native
+        .source
+        .contains("rt::evaluate_native_boolean_equality(left, right, meter)"));
+    assert!(native
+        .source
+        .contains("rt::Outcome::Completed(related) => rt::Outcome::Completed(related == true)"));
+    assert!(!native.source.contains("check_equality"));
+    assert!(general.source.contains("check_equality"));
     // Control: the general oracle keeps the full runtime outcome.
     assert!(general.source.contains("Runtime(rt::Outcome<bool>)"));
     assert!(general

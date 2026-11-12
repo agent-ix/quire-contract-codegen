@@ -291,6 +291,21 @@ impl SourceBuilder {
                     call,
                 }
             }
+            ExactScalarOperation::Equality {
+                operator,
+                operands: EqualityOperandKind::Boolean,
+            } if self.needs_native_admission => {
+                // The operand kind is a generation-time fact: no run-time type check. The
+                // kernel makes the four `planned_equality` charges over two Booleans, and
+                // `!=` negates the relation after them as `CheckedEquality::run` does.
+                let equal = matches!(operator, EqualityOperator::Equal);
+                Body {
+                    parameters: binary("bool"),
+                    output: OracleOutput::Value("bool"),
+                    prelude: Vec::new(),
+                    call: format!("Ok(match rt::evaluate_native_boolean_equality(left, right, meter) {{\n        rt::Outcome::Completed(related) => rt::Outcome::Completed(related == {equal}),\n        rt::Outcome::Undefined(reason) => rt::Outcome::Undefined(reason),\n        rt::Outcome::Refused(reason) => rt::Outcome::Refused(reason),\n        rt::Outcome::Incomplete(record) => rt::Outcome::Incomplete(record),\n    }})"),
+                }
+            }
             ExactScalarOperation::Equality { operator, operands } => {
                 let operator = match operator {
                     EqualityOperator::Equal => "Equal",
