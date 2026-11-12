@@ -354,7 +354,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     invocation document and post snapshot, and the snapshot anchor against the selection's
     (FR-024-AC-57). Mutation control: building `Invocation` instead of `Current` fails the
     observation-form assertion of this step.
-40. Over an object declaring `balance` and an unread `audit`, replay the `balance` playback with
+40. (Implemented, IR-1512.) Over an object declaring `balance` and an unread `audit`, replay the `balance` playback with
     no `unread_values` (FR-024-AC-58, FR-024-AC-70). The result is the CG-typed `MissingField`
     naming `audit`, the executor is uncalled and no document is built, so QSL's `missing-member`
     refusal is not reached. Mutation controls: a builder that omits an unread field from the
@@ -438,7 +438,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     above was applied at its site and fails the named assertion; the controls use the identities
     QSL's selected sites mint (`Twin::minted_role_identities`) for the replay accept cases and
     hand-written literals for the refusals.
-48. Over the `balance`/`audit` twin (`Account.balance: Int[-1, 1000]`, unread `audit: Int[0, 1000]`,
+48. (Implemented, IR-1512.) Over the `balance`/`audit` twin (`Account.balance: Int[-1, 1000]`, unread `audit: Int[0, 1000]`,
     invariant `balance >= 0`, FR-024-AC-69), replay the playback `balance = -1` with `unread_values`
     `[("audit", 7)]` through `replay_through`, decode the snapshot document from the captured
     request, and assert `balance == -1` and `audit == 7` (member order is by name and is not
@@ -458,7 +458,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     transcript-holds-only-`balance` assertion. Over a fixture whose `audit` accessor range is
     narrowed to `Int[0, 5]`, `audit = 7` returns `OutOfDomain`: a check reading `i64` or the
     unmutated package's range accepts it and fails.
-49. Refuse the unread values (FR-024-AC-70): a name supplied that the harness draws (`balance`); a
+49. (Implemented, IR-1512.) Refuse the unread values (FR-024-AC-70): a name supplied that the harness draws (`balance`); a
     name supplied that the clause reads, over a clause reading two fields where the playback
     draws only one and the other is supplied (hand-built `InvariantReplayInputs`, because
     `decode_falsification` refuses a harness whose field order differs from the inputs'; fixture:
@@ -516,7 +516,7 @@ planned. No production minimizer or lineage record is claimed by this test case.
 Steps 29 to 32 and their results 34 to 37 are planned for IR-968. They require QSL's
 QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
 occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
-Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142, IR-1520) is implemented by the identity comparisons in `StateClauseReplayInputs::decode_falsification` and `FrameReplay::new` and covered by the tagged tests of `tests/it/state_frame_obligation_identity.rs`. Steps 40, 48 and 49 (FR-024-AC-58, FR-024-AC-69 and FR-024-AC-70, IR-1512) are planned: the `unread_values` completion of the invariant snapshot is not implemented, and the existing test `tc_035_unread_declared_field_ends_refused_with_missing_member` (tagged FR-024-AC-58) asserts the superseded `Refused`/`missing-member` behaviour, which the IR-1512 code change must replace. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 and 41 to 45 (FR-024-AC-57 and FR-024-AC-59 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
+Step 47 (FR-024-AC-71 to FR-024-AC-75, FR-015-AC-137 to FR-015-AC-142, IR-1520) is implemented by the identity comparisons in `StateClauseReplayInputs::decode_falsification` and `FrameReplay::new` and covered by the tagged tests of `tests/it/state_frame_obligation_identity.rs`. Steps 40, 48 and 49 (FR-024-AC-58, FR-024-AC-69 and FR-024-AC-70, IR-1512) are implemented by `complete_snapshot` in `src/replay/state_clause/invariant.rs` and covered by `tc_035_unread_declared_field_is_completed_from_the_supplied_value` and `tc_035_each_unread_value_refusal_is_a_distinct_variant_before_any_document` in `tests/it/state_clause_invariant_replay.rs`; the superseded `tc_035_unread_declared_field_ends_refused_with_missing_member` is replaced. Step 46 (FR-024-AC-65 and FR-024-AC-66, IR-1519) is implemented by the identity comparison in `InvariantReplayInputs::decode_falsification` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Steps 39 and 41 to 45 (FR-024-AC-57 and FR-024-AC-59 to FR-024-AC-64, IR-1505) are implemented by `StateClauseReplay::new_invariant` and covered by the tagged tests of `tests/it/state_clause_invariant_replay.rs`. Step 33 and result 38 are planned for IR-1255; the public selected-target input and its
 association refusals are not implemented yet.
 
 ## Scoped evidence status (IR-1316)

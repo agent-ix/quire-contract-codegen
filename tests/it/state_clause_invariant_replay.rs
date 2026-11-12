@@ -524,6 +524,15 @@ fn tc_035_each_unread_value_refusal_is_a_distinct_variant_before_any_document() 
         );
     }
 
+    // A name the inputs draw although the clause does not read it (hand-built inputs).
+    let mut drawn = with(&[("audit", 7)]);
+    drawn.state_fields = vec!["balance".to_owned(), "audit".to_owned()];
+    drawn.playback.push(("audit".to_owned(), 3));
+    assert!(matches!(
+        refuse(drawn),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "audit"
+    ));
+
     // A name the clause reads while the playback draws only the other field: the clause
     // `balance >= audit` reads both and the hand-built inputs draw `balance` alone.
     let two = Twin::with_unread_audit_invariant((0, 1000), (0, 1000), "self.balance >= self.audit");
