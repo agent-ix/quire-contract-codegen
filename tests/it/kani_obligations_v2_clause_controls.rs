@@ -822,9 +822,7 @@ fn the_matrix_status_of_the_enumeration_rows_says_enumeration_evidence_without_p
     for id in ["FR-015-AC-132", "FR-017-AC-64"] {
         let row = matrix
             .lines()
-            .find(|line| {
-                line.starts_with(&format!("| FR-0")) && line.contains(&format!("| {id} |"))
-            })
+            .find(|line| line.starts_with("| FR-0") && line.contains(&format!("| {id} |")))
             .unwrap_or_else(|| panic!("a matrix row for {id}"));
         let status = row.split('|').nth(4).expect("status column");
         assert!(status.contains("enumeration evidence"), "{id}: {status}");
