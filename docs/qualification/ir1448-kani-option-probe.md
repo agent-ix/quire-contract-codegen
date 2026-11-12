@@ -54,9 +54,10 @@ null state, unrecognised operation), not by cost.
 
 ## What this does not establish
 
-- Not CG generation: the harness, oracle and subject are hand-written, the quire-exact option
-  kernel and its meter were not used, and `option.value` of an absent option is modelled as
-  `Undefined` by assumption (the kernel outcome is the authority, FR-054).
+- Not CG generation: the harness, oracle and subject are hand-written, no quire-exact kernel
+  or meter was used, and `option.value` of an absent option is modelled as `Undefined` by
+  assumption (FR-054 owns that CG rule; QSL and the Contract IR own option definedness and
+  quire-exact owns `Undefined::NoneValue`).
 - Not CG's runner: no two-phase run, no identity record.
 - Not scaled: the probe has one 0..=1000 payload, not a clause with arithmetic over an option, a
   large record payload or several options; those costs are unmeasured.

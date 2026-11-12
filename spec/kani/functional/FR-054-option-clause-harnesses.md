@@ -141,9 +141,10 @@ The refusals SHALL NOT map to `NoFiniteEncoding`, `StateFrameRefused` or
 
 A refused item SHALL NOT discard a supported sibling item (FR-015-AC-23).
 
-When a clause meets several refusals, CG SHALL report the one at the lowest node id in the clause
-body, in the order FR-015-AC-42 already uses for unsupported operators. Among refusals at one
-node, a shape refusal (`PayloadNotScalar`, `NestedOption`, `NullablePresence`,
+When a clause meets several refusals, CG SHALL report the first one met in a depth-first, left-to-right walk of
+the clause condition from its root that follows each reference once, which is the walk the V2
+clause classifier already makes for the first unsupported operator and which this requirement
+does not change. Among refusals at one node, a shape refusal (`PayloadNotScalar`, `NestedOption`, `NullablePresence`,
 `OptionOperationNotLowered`) precedes a bound refusal of the payload's integer leaves, because the
 shape decides which leaves exist.
 
@@ -184,13 +185,13 @@ checked condition".
 | FR-054-AC-14 | None of the four refusal reasons is reported as `NoFiniteEncoding`, `StateFrameRefused` or `V2ClauseOperatorNotSupported`. Mutant: collapsing the four reasons into `V2ClauseOperatorNotSupported` fails FR-054-AC-10 to FR-054-AC-13. | Test |
 | FR-054-AC-15 | A request holding a refused option clause and a supported sibling item reports the sibling `supported` with its harness unchanged. Mutant: dropping the sibling after the refusal fails. | Test |
 | FR-054-AC-16 | An option of an unbounded integer keeps `requires_bound` with the type node and has no harness. Mutant: remapping it to `PayloadNotScalar` fails the disposition check. | Test |
-| FR-054-AC-17 | A clause holding an unsupported operator at a lower node id than an option refusal is reported as `V2ClauseOperatorNotSupported`; a clause holding two option refusals reports the one at the lower node id; and a shape refusal precedes the bound refusal of the same node. Mutant: reporting the highest node id fails the first two. | Test |
+| FR-054-AC-17 | A clause holding an unsupported operator met earlier in the walk than an option refusal is reported as `V2ClauseOperatorNotSupported`; a clause holding two option refusals reports the one met first; and a shape refusal precedes the bound refusal of the same node. Mutant: reporting the last refusal met fails the first two. | Test |
 | FR-054-AC-18 | The harness identity record retains the presence leaf, the payload leaves and the canonical-absent rule. Mutant: changing the absent rule from canonical payload to free payload yields an identity record that differs from the healthy one. | Test |
 | FR-054-AC-19 | Playback of a present and of an absent draw decodes to one option witness value each. Mutant: decoding the presence leaf as a payload leaf fails both. | Test |
 | FR-054-AC-20 | Playback of an absent option with a non-canonical payload leaf (payload 1) is refused. Mutant: omitting the canonical check accepts it. | Test |
 | FR-054-AC-21 | Executed through CG's two-phase runner (FR-017-AC-63), the healthy runs of FR-054-AC-3, AC-4, AC-6 and AC-8 return `Verified` with the cover satisfied, and the mutant runs of FR-054-AC-3, AC-4, AC-7 and AC-8 return `Falsified` from the witness phase with the playback each criterion names. Run one at a time, with the memory cap supplied by the caller's environment (ADR-007), recording verdict and wall time, and peak memory only where the environment supplies a source. A run that ends `TimedOut` or `Inconclusive` leaves the control unmet. The probe record does not substitute. | Test |
 | FR-054-AC-22 | The controls of FR-054-AC-5 and FR-054-AC-6 are run on the generated oracle compiled in a scratch crate, one run per mutant, and each stated verdict is observed. | Test |
-| FR-054-AC-23 | FR-015-AC-42 states that `quire.op.option.present` and `quire.op.option.value` are lowered by this requirement, that every other `quire.op.option.*` operator is refused with `OptionNotLowered`, and that the amendment stands beside the control-operator exception of FR-015-AC-152 to FR-015-AC-163. | Inspection |
+| FR-054-AC-23 | FR-015-AC-42 states that `quire.op.option.present` and `quire.op.option.value` are lowered by FR-054 and that every other `quire.op.option.*` operator is refused with `OptionNotLowered` and not as `V2ClauseOperatorNotSupported`. | Inspection |
 
 ## Dependencies
 
@@ -203,6 +204,5 @@ checked condition".
 
 ## Status
 
-PLANNED (IR-1448 specifies; the implementation ticket is owned by the IR code lead and is created
-by the lead). No criterion is implemented or tagged. The installed-Kani measurement is a
+PLANNED (IR-1448 specifies; IR-1448 also owns the implementing code PR; no new ticket). No criterion is implemented or tagged. The installed-Kani measurement is a
 hand-written probe only. Drawing the `null` state of `field?` is not planned.
