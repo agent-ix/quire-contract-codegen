@@ -923,9 +923,10 @@ impl ReplayPackage {
         ))
     }
 
-    /// Builds a value-parity request only after QSL admits the producer packet and this package
-    /// binds its target, declaration occurrence, subject, package, `Input` arm and obligation to
-    /// the independently selected checked function claim. A missing packet has no request path.
+    /// Builds a value-parity request only after QSL admits the producer packet and its target,
+    /// declaration occurrence, subject, `Input` arm, empty declared domains and obligation match
+    /// the independently selected checked function claim. The request is built from this checked
+    /// package, so a packet cannot select another one. A missing packet has no request path.
     ///
     /// # Errors
     ///
@@ -1042,6 +1043,7 @@ impl ReplayPackage {
         );
         if matches!(envelope.source(), EnvelopeSource::Input(_)) {
             request.backend = envelope.backend().as_str().to_owned();
+            request.declared_domains = envelope.declared_domains().to_vec();
             request.supplied_limits = Some(self.inputs.supplied_limits.unwrap_or_default());
         }
         Ok(request)
@@ -1727,13 +1729,17 @@ mod tests {
     }
 
     fn package_from_source(source: &str, function: &str) -> ReplayPackage {
+        package_named("fixture", source, function)
+    }
+
+    fn package_named(package_name: &str, source: &str, function: &str) -> ReplayPackage {
         let limits = unlimited();
         let inputs = ReplayInputs {
             decode_limits: WitnessDecodeLimits {
                 bytes: 1_048_576,
                 values: 1024,
             },
-            package_name: "fixture".to_owned(),
+            package_name: package_name.to_owned(),
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: "unit".to_owned(),
@@ -1910,6 +1916,21 @@ mod tests {
         }]
     }
 
+    /// A proving-run domain for the function's parameter, which a value-parity request must not
+    /// carry.
+    fn proving_run_domain(package: &ReplayPackage) -> DeclaredDomain {
+        use qsl_replay::{DomainKey, DomainKind, FiniteBound, Integer, ProofBound};
+        let bound = FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
+            .expect("a valid range");
+        let key = DomainKey::Node {
+            node: package.site.site.parameters[0].1.clone(),
+            path: Vec::new(),
+        };
+        DeclaredDomain::new(
+            ProofBound::new(key, Some(DomainKind::Integer), bound).expect("a valid proof bound"),
+        )
+    }
+
     fn value_obligation(package: &ReplayPackage) -> ObligationIdentity {
         package
             .site
@@ -1930,7 +1951,8 @@ mod tests {
             replay_value_parity, Integer, ScalarOutcome, Value, ValueClaim, ValueParityResult,
         };
 
-        let package = package_from_source(VALUE_UNIT, "f");
+        let mut package = package_from_source(VALUE_UNIT, "f");
+        package.inputs.declared_domains = vec![proving_run_domain(&package)];
         let obligation = value_obligation(&package);
         let generator = BackendId::new("generated-provider");
         let assignments = value_assignments(&package);
@@ -1954,6 +1976,7 @@ mod tests {
         assert_eq!(wire.obligation_identity, obligation);
         assert_eq!(wire.backend, generator.as_str());
         assert!(wire.declared_domains.is_empty());
+        assert!(!package.inputs.declared_domains.is_empty());
         let readback = ReplayRequest::decode(wire.clone(), package.inputs.replay_limits)
             .expect("QSL reads the packet-backed value request");
         assert_eq!(
@@ -2051,6 +2074,41 @@ mod tests {
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Occurrence
             ))
+        ));
+
+        let mut wrong_role = packet.clone();
+        wrong_role.occurrence_key = Some(OccurrenceKey::new(
+            package.site.site.function.clone(),
+            qsl_replay::Origin::new(qsl_replay::Role::new("expression"), 0),
+        ));
+        assert!(matches!(
+            refused(wrong_role),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence
+            ))
+        ));
+
+        let mut wrong_node = packet.clone();
+        wrong_node.occurrence_key = Some(OccurrenceKey::new(
+            fixture_node("other-node"),
+            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 0),
+        ));
+        assert!(matches!(
+            refused(wrong_node),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence
+            ))
+        ));
+
+        // `WitnessPacket` has no package member, so a foreign package is reachable only as the
+        // packet that package's own checked claim produces for the same function name.
+        let foreign = package_named("foreign", VALUE_UNIT, "f");
+        let foreign_packet = foreign
+            .value_parity_packet(&generator, value_assignments(&foreign))
+            .expect("the foreign function has a value claim");
+        assert!(matches!(
+            refused(foreign_packet),
+            Err(FunctionPacketError::ClaimMismatch(_))
         ));
 
         let mut wrong_subject = packet.clone();
