@@ -224,7 +224,7 @@ fn ensure_declaring_object(
     clause_node: &CheckedNodeId,
     object_node: &CheckedNodeId,
     object_type: &str,
-) -> Result<(), StateClauseReplayError> {
+) -> Result<Vec<String>, StateClauseReplayError> {
     let mismatch = || StateClauseReplayError::HarnessMismatch {
         member: StateClauseHarnessMember::Object,
     };
@@ -250,18 +250,6 @@ fn ensure_declaring_object(
     if address != Some(object_type) {
         return Err(mismatch());
     }
-    Ok(())
-}
-
-/// The names of the fields the invariant clause reads.
-fn clause_read_fields(
-    graph: &ClauseGraphView<'_>,
-    clause_node: &CheckedNodeId,
-) -> Result<Vec<String>, StateClauseReplayError> {
-    let condition =
-        read_clause(clause_node, graph).ok_or(StateClauseReplayError::HarnessMismatch {
-            member: StateClauseHarnessMember::Object,
-        })?;
     Ok(condition
         .inputs
         .into_iter()
@@ -270,9 +258,11 @@ fn clause_read_fields(
 }
 
 /// Every declared field of the object with its value, in declared order: a drawn field takes the
-/// playback's value and each other declared field takes the caller's supplied value. Every
-/// supplied name is checked first, and a declared field that is neither drawn nor supplied is
-/// `MissingField`; no value is invented.
+/// playback's value and each other declared field takes the caller's supplied value. The supplied
+/// entries are checked in order, each against, in this order: drawn or read
+/// (`UnreadValueForReadField`), undeclared, repeated, no `i64` range (`UnreadFieldNotRanged`),
+/// outside the range (`OutOfDomain`); then a declared field that is neither drawn nor supplied is
+/// `MissingField`. No value is invented.
 fn complete_snapshot(
     graph: &ClauseGraphView<'_>,
     object: &CheckedNodeId,
@@ -289,7 +279,7 @@ fn complete_snapshot(
         })?;
     for (position, (name, value)) in supplied.iter().enumerate() {
         let field = || name.clone();
-        if drawn.iter().any(|(drawn, _)| drawn == name) || read.contains(name) {
+        if drawn.iter().any(|(bound, _)| bound == name) || read.contains(name) {
             return Err(StateClauseReplayError::UnreadValueForReadField { field: field() });
         }
         if declared.field(name).is_none() {
@@ -390,10 +380,9 @@ impl StateClauseReplay {
         }
 
         let graph = ClauseGraphView::new(package);
-        ensure_declaring_object(&graph, clause_node, object_node, &object.object_type)?;
+        let read = ensure_declaring_object(&graph, clause_node, object_node, &object.object_type)?;
         let fields = state_fields(&graph, object_node, &requested)?;
         let drawn = bind(&fields, &playback, Side::Playback)?;
-        let read = clause_read_fields(&graph, clause_node)?;
         let values = complete_snapshot(&graph, object_node, &drawn, &read, &unread_values)?;
 
         let model = model_header(&packages, &object.object_type)

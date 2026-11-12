@@ -475,6 +475,16 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     Boolean case; a builder returning `OutOfDomain` for them fails the variant assertion; a builder accepting a supplied value for a clause-read field (site: the
     drawn-or-read membership check) fails the first two refusal assertions; a builder mapping the
     duplicate to `UndeclaredField` (site: the duplicate-name check) fails the variant assertion.
+    Precedence (FR-024-AC-70): supplied `[("balance", 1), ("balance", 2)]` is
+    `UnreadValueForReadField`, not `DuplicateField`; `[("balance", 99999)]` is
+    `UnreadValueForReadField`, not `OutOfDomain`; `[("audit", 7), ("audit", 5000)]` is
+    `DuplicateField`, not `OutOfDomain`; and over `audit` plus a second unread `note`,
+    `[("note", 5000)]` is `OutOfDomain`, not the `MissingField` of the omitted `audit`. A
+    reordering of the checks (site: the order of the per-entry checks in `complete_snapshot`)
+    fails the matching case. A negative-range unread field (`audit: Int[-5, 10]`) accepts `-5` and
+    `10` and refuses `-6` and `11` with `OutOfDomain`; a minimum clamped at zero refuses `-5` and
+    fails. A supplied value for an unbounded integer and for a string `audit` is
+    `UnreadFieldNotRanged`, and the omitted one `MissingField`.
 
 ## Status
 

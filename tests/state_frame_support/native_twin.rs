@@ -602,6 +602,15 @@ impl Twin {
         Self::invariant_from(Self::with_field_ranges(balance, audit), condition)
     }
 
+    /// The invariant `BalanceNonnegative` over a twin whose unread `audit` is an unbounded
+    /// integer (no `i64` accessor range).
+    pub fn with_unbounded_audit_invariant() -> Self {
+        Self::invariant_from(
+            Self::with_field_native_type("audit", "ix://quire/native/Integer"),
+            "self.balance >= 0",
+        )
+    }
+
     /// This twin with a second unread field `note`, `Int[0, 1000]`, declared after `audit`.
     pub fn with_unread_note(mut self) -> Self {
         let mut domain: Value = serde_json::from_slice(&self.domain).expect("domain document");
