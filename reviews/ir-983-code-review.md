@@ -28,3 +28,12 @@ Focused checks: `cargo test --locked --lib tc_035` 14/14 pass; `cargo clippy --l
 ## Verdict
 
 Not mergeable until FND-001 is fixed. The obligation fix and supplied-limit fix from #553 hold. The `Witness`-arm Backend check is pre-existing main behaviour narrowed to that arm; it binds the only producer that emits Witness packets to the constant the request repeats (`wire()` writes "kani"), so it is load-bearing, not ceremony. The `Input` arm copies the packet's generator `BackendId` unchecked, consistent with the #553 ruling that a comparison against a caller-chosen label guards nothing. `NoValueParityClaim` for a Boolean function is correct and tested on both producer and request paths. The new public `ReplayInputs.supplied_limits` field is threaded through every constructor; `wire()` now also carries configured limits on the Witness path, which every current caller sets to `None`.
+
+## Dispositions
+
+Round 1, fix head 54f46f42556a4f376e4be2923a51aeaee1acc3ab. `cargo test --locked --lib tc_035` 14/14, all-targets clippy `-D warnings`, fmt and diff-check clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The Input branch sets `request.declared_domains = envelope.declared_domains().to_vec()`, which intake has already required to be empty; the positive test now gives `ReplayInputs` a non-empty proving-run domain, so its emptiness assertion can fail |
+| FND-002 | fixed | The doc now lists target, occurrence, subject, Input arm, empty domains and obligation, and says the package binds because the request is built from this checked package |

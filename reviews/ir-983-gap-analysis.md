@@ -21,3 +21,12 @@ Ticket: IR-983. Diff-scoped gap analysis of head 0b4c1a801458970cd028a923ea7e4b9
 ## Verdict
 
 Coverage is good for the obligation, target, subject, arm and limits halves. The author's package deviation (binding by building the request from the checked package) is plausible because the packet has no package member and the QSL value-parity obligation preimage is package-derived, but it is untested and unrecorded: FND-001 needs either a foreign-package packet refusal test or an AC-46 amendment stating that the package binds by construction. FND-002 is a judgement call because whole-key equality makes role and node mismatches fail by construction.
+
+## Dispositions
+
+Round 1, fix head 54f46f42556a4f376e4be2923a51aeaee1acc3ab. `cargo test --locked --lib tc_035` 14/14.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | A packet that a package named `foreign` mints for the same function `f` is admitted by QSL and then refused with `ClaimMismatch` before a request; the test fails if the foreign package's packet builds a request. This is the test option the finding offered; the member is matched with a wildcard, which AC-46's "naming the mismatched member" accepts as any typed member |
+| FND-002 | fixed | Role (`expression`, 0) and node (`other-node`, declaration 0) substitutions each refuse `ClaimMismatch(Occurrence)` |
