@@ -1019,6 +1019,35 @@ with the required author `make kani-gate`; independent review and final acceptan
     `tc_025_a_record_nested_past_the_readable_depth_is_not_read` (the reader refuses 33). The
     bound mutants 32 to 40 and 32 to 31 each fail one of them.
 
+## Tractable clause harness (IR-1022)
+
+55. Native clause generation, FR-015-AC-143 to FR-015-AC-150. Generate the FR-015-AC-119 clause
+    harness through the native route. Require the oracle's `ClauseStop` to be a `Copy` enumeration
+    with no payload and `oracle_clause` to return `Result<bool, ClauseStop>`, the harness to
+    assert `matches!(&outcome, Ok(true))`, and `core::mem::forget` of the meter after the assertions and
+    the cover-condition read, with the single cover still the last statement (FR-015-AC-7), and of each
+    arithmetic probe's outcome and meter. Control: the general oracle keeps
+    `Runtime(rt::Outcome<bool>)`, and its harness also forgets the outcome (FR-015-AC-149).
+    Mutants: restoring the `Runtime` variant in the thin stop type (site: `THIN_STOP_TYPE` in the
+    clause generator), dropping the forget statements (site: `forget_fat_values` and the
+    arithmetic probe body; the general-path outcome forget is the `!native` branch of
+    `forget_fat_values`) and emitting a forget after the cover or the cover not last (site: the statement renderer)
+    each fail the tests of this step. FR-015-AC-146 is evidenced by
+    `generated_native_boolean_equality_matches_the_typed_route`, which compiles the helpers the
+    generator rendered for `==` and `!=`; the mutant at the `related == {equal}` site of
+    `src/oracle/scalar/render.rs` that never negates `!=` fails it. FR-015-AC-150 is evidenced by the
+    same test (the out-of-domain stop) and by `native_conditions_stop_the_method_without_becoming_a_boundary`.
+    Setup of the installed-Kani measurements (FR-015-AC-147 and FR-015-AC-148, recorded in
+    `docs/qualification/ir1022-kani-clause-measurements.md`, a demonstration and not a matrix
+    test): the generated crate for the harness above with a hand-written subject, raw
+    `cargo kani -Z function-contracts --harness <module>::prove_clause --exact --unwind 3
+    --solver cadical` inside a 24 GiB cgroup with swap 0; `Verified` for the healthy subject, then,
+    with `-Z concrete-playback --concrete-playback print`, `Falsified` for the subject
+    `amount + 2 <= 1000` (playback 999), the oracle `<=` to `<` and the runtime helper returning
+    `false`; the cover witness printed with a failure is not a counterexample. CG's runner, the
+    two-phase run, the identity record, QSL regeneration, the kernel `+` mutants and the sealed
+    playback are PLANNED (FR-015-AC-151).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation

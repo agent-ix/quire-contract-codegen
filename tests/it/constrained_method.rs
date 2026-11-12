@@ -139,6 +139,38 @@ fn complete_census_retains_unread_fields_and_uncalled_operations() {
     );
 }
 
+/// The generated method matches the native oracle's thin result: a completed `false` is the
+/// boundary, a completed `true` continues, and every stop is a panic that is neither a boundary
+/// nor a Boolean assumption.
+#[trace("TC-062", "FR-048-AC-3", "FR-048-AC-6", "FR-015-AC-150")]
+#[test]
+fn native_conditions_stop_the_method_without_becoming_a_boundary() {
+    let f = fixture(
+        &document(),
+        "constrained-native-arms",
+        "self.n <= 3",
+        &["self.n < 2"],
+    );
+    let initial = initial(0);
+    let bindings = bindings(&f);
+    let method = emit_method(&request(&f, &initial, &bindings)).unwrap();
+    let text = &method.rust().contents;
+    assert!(text.contains("Ok(false) => { boundary = true; break; },\nOk(true) => {},"));
+    for stop in [
+        "Undefined",
+        "IntegerOutOfDomain | constraint::ClauseStop::Refused",
+        "Incomplete",
+    ] {
+        assert!(
+            text.contains(&format!("Err(constraint::ClauseStop::{stop})")),
+            "{stop}"
+        );
+    }
+    assert!(text
+        .contains("Err(safety::ClauseStop::Undefined) => panic!(\"undefined safety evaluation\")"));
+    assert!(!text.contains("quire_exact::Outcome::Completed(false)"));
+}
+
 #[trace("TC-062", "FR-048-AC-9")]
 #[test]
 fn ordinary_execution_cannot_publish_a_constrained_success() {

@@ -505,6 +505,8 @@ fn prepare_collection(
         | HarnessSpecError::InputAfterCall
         | HarnessSpecError::AssumeAfterCall
         | HarnessSpecError::AssertBeforeCall
+        | HarnessSpecError::ForgetBeforeCall
+        | HarnessSpecError::ForgetUnbound(_)
         | HarnessSpecError::DuplicateBinding(_) => UnsupportedObligation::RenderFailed,
         HarnessSpecError::InvalidIdentifier(_)
         | HarnessSpecError::InvalidMessage

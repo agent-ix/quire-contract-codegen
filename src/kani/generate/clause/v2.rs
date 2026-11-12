@@ -691,6 +691,29 @@ impl LoweredV2Clause {
     }
 }
 
+/// Which clause outcome a generated assertion or cover observes.
+#[derive(Clone, Copy)]
+enum OutcomeKind {
+    CompletedTrue,
+    Completed,
+    OutOfDomain,
+}
+
+/// The pattern over `&outcome`. The native proof oracle returns `Result<bool, ClauseStop>`
+/// with a payload-free stop; the general oracle retains the full runtime outcome.
+fn outcome_pattern(native: bool, kind: OutcomeKind) -> &'static str {
+    match (native, kind) {
+        (true, OutcomeKind::CompletedTrue) => "Ok(true)",
+        (true, OutcomeKind::Completed) => "Ok(_)",
+        (true, OutcomeKind::OutOfDomain) => "Err(ClauseStop::IntegerOutOfDomain)",
+        (false, OutcomeKind::CompletedTrue) => "Ok(rt::Outcome::Completed(true))",
+        (false, OutcomeKind::Completed) => "Ok(rt::Outcome::Completed(_))",
+        (false, OutcomeKind::OutOfDomain) => {
+            "Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain { .. }))"
+        }
+    }
+}
+
 pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
@@ -790,9 +813,12 @@ pub(in crate::kani::generate) fn render_clause(
     if invariant {
         body.push(Statement::Assert {
             condition: ExprText::new(if direct_boolean {
-                "outcome"
+                "outcome".to_owned()
             } else {
-                "matches!(&outcome, Ok(rt::Outcome::Completed(true)))"
+                format!(
+                    "matches!(&outcome, {})",
+                    outcome_pattern(lowered.native_integer, OutcomeKind::CompletedTrue)
+                )
             })?,
             message: V2_INVARIANT_ASSERTION_MESSAGE.to_owned(),
         });
@@ -814,9 +840,12 @@ pub(in crate::kani::generate) fn render_clause(
             "precondition",
             Cover {
                 condition: ExprText::new(if direct_boolean {
-                    "outcome"
+                    "outcome".to_owned()
                 } else {
-                    "matches!(outcome, Ok(rt::Outcome::Completed(true)))"
+                    format!(
+                        "matches!(outcome, {})",
+                        outcome_pattern(lowered.native_integer, OutcomeKind::CompletedTrue)
+                    )
                 })?,
                 message: "the V2 precondition is satisfiable within admitted input bounds"
                     .to_owned(),
@@ -824,6 +853,9 @@ pub(in crate::kani::generate) fn render_clause(
         )
     };
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
+    if !direct_boolean {
+        body.extend(forget_fat_values(lowered.native_integer));
+    }
     let spec = HarnessSpec::new(
         format!("V2 {label} {}", message_safe_node_label(&lowered.node_id)),
         path,
@@ -873,6 +905,20 @@ pub(in crate::kani::generate) fn render_clause(
 
 fn expression(text: impl Into<String>) -> Result<ExprText, UnsupportedObligation> {
     ExprText::new(text).map_err(Into::into)
+}
+
+/// A generated harness never drops a fat runtime value. The meter and a general oracle's
+/// outcome hold symbolic-discriminant sum types whose drop glue the proof would otherwise
+/// execute. The native oracle's `Result<bool, ClauseStop>` is `Copy` and has none.
+fn forget_fat_values(native: bool) -> Vec<Statement> {
+    let mut names = vec!["meter"];
+    if !native {
+        names.push("outcome");
+    }
+    names
+        .into_iter()
+        .map(|name| Statement::Forget(name.to_owned()))
+        .collect()
 }
 
 fn binding(name: &str, init: Init, mutable: bool) -> Statement {
@@ -1071,13 +1117,19 @@ fn render_result_postcondition(
     }
     body.push(Statement::Assert {
         condition: expression(if direct_boolean {
-            "outcome"
+            "outcome".to_owned()
         } else {
-            "matches!(&outcome, Ok(rt::Outcome::Completed(true)))"
+            format!(
+                "matches!(&outcome, {})",
+                outcome_pattern(lowered.native_integer, OutcomeKind::CompletedTrue)
+            )
         })?,
         message: "the V2 postcondition holds for the produced result".to_owned(),
     });
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
+    if !direct_boolean {
+        body.extend(forget_fat_values(lowered.native_integer));
+    }
     let spec = HarnessSpec::new(
         format!(
             "V2 postcondition {}",
@@ -1089,9 +1141,12 @@ fn render_result_postcondition(
         body,
         vec![Cover {
             condition: expression(if direct_boolean {
-                "outcome"
+                "outcome".to_owned()
             } else {
-                "matches!(&outcome, Ok(rt::Outcome::Completed(_)))"
+                format!(
+                    "matches!(&outcome, {})",
+                    outcome_pattern(lowered.native_integer, OutcomeKind::Completed)
+                )
             })?,
             message: "the V2 result postcondition reaches its admitted domain".to_owned(),
         }],
@@ -1256,6 +1311,8 @@ fn append_arithmetic_probes(
             ))?,
             message: "arithmetic subterm agrees with independent i128 expectation".to_owned(),
         });
+        probe_body.push(Statement::Forget(outcome));
+        probe_body.push(Statement::Forget(meter));
         body.push(Statement::ConditionalProbe {
             condition: expression(guard)?,
             body: probe_body,
@@ -1328,17 +1385,21 @@ fn render_postcondition(
     body.extend([
         Statement::Assert {
             condition: expression(format!(
-                "(({completed_prefix}) && matches!(&outcome, Ok(rt::Outcome::Completed(_)))) || (!({completed_prefix}) && matches!(&outcome, Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ .. }}))))"
+                "(({completed_prefix}) && matches!(&outcome, {completed})) || (!({completed_prefix}) && matches!(&outcome, {refused}))",
+                completed = outcome_pattern(lowered.native_integer, OutcomeKind::Completed),
+                refused = outcome_pattern(lowered.native_integer, OutcomeKind::OutOfDomain),
             ))?,
             message: "the clause oracle preserves completed and refused semantic domains".to_owned(),
         },
         Statement::Assert {
             condition: expression(format!(
-                "!({completed_prefix}) || (matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected)"
+                "!({completed_prefix}) || (matches!(&outcome, {completed_true}) == expected)",
+                completed_true = outcome_pattern(lowered.native_integer, OutcomeKind::CompletedTrue),
             ))?,
             message: "the clause oracle agrees with the independent checked condition".to_owned(),
         },
     ]);
+    body.extend(forget_fat_values(lowered.native_integer));
     let spec = HarnessSpec::new(
         format!(
             "V2 postcondition {}",
@@ -1350,7 +1411,8 @@ fn render_postcondition(
         body,
         vec![Cover {
             condition: expression(format!(
-                "({completed_prefix}) && matches!(outcome, Ok(rt::Outcome::Completed(_)))"
+                "({completed_prefix}) && matches!(&outcome, {completed})",
+                completed = outcome_pattern(lowered.native_integer, OutcomeKind::Completed),
             ))?,
             message: "the original V2 condition completes on an admitted parameter".to_owned(),
         }],

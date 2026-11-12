@@ -188,10 +188,31 @@ fn oracle(
     // Exact-kernel outcomes are retained rather than coerced to a Boolean predicate.
     let result = if condition.oracle.descriptor.operation_identities.is_empty() {
         "bool".to_owned()
+    } else if condition.oracle.native_integer_selection.is_some() {
+        format!("Result<bool, {name}::ClauseStop>")
     } else {
         format!("Result<quire_exact::Outcome<bool>, {name}::ClauseStop>")
     };
     writeln!(source,"fn evaluate_{name}(state: &{state_type}{parameters}) -> {result} {{ {name}::oracle_clause({}) }}",arguments.join(",")).map_err(|_|R::Render)
+}
+
+/// The Boolean arms of a condition's evaluation. The native oracle returns a plain
+/// `Result<bool, ClauseStop>`; the general one retains the full runtime outcome.
+fn completed_arms(condition: &ConstrainedConditionSpec, on_false: &str, on_true: &str) -> String {
+    if condition.oracle.native_integer_selection.is_some() {
+        format!("Ok(false) => {on_false},\nOk(true) => {on_true},")
+    } else {
+        format!("Ok(quire_exact::Outcome::Completed(false)) => {on_false},\nOk(quire_exact::Outcome::Completed(true)) => {on_true},")
+    }
+}
+
+/// The arms for a condition evaluation that did not complete.
+fn stop_arms(condition: &ConstrainedConditionSpec, module: &str, label: &str) -> String {
+    if condition.oracle.native_integer_selection.is_some() {
+        format!("Err({module}::ClauseStop::Undefined) => panic!(\"undefined {label} evaluation\"),\nErr({module}::ClauseStop::IntegerOutOfDomain | {module}::ClauseStop::Refused) => panic!(\"refused {label} evaluation\"),\nErr({module}::ClauseStop::Incomplete) => panic!(\"incomplete {label} evaluation\"),\nErr(_) => panic!(\"owner call failure\"),")
+    } else {
+        format!("Ok(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined {label} evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused {label} evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete {label} evaluation\"),\nErr(_) => panic!(\"owner call failure\"),")
+    }
 }
 
 fn tuple_type(identity: &ConstrainedMethodIdentity) -> String {
@@ -290,13 +311,29 @@ pub(super) fn render(
     {
         source.push_str("assert!(evaluate_safety(&state), \"safety violation\");\n");
     } else {
-        source.push_str("match evaluate_safety(&state) {\nOk(quire_exact::Outcome::Completed(value)) => assert!(value, \"safety violation\"),\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined safety evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused safety evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete safety evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
+        let completed = if prepared.safety.oracle.native_integer_selection.is_some() {
+            "Ok(value) => assert!(value, \"safety violation\"),"
+        } else {
+            "Ok(quire_exact::Outcome::Completed(value)) => assert!(value, \"safety violation\"),"
+        };
+        writeln!(
+            source,
+            "match evaluate_safety(&state) {{\n{completed}\n{}\n}}",
+            stop_arms(&prepared.safety, "safety", "safety")
+        )
+        .map_err(|_| R::Render)?;
     }
     if let Some(constraint) = &prepared.constraint {
         if constraint.oracle.descriptor.operation_identities.is_empty() {
             source.push_str("if !evaluate_constraint(&state) { boundary = true; break; }\n");
         } else {
-            source.push_str("match evaluate_constraint(&state) {\nOk(quire_exact::Outcome::Completed(false)) => { boundary = true; break; },\nOk(quire_exact::Outcome::Completed(true)) => {},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined constraint evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused constraint evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete constraint evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}\n");
+            writeln!(
+                source,
+                "match evaluate_constraint(&state) {{\n{}\n{}\n}}",
+                completed_arms(constraint, "{ boundary = true; break; }", "{}"),
+                stop_arms(constraint, "constraint", "constraint")
+            )
+            .map_err(|_| R::Render)?;
         }
     }
     writeln!(
@@ -344,7 +381,18 @@ pub(super) fn render(
                     )
                     .map_err(|_| R::Render)?;
                 } else {
-                    writeln!(source,"match evaluate_pre_{index}_{condition}(&state{parameters}) {{\nOk(quire_exact::Outcome::Completed(false)) => break,\nOk(quire_exact::Outcome::Completed(true)) => {{}},\nOk(quire_exact::Outcome::Undefined(_)) => panic!(\"undefined precondition evaluation\"),\nOk(quire_exact::Outcome::Refused(_)) => panic!(\"refused precondition evaluation\"),\nOk(quire_exact::Outcome::Incomplete(_)) => panic!(\"incomplete precondition evaluation\"),\nErr(_) => panic!(\"owner call failure\"),\n}}").map_err(|_|R::Render)?;
+                    let precondition = &prepared.preconditions[index][condition];
+                    writeln!(
+                        source,
+                        "match evaluate_pre_{index}_{condition}(&state{parameters}) {{\n{}\n{}\n}}",
+                        completed_arms(precondition, "break", "{}"),
+                        stop_arms(
+                            precondition,
+                            &format!("pre_{index}_{condition}"),
+                            "precondition"
+                        )
+                    )
+                    .map_err(|_| R::Render)?;
                 }
             }
             let mut arguments = (0..identity.fields.len())
@@ -419,6 +467,7 @@ pub(in crate::kani::generate) fn observation_lines(
     let mut safety = rust.contents.lines().enumerate().filter(|(_, line)| {
         line.trim_start()
             .starts_with("Ok(quire_exact::Outcome::Completed(value)) => assert!(value,")
+            || line.trim_start().starts_with("Ok(value) => assert!(value,")
             || line
                 .trim_start()
                 .starts_with("assert!(evaluate_safety(&state),")

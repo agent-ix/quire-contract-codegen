@@ -190,6 +190,7 @@ fn render_statements(
         ProofKind::Proof => source.push_str("#[kani::proof]\n"),
     }
     source.push_str(&format!("fn {}() {{\n", path.harness));
+    let mut forgotten = Vec::new();
     for statement in body {
         match statement {
             Statement::Input {
@@ -250,6 +251,7 @@ fn render_statements(
                 &mut source,
                 &format!("assert!({}, \"{message}\");", condition.as_str()),
             ),
+            Statement::Forget(name) => forgotten.push(name.as_str()),
             Statement::ConditionalProbe { condition, body } => {
                 line(&mut source, &format!("if {} {{", condition.as_str()));
                 for item in body {
@@ -259,6 +261,9 @@ fn render_statements(
                             &mut source,
                             &format!("assert!({}, \"{message}\");", condition.as_str()),
                         ),
+                        Statement::Forget(name) => {
+                            line(&mut source, &format!("core::mem::forget({name});"));
+                        }
                         _ => {
                             return Err(UnsupportedObligation::InvalidGeneratedSyntax {
                                 error: "invalid conditional probe statement".to_owned(),
@@ -270,14 +275,34 @@ fn render_statements(
             }
         }
     }
-    line(
-        &mut source,
-        &format!(
-            "kani::cover!({}, \"{}\");",
-            spec.cover().condition.as_str(),
-            spec.cover().message
-        ),
-    );
+    if forgotten.is_empty() {
+        line(
+            &mut source,
+            &format!(
+                "kani::cover!({}, \"{}\");",
+                spec.cover().condition.as_str(),
+                spec.cover().message
+            ),
+        );
+    } else {
+        // The cover stays the last statement. Its condition is read into a plain `bool` before
+        // the fat runtime values are forgotten, so the cover observes them and no drop glue of
+        // a symbolic-discriminant value is part of the proof.
+        line(
+            &mut source,
+            &format!(
+                "let cover_reached: bool = {};",
+                spec.cover().condition.as_str()
+            ),
+        );
+        for name in forgotten {
+            line(&mut source, &format!("core::mem::forget({name});"));
+        }
+        line(
+            &mut source,
+            &format!("kani::cover!(cover_reached, \"{}\");", spec.cover().message),
+        );
+    }
     source.push_str("}\n}\n");
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(UnsupportedObligation::ResourceLimitExceeded {
