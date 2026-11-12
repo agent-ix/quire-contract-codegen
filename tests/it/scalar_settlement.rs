@@ -577,6 +577,7 @@ fn expected_cg_defect(error: &ScalarBuildError) -> bool {
         ScalarBuildError::BodyMismatch
         | ScalarBuildError::Context(_)
         | ScalarBuildError::Artifacts
+        | ScalarBuildError::UnavailableFamily(_)
         | ScalarBuildError::Operation
         | ScalarBuildError::Observation
         | ScalarBuildError::Report
@@ -652,7 +653,7 @@ fn small_input_context(fixture: &ReplayFixture) -> OriginalScalarContext {
     .expect("a small input budget is a plan-time refusal")
 }
 
-#[trace("TC-047", "FR-032-AC-24")]
+#[trace("TC-047", "FR-032-AC-1", "FR-032-AC-24")]
 #[test]
 fn step_13_each_reachable_setup_error_is_classified_and_pairs_as_specified() {
     let fixture = sum_fixture();
@@ -755,7 +756,7 @@ fn step_13_each_reachable_setup_error_is_classified_and_pairs_as_specified() {
             &implies.identity,
             body,
             &fixture.artifacts,
-            &ok_transcript,
+            &transcript(&implies.identity, &[1, 1]),
         )
         .unwrap_err();
     assert!(

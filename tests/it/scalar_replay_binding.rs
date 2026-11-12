@@ -178,6 +178,8 @@ pub(super) fn observe(
 
 #[trace(
     "TC-047",
+    "FR-032-AC-1",
+    "FR-032-AC-4",
     "FR-032-AC-15",
     "FR-032-AC-16",
     "FR-032-AC-17",
@@ -289,7 +291,14 @@ fn original_scalar_driver_executes_independent_repeated_draws_and_binds_real_qsl
     ));
 }
 
-#[trace("TC-047", "FR-032-AC-6", "FR-032-AC-17", "FR-032-AC-18")]
+#[trace(
+    "TC-047",
+    "FR-032-AC-4",
+    "FR-032-AC-6",
+    "FR-032-AC-15",
+    "FR-032-AC-17",
+    "FR-032-AC-18"
+)]
 #[test]
 fn scalar_actual_sent_context_and_every_driver_tie_are_independently_checked() {
     let fixture = replay_fixture_with_extra(

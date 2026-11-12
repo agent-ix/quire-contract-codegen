@@ -98,6 +98,7 @@ mod requirement_records;
 mod routed_generation;
 mod scalar_literal_operands;
 mod scalar_playback;
+mod scalar_replay_acceptance;
 mod scalar_replay_binding;
 mod scalar_replay_residuals;
 mod scalar_settlement;
