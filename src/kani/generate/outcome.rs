@@ -129,6 +129,8 @@ pub enum ObligationItem<'a> {
         result_selection: &'a ContractDriverResultSelection,
         /// The occurrence's path condition, outermost guard first; empty for a direct claim.
         path_condition: &'a [RequirementGuard],
+        /// The routed item's QSL occurrence key; `None` for a direct claim.
+        requirement_occurrence: Option<&'a RequirementOccurrence>,
     },
     /// One selected forall/exists occurrence in an admitted V2 function or state-clause body.
     /// Only invariant state clauses currently have standalone collection proofs.
@@ -399,6 +401,16 @@ pub enum UnsupportedObligation {
         /// Why the guard is not lowered.
         reason: PathGuardRefusal,
     },
+    /// The item's path condition empties a parameter's domain, so the occurrence lies on a path
+    /// no input reaches. FR-022 owns when this arises.
+    PathConditionUnsatisfiable {
+        /// The guard at which the domain became empty.
+        guard: Box<RequirementOccurrence>,
+        /// The parameter node, in the authenticated V2 source frame.
+        parameter: Box<CheckedNodeId>,
+        /// The parameter's declared domain.
+        declared: crate::kani::identity::ScalarGuardDomain,
+    },
     /// A reachable node family has no finite encoding.
     NoFiniteEncoding {
         /// The node.
@@ -460,11 +472,23 @@ pub enum UnsupportedObligation {
 
 /// Why a guard of an item's path condition is not lowered.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PathGuardRefusal {
-    /// Guard lowering is not implemented yet, so no guard of any form is lowered.
-    GuardLoweringNotImplemented,
+    /// The guard's context root has no `lowered` accounting record in the admitted package.
+    GuardRootNotLowered,
+    /// The lowered guard is neither a Boolean parameter nor a supported integer comparison.
+    UnsupportedGuardForm,
+    /// A lowered comparison reads an integer parameter with no bounded domain.
+    UnboundedGuardOperand {
+        /// The parameter node, in the authenticated V2 source frame.
+        parameter: CheckedNodeId,
+    },
+    /// A lowered comparison's literal does not fit `i64`.
+    GuardLiteralNotI64 {
+        /// The literal, canonical decimal.
+        value: String,
+    },
 }
 
 /// Why an item is not a valid request.

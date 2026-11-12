@@ -699,10 +699,21 @@ fn fr015(
         .map(|(index, node)| route(index, node))
         .collect::<Vec<_>>();
     let admitted = admitted_routing_input(&fixture.package, &routed);
+    // The routed fixture's requirement occurrence is its node's first expression occurrence.
+    let occurrences = nodes
+        .iter()
+        .map(|node_id| quire_contract_codegen::RequirementOccurrence {
+            node_id: (*node_id).clone(),
+            role: quire_contract_model::CheckedOccurrenceRole::Expression,
+            ordinal: 0,
+        })
+        .collect::<Vec<_>>();
     let items = nodes
         .iter()
-        .map(|node_id| ObligationItem::ScalarClaim {
+        .zip(&occurrences)
+        .map(|(node_id, occurrence)| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: Some(occurrence),
             source: &fixture.package,
             package: &admitted.package,
             claim_map,

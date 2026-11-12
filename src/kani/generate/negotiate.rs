@@ -70,6 +70,8 @@ mod request_lookup_work {
     }
 }
 
+mod guard;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -84,7 +86,7 @@ use crate::{
     core::identity::HarnessSymbol,
     core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
-    core::requirement::RequirementGuard,
+    core::requirement::{RequirementGuard, RequirementOccurrence},
     kani::census::{
         normalize_dependencies, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest,
         ProofDependencyState,
@@ -101,8 +103,8 @@ use crate::{
     kani::generate::outcome::{
         state_frame_disposition, CollectionUnsupportedReason, InvalidObligationItem,
         KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ObligationDisposition,
-        ObligationItem, ObligationRecord, ObligationSubject, PathGuardRefusal, StateFrameRefusal,
-        StateFrameRole, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+        ObligationItem, ObligationRecord, ObligationSubject, StateFrameRefusal, StateFrameRole,
+        UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::scalar::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
@@ -123,6 +125,7 @@ use crate::{
 /// A node's first graph entry and all source entries retain their original wire order.
 struct ContractLookup<'a> {
     source: &'a CheckedPackageV2,
+    package: &'a ContractPackageV1,
     graph: CheckedGraph<'a>,
     sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
     represented_nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedNodeId>,
@@ -176,6 +179,7 @@ impl<'a> ContractLookup<'a> {
         }
         Self {
             source,
+            package,
             graph,
             sources,
             represented_nodes,
@@ -863,6 +867,7 @@ fn classify<'a>(
             claim_index,
             result_selection,
             path_condition,
+            requirement_occurrence,
         } => {
             let lookup = scalar_lookups
                 .entry((std::ptr::from_ref(source), std::ptr::from_ref(package)))
@@ -874,7 +879,8 @@ fn classify<'a>(
                 node_id,
                 claim_index,
                 result_selection,
-                path_condition.first(),
+                path_condition,
+                requirement_occurrence,
             )
         }
         ObligationItem::CollectionClaim {
@@ -1217,7 +1223,8 @@ fn classify_node(
     node_id: &CheckedNodeId,
     claim_index: usize,
     result_selection: &ContractDriverResultSelection,
-    first_guard: Option<&RequirementGuard>,
+    path_condition: &[RequirementGuard],
+    requirement_occurrence: Option<&RequirementOccurrence>,
 ) -> ItemState {
     let graph_node = lookup.source_node(node_id);
     let kind = graph_node.and_then(|node| {
@@ -1246,7 +1253,12 @@ fn classify_node(
             .filter(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            Some(claim) => classify_claim(lookup, claim, first_guard),
+            Some(claim) => match classify_claim(lookup, claim, path_condition) {
+                Outcome::LoweredScalar(lowered) => Outcome::LoweredScalar(Box::new(
+                    lowered.with_requirement_occurrence(requirement_occurrence),
+                )),
+                other => other,
+            },
         }
     };
     let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
@@ -1307,7 +1319,7 @@ pub(crate) fn classify_scalar_form<'a>(
         positions,
         request_index,
     ) {
-        Ok(claim) => classify_claim(lookups.contract(package, contract), &claim, None),
+        Ok(claim) => classify_claim(lookups.contract(package, contract), &claim, &[]),
         Err(_) => Outcome::Invalid(InvalidObligationItem::ScalarDerivationFailed),
     };
     let graph_node = lookups.checked_node(package, node_id);
@@ -1384,14 +1396,12 @@ fn refuse_unknown_node_kind<Body>(
     })
 }
 
-/// Classifies one claim. `first_guard` is the first guard of the occurrence's path condition: while
-/// guard lowering is unimplemented it settles every claim that would otherwise lower, or meet a
-/// domain or reachability refusal, as `PathGuardNotLowered`. A claim FR-014 refuses, or that has no
-/// renderer, keeps that refusal whatever its guards.
+/// Classifies one claim under the occurrence's path condition. A claim FR-014 refuses, or that has
+/// no renderer, keeps that refusal whatever its guards (FR-022 "Per-item precedence").
 fn classify_claim(
     lookup: &ContractLookup<'_>,
     claim: &ExactScalarClaim,
-    first_guard: Option<&RequirementGuard>,
+    path_condition: &[RequirementGuard],
 ) -> Outcome {
     let graph = |id: &CheckedNodeId| lookup.source_node(id);
     match &claim.result {
@@ -1463,21 +1473,14 @@ fn classify_claim(
                             | crate::oracle::scalar::lower::OperandRange::Result => {}
                         }
                     }
-                    let lowering = lower_scalar_claim(claim, generated, &derived, &operand_ranges);
-                    if let (
-                        Some(guard),
-                        Ok(_)
-                        | Err(
-                            ScalarLoweringRefusal::BoundNotI64 { .. }
-                            | ScalarLoweringRefusal::ResultUnreachable { .. },
-                        ),
-                    ) = (first_guard, &lowering)
-                    {
-                        return Outcome::Unsupported(UnsupportedObligation::PathGuardNotLowered {
-                            guard: guard.occurrence.clone(),
-                            reason: PathGuardRefusal::GuardLoweringNotImplemented,
-                        });
-                    }
+                    let operand_targets = if path_condition.is_empty() {
+                        Vec::new()
+                    } else {
+                        operand_parameters(lookup, admitted_node, &operand_ranges)
+                    };
+                    let guards = guard::resolve_guards(lookup, path_condition, &operand_targets);
+                    let lowering =
+                        lower_scalar_claim(claim, generated, &derived, &operand_ranges, &guards);
                     match lowering {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
@@ -1498,6 +1501,23 @@ fn classify_claim(
                             reachable_lower,
                             reachable_upper,
                         }),
+                        Err(ScalarLoweringRefusal::GuardNotLowered(refusal)) => {
+                            let (guard, reason) = *refusal;
+                            Outcome::Unsupported(UnsupportedObligation::PathGuardNotLowered {
+                                guard,
+                                reason,
+                            })
+                        }
+                        Err(ScalarLoweringRefusal::PathConditionUnsatisfiable(path)) => {
+                            let path = *path;
+                            Outcome::Unsupported(
+                                UnsupportedObligation::PathConditionUnsatisfiable {
+                                    guard: Box::new(path.guard),
+                                    parameter: Box::new(path.parameter),
+                                    declared: path.declared,
+                                },
+                            )
+                        }
                         Err(ScalarLoweringRefusal::BoundNotI64 { lower, upper }) => {
                             Outcome::Unsupported(
                                 UnsupportedObligation::DomainNotRepresentableInI64 {
@@ -1588,6 +1608,27 @@ fn classify_claim(
             }
         },
     }
+}
+
+/// The V2 parameter each operand position of the claimed application directly references, for the
+/// positions ranged over their own bound.
+fn operand_parameters(
+    lookup: &ContractLookup<'_>,
+    admitted_node: &CheckedNodeId,
+    ranges: &[crate::oracle::scalar::lower::OperandRange],
+) -> Vec<Option<CheckedNodeId>> {
+    use crate::oracle::scalar::lower::OperandRange;
+    let arguments = lookup.graph.arguments(admitted_node).unwrap_or_default();
+    ranges
+        .iter()
+        .zip(arguments)
+        .map(|(range, argument)| match (range, argument) {
+            (OperandRange::Bound(_), CheckedTerm::Reference { target }) => {
+                lookup.original_node(target).cloned()
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn reject_duplicates_and_mixtures(states: &mut [ItemState]) {

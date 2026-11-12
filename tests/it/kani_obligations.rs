@@ -113,6 +113,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -342,6 +343,7 @@ pub(super) fn boolean_implies_scalars_from(
         .iter()
         .map(|node| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &package,
             package: &admitted,
             claim_map: &oracles.claim_map,
@@ -595,6 +597,7 @@ fn scalar_records(
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: package,
             package: &admitted,
             claim_map,
@@ -627,6 +630,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -695,6 +699,7 @@ fn tc_047_bounded_addition_playback_derives_an_out_of_result_range_exact_value()
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -772,6 +777,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -903,6 +909,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
         .iter()
         .map(|claim| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1038,6 +1045,7 @@ fn tc_025_scalar_source_lookup_preserves_multiple_occurrences_per_node() {
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &checked,
             package: &admitted,
             claim_map: &claim_map,
@@ -1098,6 +1106,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1130,6 +1139,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
     let control_node = control_ids.resolve(&code_id(1001));
     let control_item = ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &control_package,
         package: &control_admitted,
         claim_map: &control_claims,
@@ -1213,6 +1223,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
     let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &package,
         package: &admitted,
         claim_map: &claim_map,
@@ -1335,6 +1346,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
     let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &package,
         package: &admitted,
         claim_map: &claim_map,
@@ -1407,6 +1419,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
             .iter()
             .map(|claim| ObligationItem::ScalarClaim {
                 path_condition: &[],
+                requirement_occurrence: None,
                 source: &scalar,
                 package: &admitted,
                 claim_map: &claim_map,
@@ -1476,6 +1489,7 @@ fn admitted_integer_division_is_unrendered_and_emits_no_harness() {
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &claim_map,
@@ -1543,6 +1557,7 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
         };
         let items = [ObligationItem::ScalarClaim {
             path_condition: &path_condition,
+            requirement_occurrence: None,
             source: &package,
             package: &admitted,
             claim_map: &oracles.claim_map,
@@ -1590,6 +1605,7 @@ fn tc_033_an_unsatisfiable_bound_precedes_the_guard_refusal() {
         };
         let items = [ObligationItem::ScalarClaim {
             path_condition: &path_condition,
+            requirement_occurrence: None,
             source: &package,
             package: &admitted,
             claim_map: &claim_map,
@@ -1628,6 +1644,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let items = [
         ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1637,6 +1654,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         },
         ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1646,6 +1664,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         },
         ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1655,6 +1674,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         },
         ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &scalar,
             package: &admitted,
             claim_map: &claim_map,
@@ -1724,6 +1744,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let admitted = admitted_scalar_claims(&scalar, &foreign_map);
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &scalar,
         package: &admitted,
         claim_map: &foreign_map,

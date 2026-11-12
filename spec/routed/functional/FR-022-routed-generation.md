@@ -284,16 +284,24 @@ A guard is lowerable in one of two forms:
 - an IR-confirmed `quire.op.integer.{lt,le,gt,ge,eq,ne}` comparison whose two
   operands are each a direct reference to an integer parameter typed by a
   bounded domain, or an integer literal that fits `i64`, with at least one
-  parameter reference.
+  parameter reference. A literal that QSL widens through a
+  `quire.op.numeric.narrow` conversion (as it does for `=` and `!=`) is read
+  as that literal, and a literal outside `i64` keeps its `GuardLiteralNotI64`
+  reason. QSL admits the conversion only after proving the literal lies in its
+  target range, so no range check is repeated. A conversion over a parameter is
+  not read as that parameter and refuses as `UnsupportedGuardForm`.
 
 Otherwise the item settles `unsupported` with no harness, as
 `UnsupportedObligation::PathGuardNotLowered { guard, reason }` (wire code
 `path_guard_not_lowered`). `guard` is the guard's `RequirementOccurrence`, and
 `reason` is one `PathGuardRefusal` (snake-case wire names):
 
-- `GuardRootNotLowered` (`guard_root_not_lowered`): the guard's context root
-  has a non-`lowered` accounting record, for example a guard reading a model
-  member, whose closure reaches a `model` node outside the routed profile.
+- `GuardRootNotLowered` (`guard_root_not_lowered`): the guard's node is not an
+  admitted `lowered` context root of the call: its context root has a
+  non-`lowered` accounting record, or, for a direct FR-015 caller, the node
+  is not admitted at all or lies inside an admitted closure without being a
+  requested root, for example a guard whose closure reaches a
+  node tag outside the routed profile's supported tags.
 - `UnsupportedGuardForm` (`unsupported_guard_form`): the lowered guard is
   neither form, for example arithmetic inside the guard, a call or a negation
   node.
@@ -301,8 +309,6 @@ Otherwise the item settles `unsupported` with no harness, as
   comparison reads an integer parameter with no bounded domain.
 - `GuardLiteralNotI64 { value }` (`guard_literal_not_i64`): a lowered
   comparison's literal does not fit `i64`.
-- `GuardLoweringNotImplemented` (`guard_lowering_not_implemented`): slice (a)
-  only, see "Scoped evidence status". It is removed when slice (b) lands.
 
 CG never drops a guard instead, because a harness without the guard would
 test the claim off its path and misreport why it fails.
@@ -327,9 +333,9 @@ The generator reports the first that applies, in this order:
    for example an integer comparison claim);
 3. `path_guard_not_lowered`, for the first guard in outermost-first order that
    is not lowered, with reasons checked in the order `GuardRootNotLowered`,
-   `UnsupportedGuardForm`, `UnboundedGuardOperand`, `GuardLiteralNotI64` (in
-   slice (a), `GuardLoweringNotImplemented` takes this place);
-4. `domain_not_representable_in_i64` for an operand bound or literal;
+   `UnsupportedGuardForm`, `UnboundedGuardOperand`, `GuardLiteralNotI64`;
+4. `domain_not_representable_in_i64` for an operand bound or literal, or for the
+   declared domain of a guard parameter that does not fit `i64`;
 5. `path_condition_unsatisfiable`;
 6. `result_bound_unreachable`.
 
@@ -349,6 +355,12 @@ operand keeps its wider range, so the proof covers a superset of the guarded
 executions. The harness draws the operand inputs in call order and then the
 guard inputs in `guard_inputs` order: by first read in the path condition,
 outermost guard first, left operand before right.
+
+A narrowed harness keeps the replay body of the admitted claim: the retained body carries the
+admitted operand ranges QSL's operator parity runs over, and each narrowed operand range of the
+harness lies inside the matching admitted range, so a falsifying witness of the guarded harness is
+an input of the admitted claim and reaches parity like an unguarded one. An unguarded harness
+keeps equal ranges.
 
 Every lowered guard is emitted as one `Statement::Assume` in outermost-first
 order, after all symbolic inputs and before the oracle call. `holds = false`
@@ -693,13 +705,13 @@ IR-815.
 | FR-022-AC-29 | Given an admitted package whose complete lowering sequence has bound driver items at indexes 0 and 2 and an excluded accounting-only position at index 1, a routed item with `request_index` 1 and the excluded position's exact `node_id` refuses the whole call as `ExcludedDriverIndex { request_index: 1, node_id }` before any generation arm, oracle or harness. The same routed backend and descriptor at indexes 0 and 2 remain valid controls, and CG never substitutes an envelope position or the next bound item's selection for index 1. | Test (TC-033) |
 | FR-022-AC-30 | For a plain reader-admitted V1 package, a routed item requiring an operation mode, law-definition or member-target view whose accessor returns `NotAdmitted` makes `generate_routed` refuse the whole call as `UnauthenticatedOperationView { request_index, node_id }`, identifying the lowest `request_index` among such routed items regardless of routed-item slice permutation, with no oracle, settlement or harness output. A view-independent integer route over the plain read retains its existing result. The same view-dependent route over the matching source-authenticated V1 package retains its ordinary generated oracle and capability disposition (FR-014-AC-55), including integer division's admitted law profile and quantity conversion's exact oracle and `OperationNotRendered` settlement. | Test (TC-033) |
 | FR-022-AC-31 | Each routed scalar harness of FR-022-AC-26 has `ScalarObligationIdentity.requirement_occurrence` equal to its item's `RequirementOccurrence` node, role and ordinal, and the two identities and persisted records differ in that field. The record serializes the occurrence as those three fields, not a hash, digest or text rendering. A harness generated through direct `negotiate_kani_obligations` for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]` has `requirement_occurrence: None`, and its persisted record equals byte for byte the committed golden `tests/fixtures/kani-scalar/direct-increment-record.json`, captured by slice (a) from the generator before the identity fields exist and updated by IR-1022 only in the option vectors: `options` is the proof vector and the new `witnessOptions` is the vector the golden recorded before (FR-015-AC-9). | Test (TC-033) |
-| FR-022-AC-32 | A routed item whose guard is a lowerable form (a Boolean parameter reference, or an integer `lt`/`le`/`gt`/`ge`/`eq`/`ne` comparison between bounded-integer parameter references or such a reference and an `i64` literal) generates a harness with that guard's `Statement::Assume`. Otherwise the item settles `unsupported` as `path_guard_not_lowered` naming the guard occurrence, with no harness and its sibling item unaffected, and with reason: `UnsupportedGuardForm` for `x + 1 > 5`; `UnboundedGuardOperand` naming `n` for `n >= 0` over a plain-Integer parameter `n` (which lowers, since the routed profile has `require_bounds: false`); `GuardLiteralNotI64` naming the value for `x < 10^23`; and `GuardRootNotLowered` for a guard root whose accounting record is not `lowered`, for a guard reading a model member, whose closure reaches a `model` node outside the routed profile's `supported_tags` and so lowers as `unsupported`. A guard whose node is not a context root in the item's context span refuses the whole call as `RequirementRecord` with `GuardContextMissing` naming the guard. | Test (TC-033) |
+| FR-022-AC-32 | A routed item whose guard is a lowerable form (a Boolean parameter reference, or an integer `lt`/`le`/`gt`/`ge`/`eq`/`ne` comparison between bounded-integer parameter references or such a reference and an `i64` literal) generates a harness with that guard's `Statement::Assume`. Otherwise the item settles `unsupported` as `path_guard_not_lowered` naming the guard occurrence, with no harness and its sibling item unaffected, and with reason: `UnsupportedGuardForm` for `x + 1 > 5`; `UnboundedGuardOperand` naming `n` for `n >= 0` over a plain-Integer parameter `n` (which lowers, since the routed profile has `require_bounds: false`); `GuardLiteralNotI64` naming the value for `x < 10^23`; and `GuardRootNotLowered` for a guard root whose accounting record is not `lowered`, for a guard whose closure reaches a node tag outside the routed profile's `supported_tags`, such as a call to a function when `Function` is unsupported and so lowers as `unsupported`. A guard whose node is not a context root in the item's context span refuses the whole call as `RequirementRecord` with `GuardContextMissing` naming the guard. | Test (TC-033) |
 | FR-022-AC-33 | For QSL-emitted `if x > 5 then x + 100 else 0` over `x: Int[0, 9]` into `Int[0, 200]`, the guarded `x + 100` item is `Supported` with arguments `[6, 9]` and `[100, 100]`, a `Statement::Assume` of `x > 5`, and a result assertion against `[0, 200]`. The same item with the guard's `holds=false` has arguments `[0, 5]` and `[100, 100]`. For `if x < y then x + 1 else 0` over `x: Int[0, 9]` and `y: Int[0, 9]` into `Int[0, 10]`, a comparison between two parameters, the argument `x` keeps `[0, 9]`, `y` is a guard input over `[0, 9]`, and the harness assumes `x < y`. | Test (TC-033) |
 | FR-022-AC-34 | For QSL-emitted `f(x: Int[0, 9]): Int[0, 10] { if x > 20 then x + 100 else 0 }`, the guarded `x + 100` item settles `unsupported` as `path_condition_unsatisfiable` naming the `x > 20` guard occurrence, the parameter `x` and its declared `Integer { minimum: 0, maximum: 9 }`, with no harness; it is not `result_bound_unreachable`. The same `x + 100` into `Int[0, 10]` with an empty path condition still settles `result_bound_unreachable` with reachable `[100, 109]` (FR-015-AC-18). The literal-left guard `20 < x` gives the same outcome. For `f(p: Boolean, x: Int[0, 9]): Int[0, 10] { if p then (if p then 0 else x + 1) else 0 }`, the `x + 1` item settles `path_condition_unsatisfiable` naming the inner `p` guard, the parameter `p` and `Boolean`. | Test (TC-033) |
-| FR-022-AC-35 | For a guarded item whose guards are jointly infeasible but not emptied by narrowing (`if x < y then x + 1 else 0` with `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`), CG emits a harness whose `completed` cover follows the guard assumptions, and FR-017 execution under installed Kani reports `CoverUnsatisfied`, not `Verified`. The same harness with the guard `x > y` reports `Verified`. | Test (TC-033) |
-| FR-022-AC-36 | A routed Kani item with a `NotApplicable` selection at a node with no record in `requirement_records` and no requirement keeps its existing result with no guard. A `NotApplicable` item at the FR-022-AC-27 `x + 1` node, whose two records carry the guards `(p, holds=true)` and `(p, holds=false)`, refuses the whole call as `RequirementRecord` with `OccurrenceNotSelected`, both without a requirement and when it carries the `RoutedRequirement` of one of that node's occurrences. Routing the same node with an `OwnResult` selection and its own requirement is accepted and reaches the guard handling of FR-022-AC-27 (FR-022-AC-38 in slice (a)). A check comparing only the requirement's `node_id` with the item's would accept both refused inputs. | Test (TC-033) |
-| FR-022-AC-37 | Over the RR-16 input of FR-022-AC-26: an input with a `ScalarSelectionMismatch` at the higher request index and a `RecordMissing` at the lower one refuses as `ScalarSelectionMismatch` naming the higher index; in the FR-022-AC-30 plain-read package, giving the view-independent integer item a requirement with no record, beside the view-dependent item that alone refuses as `UnauthenticatedOperationView`, refuses as `RequirementRecord` (`RecordMissing` for an `OwnResult` selection, `OccurrenceNotSelected` for `NotApplicable`). In one item, a wrong result bound together with a wrong path condition refuses with `ResultBoundMismatch`; an occurrence ordinal changed to the other recorded occurrence's ordinal together with a wrong conversion context refuses with `ApplicationMismatch`, while an ordinal with no record refuses with `RecordMissing`. Per item, in the IR-304 guarded package: `if p then x + m else 0` with a plain-Integer `m` settles `requires_bound`, and `if flag then true else n >= 0` (`n >= 0` under `(flag, holds=false)`) settles `operation_not_rendered`, in both slices rather than a guard reason; in slice (b), `j`'s `x + 100`, under `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`, settles `path_guard_not_lowered` rather than `path_condition_unsatisfiable`. | Test (TC-033) |
-| FR-022-AC-38 | Slice (a) only, until guard lowering lands: one `generate_routed` call over the IR-304 guarded package routes the `f` then item (`[(p, holds=true)]`), the `h` item (`[(x > 5, holds=true)]`) and the unguarded `g` item, each with a valid matching record. The two guarded items settle `unsupported` as `path_guard_not_lowered` with reason `guard_lowering_not_implemented` naming their first guard, with no harness, while `g` stays `Supported` with a harness, so the refusal is per item and not whole-call. Slice (b) replaces this criterion's expected outcome with FR-022-AC-27 and FR-022-AC-33, removes `GuardLoweringNotImplemented`, and retires this criterion. | Test (TC-033) |
+| FR-022-AC-35 | PLANNED (owner IR-304, which delivers a native-integer routed scalar harness next; installed Kani gave no verdict in the 30-minute cap; see docs/qualification/ir304-kani-guard-cover-attempt.md). For a guarded item whose guards are jointly infeasible but not emptied by narrowing (`if x < y then x + 1 else 0` with `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`), CG emits a harness whose `completed` cover follows the guard assumptions, and FR-017 execution under installed Kani reports `CoverUnsatisfied`, not `Verified`. The same harness with the guard `x > y` reports `Verified`. | Test (TC-033) |
+| FR-022-AC-36 | A routed Kani item with a `NotApplicable` selection at a node with no record in `requirement_records` and no requirement keeps its existing result with no guard. A `NotApplicable` item at the FR-022-AC-27 `x + 1` node, whose two records carry the guards `(p, holds=true)` and `(p, holds=false)`, refuses the whole call as `RequirementRecord` with `OccurrenceNotSelected`, both without a requirement and when it carries the `RoutedRequirement` of one of that node's occurrences. Routing the same node with an `OwnResult` selection and its own requirement is accepted and reaches the guard handling of FR-022-AC-27. A check comparing only the requirement's `node_id` with the item's would accept both refused inputs. | Test (TC-033) |
+| FR-022-AC-37 | Over the RR-16 input of FR-022-AC-26: an input with a `ScalarSelectionMismatch` at the higher request index and a `RecordMissing` at the lower one refuses as `ScalarSelectionMismatch` naming the higher index; in the FR-022-AC-30 plain-read package, giving the view-independent integer item a requirement with no record, beside the view-dependent item that alone refuses as `UnauthenticatedOperationView`, refuses as `RequirementRecord` (`RecordMissing` for an `OwnResult` selection, `OccurrenceNotSelected` for `NotApplicable`). In one item, a wrong result bound together with a wrong path condition refuses with `ResultBoundMismatch`; an occurrence ordinal changed to the other recorded occurrence's ordinal together with a wrong conversion context refuses with `ApplicationMismatch`, while an ordinal with no record refuses with `RecordMissing`. Per item, in the IR-304 guarded package: `if p then x + m else 0` with a plain-Integer `m` settles `requires_bound`, and `if flag then true else n >= 0` (`n >= 0` under `(flag, holds=false)`) settles `operation_not_rendered`, rather than a guard reason; `j`'s `x + 100`, under `[(x > 20, holds=true), (x + 1 > 5, holds=true)]`, settles `path_guard_not_lowered` rather than `path_condition_unsatisfiable`. | Test (TC-033) |
+| FR-022-AC-38 | ~~Retired by IR-304 slice (b): the interim `guard_lowering_not_implemented` settlement of slice (a) no longer exists. Its replacement outcomes are FR-022-AC-27 and FR-022-AC-33.~~ | Inspection |
 
 ## Dependencies
 
@@ -766,9 +778,7 @@ IR-815.
    Other forms refuse with `PathGuardNotLowered` rather than dropping the guard, since an
    unguarded harness tests the claim off its path and can fail or refuse for reasons the claim
    does not have. The guard node reaches CG as a context root because FR-039's context span is
-   the existing way to bring a non-requested node into the admitted package. Slice (a) reports a
-   distinct `guard_lowering_not_implemented` reason, so a record persisted before slice (b)
-   never states a false cause for a guard that slice (b) lowers.
+   the existing way to bring a non-requested node into the admitted package.
 2. **Narrowing is derived from the assumptions.** FR-022-AC-13 asks for one range per operand,
    and the review case asks for `x` in `[6, 9]`. Both hold when narrowing is an interval analysis
    of the assumed guards: each operand still has one range, now intersected with the guard's
@@ -831,40 +841,34 @@ checks descriptor/backend identity before deriving the closed kind. There is no 
 backend/kind accessor. Rust field privacy prevents external struct construction or reassignment
 of those fields. This is an API/privacy fact; constructor tests alone are not its proof method.
 
-FR-022-AC-26, AC-28, AC-36 and AC-38 are covered by IR-304 slice (a) tests, and AC-37 is covered
-except its two-guard `j` case. FR-022-AC-27 and FR-022-AC-31 to FR-022-AC-35 stay Planned, with
-FR-032-AC-19 and the two-guard case of AC-37 (slice (b)); the slice (a) golden half of
-FR-022-AC-31 is asserted but untagged because the criterion's routed `requirement_occurrence`
-identity is slice (b).
-Slice (a) adds the QSL occurrence requirement-record intake and the missing/wrong-keyed-record
-refusals; ordered branch guards in proof obligations are not yet lowered. IR-304 lands in two
-slices:
+FR-022-AC-26 to AC-34, AC-36 and AC-37 are covered by IR-304 slice (a) and (b) tests, and
+FR-022-AC-38 is retired. FR-022-AC-35 stays Planned: the real Kani 0.68.0 run on its infeasible-guard harness
+(`--unwind 3 --solver cadical`, 24 GiB scope) was cut off at the 30-minute cap with cgroup peak
+25.3 GB and no verdict, and the feasible-guard run was not started (docs/qualification/ir304-kani-guard-cover-attempt.md); its harness shape (the assumption and the guard input) is
+asserted through FR-022-AC-27 and FR-022-AC-33. FR-032-AC-19 is covered (TC-047).
+IR-304 added the QSL occurrence requirement-record intake and the missing/wrong-keyed-record
+refusals (slice (a)) and lowers ordered branch guards in proof obligations (slice (b)):
 
 - Slice (a), typed record input: `RequirementOccurrence`, `RequirementGuard`,
   `RequirementRecordInput`, `RequirementRecords`, `RoutedRequirement`,
   `RoutedGenerationItem::with_requirement`, `KaniGenerationContext.requirement_records`, the
   `RequirementRecord` refusal with every `RequirementRecordMismatch` variant except
-  `GuardContextMissing`, and `UnsupportedObligation::PathGuardNotLowered` with the one
-  `PathGuardRefusal` variant `GuardLoweringNotImplemented`. Until slice (b) lands, every item
-  whose path condition is not empty and that no earlier per-item refusal settles (an FR-014 claim
-  refusal, `unsatisfiable_bound`, `caller_declared_operation` or `operation_not_rendered`; see
-  "Per-item precedence") settles `path_guard_not_lowered` with
-  `guard_lowering_not_implemented` for its first guard, whatever the guard's form, so slice (a)
-  never yields an unguarded harness and never names a reason that slice (b) would contradict.
+  `GuardContextMissing`, and `UnsupportedObligation::PathGuardNotLowered`. Slice (a) settled
+  every guarded item `path_guard_not_lowered` so that it never yielded an unguarded harness.
   Slice (a) also commits the golden `tests/fixtures/kani-scalar/direct-increment-record.json`
   from the unchanged generator. Slice (a) also migrates every existing routed `OwnResult`
   fixture to carry a matching `RoutedRequirement` and `requirement_records`, so the tests that
   back FR-022-AC-23, AC-24, AC-29 and AC-30 keep passing: `src/routed/contract_package_tests.rs`,
   `src/routed/generate.rs`, and `tests/it/routed_generation.rs`, `capability_settlement.rs`,
-  `scalar_playback.rs`, `kani_scalar_native_fixture.rs` and `scalar_literal_operands.rs`. It covers FR-022-AC-26, AC-28, AC-36, AC-38 and AC-37 except its two-guard case.
+  `scalar_playback.rs`, `kani_scalar_native_fixture.rs` and `scalar_literal_operands.rs`. It covers FR-022-AC-26, AC-28, AC-36 and AC-37 except its two-guard case.
 - Slice (b), guard lowering and identity: guard binding, `Statement::Assume` emission, interval
   narrowing, the other `PathGuardRefusal` variants (`GuardRootNotLowered`,
   `UnsupportedGuardForm`, `UnboundedGuardOperand`, `GuardLiteralNotI64`),
   `PathConditionUnsatisfiable`, `GuardContextMissing`, the `requirement_occurrence`,
   `path_condition` and `guard_inputs` identity fields, and FR-032's guard-input decoding. It
   removes `GuardLoweringNotImplemented` and retires FR-022-AC-38. It covers FR-022-AC-27,
-  FR-022-AC-31 to AC-35, the two-guard case of FR-022-AC-37 and FR-032-AC-19, including the two IR-304 review cases (FR-022-AC-33
-  and FR-022-AC-34).
+  FR-022-AC-31 to AC-34, the two-guard case of FR-022-AC-37 and FR-032-AC-19, including the two
+  IR-304 review cases (FR-022-AC-33 and FR-022-AC-34). FR-022-AC-35 awaits a Kani verdict (see "Scoped evidence status").
 
 Upstream prerequisites: none for either slice. The QSL record and route-item shapes exist on QSL
 `origin/main` (`RequirementRecord`, `PathGuard`, `RequirementItem.path_condition`). TC-033 builds

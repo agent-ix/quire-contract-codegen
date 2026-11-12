@@ -420,7 +420,7 @@ installed-backend or independent native-replay proof credit.
 - If a routed scalar item has a path guard that FR-022 does not lower, then
   the generator shall refuse the item as `path_guard_not_lowered` naming the
   guard occurrence and its `PathGuardRefusal` reason, and emit no harness.
-  FR-022 owns when this arises and its reasons (FR-022-AC-32, FR-022-AC-38).
+  FR-022 owns when this arises and its reasons (FR-022-AC-32).
 - If a routed scalar item's path condition empties a parameter's domain, then
   the generator shall refuse the item as `path_condition_unsatisfiable` naming
   the guard, the parameter and its declared domain, and emit no harness.

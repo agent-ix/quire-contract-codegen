@@ -135,7 +135,7 @@ impl OriginalScalarContext {
             identity.harness_symbol.as_str(),
             identity.module_symbol.as_str(),
             super::scalar::SCALAR_PLAYBACK_BYTES,
-            identity.arguments.len(),
+            identity.arguments.len() + identity.guard_inputs.len(),
         )
         .map_err(|cause| refuse(ScalarBuildError::Playback(DecodeFailure::from(cause))))?;
         let decoded = decode_scalar_falsification(identity, &parsed);

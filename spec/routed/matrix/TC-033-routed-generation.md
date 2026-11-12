@@ -93,7 +93,7 @@ For FR-022-AC-36, route an existing `NotApplicable` item with no record for its 
 unchanged control. Then route the FR-022-AC-27 `x + 1` node, whose records carry `p` guards,
 with a `NotApplicable` selection, without and then with one occurrence's requirement; expect
 `OccurrenceNotSelected` for both. Route the same node with an `OwnResult` selection and its
-requirement and check it reaches FR-022-AC-38 (slice a) or FR-022-AC-27 (slice b).
+requirement and check it reaches the guard handling of FR-022-AC-27.
 
 For FR-022-AC-37, over RR-16 combine a `ScalarSelectionMismatch` at the higher request index
 with a `RecordMissing` at the lower; in the FR-022-AC-30 plain-read package give the
@@ -101,15 +101,11 @@ view-independent integer item a requirement with no record beside the view-depen
 in one RR-16 item, set a wrong result bound with a wrong path condition, then the other recorded
 occurrence's ordinal with a wrong conversion context, then an ordinal with no record. Read the
 single reported refusal each time. In the IR-304 guarded package, route `k`'s `x + m` and `c`'s
-`n >= 0` with valid records in both slices, and in slice (b) `j`'s `x + 100` item, whose record
+`n >= 0` with valid records, and `j`'s `x + 100` item, whose record
 carries `[(x > 20, holds=true), (x + 1 > 5, holds=true)]` with both guard nodes as context roots;
 read each disposition.
 
-For FR-022-AC-38 (slice a only), make one `generate_routed` call over the IR-304 guarded package
-routing `f`'s then item, `h`'s `x + 100` and `g`'s `x + 1` with valid records, and read each
-disposition, reason and harness.
-
-For FR-022-AC-27 and AC-31 to AC-35 (slice b), route the QSL-emitted packages named in each
+For FR-022-AC-27 and AC-31 to AC-35, route the QSL-emitted packages named in each
 criterion, with each guard's node as a `ContextRoot` in its item's context span. Inspect each
 harness's `Statement::Assume` list and order, symbolic input ranges, `guard_inputs`,
 `path_condition` and `requirement_occurrence`, and the persisted record JSON. For AC-27, also
@@ -118,8 +114,8 @@ assumptions exchange. For AC-31, generate the same scalar node through direct
 `negotiate_kani_obligations` and compare its record bytes with the committed golden
 `tests/fixtures/kani-scalar/direct-increment-record.json` that slice (a) captures from the
 unchanged generator. For AC-32,
-route `x + 1 > 5`, `n >= 0` over a plain-Integer `n`, `x < 10^23` and a guard reading a model
-member beside a lowerable sibling, then drop one guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
+route `x + 1 > 5`, `n >= 0` over a plain-Integer `n`, `x < 10^23` and a guard calling a function the
+profile does not support, each beside a lowerable sibling, then drop one guard's context root. For AC-33 and AC-34, read the argument ranges and dispositions, and route
 the unguarded `x + 100` control, the literal-left `20 < x` guard, and the Boolean
 `f(p: Boolean, x: Int[0, 9]): Int[0, 10] { if p then (if p then 0 else x + 1) else 0 }` case. For AC-35, run both harnesses through FR-017 under installed
 Kani and read the evidence outcome.
@@ -304,7 +300,7 @@ diagnostic-string parsing.
     role and ordinal; the direct FR-015 record omits the field and equals the committed golden
     byte for byte (FR-022-AC-31).
 25. Lowerable guards produce their assumptions; `x + 1 > 5`, `n >= 0`, `x < 10^23` and the
-    model-member guard yield `path_guard_not_lowered` with `UnsupportedGuardForm`,
+    unsupported-function guard yield `path_guard_not_lowered` with `UnsupportedGuardForm`,
     `UnboundedGuardOperand`, `GuardLiteralNotI64` and `GuardRootNotLowered`, each without a
     harness and with the sibling unchanged; the missing guard root yields the whole-call
     `GuardContextMissing` (FR-022-AC-32).
@@ -314,22 +310,19 @@ diagnostic-string parsing.
     `Integer { minimum: 0, maximum: 9 }`, with no harness, also for `20 < x`; the Boolean case
     names the inner `p` guard, `p` and `Boolean`; the unguarded control remains
     `result_bound_unreachable` (FR-022-AC-34).
-28. The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
+28. Planned (owner IR-304, which delivers a native-integer routed scalar harness next): Kani 0.68.0 was run on the infeasible-guard harness and gave no verdict in 30 minutes (docs/qualification/ir304-kani-guard-cover-attempt.md). The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
     (FR-022-AC-35).
 29. The `NotApplicable` control keeps its result; the recorded node and the attached requirement
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).
 30. The reported refusals are `ScalarSelectionMismatch` at the higher index, `RequirementRecord`,
     `ResultBoundMismatch`, `ApplicationMismatch` and `RecordMissing`; `x + m` is
-    `requires_bound` and `n >= 0` is `operation_not_rendered` in both slices; `j`'s two-guard
-    `x + 100` is `path_guard_not_lowered` in slice (b) (FR-022-AC-37).
-31. In slice (a), in one call, `f`'s then item and `h`'s item are `path_guard_not_lowered` with
-    `guard_lowering_not_implemented` and no harness, and `g`'s item is `Supported` with a
-    harness (FR-022-AC-38).
+    `requires_bound` and `n >= 0` is `operation_not_rendered`; `j`'s two-guard
+    `x + 100` is `path_guard_not_lowered` (FR-022-AC-37).
 
 ## Scoped evidence status (IR-1316)
 
-FR-022-AC-26, AC-28, AC-36 and AC-38 are covered (IR-304 slice (a)), and AC-37 is covered except
-its two-guard `j` case. AC-27 and AC-31 to AC-35, with the two-guard case of AC-37, are Planned
-for slice (b), which also retires AC-38 (FR-022, "Scoped evidence status"). Same-node selected-bound
-controls alone do not establish ordered guards, which slice (b) lowers. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
+FR-022-AC-26 to AC-34, AC-36 and AC-37 are covered (IR-304 slices (a) and (b)), and AC-38 is
+retired. Step 28, the real-Kani `CoverUnsatisfied`/`Verified` execution of FR-022-AC-35,
+stays Planned: the real Kani run was cut off at the 30-minute cap with no verdict (docs/qualification/ir304-kani-guard-cover-attempt.md), and the harness shape it runs (the assumption and
+the guard input) is asserted by steps 21 and 26. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
 recorded in FR-022 and receives no backend-execution credit.

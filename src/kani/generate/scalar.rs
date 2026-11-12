@@ -1,6 +1,8 @@
 //! The scalar family: lowering an IR-confirmed V2 exact-scalar claim and rendering its Kani
 //! harness (FR-015).
 
+pub(crate) mod guard;
+
 use crate::oracle::operator_catalog::{
     IntegerOperator, Operator as CatalogOperator, ScalarKaniOperator,
 };
@@ -46,6 +48,10 @@ pub(super) struct LoweredScalarClaim {
     upper: i64,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
+    /// The routed item's QSL occurrence; `None` for a direct claim.
+    pub(super) requirement_occurrence: Option<crate::core::requirement::RequirementOccurrence>,
+    /// The lowered path condition, with the narrowing its assumptions imply.
+    guards: Option<(guard::GuardPlan, guard::NarrowedGuards)>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -215,6 +221,21 @@ pub(super) enum ScalarLoweringRefusal {
         /// Inclusive upper bound, canonical decimal.
         upper: String,
     },
+    /// A guard of the path condition is not lowered.
+    GuardNotLowered(guard::GuardRefusal),
+    /// The path condition empties a parameter's domain.
+    PathConditionUnsatisfiable(Box<guard::UnsatisfiedPath>),
+}
+
+impl From<guard::NarrowingRefusal> for ScalarLoweringRefusal {
+    fn from(refusal: guard::NarrowingRefusal) -> Self {
+        match refusal {
+            guard::NarrowingRefusal::BoundNotI64 { lower, upper } => {
+                Self::BoundNotI64 { lower, upper }
+            }
+            guard::NarrowingRefusal::Unsatisfiable(path) => Self::PathConditionUnsatisfiable(path),
+        }
+    }
 }
 
 /// Lowers one IR-confirmed V2 claim to a renderable scalar harness. Boolean implication takes
@@ -228,10 +249,15 @@ pub(super) fn lower_scalar_claim(
     generated: &GeneratedScalarClaim,
     derived: &[DerivedDomain],
     operand_ranges: &[OperandRange],
+    guards: &Result<guard::GuardPlan, guard::GuardRefusal>,
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let operation =
         ScalarOperation::of(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     if operation == ScalarOperation::Implies {
+        let plan = guards
+            .as_ref()
+            .map_err(|refusal| ScalarLoweringRefusal::GuardNotLowered(refusal.clone()))?;
+        let narrowed = plan.narrow()?;
         return Ok(LoweredScalarClaim {
             node_id: claim.node_id.clone(),
             operation_identity: claim.operation.identity.clone(),
@@ -246,6 +272,8 @@ pub(super) fn lower_scalar_claim(
             upper: 1,
             module_symbol: format!("{}_module", scalar_stem(&claim.operation.identity)),
             harness_symbol: format!("{}_proof", scalar_stem(&claim.operation.identity)),
+            requirement_occurrence: None,
+            guards: (!plan.is_empty()).then(|| (plan.clone(), narrowed)),
         });
     }
     // `check_parameters` records exactly one checked bound for every `IntegerArithmetic` claim,
@@ -269,6 +297,21 @@ pub(super) fn lower_scalar_claim(
     let Some((lower, upper)) = range_of(bound_id) else {
         return Err(ScalarLoweringRefusal::NoRenderer);
     };
+    // Guards are checked after every refusal that does not depend on the path (FR-022
+    // "Per-item precedence"): a claim FR-014 refuses or that has no renderer is reported first,
+    // including an operand bound this generator's claim map does not carry.
+    operation.operands(|position| match operand_ranges.get(position) {
+        Some(OperandRange::Bound(id)) if !generated.checked_bounds.contains(id) => {
+            Err(ScalarLoweringRefusal::NoRenderer)
+        }
+        Some(OperandRange::Bound(id)) if range_of(id).is_none() => {
+            Err(ScalarLoweringRefusal::NoRenderer)
+        }
+        _ => Ok((0, 0)),
+    })?;
+    let plan = guards
+        .as_ref()
+        .map_err(|refusal| ScalarLoweringRefusal::GuardNotLowered(refusal.clone()))?;
     let to_i64 = |(lower, upper): (&String, &String)| match (lower.parse(), upper.parse()) {
         (Ok(lower), Ok(upper)) => Ok((lower, upper)),
         _ => Err(ScalarLoweringRefusal::BoundNotI64 {
@@ -305,6 +348,17 @@ pub(super) fn lower_scalar_claim(
             to_i64((lower, upper))
         }
     })?;
+    // Narrowing needs every guard lowered and every range in `i64`; it precedes the reachable-result
+    // check, so a dead branch is not reported as an unreachable result.
+    let narrowed = plan.narrow()?;
+    let mut ranges = operands.ranges();
+    plan.narrow_operands(&narrowed, &mut ranges);
+    let operands = operation.operands(|position| {
+        ranges
+            .get(position)
+            .copied()
+            .ok_or(ScalarLoweringRefusal::NoRenderer)
+    })?;
     let (reachable_lower, reachable_upper) = operands.reachable();
     if reachable_upper < i128::from(lower) || reachable_lower > i128::from(upper) {
         return Err(ScalarLoweringRefusal::ResultUnreachable {
@@ -332,10 +386,63 @@ pub(super) fn lower_scalar_claim(
         upper,
         module_symbol,
         harness_symbol,
+        requirement_occurrence: None,
+        guards: (!plan.is_empty()).then(|| (plan.clone(), narrowed)),
     })
 }
 
+/// The guard inputs and assumptions as harness statements, to follow every operand input.
+fn guard_statements(
+    rendered: &guard::RenderedGuards,
+) -> Result<Vec<super::spec::Statement>, UnsupportedObligation> {
+    use super::spec::{ExprText, Statement};
+    let inputs = rendered.inputs.iter().map(|input| Statement::Input {
+        name: input.identity.identifier.clone(),
+        ty: input.primitive,
+        domain: input.domain,
+        then: Vec::new(),
+    });
+    let assumptions = rendered
+        .assumptions
+        .iter()
+        .map(|condition| {
+            Ok(Statement::Assume {
+                condition: ExprText::new(condition.clone())?,
+            })
+        })
+        .collect::<Result<Vec<_>, UnsupportedObligation>>()?;
+    Ok(inputs.chain(assumptions).collect())
+}
+
 impl LoweredScalarClaim {
+    /// The guard inputs and assumptions of this claim; empty without a path condition.
+    fn rendered_guards(&self) -> guard::RenderedGuards {
+        match &self.guards {
+            Some((plan, narrowed)) => plan.render(narrowed, self.operation.operand_names()),
+            None => guard::RenderedGuards {
+                inputs: Vec::new(),
+                assumptions: Vec::new(),
+            },
+        }
+    }
+
+    /// The path condition the harness assumes.
+    fn path_condition(&self) -> Vec<crate::core::requirement::RequirementGuard> {
+        self.guards
+            .as_ref()
+            .map(|(plan, _)| plan.path_condition.clone())
+            .unwrap_or_default()
+    }
+
+    /// Bind the routed item's occurrence key.
+    pub(super) fn with_requirement_occurrence(
+        mut self,
+        occurrence: Option<&crate::core::requirement::RequirementOccurrence>,
+    ) -> Self {
+        self.requirement_occurrence = occurrence.cloned();
+        self
+    }
+
     pub(super) fn replay_body(
         &self,
         source: &quire_contract_model::CheckedPackageV2,
@@ -358,14 +465,22 @@ impl LoweredScalarClaim {
         if body.operation_identity != self.operation_identity {
             return Err(ScalarAuthorityError::Operation);
         }
+        // The retained body carries the admitted ranges QSL's operator parity runs over. Guards
+        // narrow the harness's operand ranges inside them, so a witness in a narrowed range is
+        // an input of the admitted range; without guards the ranges are equal.
+        let guarded = self.guards.is_some();
         if body.operands.len() != self.operands.len()
             || body
                 .operands
                 .iter()
                 .zip(&self.operands)
                 .any(|(operand, (lower, upper))| {
-                    operand.range.lower != i128::from(*lower)
-                        || operand.range.upper != i128::from(*upper)
+                    let (lower, upper) = (i128::from(*lower), i128::from(*upper));
+                    if guarded {
+                        lower < operand.range.lower || upper > operand.range.upper
+                    } else {
+                        operand.range.lower != lower || operand.range.upper != upper
+                    }
                 })
         {
             return Err(ScalarAuthorityError::Ranges);
@@ -444,6 +559,8 @@ mod native_selection_tests {
             upper: 100,
             module_symbol: "native_plan".to_owned(),
             harness_symbol: "check".to_owned(),
+            requirement_occurrence: None,
+            guards: None,
         }
     }
 
@@ -621,6 +738,8 @@ pub(super) fn render_scalar(
             ],
         });
     }
+    let rendered_guards = lowered.rendered_guards();
+    body.extend(guard_statements(&rendered_guards)?);
     body.push(Statement::Let(LetBinding {
         name: "meter".to_owned(),
         ty: None,
@@ -700,6 +819,13 @@ pub(super) fn render_scalar(
             })
             .collect(),
         inferred_operands: lowered.inferred_operands.clone(),
+        requirement_occurrence: lowered.requirement_occurrence.clone(),
+        path_condition: lowered.path_condition(),
+        guard_inputs: rendered_guards
+            .inputs
+            .iter()
+            .map(|input| input.identity.clone())
+            .collect(),
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
@@ -725,7 +851,7 @@ fn render_boolean_implies(
     use crate::kani::abi::KaniPrimitiveType;
 
     let expr = |source: &str| ExprText::new(source.to_owned());
-    let body = vec![
+    let mut body = vec![
         Statement::Input {
             name: "left".to_owned(),
             ty: KaniPrimitiveType::Boolean,
@@ -738,6 +864,10 @@ fn render_boolean_implies(
             domain: (0, 1),
             then: Vec::new(),
         },
+    ];
+    let rendered_guards = lowered.rendered_guards();
+    body.extend(guard_statements(&rendered_guards)?);
+    body.extend([
         Statement::Let(LetBinding {
             name: "meter".to_owned(),
             ty: None,
@@ -778,7 +908,7 @@ fn render_boolean_implies(
             condition: expr("completed")?,
             message: "the Boolean oracle must complete with native implication".to_owned(),
         },
-    ];
+    ]);
     let spec = HarnessSpec::new(
         format!(
             "exact-scalar {} `{}`",
@@ -817,6 +947,13 @@ fn render_boolean_implies(
             })
             .collect(),
         inferred_operands: Vec::new(),
+        requirement_occurrence: lowered.requirement_occurrence.clone(),
+        path_condition: lowered.path_condition(),
+        guard_inputs: rendered_guards
+            .inputs
+            .iter()
+            .map(|input| input.identity.clone())
+            .collect(),
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
@@ -862,6 +999,8 @@ pub(super) fn false_bound_harness_for_test(
         upper: 5,
         module_symbol: identity.module_symbol.as_str().to_owned(),
         harness_symbol: identity.harness_symbol.as_str().to_owned(),
+        requirement_occurrence: None,
+        guards: None,
     };
     let mut harness = render_scalar(
         &KaniObligationRequest {
@@ -975,6 +1114,9 @@ mod {module} {{\n\
         harness_symbol: path.harness,
         arguments,
         inferred_operands: lowered.inferred_operands.clone(),
+        requirement_occurrence: None,
+        path_condition: Vec::new(),
+        guard_inputs: Vec::new(),
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
@@ -1256,7 +1398,13 @@ mod tests {
             lower: lower.clone(),
             upper: upper.clone(),
         }];
-        match lower_scalar_claim(&claim, generated, &derived, &[]) {
+        match lower_scalar_claim(
+            &claim,
+            generated,
+            &derived,
+            &[],
+            &Ok(guard::GuardPlan::default()),
+        ) {
             Err(ScalarLoweringRefusal::BoundNotI64 {
                 lower: got_lower,
                 upper: got_upper,
@@ -1270,6 +1418,10 @@ mod tests {
             Err(ScalarLoweringRefusal::ResultUnreachable { .. }) => {
                 panic!("the domain does not fit i64, so no reachability is computed")
             }
+            Err(
+                ScalarLoweringRefusal::GuardNotLowered(_)
+                | ScalarLoweringRefusal::PathConditionUnsatisfiable(_),
+            ) => panic!("the claim has no guard"),
             Ok(_) => panic!("an arbitrary-precision Integer domain outside i64 must not lower"),
         }
     }
@@ -1348,12 +1500,63 @@ mod tests {
             };
             assert!(
                 matches!(
-                    lower_scalar_claim(&claim, generated, &derived, &[]),
+                    lower_scalar_claim(
+                        &claim,
+                        generated,
+                        &derived,
+                        &[],
+                        &Ok(guard::GuardPlan::default())
+                    ),
                     Err(ScalarLoweringRefusal::NoRenderer)
                 ),
                 "checked bounds {:?}",
                 generated.checked_bounds
             );
+        }
+    }
+
+    /// An operand bound this generator's claim map does not carry is `operation_not_rendered`
+    /// before any guard refusal: the guard is only considered for a claim that can be rendered.
+    #[trace("FR-022-AC-37", "TC-033")]
+    #[test]
+    fn a_foreign_operand_bound_precedes_the_guard_refusal() {
+        let (bound, listed, unlisted) = (
+            checked_node_id("7"),
+            checked_node_id("8"),
+            checked_node_id("9"),
+        );
+        let derived = vec![DerivedDomain::IntegerRange {
+            bound: bound.clone(),
+            lower: "0".to_owned(),
+            upper: "9".to_owned(),
+        }];
+        let unlowered: Result<guard::GuardPlan, guard::GuardRefusal> = Err(Box::new((
+            crate::core::requirement::RequirementOccurrence {
+                node_id: checked_node_id("5"),
+                role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                ordinal: 0,
+            },
+            crate::kani::generate::outcome::PathGuardRefusal::UnsupportedGuardForm,
+        )));
+        // A bound outside `checked_bounds`, and one listed with no derived range.
+        for (checked_bounds, foreign) in [
+            (vec![bound.clone()], unlisted),
+            (vec![bound.clone(), listed.clone()], listed),
+        ] {
+            let claim = add_claim(checked_bounds);
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("built as Generated above");
+            };
+            let ranges = [OperandRange::Bound(foreign), OperandRange::Result];
+            for guards in [&Ok(guard::GuardPlan::default()), &unlowered] {
+                assert!(
+                    matches!(
+                        lower_scalar_claim(&claim, generated, &derived, &ranges, guards),
+                        Err(ScalarLoweringRefusal::NoRenderer)
+                    ),
+                    "a foreign operand bound is not rendered"
+                );
+            }
         }
     }
 
@@ -1451,6 +1654,8 @@ mod tests {
                             upper: i64::MAX,
                             module_symbol: "scalar_control".into(),
                             harness_symbol: "check".into(),
+                            requirement_occurrence: None,
+                            guards: None,
                         };
                         let actual = render_scalar(&request, &lowered).unwrap();
                         let reference = render_scalar_reference(&request, &lowered).unwrap();
@@ -1535,6 +1740,8 @@ mod tests {
                 upper: 1,
                 module_symbol: "scalar_control".into(),
                 harness_symbol: "check".into(),
+                requirement_occurrence: None,
+                guards: None,
             };
             assert_eq!(
                 render_scalar(&request, &lowered).unwrap_err(),

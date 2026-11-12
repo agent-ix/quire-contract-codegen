@@ -524,6 +524,7 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
         let admitted = admitted_scalar_claims(&package, claim_map);
         let items = [ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &package,
             package: &admitted,
             claim_map,

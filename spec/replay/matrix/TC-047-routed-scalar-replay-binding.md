@@ -21,7 +21,7 @@ failure from source-property refutation. Partial native evidence exists (IR-1184
 `scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
 a compiled generated artifact, without a Kani run. `scalar_settlement.rs` implements the
 settlement steps 10 to 14 (IR-631), and `kani_obligations.rs` implements the descriptor-level
-bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence (step 3, with the absent capability last), single-member binding (step 6), stale-dependency and invented-membership (the membership half of step 8, FR-032-AC-12) checks. Steps 1, 7 and 9, the rest of step 8 (the canonical preimage members, the unencodable-preimage `IdentityEncodeError` path and a changed range or kind under a retained digest) and the real-Kani run of step 2 remain
+bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence (step 3, with the absent capability last), single-member binding (step 6), stale-dependency and invented-membership (the membership half of step 8, FR-032-AC-12) checks. Step 9 (FR-032-AC-19) is implemented by IR-304 slice (b) in `scalar_playback.rs` and `requirement_records.rs`. Steps 1 and 7, the rest of step 8 (the canonical preimage members, the unencodable-preimage `IdentityEncodeError` path and a changed range or kind under a retained digest) and the real-Kani run of step 2 remain
 Planned, as does any real falsified Kani run through the route. No
 passing proof-driven replay is claimed.
 

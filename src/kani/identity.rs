@@ -17,7 +17,7 @@ use qsl_replay::ObligationIdentity;
 use crate::{
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
-    core::requirement::RequirementOccurrence,
+    core::requirement::{RequirementGuard, RequirementOccurrence},
     kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
     kani::census::{ProofDependencyEdge, ProofExecutionState, ProofReadiness},
 };
@@ -581,6 +581,34 @@ pub struct InferredScalarOperand {
     pub upper: String,
 }
 
+/// The declared domain of a parameter a path guard reads (FR-022).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "domain", rename_all = "snake_case")]
+pub enum ScalarGuardDomain {
+    /// Both Boolean values.
+    Boolean,
+    /// An inclusive integer range.
+    Integer {
+        /// Inclusive lower bound.
+        minimum: i64,
+        /// Inclusive upper bound.
+        maximum: i64,
+    },
+}
+
+/// One symbolic input the harness draws for a parameter a guard reads that no operand reads.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarGuardInput {
+    /// The harness variable.
+    pub identifier: String,
+    /// The parameter node, in the authenticated V2 source frame.
+    pub parameter: CheckedNodeId,
+    /// The domain the input is drawn over, after the guards narrowed it.
+    #[serde(flatten)]
+    pub domain: ScalarGuardDomain,
+}
+
 /// The integer representation selected for a scalar proof.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -626,6 +654,15 @@ pub struct ScalarObligationIdentity {
     pub arguments: Vec<ScalarObligationArgument>,
     /// Exact IR evidence for operands ranged by recursive inference.
     pub inferred_operands: Vec<InferredScalarOperand>,
+    /// The QSL occurrence the routed item claims; `None` for a direct FR-015 caller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requirement_occurrence: Option<RequirementOccurrence>,
+    /// The occurrence's path condition, outermost guard first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub path_condition: Vec<RequirementGuard>,
+    /// The guard inputs drawn after the operands, in draw order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub guard_inputs: Vec<ScalarGuardInput>,
     /// Solver.
     pub solver: KaniSolver,
     /// Loop unwind bound.
