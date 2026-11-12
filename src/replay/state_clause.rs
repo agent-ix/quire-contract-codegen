@@ -309,6 +309,19 @@ pub enum StateClauseReplayError {
         /// The field.
         field: String,
     },
+    /// The caller supplied a value for a field the invariant harness draws or the clause reads;
+    /// only a field the invariant does not read takes a supplied value.
+    UnreadValueForReadField {
+        /// The field.
+        field: String,
+    },
+    /// The caller supplied a value for a declared field that has no `i64` accessor range (a
+    /// Boolean or string field, an unbounded integer, or a range wider than `i64`); no integer
+    /// is written into such a field.
+    UnreadFieldNotRanged {
+        /// The field.
+        field: String,
+    },
     /// The operation declares a parameter or a result, which the invocation document this path
     /// builds does not carry.
     UnsupportedOperationShape {
@@ -363,6 +376,15 @@ impl fmt::Display for StateClauseReplayError {
                 f,
                 "the value of the state field `{field}` is outside its declared range"
             ),
+            Self::UnreadValueForReadField { field } => write!(
+                f,
+                "a value was supplied for `{field}`, which the invariant harness draws or the \
+                 clause reads"
+            ),
+            Self::UnreadFieldNotRanged { field } => write!(
+                f,
+                "a value was supplied for `{field}`, which declares no `i64` range"
+            ),
             Self::UnsupportedOperationShape {
                 operation,
                 declaration,
@@ -407,6 +429,8 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::UndeclaredField { .. }
             | StateClauseReplayError::DuplicateField { .. }
             | StateClauseReplayError::OutOfDomain { .. }
+            | StateClauseReplayError::UnreadValueForReadField { .. }
+            | StateClauseReplayError::UnreadFieldNotRanged { .. }
             | StateClauseReplayError::UnsupportedOperationShape { .. } => Self::CgDefect,
             StateClauseReplayError::Refused(refusal) => Self::Refused(refusal),
         }

@@ -60,6 +60,16 @@ fn generate_claimed(
     identity: Option<&ObligationIdentity>,
 ) -> Fixture {
     let (package, node) = twin.emitted_package(clause);
+    fixture_of(package, node, native, identity)
+}
+
+/// The harness generated for `node` of an already-admitted `package`.
+fn fixture_of(
+    package: CheckedPackageV2,
+    node: CheckedNodeId,
+    native: bool,
+    identity: Option<&ObligationIdentity>,
+) -> Fixture {
     let negotiate = if native {
         negotiate_kani_native_obligations
     } else {
@@ -290,14 +300,48 @@ fn tc_035_invariant_playback_builds_the_current_envelope() {
     );
 }
 
-/// Step 40 (FR-024-AC-58): an object declaring `balance` and an unread `audit`. The harness draws
-/// `balance`; CG does not return `MissingField` for `audit` and invents no value, so QSL refuses
-/// the snapshot for the missing `audit`.
-#[trace("TC-035", "FR-024-AC-58")]
+const UNREAD: &str = "BalanceNonnegative";
+
+/// The `balance`/`audit` twin: `Account.balance: Int[-1, 1000]`, unread `audit: Int[0, 1000]`,
+/// invariant `balance >= 0`.
+fn unread_twin() -> Twin {
+    Twin::with_unread_audit_invariant((-1, 1000), (0, 1000), "self.balance >= 0")
+}
+
+impl Fixture {
+    /// The `balance` playback `-1` decoded against this harness, with `unread` supplied.
+    fn decoded_unread<'a>(
+        &'a self,
+        twin: &Twin,
+        object: &'a CheckedNodeId,
+        value: i64,
+        unread: &[(&str, i64)],
+    ) -> quire_contract_codegen::InvariantReplayInputs<'a> {
+        let mut inputs = self
+            .decoded(
+                twin,
+                object,
+                UNREAD,
+                &self.playback(&[value]),
+                StateClauseHarness::V2Clause(&self.harness),
+            )
+            .expect("the playback decodes");
+        inputs.unread_values = unread
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), *value))
+            .collect();
+        inputs
+    }
+}
+
+/// Step 48 (FR-024-AC-58, FR-024-AC-69): the snapshot binds every declared field, the drawn
+/// `balance` from the playback and the unread `audit` from the caller; the result is QSL's own;
+/// the transcript holds only the playback's binding.
+#[trace("TC-035", "FR-024-AC-58", "FR-024-AC-69")]
 #[test]
-fn tc_035_unread_declared_field_ends_refused_with_missing_member() {
-    let twin = Twin::with_balance_invariant();
-    let fixture = generate(&twin, "BalanceNonnegative");
+fn tc_035_unread_declared_field_is_completed_from_the_supplied_value() {
+    let twin = unread_twin();
+    let fixture = generate(&twin, UNREAD);
     assert_eq!(
         fixture
             .harness
@@ -309,22 +353,297 @@ fn tc_035_unread_declared_field_ends_refused_with_missing_member() {
         ["balance"],
         "the harness draws only the field the invariant reads"
     );
-    let replay = fixture.built(&twin, "BalanceNonnegative", &[0]);
-    assert_eq!(
-        snapshot_document(&replay)["populations"][0]["objects"][0]["fields"],
-        json!({"balance": {"integer": "0"}}),
-        "no value is invented for `audit`"
-    );
-    let error = replay.replay().err().expect("QSL refuses the snapshot");
-    let StateClauseReplayError::Refused(refusal) = error else {
-        panic!("the replay ends Refused, not MissingField: {error}");
+    let object = fixture.object();
+    for audit in [7, 9] {
+        let build = |fixture: &Fixture, twin: &Twin, object: &CheckedNodeId| {
+            StateClauseReplay::new_invariant(fixture.decoded_unread(
+                twin,
+                object,
+                -1,
+                &[("audit", audit)],
+            ))
+            .expect("the replay is built")
+        };
+        let direct = build(&fixture, &twin, &object);
+        let (fields, transcript, result) = through(build(&fixture, &twin, &object));
+        assert_eq!(
+            fields,
+            json!({"balance": {"integer": "-1"}, "audit": {"integer": audit.to_string()}}),
+            "the drawn field takes the playback and the unread field the supplied value"
+        );
+        assert_eq!(
+            transcript, "<<<assertion|deposit|BalanceNonnegative|balance=-1>>>",
+            "the transcript holds only the playback's binding"
+        );
+        assert_violation(&result);
+        assert_eq!(
+            result,
+            direct.replay().expect("the replay settles"),
+            "the result is QSL's own"
+        );
+        assert!(
+            matches!(
+                result.result(),
+                ReplayResult::Witness(arm) if arm.value().is_some()
+            ),
+            "an evaluated witness"
+        );
+    }
+
+    // Two unread fields: each value reaches its own field.
+    let twin = unread_twin().with_unread_note();
+    let fixture = generate(&twin, UNREAD);
+    let object = fixture.object();
+    let build = |unread: &[(&str, i64)]| {
+        StateClauseReplay::new_invariant(fixture.decoded_unread(&twin, &object, -1, unread))
+            .expect("the replay is built")
     };
-    assert_eq!(refusal.code().as_str(), "invalid_runtime_input");
-    assert_eq!(refusal.cause(), Some("missing-member"));
-    assert!(
-        format!("{refusal:?}").contains("audit"),
-        "the refusal names the unread field: {refusal:?}"
+    let (completed, _, result) = through(build(&[("audit", 7), ("note", 3)]));
+    assert_eq!(
+        completed,
+        json!({
+            "balance": {"integer": "-1"},
+            "audit": {"integer": "7"},
+            "note": {"integer": "3"},
+        })
     );
+    assert_violation(&result);
+
+    // The supplied name-value pairs, not their positions, pick the field.
+    let (swapped, _, _) = through(build(&[("note", 3), ("audit", 7)]));
+    assert_eq!(swapped, completed);
+
+    // The accessor range of `audit` is the check, not `i64` and not another package's range.
+    let narrowed = Twin::with_unread_audit_invariant((-1, 1000), (0, 5), "self.balance >= 0");
+    let fixture = generate(&narrowed, UNREAD);
+    let object = fixture.object();
+    let refused = StateClauseReplay::new_invariant(fixture.decoded_unread(
+        &narrowed,
+        &object,
+        -1,
+        &[("audit", 7)],
+    ))
+    .err()
+    .expect("7 is outside Int[0, 5]");
+    assert!(matches!(refused, StateClauseReplayError::OutOfDomain { field } if field == "audit"));
+    assert!(StateClauseReplay::new_invariant(fixture.decoded_unread(
+        &narrowed,
+        &object,
+        -1,
+        &[("audit", 5)],
+    ))
+    .is_ok());
+}
+
+/// Runs `replay` through `replay_through`, decoding the snapshot document and the transcript from
+/// the request the executor receives, and returns the snapshot's field object, the transcript and
+/// QSL's result for that request.
+fn through(replay: StateClauseReplay) -> (Value, String, StateClauseReplayResult) {
+    let limits = replay.replay_limits();
+    let captured = std::cell::RefCell::new(None);
+    let result = replay
+        .replay_through(|wire, envelope| {
+            let snapshots = wire
+                .documents
+                .iter()
+                .filter_map(|bytes| serde_json::from_slice::<Value>(bytes).ok())
+                .filter(|document| document["format"] == "quire.state.snapshot/v1")
+                .collect::<Vec<_>>();
+            assert_eq!(snapshots.len(), 1, "exactly one state document");
+            let qsl_replay::ReplaySource::Witness(witness) = &wire.source else {
+                panic!("the invariant envelope rides the witness arm");
+            };
+            *captured.borrow_mut() = Some((
+                snapshots[0]["populations"][0]["objects"][0]["fields"].clone(),
+                witness.transcript().to_owned(),
+            ));
+            replay_state_clause(wire, envelope, limits)
+        })
+        .expect("QSL settles the replay");
+    let (fields, transcript) = captured.into_inner().expect("the executor ran");
+    (fields, transcript, result)
+}
+
+/// The error of a replay that must be refused, the executor asserted uncalled.
+fn refuse(inputs: quire_contract_codegen::InvariantReplayInputs<'_>) -> StateClauseReplayError {
+    let called = Cell::new(false);
+    let error = match StateClauseReplay::new_invariant(inputs) {
+        Ok(replay) => replay
+            .replay_through(|_, _| {
+                called.set(true);
+                Err(ReplayRefusal::WrongModelGraphEntry)
+            })
+            .err()
+            .expect("refused"),
+        Err(error) => error,
+    };
+    assert!(!called.get(), "the executor is not called");
+    error
+}
+
+/// Step 49 (FR-024-AC-70): each unread-value refusal is its own variant, with no document built
+/// and the executor uncalled.
+#[trace("TC-035", "FR-024-AC-58", "FR-024-AC-70")]
+#[test]
+fn tc_035_each_unread_value_refusal_is_a_distinct_variant_before_any_document() {
+    let twin = unread_twin();
+    let fixture = generate(&twin, UNREAD);
+    let object = fixture.object();
+    let with = |unread: &[(&str, i64)]| fixture.decoded_unread(&twin, &object, -1, unread);
+
+    // A name the harness draws.
+    assert!(matches!(
+        refuse(with(&[("balance", 1), ("audit", 7)])),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "balance"
+    ));
+    // An undeclared name, and a name supplied twice.
+    assert!(matches!(
+        refuse(with(&[("audit", 7), ("ghost", 1)])),
+        StateClauseReplayError::UndeclaredField { field } if field == "ghost"
+    ));
+    assert!(matches!(
+        refuse(with(&[("audit", 7), ("audit", 8)])),
+        StateClauseReplayError::DuplicateField { field } if field == "audit"
+    ));
+    // An omitted unread field.
+    assert!(matches!(
+        refuse(with(&[])),
+        StateClauseReplayError::MissingField { field } if field == "audit"
+    ));
+    // The accessor range `Int[0, 1000]`: the endpoints are accepted, the values beyond refused.
+    for value in [0, 1000] {
+        assert!(
+            StateClauseReplay::new_invariant(with(&[("audit", value)])).is_ok(),
+            "{value}"
+        );
+    }
+    for value in [1001, -1] {
+        assert!(
+            matches!(
+                refuse(with(&[("audit", value)])),
+                StateClauseReplayError::OutOfDomain { field } if field == "audit"
+            ),
+            "{value}"
+        );
+    }
+
+    // Precedence: the first failing check of an entry is the error, in the order drawn-or-read,
+    // undeclared, repeated, unranged, out of range; an entry error precedes `MissingField`.
+    assert!(matches!(
+        refuse(with(&[("balance", 1), ("balance", 2)])),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "balance"
+    ));
+    assert!(matches!(
+        refuse(with(&[("balance", 99_999)])),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "balance"
+    ));
+    assert!(matches!(
+        refuse(with(&[("audit", 7), ("audit", 5000)])),
+        StateClauseReplayError::DuplicateField { field } if field == "audit"
+    ));
+    let noted = unread_twin().with_unread_note();
+    let noted_fixture = generate(&noted, UNREAD);
+    let noted_object = noted_fixture.object();
+    assert!(matches!(
+        refuse(noted_fixture.decoded_unread(&noted, &noted_object, -1, &[("note", 5000)])),
+        StateClauseReplayError::OutOfDomain { field } if field == "note"
+    ));
+
+    // A negative lower bound on an unread field: both endpoints are accepted, one beyond refused.
+    let negative = Twin::with_unread_audit_invariant((-1, 1000), (-5, 10), "self.balance >= 0");
+    let negative_fixture = generate(&negative, UNREAD);
+    let negative_object = negative_fixture.object();
+    let negative_with = |value| {
+        negative_fixture.decoded_unread(&negative, &negative_object, -1, &[("audit", value)])
+    };
+    for value in [-5, 10] {
+        assert!(
+            StateClauseReplay::new_invariant(negative_with(value)).is_ok(),
+            "{value}"
+        );
+    }
+    for value in [-6, 11] {
+        assert!(
+            matches!(
+                refuse(negative_with(value)),
+                StateClauseReplayError::OutOfDomain { field } if field == "audit"
+            ),
+            "{value}"
+        );
+    }
+
+    // A name the inputs draw although the clause does not read it (hand-built inputs).
+    let mut drawn = with(&[("audit", 7)]);
+    drawn.state_fields = vec!["balance".to_owned(), "audit".to_owned()];
+    drawn.playback.push(("audit".to_owned(), 3));
+    assert!(matches!(
+        refuse(drawn),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "audit"
+    ));
+
+    // A name the clause reads while the playback draws only the other field: the clause
+    // `balance >= audit` reads both and the hand-built inputs draw `balance` alone.
+    let two = Twin::with_unread_audit_invariant((0, 1000), (0, 1000), "self.balance >= self.audit");
+    let two_fixture = generate(&two, UNREAD);
+    let two_object = two_fixture.object();
+    let mut read = two.invariant_inputs(
+        &two_fixture.package,
+        &two_fixture.clause,
+        &two_object,
+        UNREAD,
+        &["balance"],
+    );
+    read.playback = vec![("balance".to_owned(), 0)];
+    read.unread_values = vec![("audit".to_owned(), 7)];
+    assert!(matches!(
+        refuse(read),
+        StateClauseReplayError::UnreadValueForReadField { field } if field == "audit"
+    ));
+
+    // A declared unread field with no `i64` accessor range is `UnreadFieldNotRanged`, never
+    // `OutOfDomain`, and no integer is written into it; omitted, it stays `MissingField`.
+    let boolean = Twin::without_audit_range().with_invariant_condition("self.balance >= 0");
+    let wide = unread_twin();
+    let (wide_package, wide_node) = wide.emitted_package_with_wide_audit_range(UNREAD);
+    let unbounded = Twin::with_unbounded_audit_invariant();
+    let (string_package, string_node) = wide.emitted_package_with_unread_string_audit(UNREAD);
+    let cases = [
+        (&boolean, generate(&boolean, UNREAD), "a Boolean field"),
+        (
+            &unbounded,
+            generate(&unbounded, UNREAD),
+            "an unbounded integer",
+        ),
+        (
+            &wide,
+            fixture_of(string_package, string_node, false, None),
+            "a string field",
+        ),
+        (
+            &wide,
+            fixture_of(wide_package, wide_node, false, None),
+            "a range wider than i64",
+        ),
+    ];
+    for (twin, fixture, case) in &cases {
+        let object = fixture.object();
+        let supplied = fixture.decoded_unread(twin, &object, 1, &[("audit", 1)]);
+        assert!(
+            matches!(
+                refuse(supplied),
+                StateClauseReplayError::UnreadFieldNotRanged { field } if field == "audit"
+            ),
+            "{case}"
+        );
+        let omitted = fixture.decoded_unread(twin, &object, 1, &[]);
+        assert!(
+            matches!(
+                refuse(omitted),
+                StateClauseReplayError::MissingField { field } if field == "audit"
+            ),
+            "{case}"
+        );
+    }
 }
 
 /// Step 41 (FR-024-AC-59): the invariant is selected by its declared name, not by position.

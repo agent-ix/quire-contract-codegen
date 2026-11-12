@@ -838,6 +838,12 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         StateClauseReplayError::OutOfDomain {
             field: "balance".to_owned(),
         },
+        StateClauseReplayError::UnreadValueForReadField {
+            field: "balance".to_owned(),
+        },
+        StateClauseReplayError::UnreadFieldNotRanged {
+            field: "audit".to_owned(),
+        },
         StateClauseReplayError::UnsupportedOperationShape {
             operation: OperationName {
                 model: identifier("m"),

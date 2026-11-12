@@ -3,9 +3,11 @@
 //! observation, one snapshot document and the caller's anchor.
 //!
 //! CG never infers the anchor: a drawn-state invariant harness carries none, so the caller supplies
-//! the [`SelectedAnchor`] and the self object's address. The snapshot binds only the fields the
-//! harness draws. A declared field the invariant does not read stays unbound and QSL refuses the
-//! snapshot as `missing-member` (the limit IR-1512 owns); this module invents no value for it.
+//! the [`SelectedAnchor`] and the self object's address. The snapshot binds every declared field
+//! of the object (QSL refuses a `Current` snapshot lacking any, FR-106): a field the harness draws
+//! takes the playback's value and a declared field the invariant does not read takes the value the
+//! caller supplied in [`InvariantReplayInputs::unread_values`] (FR-024-AC-58, IR-1512). This module
+//! invents no value for any field.
 
 use qsl_replay::{
     call_site, AnchorKind, ClauseName, ClauseSelectionInput, EnvelopeSource, ObligationIdentity,
@@ -17,9 +19,10 @@ use quire_contract_model::{CheckedNodeId, CheckedNodeOwner, CheckedPackageV2};
 use serde::Serialize;
 
 use super::{
-    bind, encode_document, ensure_unique_documents, model_header, populations, state_fields,
-    DocumentError, DocumentLabel, IdentityMember, ModelHeader, Side, SnapshotPopulation,
-    StateClauseHarnessMember, StateClauseReplay, StateClauseReplayError, StateObjectAddress,
+    bind, encode_document, ensure_unique_documents, model_header, populations, replay_range,
+    state_fields, DocumentError, DocumentLabel, IdentityMember, ModelHeader, Side,
+    SnapshotPopulation, StateClauseHarnessMember, StateClauseModelFieldsCause, StateClauseReplay,
+    StateClauseReplayError, StateObjectAddress,
 };
 use crate::{
     core::ir::{
@@ -76,6 +79,10 @@ pub struct InvariantReplayInputs<'a> {
     pub snapshot_label: DocumentLabel,
     /// The decoded playback: the `i64` Kani bound to each drawn field.
     pub playback: Vec<(String, i64)>,
+    /// The value of each declared field the invariant does not read, by name. A name the harness
+    /// draws or the clause reads, an undeclared or repeated name, and a value outside the field's
+    /// `i64` accessor range are refused; so is a name whose field has no `i64` range.
+    pub unread_values: Vec<(String, i64)>,
     /// The identity of the obligation the counterexample falsified.
     pub obligation_identity: ObligationIdentity,
 }
@@ -211,13 +218,14 @@ impl InvariantReplayInputs<'_> {
 /// is declared by `object_node`, and the node is the model object whose address the snapshot
 /// names. A different model object that happens to declare a field of the same name, or an
 /// address that is not `object_node`'s, would otherwise lend its field set and range to the
-/// replay.
+/// replay. The clause is parsed once here, and the names of the fields it reads are returned for
+/// the unread-value checks.
 fn ensure_declaring_object(
     graph: &ClauseGraphView<'_>,
     clause_node: &CheckedNodeId,
     object_node: &CheckedNodeId,
     object_type: &str,
-) -> Result<(), StateClauseReplayError> {
+) -> Result<Vec<String>, StateClauseReplayError> {
     let mismatch = || StateClauseReplayError::HarnessMismatch {
         member: StateClauseHarnessMember::Object,
     };
@@ -243,7 +251,66 @@ fn ensure_declaring_object(
     if address != Some(object_type) {
         return Err(mismatch());
     }
-    Ok(())
+    Ok(condition
+        .inputs
+        .into_iter()
+        .map(|input| input.name)
+        .collect())
+}
+
+/// Every declared field of the object with its value, in declared order: a drawn field takes the
+/// playback's value and each other declared field takes the caller's supplied value. The supplied
+/// entries are checked in order, each against, in this order: drawn or read
+/// (`UnreadValueForReadField`), undeclared, repeated, no `i64` range (`UnreadFieldNotRanged`),
+/// outside the range (`OutOfDomain`); then a declared field that is neither drawn nor supplied is
+/// `MissingField`. No value is invented.
+fn complete_snapshot(
+    graph: &ClauseGraphView<'_>,
+    object: &CheckedNodeId,
+    drawn: &[(String, i64)],
+    read: &[String],
+    supplied: &[(String, i64)],
+) -> Result<Vec<(String, i64)>, StateClauseReplayError> {
+    let declared = graph
+        .package()
+        .model_object_fields(object)
+        .map_err(|cause| StateClauseReplayError::ModelFields {
+            object: object.clone(),
+            cause: StateClauseModelFieldsCause::Accessor(cause),
+        })?;
+    for (position, (name, value)) in supplied.iter().enumerate() {
+        let field = || name.clone();
+        if drawn.iter().any(|(bound, _)| bound == name) || read.contains(name) {
+            return Err(StateClauseReplayError::UnreadValueForReadField { field: field() });
+        }
+        if declared.field(name).is_none() {
+            return Err(StateClauseReplayError::UndeclaredField { field: field() });
+        }
+        if supplied.iter().take(position).any(|(seen, _)| seen == name) {
+            return Err(StateClauseReplayError::DuplicateField { field: field() });
+        }
+        let Some((minimum, maximum)) = replay_range(graph, object, name)? else {
+            return Err(StateClauseReplayError::UnreadFieldNotRanged { field: field() });
+        };
+        if !(minimum..=maximum).contains(value) {
+            return Err(StateClauseReplayError::OutOfDomain { field: field() });
+        }
+    }
+    declared
+        .fields()
+        .iter()
+        .map(|field| {
+            let name = field.name();
+            drawn
+                .iter()
+                .chain(supplied)
+                .find(|(bound, _)| bound == name)
+                .map(|(_, value)| (name.to_owned(), *value))
+                .ok_or_else(|| StateClauseReplayError::MissingField {
+                    field: name.to_owned(),
+                })
+        })
+        .collect()
 }
 
 /// The documents the request provides: the domain packages, then the one current snapshot. The
@@ -287,6 +354,7 @@ impl StateClauseReplay {
             anchor,
             snapshot_label,
             playback,
+            unread_values,
             obligation_identity,
         } = inputs;
         let (run, dependencies) = run.admit().map_err(StateClauseReplayError::Dependencies)?;
@@ -313,9 +381,10 @@ impl StateClauseReplay {
         }
 
         let graph = ClauseGraphView::new(package);
-        ensure_declaring_object(&graph, clause_node, object_node, &object.object_type)?;
+        let read = ensure_declaring_object(&graph, clause_node, object_node, &object.object_type)?;
         let fields = state_fields(&graph, object_node, &requested)?;
-        let values = bind(&fields, &playback, Side::Playback)?;
+        let drawn = bind(&fields, &playback, Side::Playback)?;
+        let values = complete_snapshot(&graph, object_node, &drawn, &read, &unread_values)?;
 
         let model = model_header(&packages, &object.object_type)
             .map_err(|cause| StateClauseReplayError::Document(DocumentError::Model(cause)))?;
@@ -338,7 +407,8 @@ impl StateClauseReplay {
 
         let selected =
             QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;
-        let bindings = values
+        // The transcript carries the playback's bindings only, never a supplied value.
+        let bindings = drawn
             .iter()
             .map(|(field, value)| (field.as_str(), i128::from(*value)))
             .collect::<Vec<_>>();
