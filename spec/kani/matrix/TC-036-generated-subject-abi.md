@@ -156,6 +156,10 @@ yield no harness.
     fixed source unit; a valid tuple replays as one owner carried quantity per leaf, each
     malformed or out-of-domain case refuses with no replay, and an endpoint beyond `i64` is
     `unsupported` with no harness (FR-025-AC-18).
+19. One arity-0 union operand of a `case` scrutinee has one grouped `i64` binding with its
+    declaration, ordered member list and index bounds `0..member_count`; a valid index replays as the member
+    at that declared position, and each out-of-range, missing, duplicate or foreign binding refuses with a
+    typed reason and no replay (FR-025-AC-19, PLANNED, IR-1447).
 
 ## Status
 
