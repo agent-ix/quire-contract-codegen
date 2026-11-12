@@ -132,4 +132,10 @@ pub enum RequirementRecordMismatch {
         /// The record's path condition.
         record: Vec<RequirementGuard>,
     },
+    /// A guard's node is not a context root in the item's contiguous context span, so the
+    /// admitted package holds no accounting for the guard.
+    GuardContextMissing {
+        /// The guard's occurrence.
+        guard: RequirementOccurrence,
+    },
 }

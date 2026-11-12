@@ -2095,6 +2095,7 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
     let result_selection = quire_contract_codegen::ContractDriverResultSelection::NotApplicable;
     let items = [ObligationItem::ScalarClaim {
         path_condition: &[],
+        requirement_occurrence: None,
         source: &package,
         package: &contract,
         claim_map: &claim_map,
@@ -2599,6 +2600,7 @@ fn kani_routed_preflight_requires_selected_result_occurrences() {
         .enumerate()
         .map(|(claim_index, claim)| ObligationItem::ScalarClaim {
             path_condition: &[],
+            requirement_occurrence: None,
             source: &package,
             package: &contract,
             claim_map: &claim_map,

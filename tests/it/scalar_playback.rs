@@ -758,3 +758,91 @@ fn original_limits_refuse_changed_retained_identity_source_or_record() {
         u64::MAX
     );
 }
+
+fn guard_transcript(identity: &ScalarObligationIdentity, entries: &[(&str, &[u8])]) -> String {
+    let entries = entries
+        .iter()
+        .map(|(comment, bytes)| format!("// {comment}\nvec!{bytes:?},\n"))
+        .collect::<String>();
+    format!(
+        "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"scalar parity\"\nfn playback() {{\nlet concrete_vals: Vec<Vec<u8>> = vec![\n{entries}];\nkani::concrete_playback_run(concrete_vals, harness);\n}}",
+        identity.module_symbol, identity.harness_symbol,
+    )
+}
+
+#[trace("FR-032-AC-19")]
+#[test]
+fn guard_entries_follow_the_operands_and_never_reach_the_operand_vector() {
+    use quire_contract_codegen::{ScalarGuardDomain, ScalarGuardInput};
+    let base = sum();
+    let node = base.node_id.clone();
+    let guard = |identifier: &str, domain| ScalarGuardInput {
+        identifier: identifier.to_owned(),
+        parameter: node.clone(),
+        domain,
+    };
+    let mut integer = base.clone();
+    integer.guard_inputs = vec![guard(
+        "guard_0",
+        ScalarGuardDomain::Integer {
+            minimum: 0,
+            maximum: 9,
+        },
+    )];
+    let mut boolean = base.clone();
+    boolean.guard_inputs = vec![guard("guard_0", ScalarGuardDomain::Boolean)];
+    let three = 3_i64.to_le_bytes();
+    let seventeen = 17_i64.to_le_bytes();
+    let nine = 9_i64.to_le_bytes();
+    let ten = 10_i64.to_le_bytes();
+
+    let valid = guard_transcript(&integer, &[("3", &three), ("17", &seventeen), ("9", &nine)]);
+    assert_eq!(decode_from_transcript(&integer, &valid), Ok(vec![3, 17]));
+    let valid = guard_transcript(
+        &boolean,
+        &[("3", &three), ("17", &seventeen), ("true", &[1])],
+    );
+    assert_eq!(decode_from_transcript(&boolean, &valid), Ok(vec![3, 17]));
+
+    refusal(
+        &integer,
+        &guard_transcript(&integer, &[("3", &three), ("17", &seventeen)]),
+        "kani_witness_arity_mismatch",
+    );
+    refusal(
+        &integer,
+        &guard_transcript(
+            &integer,
+            &[("3", &three), ("17", &seventeen), ("9", &[9, 0, 0, 0])],
+        ),
+        "kani_witness_width_mismatch",
+    );
+    refusal(
+        &boolean,
+        &guard_transcript(
+            &boolean,
+            &[
+                ("3", &three),
+                ("17", &seventeen),
+                ("1", &[1, 0, 0, 0, 0, 0, 0, 0]),
+            ],
+        ),
+        "kani_witness_width_mismatch",
+    );
+    refusal(
+        &boolean,
+        &guard_transcript(&boolean, &[("3", &three), ("17", &seventeen), ("2", &[2])]),
+        "cg_scalar_witness_guard_out_of_domain",
+    );
+    refusal(
+        &integer,
+        &guard_transcript(&integer, &[("3", &three), ("17", &seventeen), ("10", &ten)]),
+        "cg_scalar_witness_guard_out_of_domain",
+    );
+    // An identity without guard inputs decodes as before.
+    let plain = sum();
+    assert_eq!(
+        decode_from_transcript(&plain, &transcript(&plain, &[3, 17])),
+        Ok(vec![3, 17])
+    );
+}

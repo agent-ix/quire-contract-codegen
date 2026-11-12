@@ -314,22 +314,19 @@ diagnostic-string parsing.
     `Integer { minimum: 0, maximum: 9 }`, with no harness, also for `20 < x`; the Boolean case
     names the inner `p` guard, `p` and `Boolean`; the unguarded control remains
     `result_bound_unreachable` (FR-022-AC-34).
-28. The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
+28. Planned (real-Kani lane, not run by IR-304 slice (b)). The infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`
     (FR-022-AC-35).
 29. The `NotApplicable` control keeps its result; the recorded node and the attached requirement
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).
 30. The reported refusals are `ScalarSelectionMismatch` at the higher index, `RequirementRecord`,
     `ResultBoundMismatch`, `ApplicationMismatch` and `RecordMissing`; `x + m` is
-    `requires_bound` and `n >= 0` is `operation_not_rendered` in both slices; `j`'s two-guard
-    `x + 100` is `path_guard_not_lowered` in slice (b) (FR-022-AC-37).
-31. In slice (a), in one call, `f`'s then item and `h`'s item are `path_guard_not_lowered` with
-    `guard_lowering_not_implemented` and no harness, and `g`'s item is `Supported` with a
-    harness (FR-022-AC-38).
+    `requires_bound` and `n >= 0` is `operation_not_rendered`; `j`'s two-guard
+    `x + 100` is `path_guard_not_lowered` (FR-022-AC-37).
 
 ## Scoped evidence status (IR-1316)
 
-FR-022-AC-26, AC-28, AC-36 and AC-38 are covered (IR-304 slice (a)), and AC-37 is covered except
-its two-guard `j` case. AC-27 and AC-31 to AC-35, with the two-guard case of AC-37, are Planned
-for slice (b), which also retires AC-38 (FR-022, "Scoped evidence status"). Same-node selected-bound
-controls alone do not establish ordered guards, which slice (b) lowers. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
+FR-022-AC-26 to AC-34, AC-36 and AC-37 are covered (IR-304 slices (a) and (b)), and AC-38 is
+retired. Step 28, the real-Kani `CoverUnsatisfied`/`Verified` execution of FR-022-AC-35,
+stays Planned: it needs the real-Kani lane, and the harness shape it runs (the assumption and
+the guard input) is asserted by steps 21 and 26. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
 recorded in FR-022 and receives no backend-execution credit.

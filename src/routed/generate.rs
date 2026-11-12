@@ -648,6 +648,16 @@ fn check_requirement_record(
             },
         );
     }
+    if let Some(guard) = requirement.path_condition.iter().find(|guard| {
+        !package_items.has_context_root(item.request_index, &guard.occurrence.node_id)
+    }) {
+        return refuse(
+            Some(requirement),
+            RequirementRecordMismatch::GuardContextMissing {
+                guard: guard.occurrence.clone(),
+            },
+        );
+    }
     Ok(())
 }
 
@@ -754,6 +764,10 @@ fn generate_kani(
                     .requirement
                     .as_ref()
                     .map_or(&[], |requirement| requirement.path_condition.as_slice()),
+                requirement_occurrence: item
+                    .requirement
+                    .as_ref()
+                    .map(|requirement| &requirement.occurrence),
             })
         })
         .collect::<Result<Vec<_>, RoutedGenerationError>>()?;
@@ -1113,6 +1127,9 @@ mod tests {
                 harness_symbol: HarnessSymbol::try_from(symbol).expect("a harness symbol"),
                 arguments: Vec::new(),
                 inferred_operands: Vec::new(),
+                requirement_occurrence: None,
+                path_condition: Vec::new(),
+                guard_inputs: Vec::new(),
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),

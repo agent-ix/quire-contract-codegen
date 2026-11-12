@@ -8,10 +8,10 @@ use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, generate_routed,
     negotiate_kani_obligations, routed_contract_lowering_profile, ContractDriverResultSelection,
     ContractRequestPosition, GenerationContexts, KaniGenerationContext, KaniObligationOutcome,
-    KaniObligationRequest, KindOutput, ObligationDisposition, ObligationItem, PathGuardRefusal,
-    RequirementGuard, RequirementOccurrence, RequirementRecordInput, RequirementRecordMismatch,
-    RequirementRecords, RoutedGeneration, RoutedGenerationError, RoutedGenerationItem,
-    RoutedRequirement, UnsupportedObligation,
+    KaniObligationRequest, KindOutput, ObligationDisposition, ObligationItem, RequirementGuard,
+    RequirementOccurrence, RequirementRecordInput, RequirementRecordMismatch, RequirementRecords,
+    RoutedGeneration, RoutedGenerationError, RoutedGenerationItem, RoutedRequirement,
+    UnsupportedObligation,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -39,15 +39,22 @@ fn direct_increment_record() -> String {
 
 /// The direct FR-015 outcome for the QSL-shaped node `code`, under one guard when `guarded`.
 fn direct_outcome(code: u32, guarded: bool) -> KaniObligationOutcome {
+    direct_outcome_guarded(code, guarded.then_some(code))
+}
+
+/// The direct FR-015 outcome for the node `code`, under one guard on the node `guard`.
+fn direct_outcome_guarded(code: u32, guard: Option<u32>) -> KaniObligationOutcome {
     let mut builder = package::qsl_shaped_package();
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
     let node_id = ids.resolve(&package::code_id(code));
-    let path_condition = [RequirementGuard {
-        occurrence: occurrence(&node_id, 0),
-        holds: true,
-    }];
-    let path_condition = if guarded { &path_condition[..] } else { &[] };
+    let path_condition = guard
+        .map(|guard| RequirementGuard {
+            occurrence: occurrence(&ids.resolve(&package::code_id(guard)), 0),
+            holds: true,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
     let routed = [route(0, &node_id)];
     let admitted = admitted_routing_input(&checked, &routed);
     let item = derive_exact_scalar_items(&checked, std::slice::from_ref(&node_id))
@@ -69,7 +76,8 @@ fn direct_outcome(code: u32, guarded: bool) -> KaniObligationOutcome {
         })
         .expect("a driver position");
     let items = [ObligationItem::ScalarClaim {
-        path_condition,
+        path_condition: &path_condition,
+        requirement_occurrence: None,
         source: &checked,
         package: &admitted.package,
         claim_map: &claim_map,
@@ -86,9 +94,7 @@ fn direct_outcome(code: u32, guarded: bool) -> KaniObligationOutcome {
     .expect("FR-015 accepts the request")
 }
 
-/// The golden half of FR-022-AC-31 that slice (a) owns; the routed `requirement_occurrence`
-/// identity half lands in slice (b), which tags the criterion.
-#[trace("TC-033")]
+#[trace("FR-022-AC-31", "TC-033")]
 #[test]
 fn direct_increment_record_equals_the_committed_golden() {
     let golden = include_str!("../fixtures/kani-scalar/direct-increment-record.json");
@@ -794,10 +800,6 @@ struct Guarded {
     f_conversion: CheckedNodeId,
     p: CheckedNodeId,
     g_add: CheckedNodeId,
-    g_conversion: CheckedNodeId,
-    h_add: CheckedNodeId,
-    h_conversion: CheckedNodeId,
-    gt: CheckedNodeId,
     checked: CheckedPackageV2,
 }
 
@@ -846,21 +848,11 @@ fn guarded() -> Guarded {
         .expect("f's Boolean guard parameter")
         .node_id
         .clone();
-    let gt = nodes
-        .iter()
-        .find(|node| operation(node) == Some("quire.op.integer.gt"))
-        .expect("h's comparison")
-        .node_id
-        .clone();
     Guarded {
         f_conversion: conversion(&f_add),
-        g_conversion: conversion(&g_add),
-        h_conversion: conversion(&h_add),
         f_add,
         g_add,
-        h_add,
         p,
-        gt,
         checked,
     }
 }
@@ -871,66 +863,6 @@ fn conv_occurrence(
     ordinal: usize,
 ) -> RequirementOccurrence {
     occurrence(node, occurrences(checked, node)[ordinal])
-}
-
-/// Slice (a): a non-empty path condition settles per item as `path_guard_not_lowered` with
-/// `guard_lowering_not_implemented` naming its first guard, whatever the guard's form, and an
-/// unguarded sibling keeps its harness.
-#[trace("FR-022-AC-38", "TC-033")]
-#[test]
-fn guarded_items_settle_unsupported_and_the_unguarded_sibling_keeps_its_harness() {
-    let guarded = guarded();
-    let f_guard = RequirementGuard {
-        occurrence: conv_occurrence(&guarded.checked, &guarded.p, 0),
-        holds: true,
-    };
-    let h_guard = RequirementGuard {
-        occurrence: conv_occurrence(&guarded.checked, &guarded.gt, 0),
-        holds: true,
-    };
-    let specs = vec![
-        ItemSpec {
-            application: conv_occurrence(&guarded.checked, &guarded.f_add, 0),
-            conversion: Some(conv_occurrence(&guarded.checked, &guarded.f_conversion, 0)),
-            path: vec![f_guard.clone()],
-        },
-        ItemSpec {
-            application: conv_occurrence(&guarded.checked, &guarded.h_add, 0),
-            conversion: Some(conv_occurrence(&guarded.checked, &guarded.h_conversion, 0)),
-            path: vec![h_guard.clone()],
-        },
-        ItemSpec {
-            application: conv_occurrence(&guarded.checked, &guarded.g_add, 0),
-            conversion: Some(conv_occurrence(&guarded.checked, &guarded.g_conversion, 0)),
-            path: Vec::new(),
-        },
-    ];
-    let scenario = Scenario::new(guarded.checked, specs);
-    let generation = scenario
-        .generate(&scenario.valid(), scenario.records())
-        .expect("valid records route");
-    for (index, guard) in [(0, &f_guard), (1, &h_guard)] {
-        let (record, harness) = kani_record(&generation, index);
-        assert_eq!(
-            record.disposition,
-            ObligationDisposition::Unsupported {
-                reason: UnsupportedObligation::PathGuardNotLowered {
-                    guard: guard.occurrence.clone(),
-                    reason: PathGuardRefusal::GuardLoweringNotImplemented,
-                }
-            }
-        );
-        assert!(harness.is_none());
-        let wire = serde_json::to_value(&record.disposition).expect("serializes");
-        assert_eq!(wire["reason"]["code"], "path_guard_not_lowered");
-        assert_eq!(wire["reason"]["reason"], "guard_lowering_not_implemented");
-    }
-    let (record, harness) = kani_record(&generation, 2);
-    assert!(matches!(
-        record.disposition,
-        ObligationDisposition::Supported { .. }
-    ));
-    assert!(harness.is_some());
 }
 
 /// A `NotApplicable` item authenticates no occurrence, so a node with records is refused with or
@@ -1007,21 +939,15 @@ fn not_applicable_items_with_records_are_refused() {
         )
     );
 
-    // routing the same node `OwnResult` with its own requirement is accepted and reaches the
-    // guard handling
+    // routing the same node `OwnResult` with its own requirement is accepted
     let accepted = scenario
         .generate(&scenario.valid(), records.clone())
         .expect("OwnResult items with their own requirements are accepted");
-    for (index, requirement) in scenario.requirements.iter().enumerate() {
-        assert_eq!(
+    for index in 0..scenario.requirements.len() {
+        assert!(matches!(
             kani_record(&accepted, index).0.disposition,
-            ObligationDisposition::Unsupported {
-                reason: UnsupportedObligation::PathGuardNotLowered {
-                    guard: requirement.path_condition[0].occurrence.clone(),
-                    reason: PathGuardRefusal::GuardLoweringNotImplemented,
-                }
-            }
-        );
+            ObligationDisposition::Supported { .. }
+        ));
     }
 
     // a node with no record and no requirement keeps its unguarded behaviour
@@ -1121,7 +1047,7 @@ fn claim_refusals_precede_the_guard_refusal() {
 
 /// The guard refusal is reported ahead of `domain_not_representable_in_i64` and
 /// `result_bound_unreachable`, which the same node without a guard is settled as.
-#[trace("FR-022-AC-38", "TC-033")]
+#[trace("FR-022-AC-32", "TC-033")]
 #[test]
 fn guard_refusal_precedes_the_bound_and_reachability_refusals() {
     for (code, plain) in [
@@ -1141,6 +1067,450 @@ fn guard_refusal_precedes_the_bound_and_reachability_refusals() {
         assert_eq!(reason(false)["code"], plain);
         let guarded = reason(true);
         assert_eq!(guarded["code"], "path_guard_not_lowered");
-        assert_eq!(guarded["reason"], "guard_lowering_not_implemented");
+        assert_eq!(guarded["reason"], "unsupported_guard_form");
     }
+}
+
+// ---- IR-304 slice (b): guard lowering ----
+
+type NodePredicate<'a> = &'a dyn Fn(&quire_contract_model::CheckedSemanticNodeV2) -> bool;
+
+fn param_named(
+    name: &'static str,
+) -> impl Fn(&quire_contract_model::CheckedSemanticNodeV2) -> bool {
+    move |node| {
+        node.semantic_form.as_ref() == "parameter"
+            && format!("{:?}", node.body).contains(&format!("value: \"{name}\""))
+    }
+}
+
+fn op_is(identity: &'static str) -> impl Fn(&quire_contract_model::CheckedSemanticNodeV2) -> bool {
+    move |node| operation(node) == Some(identity)
+}
+
+/// A one-function package whose `application` node (a `+`) is routed under `guards`, each a node
+/// selected by predicate with its `holds`; the application is converted to its declared result.
+fn guard_scenario(
+    name: &str,
+    source: &str,
+    application: NodePredicate,
+    guards: &[(NodePredicate, bool)],
+) -> Scenario {
+    let checked = qsl_package(name, source);
+    let nodes = &checked.resolved_graph().nodes;
+    let find = |predicate: NodePredicate| {
+        let matches = nodes
+            .iter()
+            .filter(|node| predicate(node))
+            .map(|node| node.node_id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1, "one node selected, got {matches:?}");
+        matches[0].clone()
+    };
+    let add = find(application);
+    let conversion = narrow_of(&checked, &add)
+        .first()
+        .map(|node| (*node).clone());
+    let path = guards
+        .iter()
+        .map(|(predicate, holds)| RequirementGuard {
+            occurrence: conv_occurrence(&checked, &find(*predicate), 0),
+            holds: *holds,
+        })
+        .collect();
+    let spec = ItemSpec {
+        application: conv_occurrence(&checked, &add, 0),
+        conversion: conversion.map(|node| conv_occurrence(&checked, &node, 0)),
+        path,
+    };
+    Scenario::new(checked, vec![spec])
+}
+
+fn guard_fn(signature: &str, body: &str) -> String {
+    let returns = if body.contains("100") {
+        "Int[0, 200]"
+    } else {
+        "Int[0, 10]"
+    };
+    format!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction t using v({signature}): {returns} pure {{ {body} }}\n"
+    )
+}
+
+fn is_plus(addend: &'static str) -> impl Fn(&quire_contract_model::CheckedSemanticNodeV2) -> bool {
+    move |node| {
+        operation(node) == Some("quire.op.integer.add")
+            && format!("{:?}", node.node_id.path).contains(&format!("\"{addend}\""))
+    }
+}
+
+/// The disposition JSON and harness of the scenario's one item.
+fn settle(
+    scenario: &Scenario,
+) -> (
+    serde_json::Value,
+    Option<quire_contract_codegen::KaniScalarObligationHarness>,
+) {
+    let generation = scenario
+        .generate(&scenario.valid(), scenario.records())
+        .expect("valid records route");
+    let (record, harness) = kani_record(&generation, 0);
+    (
+        serde_json::to_value(&record.disposition).expect("serializes"),
+        harness.cloned(),
+    )
+}
+
+fn args(harness: &quire_contract_codegen::KaniScalarObligationHarness) -> Vec<(i64, i64)> {
+    harness
+        .identity
+        .arguments
+        .iter()
+        .map(|argument| (argument.minimum, argument.maximum))
+        .collect()
+}
+
+fn guard_unsupported(
+    signature: &str,
+    body: &str,
+    plus: &'static str,
+    guards: &[(NodePredicate, bool)],
+) -> serde_json::Value {
+    let scenario = guard_scenario(
+        "ir304-refusal",
+        &guard_fn(signature, body),
+        &is_plus(plus),
+        guards,
+    );
+    let (disposition, harness) = settle(&scenario);
+    assert!(harness.is_none(), "no harness for a refused guard");
+    disposition["reason"].clone()
+}
+
+#[trace("FR-022-AC-27", "TC-033")]
+#[test]
+fn boolean_guards_lower_to_assumptions_in_path_order() {
+    let then = guard_scenario(
+        "ir304-then",
+        &guard_fn("p: Boolean, x: Int[0, 9]", "if p then x + 1 else x + 1"),
+        &is_plus("1"),
+        &[(&param_named("p"), true)],
+    );
+    let (disposition, harness) = settle(&then);
+    assert_eq!(disposition["disposition"], "supported");
+    let harness = harness.expect("a harness");
+    assert!(
+        harness.rust.contents.contains("kani::assume(p);")
+            || harness.rust.contents.contains("assume(guard_0)"),
+        "{}",
+        harness.rust.contents
+    );
+    assert_eq!(harness.identity.guard_inputs.len(), 1);
+    assert_eq!(
+        harness.identity.path_condition,
+        then.requirements[0].path_condition
+    );
+    assert_eq!(
+        harness.identity.requirement_occurrence,
+        Some(then.requirements[0].occurrence.clone())
+    );
+    let otherwise = guard_scenario(
+        "ir304-else",
+        &guard_fn("p: Boolean, x: Int[0, 9]", "if p then x + 1 else x + 1"),
+        &is_plus("1"),
+        &[(&param_named("p"), false)],
+    );
+    let (_, negated) = settle(&otherwise);
+    let negated = negated.expect("a harness");
+    assert!(
+        negated.rust.contents.contains("!guard_0") || negated.rust.contents.contains("!p"),
+        "{}",
+        negated.rust.contents
+    );
+    assert_ne!(negated.rust.contents, harness.rust.contents);
+
+    let nested = guard_scenario(
+        "ir304-nested",
+        &guard_fn(
+            "p: Boolean, q: Boolean, x: Int[0, 9]",
+            "if p then (if q then x + 1 else 0) else 0",
+        ),
+        &is_plus("1"),
+        &[(&param_named("p"), true), (&param_named("q"), true)],
+    );
+    let (_, nested) = settle(&nested);
+    let nested = nested.expect("a harness");
+    let text = &nested.rust.contents;
+    let first = text.find("assume").expect("an assumption");
+    let second = text[first + 1..]
+        .find("assume")
+        .expect("a second assumption")
+        + first
+        + 1;
+    assert!(first < second);
+    assert_eq!(nested.identity.guard_inputs.len(), 2);
+    assert!(
+        nested.identity.guard_inputs[0].identifier < nested.identity.guard_inputs[1].identifier
+    );
+}
+
+#[trace("FR-022-AC-31", "TC-033")]
+#[test]
+fn routed_identity_carries_the_occurrence_and_the_direct_one_does_not() {
+    let scenario = rr16();
+    let generation = scenario
+        .generate(&scenario.valid(), scenario.records())
+        .expect("both occurrences route");
+    let mut occurrences = Vec::new();
+    for index in 0..2 {
+        let harness = kani_record(&generation, index).1.expect("a harness");
+        assert_eq!(
+            harness.identity.requirement_occurrence.as_ref(),
+            Some(&scenario.requirements[index].occurrence)
+        );
+        assert!(harness.identity.path_condition.is_empty());
+        assert!(harness.identity.guard_inputs.is_empty());
+        occurrences.push(harness.identity.requirement_occurrence.clone());
+    }
+    assert_ne!(occurrences[0], occurrences[1]);
+    let record = direct_increment_record();
+    assert_eq!(
+        record,
+        include_str!("../fixtures/kani-scalar/direct-increment-record.json")
+    );
+    assert!(!record.contains("requirementOccurrence"));
+}
+
+#[trace("FR-022-AC-32", "TC-033")]
+#[test]
+fn unlowerable_guards_settle_per_item_with_their_reason() {
+    let reason = guard_unsupported(
+        "x: Int[0, 9]",
+        "if x + 1 > 5 then x + 100 else 0",
+        "100",
+        &[(&op_is("quire.op.integer.gt"), true)],
+    );
+    assert_eq!(reason["code"], "path_guard_not_lowered");
+    assert_eq!(reason["reason"], "unsupported_guard_form");
+
+    let reason = guard_unsupported(
+        "n: Integer, x: Int[0, 9]",
+        "if n >= 0 then x + 1 else 0",
+        "1",
+        &[(&op_is("quire.op.integer.ge"), true)],
+    );
+    assert_eq!(reason["code"], "path_guard_not_lowered");
+    assert!(
+        reason["reason"]["unbounded_guard_operand"].is_object(),
+        "{reason}"
+    );
+
+    let reason = guard_unsupported(
+        "x: Int[0, 9]",
+        "if x < 100000000000000000000000 then x + 1 else 0",
+        "1",
+        &[(&op_is("quire.op.integer.lt"), true)],
+    );
+    assert_eq!(reason["code"], "path_guard_not_lowered");
+    assert!(
+        reason["reason"]["guard_literal_not_i64"].is_object(),
+        "{reason}"
+    );
+}
+
+#[trace("FR-022-AC-32", "TC-033")]
+#[test]
+fn a_guard_whose_context_root_is_dropped_refuses_the_whole_call() {
+    let mut scenario = guard_scenario(
+        "ir304-context",
+        &guard_fn("p: Boolean, x: Int[0, 9]", "if p then x + 1 else x + 1"),
+        &is_plus("1"),
+        &[(&param_named("p"), true)],
+    );
+    // A record and requirement that agree on a guard whose node the package has no context root
+    // for: every earlier record check passes.
+    let unrooted = scenario
+        .checked
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| param_named("x")(node))
+        .expect("the parameter x")
+        .node_id
+        .clone();
+    let guard = RequirementGuard {
+        occurrence: conv_occurrence(&scenario.checked, &unrooted, 0),
+        holds: true,
+    };
+    scenario.requirements[0].path_condition.push(guard.clone());
+    let error = scenario.refusal(&scenario.valid(), scenario.records());
+    assert_eq!(
+        unboxed(&error),
+        Some((
+            0,
+            RequirementRecordMismatch::GuardContextMissing {
+                guard: guard.occurrence
+            }
+        ))
+    );
+}
+
+#[trace("FR-022-AC-33", "TC-033")]
+#[trace("FR-032-AC-19", "TC-047")]
+#[test]
+fn integer_guards_narrow_the_operand_domains() {
+    let signature = "x: Int[0, 9]";
+    let body = "if x > 5 then x + 100 else 0";
+    let scenario = guard_scenario(
+        "ir304-narrow",
+        &guard_fn("x: Int[0, 9]", "if x > 5 then x + 100 else 0"),
+        &is_plus("100"),
+        &[(&op_is("quire.op.integer.gt"), true)],
+    );
+    let _ = (signature, body);
+    let (disposition, harness) = settle(&scenario);
+    assert_eq!(disposition["disposition"], "supported", "{disposition}");
+    let harness = harness.expect("a harness");
+    assert_eq!(args(&harness), vec![(6, 9), (100, 100)]);
+    assert!(harness.rust.contents.contains("assume"));
+
+    let negated = guard_scenario(
+        "ir304-narrow-else",
+        &guard_fn("x: Int[0, 9]", "if x > 5 then x + 100 else x + 100"),
+        &is_plus("100"),
+        &[(&op_is("quire.op.integer.gt"), false)],
+    );
+    let (_, negated) = settle(&negated);
+    assert_eq!(args(&negated.expect("a harness")), vec![(0, 5), (100, 100)]);
+
+    let two = guard_scenario(
+        "ir304-two",
+        &guard_fn(
+            "x: Int[0, 9], y: Int[0, 9]",
+            "if x < y then x + 1 else x + 1",
+        ),
+        &is_plus("1"),
+        &[(&op_is("quire.op.integer.lt"), true)],
+    );
+    let (disposition, two) = settle(&two);
+    assert_eq!(disposition["disposition"], "supported", "{disposition}");
+    let two = two.expect("a harness");
+    assert_eq!(args(&two), vec![(0, 9), (1, 1)]);
+    assert_eq!(two.identity.guard_inputs.len(), 1);
+    assert_eq!(
+        two.identity.guard_inputs[0].domain,
+        quire_contract_codegen::ScalarGuardDomain::Integer {
+            minimum: 0,
+            maximum: 9
+        }
+    );
+}
+
+#[trace("FR-022-AC-34", "TC-033")]
+#[test]
+fn contradictory_guards_settle_path_condition_unsatisfiable() {
+    for (name, body, guard) in [
+        (
+            "dead-gt",
+            "if x > 20 then x + 100 else 0",
+            "quire.op.integer.gt",
+        ),
+        (
+            "dead-lt",
+            "if 20 < x then x + 100 else 0",
+            "quire.op.integer.lt",
+        ),
+    ] {
+        let scenario = guard_scenario(
+            &format!("ir304-{name}"),
+            &guard_fn("x: Int[0, 9]", body),
+            &is_plus("100"),
+            &[(&op_is(guard), true)],
+        );
+        let (disposition, harness) = settle(&scenario);
+        assert!(harness.is_none());
+        assert_eq!(
+            disposition["reason"]["code"], "path_condition_unsatisfiable",
+            "{disposition}"
+        );
+    }
+    // the same node without a guard is `result_bound_unreachable`
+    let KaniObligationOutcome::Emitted { records, .. } =
+        direct_outcome(package::QSL_PLUS_HUNDRED, false)
+    else {
+        panic!("the request is rejected");
+    };
+    let disposition = serde_json::to_value(&records[0].disposition).expect("serializes");
+    assert_eq!(disposition["reason"]["code"], "result_bound_unreachable");
+}
+
+#[trace("FR-022-AC-37", "TC-033")]
+#[test]
+fn an_unlowered_second_guard_precedes_unsatisfiability() {
+    let scenario = guard_scenario(
+        "ir304-j",
+        &guard_fn(
+            "x: Int[0, 9]",
+            "if x > 20 then (if x + 1 > 5 then x + 100 else 0) else 0",
+        ),
+        &is_plus("100"),
+        &[
+            (
+                &|node| {
+                    operation(node) == Some("quire.op.integer.gt")
+                        && !format!("{:?}", node.body).contains("add")
+                },
+                true,
+            ),
+            (
+                &|node| {
+                    operation(node) == Some("quire.op.integer.gt")
+                        && format!("{:?}", node.body).contains("add")
+                },
+                true,
+            ),
+        ],
+    );
+    let (disposition, harness) = settle(&scenario);
+    assert!(harness.is_none());
+    assert_eq!(
+        disposition["reason"]["code"], "path_guard_not_lowered",
+        "{disposition}"
+    );
+}
+
+#[trace("FR-022-AC-32", "TC-033")]
+#[test]
+fn a_guard_on_a_node_that_is_no_lowered_root_is_not_lowered() {
+    let KaniObligationOutcome::Emitted { records, .. } =
+        direct_outcome_guarded(package::QSL_INC, Some(package::QSL_LITERAL_HUNDRED))
+    else {
+        panic!("the request is rejected");
+    };
+    let disposition = serde_json::to_value(&records[0].disposition).expect("serializes");
+    assert_eq!(disposition["reason"]["code"], "path_guard_not_lowered");
+    assert_eq!(disposition["reason"]["reason"], "guard_root_not_lowered");
+}
+
+#[trace("FR-022-AC-34", "TC-033")]
+#[test]
+fn a_contradicted_boolean_guard_names_the_parameter_and_its_domain() {
+    let scenario = guard_scenario(
+        "ir304-dead-boolean",
+        &guard_fn("p: Boolean, x: Int[0, 9]", "if p then x + 1 else x + 1"),
+        &is_plus("1"),
+        &[(&param_named("p"), true), (&param_named("p"), false)],
+    );
+    let (disposition, harness) = settle(&scenario);
+    assert!(harness.is_none());
+    let reason = &disposition["reason"];
+    assert_eq!(
+        reason["code"], "path_condition_unsatisfiable",
+        "{disposition}"
+    );
+    assert_eq!(
+        reason["declared"],
+        serde_json::json!({"domain": "boolean"}),
+        "{disposition}"
+    );
 }

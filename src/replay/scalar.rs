@@ -6,7 +6,8 @@
 use std::collections::BTreeSet;
 
 use crate::kani::{
-    abi::integer_scalar_operand_count, identity::ScalarObligationIdentity,
+    abi::integer_scalar_operand_count,
+    identity::{ScalarGuardDomain, ScalarObligationIdentity},
     output::playback::Playback,
 };
 use crate::replay::witness::DecodeFailure;
@@ -67,13 +68,15 @@ pub fn decode_scalar_falsification(
             &identity.operation_identity,
         )
     })?;
-    if playback.entries.len() != arity {
+    let inputs = &identity.guard_inputs;
+    if playback.entries.len() != arity + inputs.len() {
         return Err(failure("kani_witness_arity_mismatch", playback.check_text));
     }
+    let (operand_entries, guard_entries) = playback.entries.split_at(arity);
     let values = identity
         .arguments
         .iter()
-        .zip(&playback.entries)
+        .zip(operand_entries)
         .map(|(argument, (comment, bytes))| {
             let bytes: [u8; 8] = bytes
                 .as_slice()
@@ -95,6 +98,34 @@ pub fn decode_scalar_falsification(
                 "cg_scalar_witness_operand_out_of_domain",
                 &argument.identifier,
             ));
+        }
+    }
+    for (input, (comment, bytes)) in inputs.iter().zip(guard_entries) {
+        let identifier = input.identifier.as_str();
+        let in_domain = match input.domain {
+            ScalarGuardDomain::Boolean => {
+                let [byte] = bytes.as_slice() else {
+                    return Err(failure("kani_witness_width_mismatch", identifier));
+                };
+                if comment.boolean != Some(*byte == 1) && *byte <= 1 {
+                    return Err(failure("kani_witness_comment_mismatch", identifier));
+                }
+                *byte <= 1
+            }
+            ScalarGuardDomain::Integer { minimum, maximum } => {
+                let bytes: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| failure("kani_witness_width_mismatch", identifier))?;
+                let value = i64::from_le_bytes(bytes);
+                if comment.integer != Some(value) {
+                    return Err(failure("kani_witness_comment_mismatch", identifier));
+                }
+                (minimum..=maximum).contains(&value)
+            }
+        };
+        if !in_domain {
+            return Err(failure("cg_scalar_witness_guard_out_of_domain", identifier));
         }
     }
     Ok(values)

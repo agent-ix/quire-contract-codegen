@@ -436,7 +436,7 @@ fn reference_form<Body: GraphBody>(graph: &Graph<'_, Body>, term: &CheckedTerm) 
 /// `Int[0, 9]` is typed by a `bounded_domain` whose own `semantic_type` is its base scalar type:
 /// QSL emits a bounded domain directly over its scalar base, so one step reaches the type the form
 /// is read from. A node's result typed by a bounded domain reads the same way.
-pub(super) fn scalar_type_form<Body: GraphBody>(
+pub(crate) fn scalar_type_form<Body: GraphBody>(
     graph: &Graph<'_, Body>,
     type_id: &CheckedNodeId,
 ) -> Option<String> {
