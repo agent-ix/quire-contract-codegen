@@ -337,6 +337,20 @@ impl TractabilityTable {
         Self::parse(path, &bytes)
     }
 
+    /// The measured row of the general `rt::Integer` scalar route (IR-1530), embedded from
+    /// `docs/qualification/ir1530-general-route-scalar-table.json`, the single source. A caller
+    /// passes it to the decided run wrappers to opt in to the refusal (FR-056-AC-14).
+    ///
+    /// # Errors
+    ///
+    /// [`TractabilityLoadError`] if the embedded file is malformed (a build defect a test pins).
+    pub fn shipped_general_route_scalar() -> Result<Self, TractabilityLoadError> {
+        Self::parse(
+            Path::new("docs/qualification/ir1530-general-route-scalar-table.json"),
+            include_bytes!("../../docs/qualification/ir1530-general-route-scalar-table.json"),
+        )
+    }
+
     fn parse(path: &Path, bytes: &[u8]) -> Result<Self, TractabilityLoadError> {
         let values: Vec<serde_json::Value> =
             serde_json::from_slice(bytes).map_err(|error| TractabilityLoadError::NotATable {

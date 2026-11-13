@@ -52,11 +52,11 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
     multiply at or above the measured-bad row's bound and assert it is refused before any Kani
     launch, and a narrower multiply is not; the
     Decimal multiply row is used only once IR-1444 lets it reach the decider (FR-056-AC-13).
-14. Load `docs/qualification/ir1530-general-route-scalar-table.json`, build the general-route
+14. Load the embedded general-route table (assert it equals `docs/qualification/ir1530-general-route-scalar-table.json`), build the general-route
     routed `x + 1` scalar harness and submit it to `execute_kani_obligation_decided` and
     `execute_kani_obligations_decided` with a launcher and crate that do not exist; assert
     `NotTractable` carrying `V2ClauseNotTractable` with node, operation id, width 4 and the row with
-    its versions, so no launch happened. Submit the native-route harness and assert it is not
+    its versions, so no launch happened; add a mixed batch (native first, general second) and assert it is refused whole, and a route-less row against general-route features runs. Submit the native-route harness and assert it is not
     refused; assert the same operation at the same width as V2 clause features runs and a
     narrower general-route width runs (FR-056-AC-14).
 
@@ -68,5 +68,5 @@ unchanged.
 
 ## Status
 
-Steps 1 to 9, 11, 12 and 14 are implemented and tagged (IR-1526); step 10 is partial (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
+Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 14 is implemented and tagged (IR-1530); step 10 is partial (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
 needs an installed Kani run.

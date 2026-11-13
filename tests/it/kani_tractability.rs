@@ -651,7 +651,11 @@ fn tc_070_the_runner_does_not_consult_the_decider() {
                 let name = path.file_name().unwrap().to_string_lossy().into_owned();
                 let source = fs::read_to_string(&path).unwrap();
                 if !name.contains("test")
-                    && (source.contains("TractabilityDecider") || source.contains(".decide("))
+                    && (source.to_lowercase().contains("tractab")
+                        || source.contains(".decide(")
+                        || source.contains("obligation_decided")
+                        || source.contains("obligations_decided")
+                        || source.contains("refuse_if_not_tractable"))
                 {
                     found.push(path);
                 }
@@ -935,8 +939,17 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
 const GENERAL_SCALAR_TABLE: &str = "docs/qualification/ir1530-general-route-scalar-table.json";
 
 fn general_scalar_table() -> TractabilityTable {
-    TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
-        .expect("the shipped general-route row loads")
+    TractabilityTable::shipped_general_route_scalar().expect("the embedded row loads")
+}
+
+#[trace("TC-070", "FR-056-AC-14")]
+#[test]
+fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
+    let from_file =
+        TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
+            .expect("the docs file loads");
+    assert_eq!(general_scalar_table(), from_file);
+    assert_eq!(from_file.rows().len(), 1);
 }
 
 /// A request whose launcher and crate do not exist: any attempt to run it would be a different
@@ -997,13 +1010,34 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
     assert_eq!(row.max_operand_bits, 4);
     assert_eq!(row.kani_version, "0.68.0");
     assert_eq!(row.cbmc_version, "6.11.0");
-    assert_eq!(row.solver_version, "cadical");
+    assert_eq!(row.solver_version, "cadical-3.0.0");
     assert_eq!(row.generator_version, GENERATOR_VERSION);
     assert_eq!(row.kernel_version, KERNEL_VERSION);
 
     // A batch is refused whole, before any process starts.
     let batch = execute_kani_obligations_decided(std::slice::from_ref(&request), &table);
     assert!(matches!(batch, Err(DecidedRunRefusal::NotTractable { .. })));
+
+    // A mixed batch, the general harness second, is refused whole: the check does not stop at the
+    // first member and a refused member does not leave the others to run.
+    let (native, _) = super::kani_obligations::native_scalar_increment();
+    let native_request = unlaunchable(&cancel, &installation, (&native).into(), missing);
+    let mixed = [native_request, request];
+    match execute_kani_obligations_decided(&mixed, &table) {
+        Err(DecidedRunRefusal::NotTractable { harness_path, .. }) => {
+            assert_eq!(harness_path, harness.rust.path);
+        }
+        other => panic!("a mixed batch is refused whole: {other:?}"),
+    }
+    // The refusal is an error value with a message.
+    let message = execute_kani_obligations_decided(&mixed, &table)
+        .err()
+        .map(|refusal| refusal.to_string())
+        .unwrap();
+    assert!(
+        message.contains(ADD) && message.contains("4 bits"),
+        "{message}"
+    );
 }
 
 #[trace("TC-070", "FR-056-AC-14")]
@@ -1031,6 +1065,16 @@ fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row
     assert!(matches!(table.decide(&v2), Decision::Run));
     let general = v2.on_route(TractabilityRoute::GeneralScalar);
     assert!(matches!(table.decide(&general), Decision::Refuse { .. }));
+    // A row without a `route` key applies to V2 clauses only: it leaves general-route features
+    // alone, and refuses the V2 clause features it names.
+    let routeless = table_of(&[row_json(&[ADD], 4, "not_tractable")]);
+    let general_features =
+        features(vec![op_width(ADD, 4)]).on_route(TractabilityRoute::GeneralScalar);
+    assert!(matches!(routeless.decide(&general_features), Decision::Run));
+    assert!(matches!(
+        routeless.decide(&features(vec![op_width(ADD, 4)])),
+        Decision::Refuse { .. }
+    ));
     // Narrower than the measured width is not refused.
     let narrow = features(vec![op_width(ADD, 3)]).on_route(TractabilityRoute::GeneralScalar);
     assert!(matches!(table.decide(&narrow), Decision::Run));

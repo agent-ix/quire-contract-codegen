@@ -42,6 +42,37 @@ pub enum DecidedRunRefusal {
     Execution(KaniExecutionRefusal),
 }
 
+impl std::fmt::Display for DecidedRunRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotTractable {
+                harness_path,
+                refusal,
+            } => match refusal.as_ref() {
+                UnsupportedObligation::V2ClauseNotTractable {
+                    operation_identity,
+                    width_bits,
+                    ..
+                } => write!(
+                    formatter,
+                    "{harness_path} is a measured not-tractable Kani form: {operation_identity} at {width_bits} bits"
+                ),
+                other => write!(formatter, "{harness_path} is not tractable: {other:?}"),
+            },
+            Self::Execution(refusal) => write!(formatter, "{refusal}"),
+        }
+    }
+}
+
+impl std::error::Error for DecidedRunRefusal {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Execution(refusal) => Some(refusal),
+            Self::NotTractable { .. } => None,
+        }
+    }
+}
+
 /// Decide one harness. Only a routed scalar harness on the general integer route is asked; every
 /// other harness, and a native-route scalar, is `Ok` without consulting the decider.
 ///

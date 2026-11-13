@@ -62,6 +62,19 @@ decided at the run, not at generation: a generation-level refusal broke the host
 exercise this route (below), so generation still emits the harness and the wall-clock ceiling
 stays the backstop. The native-route harness is not refused.
 
+The refusal is opt-in: the caller passes the table to the decided wrappers, and with none passed
+the harness runs. CG ships the table in-crate (`TractabilityTable::shipped_general_route_scalar`,
+embedded from the JSON file, which is the single source; a test pins the equality). The production
+caller is quire-driver (`src/provider.rs` ~308, `src/upstream.rs` ~191, which call
+`execute_kani_obligation` on `generate_routed` harnesses); it will be wired to the decided wrapper
+in a quire-driver PR under IR-1530. Operand widths below the row's 4 bits on this route are
+unmeasured: nothing narrower was probed, so such a harness is not refused and is left to the
+wall-clock backstop.
+
+The `solver_version` of the row, `cadical-3.0.0`, was not captured in the #816 probe logs. It is the
+CaDiCaL that the same Kani 0.68.0 / CBMC 6.11.0 installation reports ("Solving with CaDiCaL 3.0.0",
+TC-043 and the FR-015-AC-99 close-out run).
+
 Blast-radius evidence for the rejected generation-level alternative. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
 stable serde code, carrying the node, the operation identity and `use_instead:
 "generate_routed_native"`) replaced the Add, Subtract, Multiply and Negate scalars in

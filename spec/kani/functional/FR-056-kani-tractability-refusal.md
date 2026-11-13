@@ -1,6 +1,6 @@
 ---
 id: FR-056
-title: "Refuse a V2 clause whose operation at its width is a measured not-Kani-tractable row"
+title: "Refuse a V2 clause or general-route scalar harness whose operation at its width is a measured not-Kani-tractable row"
 type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
@@ -12,7 +12,7 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-028
     type: depends_on
 ---
-# FR-056: Refuse a V2 clause whose operation at its width is a measured not-Kani-tractable row
+# FR-056: Refuse a V2 clause or general-route scalar harness whose operation at its width is a measured not-Kani-tractable row
 
 ## Description
 
@@ -33,7 +33,19 @@ The refusal is one more arm of the existing `UnsupportedObligation`, beside
 This requirement amends no FR-015 or FR-017 text. The wall-clock ceiling of FR-028 stays the
 unchanged backstop: a clause the decider lets through still runs under it.
 
-The decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
+The same decider also runs at the run, not generation, for the one other measured shape (IR-1530): a
+routed exact-scalar harness on the general `rt::Integer` integer route, which is not a V2 clause and
+which generation keeps emitting. A caller opts in by passing a table to `execute_kani_obligation_decided`
+or `execute_kani_obligations_decided` (the production caller is quire-driver, `src/provider.rs` and
+`src/upstream.rs`, wired under IR-1530 in a quire-driver change); with no table passed every harness
+runs, as for generation. The refusal deliberately reuses the `V2ClauseNotTractable` arm for that
+non-V2-clause harness (no second mechanism); it is returned wrapped in `DecidedRunRefusal` because
+`kani::run` may not import generation types. CG embeds the measured row of that route
+(`TractabilityTable::shipped_general_route_scalar`, from
+`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below the row's
+`max_operand_bits` on that route are unmeasured and left to the wall-clock backstop.
+
+The generation-time decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
 path accepts today (connectives, the six integer comparisons, integer add, subtract, multiply and
 negate). An operation refused earlier as `V2ClauseOperatorNotSupported` never reaches it. A row for
 a Decimal operation applies only once the Decimal carrier (IR-1444, FR-051) lets such a clause reach
@@ -60,6 +72,7 @@ Terms:
   clause runs (an empty table). When the path is given but the file is missing or unreadable, or
   any row is malformed, the request fails with a typed load error naming the path (and the row
   index) and generates nothing; it never falls back to an empty table.
+- For the run-level decision (FR-056-AC-14): a table the caller passes to the decided run wrappers (CG ships the general-route row) and the harness identity (operation identity, argument bounds).
 - CG's own generator version and kernel version.
 
 ## Outputs
@@ -93,7 +106,7 @@ The table decider SHALL refuse a clause when some operation id of the clause app
 row with verdict `not_tractable` whose `max_operand_bits` is less than or equal to that
 operation's width: a `not_tractable` row at `B` bits says the operation is intractable at `B` bits
 and wider. An operation whose width is unknown (no integer operand, or an operand interval beyond
-`i128`) matches no row. A row is current when its generator and kernel version equal CG's. A stale row is
+`i128`) matches no row. A row is current when its route equals the features' route and its generator and kernel version equal CG's (a row without a route is a V2 clause row). A stale row is
 ignored. When several rows qualify, the decider SHALL report the one with the smallest
 `max_operand_bits`, then the first in file order, and the first qualifying operation in
 `operation_ids` order.
@@ -115,7 +128,7 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 | FR-056-AC-11 | A scoring test runs the current decider over every corpus row, prints the false-refuse count (decider `Refuse`, ground truth `verified` or `falsified`) and the false-accept count (decider `Run`, ground truth `timed_out`), and passes when neither count exceeds its value in the baseline file, a data file in this repository beside the corpus; it fails when either count exceeds it and does not require zero. A count below the baseline passes. Mutants: a decider that refuses everything fails on false-refuse; a decider that runs everything fails on false-accept. | Test |
 | FR-056-AC-12 | Adding a corpus row changes the scored counts with no source change, and a second decider implementing the FR-056-AC-1 interface (for example, one that always returns `Run`) is scored against the same file with no change to the corpus or the scoring test. | Test |
 | FR-056-AC-13 | Through CG's runner under installed Kani, one clause the table lets through ends with an executed verdict (`Verified` or `Falsified`), recorded with its wall time, the Kani version and CG's generator and kernel versions; and a clause holding a measured-bad row for an integer operation the V2 path accepts (integer multiply at a width at or above the row's bound) is refused as `V2ClauseNotTractable` with no Kani launch, and a narrower multiply is not refused. The Decimal multiply at full width row is exercised the same way only once IR-1444 lets it reach the decider. A probe record does not substitute. | Test (installed Kani) |
-| FR-056-AC-14 | A routed exact-scalar harness on the general `rt::Integer` integer route (`integer_representation` general; the harness generation still emits) submitted to `execute_kani_obligation_decided` or `execute_kani_obligations_decided` is decided through the same decider seam with features on the `general_scalar` route (its operation identity, the largest bit width of its argument bounds, the argument bounds). When a current `not_tractable` row of that route (the row of `docs/qualification/ir1530-general-route-scalar-table.json`) qualifies, the call returns `DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node id, operation id, width, the full row with its Kani, CBMC, solver, generator and kernel versions) before any Kani process starts, so a missing launcher or crate is never reached; a batch is refused whole. A row without a `route` key applies to V2 clauses only and a `general_scalar` row never refuses a V2 clause or a native-route scalar harness; a width below the row's `max_operand_bits` runs. Mutants: matching rows across routes, or refusing the native-route harness, fails. The wall-clock ceiling stays the backstop for every harness the decider runs. | Test |
+| FR-056-AC-14 | A routed exact-scalar harness on the general `rt::Integer` integer route (`integer_representation` general; the harness generation still emits) submitted with a caller-passed table (CG ships it, `TractabilityTable::shipped_general_route_scalar`, equal to the docs file) to `execute_kani_obligation_decided` or `execute_kani_obligations_decided` is decided through the same decider seam with features on the `general_scalar` route (its operation identity, the largest bit width of its argument bounds, the argument bounds). When a current `not_tractable` row of that route (the row of `docs/qualification/ir1530-general-route-scalar-table.json`) qualifies, the call returns `DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node id, operation id, width, the full row with its Kani, CBMC, solver, generator and kernel versions) before any Kani process starts, so a missing launcher or crate is never reached; a batch is refused whole. A row without a `route` key applies to V2 clauses only and a `general_scalar` row never refuses a V2 clause or a native-route scalar harness; a width below the row's `max_operand_bits` runs. Mutants: matching rows across routes, or refusing the native-route harness, fails. The wall-clock ceiling stays the backstop for every harness the decider runs. | Test |
 
 ## Dependencies
 
