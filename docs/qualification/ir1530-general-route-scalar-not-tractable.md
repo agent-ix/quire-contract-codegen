@@ -47,9 +47,42 @@ Evidence for the row:
   (`MemoryPeak` equal to `MemoryMax`) at 50 s but kept no test output; this run supersedes it.
 
 The cost is the `rt::Integer` bignum heap shape, which no forget placement removes, so the general
-integer scalar route is not tractable at unwind 3, 600 s and 24 GiB. The refusal owner for such
-scalars is pending a planner ruling (FR-056 covers V2 clauses only); no refusal mechanism is added
-here.
+integer scalar route is not tractable at unwind 3, 600 s and 24 GiB.
+
+## Refusal of the general route: not built here
+
+Refusal of the general integer scalar route is NOT built in this change. IR-1526 (FR-056) covers V2
+clauses only. A generation-level refusal breaks 84 host tests that exercise this route, so the
+refusal, if wanted, belongs at the Kani run/verdict level (a run-time refusal to attempt the
+real-Kani lane on this shape). That is a proposed follow-up awaiting a planner ruling.
+
+Blast-radius evidence. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
+stable serde code, carrying the node, the operation identity and `use_instead:
+"generate_routed_native"`) replaced the Add, Subtract, Multiply and Negate scalars in
+`negotiate_integer_policy` whenever the integer policy was not native (Implies untouched). It
+compiled, then whole `--lib` and `--test it` gave 3 failed in `--lib` (551 passed) and 81 failed in
+`--test it` (880 passed); the change was reverted. Approximate failing tests per file (some
+shared-fixture cascade is possible):
+
+| File | Failing tests |
+| --- | --- |
+| `tests/it/routed_generation.rs` | 17 |
+| `tests/it/kani_obligations.rs` | 14 |
+| `tests/it/scalar_playback.rs` | 10 |
+| `tests/it/scalar_settlement.rs` | 9 |
+| `tests/it/requirement_records.rs` | 8 |
+| `tests/it/scalar_replay_acceptance.rs` | 7 |
+| `tests/it/scalar_replay_binding.rs` | 4 |
+| `tests/it/scalar_replay_residuals.rs` | 3 |
+| `tests/it/scalar_literal_operands.rs` | 2 |
+| `tests/it/cover_last.rs`, `no_generation_panics.rs`, `kani_generation.rs` | 1 each |
+| `--lib`: `routed/contract_package_tests.rs`, two `scalar_native_private` tests, one `routed::smt` test | 3 |
+
+About 50 test call sites use `generate_routed`; the crate has no other production caller of it
+outside its own routing code.
+
+What this change delivers: the real-Kani scalar lane tests below run on the native route with
+executed verdicts, and the general route is recorded not tractable in the table-shaped row above.
 
 ## Tests moved to the native route
 
