@@ -12,8 +12,6 @@ relationships:
     type: constrains
   - target: ix://agent-ix/quire-contract-codegen/FR-041
     type: constrains
-  - target: ix://agent-ix/quire-contract-codegen/FR-055
-    type: depends_on
 ---
 # NFR-006: A change that can alter what real Kani proves runs the real-Kani lane before it merges
 
@@ -69,7 +67,6 @@ relationships:
   `make kani-gate` on the clean, stable candidate to be tagged. A copied release-ticket line is
   insufficient.
 - The `make ci` target shall not depend on `kani-gate` or `kani`.
-- The `make ci` target shall depend on `kani-mutations` (FR-055) and on no other real-Kani target. This is the one exception to the two statements above: it runs mutant runs only and no lane test.
 - The Kani-touching set shall contain the target of every `include!`, `include_str!`,
   `include_bytes!` and `#[path]` named in a `tests/it` file that holds a lane test, and in each file
   those name in turn.
@@ -129,7 +126,7 @@ when the lane was smaller than it is now; and the IR-604 ticket's statement that
 exemplar takes about 530 s serial. The lane now holds 27 tests across eight files; the full lane
 ran in 1,308 s on the IR-617 pre-PR candidate. A required lane at every change would charge a spec-only or review-only change
 that cost for no evidence, and `make ci` runs twice per change; so the rule keys on paths and `make
-ci` runs no lane test. The one exception is `kani-mutations` (FR-055): mutant runs only, never the lane tests. The set is a path list, so `make kani-scope` decides it from the diff with no
+ci` stays as it is. The set is a path list, so `make kani-scope` decides it from the diff with no
 judgement. The lane is run in full, not as a per-path subset, because one emitter change can reach
 harness kinds the path does not name: the cover rule spans seven harness kinds (FR-015-AC-53 to
 FR-015-AC-58), each emitted from its own function. Narrowing the lane per path needs a per-module cost
@@ -144,7 +141,7 @@ host's heavy-build lock serialises lanes on one machine already shared with agen
 not required here; the pre-tag run is the backstop for drift that no path in the set shows, such as a
 Kani or toolchain upgrade, and for a merge that combined two passing heads.
 
-**Rejected: adding the lane to `make ci`.** (`kani-mutations` is the narrow exception, FR-055; its cost is the owner's decision.) `make ci` is the gate for every change, spec and review
+**Rejected: adding the lane to `make ci`.** `make ci` is the gate for every change, spec and review
 files included, and runs twice per change; the lane's cost would dominate it, contend for the lock
 and push agents to skip `make ci`.
 
@@ -184,13 +181,13 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-9 | With a dirty working tree before the build, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
-| NFR-006-AC-12 | The prerequisite and recipe list of `ci` includes the target `kani-mutations` ([FR-055](../functional/FR-055-kani-mutations-target.md)); the `kani-gate` recipe and the `kani` lane command (the `make kani` recipe's `cargo test` invocation with `--ignored` and the lane filters) are absent from `ci`, directly and through its prerequisites. | Test (TC-045) |
+| NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
 | NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean candidate before opening it, and the merger runs it again on the clean current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
 | NFR-006-AC-15 | A Kani-touching pull request whose required lane did not run or failed remains unmerged and does not claim real-Kani verification; a written explanation does not waive the gate. | Inspection |
-| NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani lane run under this requirement; the only real-Kani work it incurs is the `kani-mutations` mutant runs of `make ci` (FR-055). | Inspection |
+| NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
 | NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
-| NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's current-build module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. The `kani-mutations` target (FR-055), which runs in `make ci` as well, a retired fixed inventory or saved earlier result cannot substitute. Open until a genuine current-build claim source exists. | Test |
+| NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's current-build module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target, retired fixed inventory or saved earlier result cannot substitute. Open until a genuine current-build claim source exists. | Test |
 
 NFR-006-AC-8 retains the post-run dirty-tree refusal without a Git revision comparison.
 NFR-006-AC-14 is retired under IR-1105 because it compared Git revisions.
@@ -224,8 +221,7 @@ release criteria inspect the actual gate processes and clean candidate.
 
 ## Dependencies
 
-- **Upstream**: [FR-055](../functional/FR-055-kani-mutations-target.md),
-  [FR-015](../functional/FR-015-bounded-kani-obligations.md),
+- **Upstream**: [FR-015](../functional/FR-015-bounded-kani-obligations.md),
   [FR-017](../functional/FR-017-kani-execution-evidence.md),
   [FR-031](../../oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md).
 - **Downstream**: [TC-045](../matrix/TC-045-real-kani-lane-gate.md).

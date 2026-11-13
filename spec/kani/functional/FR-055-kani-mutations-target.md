@@ -54,20 +54,18 @@ generated harness's mutant".
 
 **Relation to `make kani-gate`.** The target is separate from `make kani-gate`. FR-041's
 claimed-module controls remain part of the gate's own lane (NFR-006-AC-19); this target neither
-replaces nor is replaced by them. FR-041's controls therefore run under both `make ci` (through this
-target) and `make kani-gate`, and that cost is paid twice; this requirement does not remove it.
+replaces nor is replaced by them. This target is the Kani-affecting merge gate alongside `make kani-gate`.
 
-**Relation to `make ci`.** Unlike `make kani` and `make kani-gate`, `make ci` shall depend on this
-target, and NFR-006 is amended to allow exactly that and nothing more (FR-055-AC-8): mutant runs
-only, no lane tests.
+**Relation to `make ci`.** Like `make kani` and `make kani-gate`, the target is standalone and is
+not part of `make ci` (NFR-006 is unchanged). It is run as a Kani-affecting merge gate, alongside
+`make kani-gate`.
 
 **Execution.** The target executes installed Kani (0.68.0 on terra), under the host lock and
 serially, as `make kani-gate` is.
 
 **Bounded cost.** The per-mutant timeout and the total wall-clock budget of one run are
 configuration values of this target. The owner sets their values; this requirement names them and
-does not fix a number. Whether the cost of running this target in every `make ci` is acceptable is
-the owner's decision and is not settled by this requirement.
+does not fix a number. The target runs outside `make ci`, so its cost is not charged to every change.
 
 ## Statements
 
@@ -111,12 +109,12 @@ the owner's decision and is not settled by this requirement.
 |----|-----------|--------------|
 | FR-055-AC-1 | `make kani-mutations` exists. Run with the declared mutants, it injects each into a scratch copy of the source, runs the owning proof through Kani, and exits zero only when every mutant is `pass`. The working tree is byte-identical before and after. | Test |
 | FR-055-AC-2 | The target prints one line per declared mutant, naming the harness, the mutant and its outcome (`pass`, `fail`, `malformed` or `unavailable`), followed by a total. Under `unavailable` (FR-055-AC-6) the rows are printed and counted in the total as `unavailable`; no row is printed for a mutant that is not declared. Mutant: omitting the line of a declared mutant fails. | Test |
-| FR-055-AC-3 | The prerequisite and recipe list of the `ci` target includes the target `kani-mutations`. The `kani` lane command (the command line of the `make kani` recipe: the `cargo test` invocation with `--ignored` and the lane filters) and the `kani-gate` recipe are defined and are absent from `ci`, directly and through its prerequisites. | Test |
+| FR-055-AC-3 | The prerequisite and recipe list of the `ci` target does not include `kani-mutations`, directly or through its prerequisites. | Test |
 | FR-055-AC-4 | When a mutant still verifies (a surviving mutant), the target prints that mutant as `fail` and exits non-zero. Mutant: exiting zero after a `fail` row fails. | Test |
 | FR-055-AC-5 | A mutant whose anchor text is absent or occurs more than once is `malformed`; one that does not compile, one whose run exits non-zero without the owning harness printing `VERIFICATION:- FAILED`, and one that times out or is inconclusive are `fail`. Each gives a non-zero exit. | Test |
 | FR-055-AC-6 | With no `cargo-kani` on `PATH`, every declared mutant is `unavailable` and the target exits non-zero; an absent toolchain never reads as success. | Test |
 | FR-055-AC-7 | Deliberately weakening one generated harness (for example replacing its checked proposition with a trivially true one) while leaving its mutant unchanged makes that mutant verify; the target then reports that mutant as `fail` and exits non-zero, and restoring the harness returns it to zero. Executed through installed Kani in the Kani lane. | Test |
-| FR-055-AC-8 | NFR-006's `make ci` statement, its Rationale, AC-12, AC-16 and AC-19, and TC-045 step 12 agree: `make ci` depends on `kani-mutations` only, runs mutant runs and no lane test, and the exception is stated as narrow. | Inspection |
+| FR-055-AC-8 | `kani-mutations` is documented as a standalone Kani-affecting merge gate alongside `make kani-gate`, and NFR-006 and TC-045 are unchanged by this requirement. | Inspection |
 | FR-055-AC-9 | The mutant declaration file holds, for every entry, the file, anchor, replacement and owning proof. With fewer than three declared mutants, including none, the target prints a refusal, runs nothing and exits 2; an empty declaration never reads as success. | Test |
 | FR-055-AC-10 | A mutant that exceeds the per-mutant timeout, and a run that exceeds the total wall-clock budget, are reported as `fail` and the target exits non-zero. Both values are configuration of the target. | Test |
 
@@ -124,7 +122,7 @@ the owner's decision and is not settled by this requirement.
 
 - [FR-017](./FR-017-kani-execution-evidence.md) owns Kani execution.
 - [NFR-006](../non-functional/NFR-006-real-kani-lane-gating.md) owns the lane, its lock and the
-  `make ci` exclusion amended by FR-055-AC-8.
+  `make ci` exclusion, which this target also observes.
 - [FR-041](./FR-041-claimed-module-proof-gate.md) and FR-046 to FR-054 own the mutant controls
   whose entries the declaration file holds.
 - [TC-069](../matrix/TC-069-kani-mutations-target.md) defines the planned verification.
