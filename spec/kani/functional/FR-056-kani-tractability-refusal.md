@@ -131,14 +131,17 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 
 PARTIAL (IR-1526). FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
-FR-056-AC-10 is partial: the shipped corpus holds ten measured rows, all `verified` or `falsified`
-and all of the one IR-1022 clause and its mutants. It has no `timed_out` row (CG's own evidence has
-no measured wall-clock timeout of a V2 clause), no Meter, decimal or pure-relational case and no other
-multi-operation clause, so the false-accept count is not exercised by the shipped file. The one timeout
-CG does hold (`docs/qualification/ir1530-general-route-scalar-not-tractable.md`) is of the general-route
-`rt::Integer` scalar harness, which is not a V2 clause: the same features verify in seconds on the native
-route, so it is out-of-domain evidence and is not a corpus row. Those rows
-need new installed-Kani measurements. FR-056-AC-13 is coded as an ignored kani-lane test and has not
+FR-056-AC-10 is partial: the shipped corpus holds thirteen measured rows. Ten are `verified` or
+`falsified` and all of the one IR-1022 clause and its mutants. Three are `timed_out` V2 clauses
+(`other * offset + 3 <= 100` on the general route at 16, 24 and 32-bit operands, each `TimedOut` at the
+600 s ceiling under Kani 0.68.0), measured by `ir1526_probe_wide_integer_multiply_under_installed_kani`.
+CG's own measured table (`tests/fixtures/tractability/table.json`) holds the one `not_tractable` row
+those measurements justify, integer multiply from 15 bits, and the scoring test scores that table over
+the corpus with no false-refuse and no false-accept. Still missing for AC-10: Meter, decimal and
+pure-relational cases and a multi-operation clause that is not integer arithmetic. The timeout in
+`docs/qualification/ir1530-general-route-scalar-not-tractable.md` is of the general-route `rt::Integer`
+scalar harness, not a V2 clause, so it is not a corpus row. Those rows need new installed-Kani
+measurements. The row's `peak_bytes` is the 24 GiB lane cap: the runner reported no peak. FR-056-AC-13 is coded as an ignored kani-lane test and has not
 been run under installed Kani; its multiply refusal and pass-through fixtures also run as a host test
 (`tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`). The narrow multiply is negotiated on the
 general route because the native route renders no two-parameter precondition. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13

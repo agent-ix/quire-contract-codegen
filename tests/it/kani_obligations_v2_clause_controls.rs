@@ -1639,7 +1639,9 @@ fn the_wide_multiply_probe_clause_negotiates_supported_with_one_harness_at_every
     }
 }
 
-/// Measures, never asserts a verdict: the AC-10 wide integer multiply row.
+/// Measures, never asserts a verdict: the AC-10 wide integer multiply row. Measured on terra
+/// (Kani 0.68.0, CBMC 6.11.0, generator 0.1.0, kernel 1, 24 GiB lane): `IR1526_PROBE_BITS` 16, 24
+/// and 32 each ended `TimedOut` at the 600 s ceiling (wall 600.0 s, 600.1 s, 600.1 s).
 #[test]
 #[ignore = "kani lane: IR1526_PROBE_BITS=<16|24|32>, one run each, serially"]
 fn ir1526_probe_wide_integer_multiply_under_installed_kani() {

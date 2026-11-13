@@ -756,8 +756,9 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     let corpus = load_corpus(&fixture_path("corpus.json"));
     let baseline: Score =
         serde_json::from_slice(&fs::read(fixture_path("baseline.json")).unwrap()).unwrap();
-    // CG holds no measured table: the current production decider runs with the empty table.
-    let current = score(&TractabilityTable::empty(), &corpus);
+    // The production decider is the table lookup over CG's own measured table.
+    let table = TractabilityTable::load(&fixture_path("table.json")).expect("the measured table");
+    let current = score(&table, &corpus);
     println!(
         "tractability corpus ({} rows): false-refuse {} (baseline {}), false-accept {} (baseline {})",
         corpus.len(),
@@ -809,6 +810,10 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     assert!(
         regressed(&score(&AlwaysRefuse, &corpus), &baseline),
         "refuse-everything fails on the shipped corpus"
+    );
+    assert!(
+        regressed(&score(&AlwaysRun, &corpus), &baseline),
+        "run-everything fails on the shipped corpus"
     );
     // A count below the baseline passes.
     assert!(!regressed(
@@ -923,4 +928,43 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
         "{:?}",
         disposition(&narrow, 0)
     );
+}
+
+/// The features the decider computes for `other * offset + 3 <= 100` with both operands
+/// `Int[0, 2^(operand_bits - 1) - 1]`.
+fn probe_features(operand_bits: u32) -> ClauseFeatures {
+    let upper = (1_i64 << (operand_bits - 1)) - 1;
+    let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
+    ClauseFeatures::new(
+        derive_v2_clause_operation_widths(&package, &clause)
+            .expect("widths")
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    )
+}
+
+/// The probe rows of the shipped corpus carry exactly the features the decider computes.
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
+    let corpus = load_corpus(&fixture_path("corpus.json"));
+    for bits in [16, 24, 32] {
+        let id = format!("ir1526-wide-multiply-{bits}bit-operands");
+        let row = corpus.iter().find(|row| row.id == id).expect(&id);
+        assert!(matches!(row.ground_truth, GroundTruth::TimedOut), "{id}");
+        assert_eq!(row.features, probe_features(bits), "{id}");
+    }
 }
