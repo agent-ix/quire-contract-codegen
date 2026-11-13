@@ -33,7 +33,19 @@ The refusal is one more arm of the existing `UnsupportedObligation`, beside
 This requirement amends no FR-015 or FR-017 text. The wall-clock ceiling of FR-028 stays the
 unchanged backstop: a clause the decider lets through still runs under it.
 
-The decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
+The same decider also runs at the run, not generation, for the one other measured shape (IR-1530): a
+routed exact-scalar harness (its route `general` when it uses the `rt::Integer` carrier, `native`
+otherwise), which is not a V2 clause and which generation keeps emitting. A caller opts in by passing a
+table to `execute_kani_obligation_decided` or `execute_kani_obligations_decided` (the production
+caller is quire-driver, `src/provider.rs` and `src/upstream.rs`, wired under IR-1530 in a quire-driver
+change); with no table passed every harness runs, as for generation. The refusal deliberately reuses
+the `V2ClauseNotTractable` arm for that non-V2-clause harness (no second mechanism); it is returned
+wrapped in `DecidedRunRefusal` because `kani::run` may not import generation types. CG embeds the
+measured general-route row (`TractabilityTable::shipped_general_route_scalar`, from
+`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below that row's
+`max_operand_bits` on the general route are unmeasured and left to the wall-clock backstop.
+
+The generation-time decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
 path accepts today (connectives, the six integer comparisons, integer add, subtract, multiply and
 negate). An operation refused earlier as `V2ClauseOperatorNotSupported` never reaches it. A row for
 a Decimal operation applies only once the Decimal carrier (IR-1444, FR-051) lets such a clause reach
@@ -66,6 +78,7 @@ Terms:
   index) and generates nothing; it never falls back to an empty table.
 - CG's own generator version and kernel version.
 - The route of the negotiation (`IntegerRoute`), which the caller already chooses.
+- For the run-level decision (FR-056-AC-15): a table the caller passes to the decided run wrappers (CG ships the general-route row) and the scalar harness identity (operation identity, argument bounds, integer representation, which gives the route).
 
 ## Outputs
 
@@ -124,6 +137,7 @@ native-route clause, and the reverse. The decider does not infer one route from 
 | FR-056-AC-12 | Adding a corpus row changes the scored counts with no source change, and a second decider implementing the FR-056-AC-1 interface (for example, one that always returns `Run`) is scored against the same file with no change to the corpus or the scoring test. | Test |
 | FR-056-AC-13 | Through CG's runner under installed Kani, one clause the table lets through ends with an executed verdict (`Verified` or `Falsified`), recorded with its wall time, the Kani version and CG's generator and kernel versions; and a clause holding a measured-bad row for an integer operation the V2 path accepts (integer multiply at a width at or above the row's bound) is refused as `V2ClauseNotTractable` with no Kani launch, and a narrower multiply is not refused. The Decimal multiply at full width row is exercised the same way only once IR-1444 lets it reach the decider. A probe record does not substitute. | Test (installed Kani) |
 | FR-056-AC-14 | Lookup matches rows only for the clause's route. The same clause (one operation, one width) and a `not_tractable` row for that operation at a bound at or below the width: with the row on `general` the clause is refused as `V2ClauseNotTractable` on the `general` route and the decider returns `Run` on the `native` route (the item is not refused as `V2ClauseNotTractable`; it may still end in another disposition such as `RenderFailed`); with the row on `native` the reverse. A `tractable` row does not refuse on either route. The refusal reports the clause's route. A `native` row at a smaller bound than a qualifying `general` row does not take precedence over it on the `general` route. Mutant: ignoring the route (matching on operation and width alone) refuses the native clause in the first case and fails. | Test |
+| FR-056-AC-15 | A routed exact-scalar harness submitted with a caller-passed table (CG ships the general-route row, `TractabilityTable::shipped_general_route_scalar`, equal to `docs/qualification/ir1530-general-route-scalar-table.json`) to `execute_kani_obligation_decided` or `execute_kani_obligations_decided` is decided through the same decider seam with features on its route (`general` for the `rt::Integer` carrier, `native` for the native integer carrier), its operation identity, the largest bit width of its argument bounds and the argument bounds. When a current `not_tractable` row of that route qualifies, the call returns `DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node id, operation id, width, route, the full row with its Kani, CBMC, solver, generator and kernel versions) before any Kani process starts, so a missing launcher or crate is never reached; a batch, including a mixed one, is refused whole. Rows apply per route across both shapes, a V2 clause at generation and a routed scalar harness at the run: the cost the general-route row records is the `rt::Integer` carrier, not the shape, so that row would also refuse a general-route V2 clause, and the shipped scalar row is scoped by use (it is passed to the decided run wrappers and is not a generation `tractability_table`). Only rows of the harness's own route apply (FR-056-AC-14), so the shipped general-route row never refuses a native-route harness (a `native` row would; none ships); a width below the row's `max_operand_bits` runs. Mutants: matching rows across routes, refusing the native-route harness, or refusing only the offending member of a batch fails. The wall-clock ceiling stays the backstop for every harness the decider runs. | Test |
 
 ## Dependencies
 
@@ -138,16 +152,16 @@ native-route clause, and the reverse. The decider does not infer one route from 
 
 ## Status
 
-PARTIAL (IR-1526). The route feature (Terms, Lookup, FR-056-AC-14, and the route additions to
-FR-056-AC-2 to AC-5, AC-7 and AC-10) is specified and not yet implemented. The decider and the
-table do not carry a route today, and the shipped table and corpus rows have no `route` key. When
-the route lands the rows are labelled by how they were measured: the `ir1022-*` and `ir1509-*`
-corpus rows are `native` (their harnesses come from `negotiate_kani_native_obligations`; see
-`docs/qualification/ir1022-kani-clause-measurements.md` and `ir1509-kani-clause-controls.md`), and
-the two `table.json` rows and the four `ir1526-*` corpus rows are `general`. The native `ir1022-*`
-rows (integer add at 10 bits) already cover AC-10's native add case below 15 bits. The
-host test `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound` negotiates on the general
-route and its expectations flip for the native route when the route lands.
+PARTIAL (IR-1526, IR-1530). The route feature (Terms, Lookup, FR-056-AC-14 and the route additions to
+FR-056-AC-2 to AC-5, AC-7 and AC-10) is implemented (IR-1530): `IntegerRoute` is the one route type,
+a required key of table rows and clause features, reported by `V2ClauseNotTractable`. Shipped rows are
+labelled by how they were measured: the `ir1022-*` and `ir1509-*` corpus rows are `native` (their
+harnesses come from `negotiate_kani_native_obligations`; see
+`docs/qualification/ir1022-kani-clause-measurements.md` and `ir1509-kani-clause-controls.md`), and the
+`table.json` rows and the four `ir1526-*` corpus rows are `general`. FR-056-AC-15 (IR-1530, the
+run-level refusal of the general-route scalar harness, `src/kani/terminal/tractable.rs`) is
+implemented and host-tested. The host test `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`
+negotiates on both routes: the general-route row refuses the general clause and not the native one.
 FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
 FR-056-AC-10 is partial: the shipped corpus holds fourteen measured rows. Ten are `verified` or
@@ -161,10 +175,8 @@ the measurements do not show that the multiply is the cause. All ran on the gene
 `rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
 measured not tractable for an add at 4 bits.
 CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
-multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Until the route feature lands, the route is not a decider feature, so those rows also refuse clauses that would be tractable on the
-native route; the corpus holds no native-route clause of 15 bits or more, so that false-refuse is
-unmeasured. Still missing for AC-10: the route in the corpus features and in the decider,
-native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
+multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Those rows are general-route rows and do not refuse native-route clauses; the corpus holds no native-route clause of 15 bits or more, so whether they over-refuse the native route is
+unmeasured. Still missing for AC-10: native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
 (`other * offset + 3 <= 100`) at any listed width (none measured; the AC-13 clause that Verified in
 235.5 s on the native route is `with_bounded_amount_implication` over `Int[0, 1000]`, 10 bits), Meter, decimal and pure-relational cases and a multi-operation clause that
 is not integer arithmetic. The ir1530 timeout is of the scalar harness, not a V2 clause, so it is

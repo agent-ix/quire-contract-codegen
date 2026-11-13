@@ -2,6 +2,7 @@
   {
     "id": "ir1022-healthy-subject",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -39,6 +40,7 @@
   {
     "id": "ir1022-helper-control",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -76,6 +78,7 @@
   {
     "id": "ir1022-mutant-1-subject-plus-two",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -113,6 +116,7 @@
   {
     "id": "ir1022-mutant-2-oracle-less-than",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -150,6 +154,7 @@
   {
     "id": "ir1022-helper-mutant-returns-false",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -187,6 +192,7 @@
   {
     "id": "ir1509-healthy-through-cg-runner",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -224,6 +230,7 @@
   {
     "id": "ir1509-exact-999-subject-mutant",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -261,6 +268,7 @@
   {
     "id": "ir1509-kernel-mutant-checked-add-plus-one",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -298,6 +306,7 @@
   {
     "id": "ir1509-kernel-mutant-some-left",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -335,6 +344,7 @@
   {
     "id": "ir1509-helper-body-returns-false",
     "features": {
+      "route": "native",
       "operations": [
         {
           "operation_id": "quire.op.integer.lt",
@@ -372,6 +382,7 @@
   {
     "id": "ir1526-wide-multiply-15bit-operands",
     "features": {
+      "route": "general",
       "operations": [
         {
           "operation_id": "quire.op.integer.mul",
@@ -407,6 +418,7 @@
   {
     "id": "ir1526-wide-multiply-23bit-operands",
     "features": {
+      "route": "general",
       "operations": [
         {
           "operation_id": "quire.op.integer.mul",
@@ -442,6 +454,7 @@
   {
     "id": "ir1526-wide-multiply-31bit-operands",
     "features": {
+      "route": "general",
       "operations": [
         {
           "operation_id": "quire.op.integer.mul",
@@ -477,6 +490,7 @@
   {
     "id": "ir1526-wide-add-15bit-operands",
     "features": {
+      "route": "general",
       "operations": [
         {
           "operation_id": "quire.op.integer.add",

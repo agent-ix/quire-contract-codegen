@@ -21,8 +21,9 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
    the signature (FR-056-AC-1).
 2. Admit `a * b + c` at three widths and compare the exposed per-operation widths with those the
    oracle rendering computes. Mutate to the declared width; the multiply-then-add case must fail
-   (FR-056-AC-2). Assert the exposed route is `general` for an `IntegerRoute::General` negotiation
-   and `native` for `IntegerRoute::Native` on the same clause; a decider fed a fixed route fails.
+   (FR-056-AC-2). Negotiate the same clause on each route with a recording decider and assert the
+   features it receives carry that route: `general` for an `IntegerRoute::General` negotiation and
+   `native` for `IntegerRoute::Native`; a decider fed a fixed route fails.
 3. Load a valid table, an empty table and tables with an unknown verdict, a missing field and a
    fractional width, a missing `route` and an unknown `route`; assert the load results and the failing row index. Add a row for a fresh
    operation id and assert the decision changes with no source change (FR-056-AC-3).
@@ -60,12 +61,23 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
     launch, and a narrower multiply is not; the
     Decimal multiply row is used only once IR-1444 lets it reach the decider (FR-056-AC-13).
 
+14. Load the embedded general-route table (assert it equals
+    `docs/qualification/ir1530-general-route-scalar-table.json`), build the general-route routed
+    `x + 1` scalar harness and submit it to `execute_kani_obligation_decided` and
+    `execute_kani_obligations_decided` with a launcher and crate that do not exist; assert
+    `NotTractable` carrying `V2ClauseNotTractable` with node, operation id, width 4, route `general`
+    and the row with its versions, so no launch happened. Add a mixed batch (native first, general
+    second) and assert it is refused whole. Submit the native-route harness and assert it is not
+    refused (the row is general-route); assert general-route features at 4 bits are refused,
+    native-route features at the same width run, and a narrower general-route width runs
+    (FR-056-AC-15).
+
 ## Expected Results
 
-Steps 1 to 12 (including 7a) pass on the host with no Kani. Step 13 records one executed verdict and one
+Steps 1 to 12 (including 7a) and 14 pass on the host with no Kani. Step 13 records one executed verdict and one
 pre-launch refusal. Every refusal keeps its own reason and no harness; a clause with no bad row is
 unchanged.
 
 ## Status
 
-Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526) except the route additions (steps 2 to 4, 7a and 10), which are specified and not yet implemented; step 10 is partial (see FR-056 Status). Step 13 is coded as a kani-lane test and was executed under installed Kani 0.68.0 (Verified, 235.5 s); the multiply refusal half runs as a host test until an installed-Kani run covers it.
+Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526) and the route additions (steps 2 to 4, 7a and 10) are implemented (IR-1530); step 14 is implemented and tagged (IR-1530); step 10 is partial (see FR-056 Status). Step 13 is coded as a kani-lane test and was executed under installed Kani 0.68.0 (Verified, 235.5 s); the multiply refusal half runs as a host test until an installed-Kani run covers it.

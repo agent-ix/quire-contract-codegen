@@ -330,13 +330,15 @@ pub fn negotiate_kani_obligations(
     negotiate_integer_policy(request, false, &TractabilityTable::empty())
 }
 
-/// Which integer encoding a negotiation selects.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IntegerRoute {
-    /// [`negotiate_kani_obligations`]: the general encoding.
-    General,
-    /// [`negotiate_kani_native_obligations`]: the kernel-admitted native encoding.
-    Native,
+use crate::kani::tractability::IntegerRoute;
+
+/// The route a `native` flag selects.
+const fn native_route(native: bool) -> IntegerRoute {
+    if native {
+        IntegerRoute::Native
+    } else {
+        IntegerRoute::General
+    }
 }
 
 /// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
@@ -351,7 +353,19 @@ pub fn negotiate_kani_obligations_with_options(
     let table = options
         .load_table()
         .map_err(KaniObligationError::TractabilityTable)?;
-    negotiate_integer_policy(request, route == IntegerRoute::Native, &table)
+    negotiate_kani_obligations_with_decider(request, &table, route)
+}
+
+/// [`negotiate_kani_obligations_with_options`] with the decider given directly (FR-056-AC-1): any
+/// implementation of the one [`TractabilityDecider`] interface decides which V2 clauses are
+/// refused on `route`, and receives that route in its clause features (FR-056-AC-2).
+// Implements: FR-056
+pub fn negotiate_kani_obligations_with_decider(
+    request: &KaniObligationRequest<'_>,
+    decider: &dyn TractabilityDecider,
+    route: IntegerRoute,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, route == IntegerRoute::Native, decider)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.
@@ -997,16 +1011,20 @@ fn classify_v2_clause<'a>(
                     node_id: clause.clone(),
                 })
             }
-            Some(kind) => match lower_v2_clause(view, clause, kind, claim, decider) {
-                Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-                Err(reason) if !native => {
-                    match lower_collection_operation(lookup.collection(), clause, claim) {
-                        Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
-                        Err(refusal) => collection_domain_refusal(clause, refusal, Some(reason)),
+            Some(kind) => {
+                match lower_v2_clause(view, clause, kind, claim, native_route(native), decider) {
+                    Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+                    Err(reason) if !native => {
+                        match lower_collection_operation(lookup.collection(), clause, claim) {
+                            Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
+                            Err(refusal) => {
+                                collection_domain_refusal(clause, refusal, Some(reason))
+                            }
+                        }
                     }
+                    Err(reason) => Outcome::Unsupported(reason),
                 }
-                Err(reason) => Outcome::Unsupported(reason),
-            },
+            }
             // Not a precondition, postcondition or invariant.
             None => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),

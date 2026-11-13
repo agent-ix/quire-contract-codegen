@@ -206,6 +206,10 @@ pub use kani::run::scalar::{
     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED, SCALAR_NATIVE_CODE_SNAPSHOT_IO,
 };
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
+pub use kani::terminal::tractable::{
+    execute_kani_obligation_decided, execute_kani_obligations_decided, refuse_if_not_tractable,
+    DecidedRunRefusal,
+};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, scalar_ir_outcome_terminal_value,
     scalar_run_terminal_value, ReplaySettlement, ScalarSettlement, TerminalPairError,
@@ -255,7 +259,7 @@ pub use kani::generate::frame::{
 };
 pub use kani::generate::negotiate::{
     negotiate_kani_native_obligations, negotiate_kani_obligations,
-    negotiate_kani_obligations_with_options, IntegerRoute,
+    negotiate_kani_obligations_with_decider, negotiate_kani_obligations_with_options,
 };
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
@@ -284,9 +288,9 @@ pub use kani::output::playback::{
     PlaybackRefusal, PlaybackRefusalCode, WitnessDecodeLimits,
 };
 pub use kani::tractability::{
-    ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable, OperationWidth,
-    RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow, TractabilityTable,
-    WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
+    ClauseFeatures, Decision, GenerationOptions, InputBound, IntegerRoute, NotTractable,
+    OperationWidth, RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow,
+    TractabilityTable, WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{
