@@ -152,7 +152,7 @@ fn the_wide_probe_clauses_negotiate_supported_with_one_harness_at_every_width() 
 /// `Inconclusive(FailedWithoutCounterexample)` after 542.5 s, so an add-only general-route clause
 /// does not verify either. The runner reported no peak memory.
 #[test]
-#[ignore = "kani lane: IR1526_PROBE_BITS=<15|23|31> IR1526_PROBE_OP=<mul|add>, one run each, serially"]
+#[ignore = "measurement probe, run by name (no Kani lane): IR1526_PROBE_BITS=<15|23|31> IR1526_PROBE_OP=<mul|add>, one run each, serially"]
 fn ir1526_probe_wide_integer_multiply_under_installed_kani() {
     use quire_contract_codegen::{GENERATOR_VERSION, KERNEL_VERSION};
     let op = ProbeOp::from_env();
@@ -326,7 +326,7 @@ fn the_native_probe_clauses_negotiate_supported_with_one_harness_at_every_width(
 /// (`other + 3 <= 100`), `mul` (`other * other <= 100`) or `chain` (`other * other + 3 <= 100`);
 /// `IR1526_NATIVE_BITS` is the unsigned operand width of `Int[0, 2^n - 1]`.
 #[test]
-#[ignore = "kani lane: IR1526_NATIVE_BITS=<10|15|23|31> IR1526_NATIVE_OP=<add|mul|chain>, one run each, serially"]
+#[ignore = "measurement probe, run by name (no Kani lane): IR1526_NATIVE_BITS=<10|15|23|31> IR1526_NATIVE_OP=<add|mul|chain>, one run each, serially"]
 fn ir1526_probe_native_route_under_installed_kani() {
     use quire_contract_codegen::{GENERATOR_VERSION, KERNEL_VERSION};
     let op = NativeOp::from_env();
