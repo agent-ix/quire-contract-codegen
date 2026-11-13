@@ -814,6 +814,29 @@ impl Twin {
         twin
     }
 
+    /// The Boolean-result package over the one parameter `amount`, typed `Int[0, upper]`, with
+    /// `result = (expression)` as the postcondition.
+    pub fn with_bounded_amount_result_postcondition(upper: i64, expression: &str) -> Self {
+        let mut twin =
+            Self::with_bounded_amount_implication_condition(&format!("result = ({expression})"));
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let value_type = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("balance value type");
+        let bound = value_type["constraints"]
+            .as_array_mut()
+            .expect("constraints")
+            .iter_mut()
+            .find(|constraint| constraint["keyword"] == "max")
+            .expect("maximum bound");
+        bound["operands"]["value"] = json!(upper.to_string());
+        twin.domain = domain.to_string().into_bytes();
+        twin
+    }
+
     /// A QSL precondition over two operation parameters with different integer ranges.
     pub fn with_two_bounded_parameter_precondition() -> Self {
         Self::with_two_parameter_precondition((0, 1000), (-5, 10), "other < 1000 and offset > 0")

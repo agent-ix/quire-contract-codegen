@@ -1712,3 +1712,204 @@ fn ir1526_probe_wide_integer_multiply_under_installed_kani() {
         wall.as_secs_f64()
     );
 }
+
+/// The native-route probe widths: unsigned operand bits `n` of `Int[0, 2^n - 1]`. The native
+/// carrier is signed, so FR-056 counts the operand as `n + 1` bits. `IR1526_NATIVE_BITS` picks one.
+const IR1526_NATIVE_WIDTHS: [u32; 4] = [10, 15, 23, 31];
+
+/// The operation of a native-route probe clause; `IR1526_NATIVE_OP` picks one per run. The native
+/// route renders no precondition with arithmetic and no two-parameter clause, so each clause is a
+/// Boolean-result postcondition `result = (<condition>)` over the one operand `amount`, the form
+/// the native route renders arithmetic in; the subject returns the same expression.
+#[derive(Clone, Copy)]
+enum NativeOp {
+    Add,
+    Mul,
+    Chain,
+}
+
+impl NativeOp {
+    const ALL: [Self; 3] = [Self::Add, Self::Mul, Self::Chain];
+
+    fn from_env() -> Self {
+        match std::env::var("IR1526_NATIVE_OP").as_deref() {
+            Err(_) | Ok("add") => Self::Add,
+            Ok("mul") => Self::Mul,
+            Ok("chain") => Self::Chain,
+            Ok(other) => panic!("IR1526_NATIVE_OP must be add, mul or chain, got {other}"),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Mul => "mul",
+            Self::Chain => "chain",
+        }
+    }
+
+    /// The clause: an add, a multiply with no add, and a multiply then an add.
+    fn condition(self) -> &'static str {
+        match self {
+            Self::Add => "amount + 3 <= 100",
+            Self::Mul => "amount * amount <= 100",
+            Self::Chain => "amount * amount + 3 <= 100",
+        }
+    }
+}
+
+fn native_bits() -> u32 {
+    let bits = std::env::var("IR1526_NATIVE_BITS")
+        .ok()
+        .map_or(IR1526_NATIVE_WIDTHS[0], |value| {
+            value.parse().expect("IR1526_NATIVE_BITS is a number")
+        });
+    assert!(
+        IR1526_NATIVE_WIDTHS.contains(&bits),
+        "IR1526_NATIVE_BITS must be one of {IR1526_NATIVE_WIDTHS:?}"
+    );
+    bits
+}
+
+fn native_probe_clause(
+    op: NativeOp,
+    bits: u32,
+) -> (
+    quire_contract_model::CheckedPackageV2,
+    quire_contract_model::CheckedNodeId,
+) {
+    Twin::with_bounded_amount_result_postcondition((1_i64 << bits) - 1, op.condition())
+        .emitted_package("BalanceNeverDrops")
+}
+
+/// The clause with its one operand `Int[0, 2^bits - 1]`, negotiated on the native route with an
+/// empty tractability table.
+fn native_probe_harness(op: NativeOp, bits: u32) -> KaniV2ClauseObligationHarness {
+    use quire_contract_codegen::{
+        negotiate_kani_obligations_with_options, GenerationOptions, IntegerRoute,
+    };
+    let scratch = TemporaryDirectory::new("ir1526-native-probe-table");
+    let table = scratch.path.join("table.json");
+    fs::write(&table, b"[]").unwrap();
+    let (package, clause) = native_probe_clause(op, bits);
+    let outcome = negotiate_kani_obligations_with_options(
+        &KaniObligationRequest {
+            ceilings: IR1526_PROBE_CEILINGS,
+            items: &[ObligationItem::V2Clause {
+                package: &package,
+                clause: &clause,
+                claim: &crate::common::v2_claim::claim_for(&package, &clause),
+                dependencies: None,
+            }],
+            subject_path: SUBJECT,
+            unwind: 3,
+        },
+        &GenerationOptions {
+            tractability_table: Some(table),
+        },
+        IntegerRoute::Native,
+    )
+    .expect("the request negotiates");
+    assert!(
+        matches!(
+            &outcome.records()[0].disposition,
+            quire_contract_codegen::ObligationDisposition::Supported { .. }
+        ),
+        "{} at {bits} bits: {:?}",
+        op.name(),
+        outcome.records()[0].disposition
+    );
+    let KaniObligationOutcome::Emitted {
+        mut v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the request is valid");
+    };
+    assert_eq!(v2_clause_harnesses.len(), 1, "one contract harness");
+    v2_clause_harnesses.remove(0)
+}
+
+#[test]
+fn the_native_probe_clauses_negotiate_supported_with_one_harness_at_every_width() {
+    for op in NativeOp::ALL {
+        for bits in IR1526_NATIVE_WIDTHS {
+            let harness = native_probe_harness(op, bits);
+            let source = &harness.rust.contents;
+            assert!(
+                source.contains(&format!("{}_i64", (1_i64 << bits) - 1)),
+                "{} at {bits} bits renders its bound",
+                op.name()
+            );
+        }
+    }
+}
+
+/// Prints the decider features of each native probe clause so corpus rows can be written from
+/// them: the clause's route and its operations with their widths.
+#[test]
+fn the_native_probe_clauses_print_their_decider_features() {
+    use quire_contract_codegen::{derive_v2_clause_operation_widths, IntegerRoute};
+    for op in NativeOp::ALL {
+        for bits in IR1526_NATIVE_WIDTHS {
+            let (package, clause) = native_probe_clause(op, bits);
+            let widths =
+                derive_v2_clause_operation_widths(&package, &clause).expect("the clause plans");
+            assert!(!widths.is_empty(), "{} has operations", op.name());
+            println!(
+                "IR1526-NATIVE-FEATURES op={} operand_bits={bits} route={:?} clause=`{}` operations={widths:?}",
+                op.name(),
+                IntegerRoute::Native,
+                op.condition(),
+            );
+        }
+    }
+}
+
+/// Measures, never asserts a verdict: the AC-10 native-route probe. The harness is the generated
+/// postcondition harness over the subject `check(amount) = <condition>`. `IR1526_NATIVE_OP` is `add`
+/// (`other + 3 <= 100`), `mul` (`other * other <= 100`) or `chain` (`other * other + 3 <= 100`);
+/// `IR1526_NATIVE_BITS` is the unsigned operand width of `Int[0, 2^n - 1]`.
+#[test]
+#[ignore = "kani lane: IR1526_NATIVE_BITS=<10|15|23|31> IR1526_NATIVE_OP=<add|mul|chain>, one run each, serially"]
+fn ir1526_probe_native_route_under_installed_kani() {
+    use quire_contract_codegen::{GENERATOR_VERSION, KERNEL_VERSION};
+    let op = NativeOp::from_env();
+    let bits = native_bits();
+    let harness = native_probe_harness(op, bits);
+    let lib = format!(
+        "{}{}",
+        harness.rust.contents,
+        subject_module(op.condition())
+    );
+    let crate_scratch = ScratchCrate::new("ir1526-native-probe", &lib, None);
+    let started = Instant::now();
+    let run = run_installed(&crate_scratch, &harness);
+    let wall = started.elapsed();
+    let verdict = match &run.evidence.outcome {
+        KaniRunOutcome::Verified => "Verified".to_owned(),
+        KaniRunOutcome::Falsified { .. } => "Falsified".to_owned(),
+        KaniRunOutcome::Inconclusive { reason } => format!("{reason:?}"),
+        other => format!("{other:?}"),
+    };
+    let kani_version = Command::new("cargo")
+        .args(["kani", "--version"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default();
+    println!(
+        "IR1526-PROBE op={} bits={bits} route=native clause=`{}` verdict={verdict} wall={:.1}s kani={kani_version} generator={GENERATOR_VERSION} kernel={KERNEL_VERSION}",
+        harness_operation(op),
+        op.condition(),
+        wall.as_secs_f64()
+    );
+}
+
+/// The catalog operation ids of the clause, as the corpus rows name them.
+fn harness_operation(op: NativeOp) -> &'static str {
+    match op {
+        NativeOp::Add => "quire.op.integer.add",
+        NativeOp::Mul => "quire.op.integer.mul",
+        NativeOp::Chain => "quire.op.integer.mul+quire.op.integer.add",
+    }
+}
