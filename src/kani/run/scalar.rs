@@ -1377,13 +1377,17 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
     seal(root)
 }
 
+/// The actual native result and the exact staged package paths and bytes that produced it.
+#[cfg(test)]
+pub(crate) type StagedNativeObservation = (Outcome<Integer>, Vec<(String, Vec<u8>)>);
+
 /// Stage the request's package, build its native observer and invoke the staged oracle once,
 /// without a Kani proof (IR-631: the observation of a falsified artifact). Returns the actual
 /// typed result and the exact package paths and bytes that were staged and executed.
 #[cfg(test)]
 pub(crate) fn observe_staged_native_for_test(
     request: &KaniScalarNativeRequest<'_>,
-) -> Result<(Outcome<Integer>, Vec<(String, Vec<u8>)>), KaniScalarNativeError> {
+) -> Result<StagedNativeObservation, KaniScalarNativeError> {
     validate_request(request)?;
     let snapshot = PrivateSnapshot::create()?;
     let package = stage_package(request, snapshot.path())?;
