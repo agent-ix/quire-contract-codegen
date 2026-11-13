@@ -108,9 +108,10 @@ bank_subject!(
 );
 
 /// The profile postcondition `Debited` read natively over the pre-state, the produced state and
-/// the parameter: the conjunction of its two comparisons.
+/// the parameter: the conjunction `post <= pre - amount and post >= pre - amount`, which holds
+/// exactly when the two sides are equal.
 fn debited(pre: i64, post: i64, amount: i64) -> bool {
-    post <= pre - amount && post >= pre - amount
+    post == pre - amount
 }
 
 /// The profile negotiated with `CanAfford` and `Debited` requested together; the postcondition
