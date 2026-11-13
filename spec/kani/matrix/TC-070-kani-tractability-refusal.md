@@ -61,5 +61,5 @@ unchanged.
 
 ## Status
 
-Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 10 is partial: the corpus now has two measured `timed_out` general-route scalar rows (IR-1530) and still lacks Meter, decimal, relational and a `timed_out` V2 clause (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
+Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 10 is partial (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
 needs an installed Kani run.

@@ -874,3 +874,53 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
         "the appended multiply is now refused"
     );
 }
+
+/// The multiply fixtures of the installed-Kani FR-056-AC-13 test, negotiated on the host: the
+/// wide multiply is refused and the narrow one is let through to a harness. The decision does
+/// not depend on the route. The native route cannot render a two-parameter precondition at all
+/// (`RenderFailed`), so the narrow clause is checked on the general route.
+#[trace("FR-056-AC-13", "TC-070")]
+#[test]
+fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
+    let directory = TemporaryDirectory::new("ir1526-ac13");
+    let path = write_table(
+        &directory,
+        "table.json",
+        &[row_json(&[MUL], 21, "not_tractable")],
+    );
+    let negotiate = |upper: i64, route: IntegerRoute| {
+        let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
+        let claim = crate::common::v2_claim::claim_for(&package, &clause);
+        negotiate_kani_obligations_with_options(
+            &request(&[item(&package, &clause, &claim)]),
+            &options(&path),
+            route,
+        )
+        .unwrap()
+    };
+    let wide = negotiate(1 << 20, IntegerRoute::General);
+    assert!(matches!(
+        disposition(&wide, 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
+    assert_eq!(harness_count(&wide), 0);
+    let native_wide = negotiate(1 << 20, IntegerRoute::Native);
+    assert!(matches!(
+        disposition(&native_wide, 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
+    let narrow = negotiate(1 << 9, IntegerRoute::General);
+    assert_eq!(harness_count(&narrow), 1);
+    assert!(
+        matches!(
+            disposition(&narrow, 0),
+            ObligationDisposition::Supported { .. }
+        ),
+        "{:?}",
+        disposition(&narrow, 0)
+    );
+}
