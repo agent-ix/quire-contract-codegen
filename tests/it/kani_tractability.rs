@@ -1054,7 +1054,7 @@ fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
         TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
             .expect("the docs file loads");
     assert_eq!(general_scalar_table(), from_file);
-    assert_eq!(from_file.rows().len(), 1);
+    assert_eq!(from_file.rows().len(), 2);
 }
 
 /// A request whose launcher and crate do not exist: any attempt to run it would be a different
@@ -1114,7 +1114,11 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
     assert_eq!(width_bits, 4, "Int[0, 9] is 4 bits");
     assert_eq!(route, IntegerRoute::General);
     assert_eq!(&*row, &general_scalar_table().rows()[0]);
-    assert_eq!(row.max_operand_bits, 4);
+    assert_eq!(row.operation_ids, [ADD]);
+    assert_eq!(
+        row.max_operand_bits, 2,
+        "the smallest add width observed to time out"
+    );
     assert_eq!(row.kani_version, "0.68.0");
     assert_eq!(row.cbmc_version, "6.11.0");
     assert_eq!(row.solver_version, "cadical-3.0.0");
@@ -1172,9 +1176,36 @@ fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row
     assert!(matches!(table.decide(&general), Decision::Refuse { .. }));
     let native_features = features_on(IntegerRoute::Native, vec![op_width(ADD, 4)]);
     assert!(matches!(table.decide(&native_features), Decision::Run));
-    // Narrower than the measured width is not refused.
-    let narrow = features(vec![op_width(ADD, 3)]);
-    assert!(matches!(table.decide(&narrow), Decision::Run));
+    // The add row starts at the smallest width observed to time out, 2 bits (IR-1530 probe,
+    // `x + 1` over `Int[2, 2]`, and 3 bits from the driver's `Int[4, 4]` run); narrower is
+    // unmeasured and runs.
+    for bits in [2, 3, 4] {
+        assert!(
+            matches!(
+                table.decide(&features(vec![op_width(ADD, bits)])),
+                Decision::Refuse { .. }
+            ),
+            "add at {bits} bits"
+        );
+        assert!(
+            matches!(
+                table.decide(&features_on(
+                    IntegerRoute::Native,
+                    vec![op_width(ADD, bits)]
+                )),
+                Decision::Run
+            ),
+            "native add at {bits} bits"
+        );
+    }
+    assert!(matches!(
+        table.decide(&features(vec![op_width(ADD, 1)])),
+        Decision::Run
+    ));
+    // Subtraction is measured at 4 bits only: 3 bits runs.
+    let sub = |bits| features(vec![op_width("quire.op.integer.sub", bits)]);
+    assert!(matches!(table.decide(&sub(3)), Decision::Run));
+    assert!(matches!(table.decide(&sub(4)), Decision::Refuse { .. }));
 }
 
 /// A decider that records the features it is given and always runs.

@@ -68,8 +68,9 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
     `NotTractable` carrying `V2ClauseNotTractable` with node, operation id, width 4, route `general`
     and the row with its versions, so no launch happened. Add a mixed batch (native first, general
     second) and assert it is refused whole. Submit the native-route harness and assert it is not
-    refused (the row is general-route); assert general-route features at 4 bits are refused,
-    native-route features at the same width run, and a narrower general-route width runs
+    refused (the row is general-route); assert general-route add features at 2, 3 and 4 bits are
+    refused (the add row starts at 2 bits) and at 1 bit run, sub features at 4 bits are refused and
+    at 3 bits run (the sub row starts at 4 bits), and native-route features at the same widths run
     (FR-056-AC-15).
 
 ## Expected Results
