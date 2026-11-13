@@ -1624,6 +1624,10 @@ fn native_term(
             arguments,
             ..
         } => {
+            if identity == "quire.op.numeric.narrow" {
+                let literal = crate::oracle::clause::admitted_literal_narrow(term)?;
+                return native_term(literal, input_name, symbolic_name, arithmetic);
+            }
             if let [left, right] = arguments.as_slice() {
                 let gate = match identity.as_str() {
                     "quire.op.boolean.and" | "quire.op.boolean.implies" => Some(false),
@@ -1904,6 +1908,53 @@ mod postcondition_signature_tests {
 
     #[trace("FR-025-AC-11", "TC-036")]
     #[test]
+    fn every_unavailable_or_ambiguous_read_keeps_its_typed_record() {
+        let (package, clause) =
+            native_twin::Twin::with_bounded_result_postcondition().emitted_package("DepositResult");
+        let view = ClauseGraphView::new(&package);
+        let context = package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == "object_type")
+            .expect("selected object context")
+            .node_id
+            .clone();
+        for code in [
+            CheckedOperationReadErrorCode::ForeignContext,
+            CheckedOperationReadErrorCode::UnknownNode,
+            CheckedOperationReadErrorCode::WrongContextKind,
+            CheckedOperationReadErrorCode::AmbiguousOperation,
+            CheckedOperationReadErrorCode::MissingDeclaringNode,
+            CheckedOperationReadErrorCode::AmbiguousDeclaringNode,
+            CheckedOperationReadErrorCode::UnavailableParameterName,
+            CheckedOperationReadErrorCode::WorkLimit,
+        ] {
+            let read_context = context.clone();
+            let refusal = match read_postcondition_signature(&view, &clause, move |_, _| {
+                Err(quire_contract_model::CheckedOperationReadError {
+                    code,
+                    context: read_context,
+                    work: 7,
+                    limit: 65_536,
+                })
+            }) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("{code:?} read exposed a signature"),
+            };
+            let UnsupportedObligation::V2ClauseOperationRead { node_id, source } = refusal else {
+                panic!("{code:?}: the typed read refusal is retained");
+            };
+            assert_eq!(node_id, clause);
+            assert_eq!(
+                (source.code, source.context, source.work, source.limit),
+                (code, context.clone(), 7, 65_536)
+            );
+        }
+    }
+
+    #[trace("FR-025-AC-11", "TC-036")]
+    #[test]
     fn binder_role_type_and_order_mismatches_refuse_before_harness_lowering() {
         let (package, clause) = native_twin::Twin::with_two_parameter_result_postcondition()
             .emitted_package("ResultWithParameters");
@@ -1969,12 +2020,72 @@ mod postcondition_signature_tests {
 
 #[cfg(test)]
 mod native_probe_tests {
-    use super::{bind_native_arithmetic_probes, escape_message_label, ArithmeticProbe};
+    use super::{
+        bind_native_arithmetic_probes, escape_message_label, native_term, ArithmeticProbe,
+        NativeTerm,
+    };
+    use crate::core::ir::clause::ClauseTerm;
     use crate::core::native_integer::{
         NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
         NativeIntegerSelection,
     };
     use ix_trace_rs::trace;
+
+    /// The independent native expectation sees a checked literal narrow only as its integer, and
+    /// only when the target admits that integer.
+    #[trace("FR-014-AC-54", "FR-015-AC-41", "TC-025")]
+    #[test]
+    fn native_clause_expectation_accepts_only_in_range_literal_narrows() {
+        let narrow = |value: &str| ClauseTerm::Operation {
+            identity: "quire.op.numeric.narrow".to_owned(),
+            arguments: vec![ClauseTerm::Integer(value.to_owned())],
+            result_bound: Some((0, 1000)),
+        };
+        let expectation =
+            |value: &str| native_term(&narrow(value), "amount", "amount_current", &mut Vec::new());
+        for (value, expected) in [("0", 0_i128), ("1000", 1000)] {
+            assert!(
+                matches!(
+                    expectation(value),
+                    Some(NativeTerm::Integer { lower, upper, .. }) if lower == expected && upper == expected
+                ),
+                "{value}"
+            );
+        }
+        assert!(expectation("-1").is_none());
+        assert!(expectation("1001").is_none());
+
+        let wide = |value: &str, lower: i128, upper: i128| {
+            native_term(
+                &ClauseTerm::Operation {
+                    identity: "quire.op.numeric.narrow".to_owned(),
+                    arguments: vec![ClauseTerm::Integer(value.to_owned())],
+                    result_bound: Some((lower, upper)),
+                },
+                "amount",
+                "amount_current",
+                &mut Vec::new(),
+            )
+        };
+        for (value, lower, upper) in [
+            ("-5", -10_i128, 10_i128),
+            ("-9223372036854775808", i128::from(i64::MIN), 0),
+            ("9223372036854775807", 0, i128::from(i64::MAX)),
+            ("9223372036854775808", 0, i128::from(i64::MAX) + 10),
+            ("-9223372036854775809", i128::from(i64::MIN) - 10, 0),
+        ] {
+            let expected: i128 = value.parse().expect("literal");
+            assert!(
+                matches!(
+                    wide(value, lower, upper),
+                    Some(NativeTerm::Integer { lower: low, upper: high, .. }) if low == expected && high == expected
+                ),
+                "{value}"
+            );
+        }
+        assert!(wide("9223372036854775808", 0, i128::from(i64::MAX)).is_none());
+        assert!(wide("-11", -10, 10).is_none());
+    }
 
     #[test]
     fn structural_message_label_escapes_delimiters_and_percent_injectively() {
