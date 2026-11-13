@@ -427,7 +427,7 @@ fn tc_025_real_kani_falsifies_the_under_debiting_subject_with_in_domain_native_p
     assert!(amount <= balance, "the precondition holds on the witness");
     let produced = balance - (amount - 1).max(0);
     assert!(
-        !(produced <= balance - amount && produced >= balance - amount),
+        produced != balance - amount,
         "the postcondition is false on the witness: balance {balance}, amount {amount}, produced {produced}"
     );
 }
