@@ -52,3 +52,9 @@ binds to AC-11 correctly.
 | ID      | Severity | Summary | Refs |
 | ------- | -------- | ------- | ---- |
 | FND-001 | medium   | AC-10's open-items list in the Status leaves out the gap this PR exposes. The corpus now mixes general-route rows (3 timed_out) with native-route rows (10 verified or falsified), and the decider features carry no route. The ground truth of a row is therefore not a function of the features the decider is scored on. This is the same confound PR #818's review rejected for scalar rows, and it is what keeps the corpus from attributing the probe timeouts to mul (code-review FND-002). Add it to the AC-10 open items: either a route field in the corpus or decider features, or matching native-route measurements of the same clause shape. Leaving it out lets the 0/0 score read as validation of the mul row. | spec/kani/functional/FR-056-kani-tractability-refusal.md:134-144, tests/fixtures/tractability/corpus.json:372-469 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | ------- | ------ |
+| FND-001 | fixed | 28053a1b: the AC-10 Status open items now list "a route feature in the corpus features and in the decider, native-route wide cases", and say the general-route rows refuse native-route clauses with that false-refuse unmeasured. |

@@ -501,8 +501,8 @@
       "generator_version": "0.1.0",
       "kernel_version": 1
     },
-    "ground_truth": "timed_out",
+    "ground_truth": "memory_exhausted",
     "wall_seconds": 542.5,
-    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=15, IR1526_PROBE_OP=add: clause 'other + offset <= 100' (no multiply), operands Int[0, 2^15 - 1], General route, empty table, Kani 0.68.0, CBMC 6.11.0. Kani outcome Inconclusive(FailedWithoutCounterexample) after 542.5 s, below the 600 s ceiling (not a clean timeout; no peak memory reported, resource exhaustion suspected); no verdict reached, recorded as timed_out for want of a closer schema value"
+    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=15, IR1526_PROBE_OP=add: clause 'other + offset <= 100' (no multiply), operands Int[0, 2^15 - 1], General route, empty table, Kani 0.68.0, CBMC 6.11.0. Kani outcome Inconclusive(FailedWithoutCounterexample) after 542.5 s: the kernel log shows 'Memory cgroup out of memory: Killed process 17052 (cbmc)' at the 24 GiB cap, anon-rss 25055932 kB"
   }
 ]

@@ -682,6 +682,7 @@ enum GroundTruth {
     Verified,
     Falsified,
     TimedOut,
+    MemoryExhausted,
 }
 
 #[derive(Debug, Deserialize)]
@@ -720,7 +721,9 @@ fn score(decider: &dyn TractabilityDecider, corpus: &[CorpusRow]) -> Score {
         let refused = matches!(decider.decide(&row.features), Decision::Refuse { .. });
         match (&row.ground_truth, refused) {
             (GroundTruth::Verified | GroundTruth::Falsified, true) => score.false_refuse += 1,
-            (GroundTruth::TimedOut, false) => score.false_accept += 1,
+            (GroundTruth::TimedOut | GroundTruth::MemoryExhausted, false) => {
+                score.false_accept += 1
+            }
             _ => {}
         }
     }
@@ -878,6 +881,14 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     fs::write(&copy, serde_json::to_vec(&rows).unwrap()).unwrap();
     let after = score(&AlwaysRun, &load_corpus(&copy));
     assert_eq!(after.false_accept, before.false_accept + 1);
+    let mut exhausted = rows.clone();
+    exhausted.last_mut().unwrap()["ground_truth"] = json!("memory_exhausted");
+    fs::write(&copy, serde_json::to_vec(&exhausted).unwrap()).unwrap();
+    assert_eq!(
+        score(&AlwaysRun, &load_corpus(&copy)).false_accept,
+        before.false_accept + 1,
+        "a memory-exhausted row scores as a false-accept"
+    );
     // The table decider scores the same file through the same function.
     let table = table_of(&[row_json(&[MUL], 63, "not_tractable")]);
     assert_eq!(
@@ -987,6 +998,10 @@ fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
     // The add control holds no multiply.
     let id = "ir1526-wide-add-15bit-operands";
     let row = corpus.iter().find(|row| row.id == id).expect(id);
+    assert!(
+        matches!(row.ground_truth, GroundTruth::MemoryExhausted),
+        "{id}"
+    );
     let mut computed = probe_features("other + offset <= 100", 15);
     computed.generator_version = row.features.generator_version.clone();
     computed.kernel_version = row.features.kernel_version;
