@@ -985,7 +985,7 @@ pub(super) fn false_bound_harness_for_test(
     let lowered = LoweredScalarClaim {
         node_id: identity.node_id.clone(),
         operation_identity: identity.operation_identity.clone(),
-        native_integer_selection: None,
+        native_integer_selection: original.identity.native_integer_selection.clone(),
         oracle_source: artifacts
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")

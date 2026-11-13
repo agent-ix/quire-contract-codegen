@@ -17,7 +17,7 @@ The native-route scalar harness for integer arithmetic (`generate_routed_native`
 - The cover stays the last and only `kani::cover!`. Its condition is read into
   `let cover_reached: bool = completed;` before the forgets, then `kani::cover!(cover_reached, ..)`.
 
-The general route (ordinary `generate_routed`, `rt::Integer`) keeps its previous tail, the cover
+The general route (ordinary `generate_routed`, `rt::Integer`) keeps its previous tail (see `ir1530-general-route-scalar-not-tractable.md` for the later measurement and the tests' move), the cover
 read directly from `completed` with nothing forgotten. A first version of the change forgot on both
 routes; the existing general-route lane test `kani_generation_real_v2_scalar_verifies` (routed
 `x + 1`) was then OOM-killed at the 24 GiB scope limit within about a minute, while the unchanged
@@ -91,6 +91,9 @@ the cargo test process, was 3.7 GB. A re-run after the forgets were restricted t
 passed again: the verdict test in 19 s and the mutant test in 59 s of wall time.
 
 ## Existing real-Kani scalar tests after the change
+
+Superseded by `ir1530-general-route-scalar-not-tractable.md`: those general-route tests now run the
+native route and end as asserted. The text below is the state at this change.
 
 - Native route, unchanged and passing: `native_original_tc027_increment_verifies` (`Verified`, 7 s).
 - General-route tests `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified` and
