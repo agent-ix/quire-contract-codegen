@@ -1314,6 +1314,68 @@ fn probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
     )
 }
 
+/// The features the decider computes on the native route for the AC-10 native probe clause
+/// `result = (condition)` over `amount`, `Int[0, 2^operand_bits - 1]`.
+fn native_probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
+    let upper = (1_i64 << operand_bits) - 1;
+    let (package, clause) = Twin::with_bounded_amount_result_postcondition(upper, condition)
+        .emitted_package("BalanceNeverDrops");
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
+    ClauseFeatures::new(
+        IntegerRoute::Native,
+        derive_v2_clause_operation_widths(&package, &clause)
+            .expect("widths")
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    )
+}
+
+/// The native probe clause of each `ir1526-native-<op>-<bits>bit-operands` row.
+const NATIVE_PROBE_CLAUSES: [(&str, &str); 3] = [
+    ("add", "amount + 3 <= 100"),
+    ("multiply", "amount * amount <= 100"),
+    ("chain", "amount * amount + 3 <= 100"),
+];
+
+/// The native-route probe rows carry exactly the features the decider computes, are measured
+/// `verified`, and the shipped general-route table does not refuse them (FR-056-AC-10, AC-14).
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_the_native_probe_rows_carry_the_decider_features_and_are_not_refused() {
+    let corpus = load_corpus(&fixture_path("corpus.json"));
+    let table = TractabilityTable::load(&fixture_path("table.json")).expect("the measured table");
+    for (name, condition) in NATIVE_PROBE_CLAUSES {
+        for bits in [10, 15, 23, 31] {
+            let id = format!("ir1526-native-{name}-{bits}bit-operands");
+            let row = corpus.iter().find(|row| row.id == id).expect(&id);
+            assert!(matches!(row.ground_truth, GroundTruth::Verified), "{id}");
+            assert!(row.wall_seconds.is_some(), "{id} was measured");
+            let mut computed = native_probe_features(condition, bits);
+            computed.generator_version = row.features.generator_version.clone();
+            computed.kernel_version = row.features.kernel_version;
+            assert_eq!(row.features, computed, "{id}");
+            assert_eq!(row.features.route, IntegerRoute::Native, "{id}");
+            assert_eq!(
+                table.decide(&row.features),
+                Decision::Run,
+                "{id}: a general-route row does not refuse a native clause"
+            );
+        }
+    }
+}
+
 /// The probe rows of the shipped corpus carry exactly the features the decider computes, at the
 /// generator and kernel versions the probe ran against (which the row records, so that scoring
 /// does not depend on the current crate version).

@@ -518,5 +518,465 @@
     "ground_truth": "memory_exhausted",
     "wall_seconds": 542.5,
     "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=15, IR1526_PROBE_OP=add: clause 'other + offset <= 100' (no multiply), operands Int[0, 2^15 - 1], General route, empty table, Kani 0.68.0, CBMC 6.11.0. Kani outcome Inconclusive(FailedWithoutCounterexample) after 542.5 s: the kernel log shows 'Memory cgroup out of memory: Killed process 17052 (cbmc)' at the 24 GiB cap, anon-rss 25055932 kB"
+  },
+  {
+    "id": "ir1526-native-add-10bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 11
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1023
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 84.5,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=add, IR1526_NATIVE_BITS=10, operand Int[0, 2^10 - 1]: integer add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 84.5 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-add-15bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 15
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 16
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 32767
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 104.2,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=add, IR1526_NATIVE_BITS=15, operand Int[0, 2^15 - 1]: integer add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 104.2 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-add-23bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 23
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 24
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 8388607
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 83.9,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=add, IR1526_NATIVE_BITS=23, operand Int[0, 2^23 - 1]: integer add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 83.9 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-add-31bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 31
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 32
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 2147483647
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 83.7,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=add, IR1526_NATIVE_BITS=31, operand Int[0, 2^31 - 1]: integer add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 83.7 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-multiply-10bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 20
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1023
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 94.9,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=mul, IR1526_NATIVE_BITS=10, operand Int[0, 2^10 - 1]: integer multiply, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 94.9 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount <= 100"
+  },
+  {
+    "id": "ir1526-native-multiply-15bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 15
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 30
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 32767
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 177.6,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=mul, IR1526_NATIVE_BITS=15, operand Int[0, 2^15 - 1]: integer multiply, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 177.6 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount <= 100"
+  },
+  {
+    "id": "ir1526-native-multiply-23bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 23
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 46
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 8388607
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 123.3,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=mul, IR1526_NATIVE_BITS=23, operand Int[0, 2^23 - 1]: integer multiply, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 123.3 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount <= 100"
+  },
+  {
+    "id": "ir1526-native-multiply-31bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 31
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 62
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 2147483647
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 491.8,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=mul, IR1526_NATIVE_BITS=31, operand Int[0, 2^31 - 1]: integer multiply, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 491.8 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount <= 100"
+  },
+  {
+    "id": "ir1526-native-chain-10bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 20
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 20
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1023
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 214.8,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=chain, IR1526_NATIVE_BITS=10, operand Int[0, 2^10 - 1]: a multiply then an add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 214.8 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-chain-15bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 15
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 30
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 30
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 32767
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 270.8,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=chain, IR1526_NATIVE_BITS=15, operand Int[0, 2^15 - 1]: a multiply then an add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 270.8 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-chain-23bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 23
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 46
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 46
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 8388607
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 259.9,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=chain, IR1526_NATIVE_BITS=23, operand Int[0, 2^23 - 1]: a multiply then an add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 259.9 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount + 3 <= 100"
+  },
+  {
+    "id": "ir1526-native-chain-31bit-operands",
+    "features": {
+      "route": "native",
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.mul",
+          "bits": 31
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 62
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 62
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 2147483647
+        },
+        {
+          "lower": 0,
+          "upper": 1,
+          "boolean": true
+        }
+      ],
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 274.3,
+    "measurement_source": "IR-1526 probe test ir1526_probe_native_route_under_installed_kani (PR #824), IR1526_NATIVE_OP=chain, IR1526_NATIVE_BITS=31, operand Int[0, 2^31 - 1]: a multiply then an add, native route, empty table, Kani 0.68.0, CBMC 6.11.0, Verified in 274.3 s under the 600 s ceiling and 24 GiB cap. Harness shape differs from the general-route cover-only precondition probe: a Boolean-result postcondition 'result = (amount * amount + 3 <= 100)' over one operand 'amount', checked against the subject fn check(amount) = amount * amount + 3 <= 100"
   }
 ]

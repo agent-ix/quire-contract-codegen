@@ -164,24 +164,33 @@ implemented and host-tested. The host test `tc_070_the_ac13_multiply_fixtures_sp
 negotiates on both routes: the general-route row refuses the general clause and not the native one.
 FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
-FR-056-AC-10 is partial: the shipped corpus holds fourteen measured rows. Ten are `verified` or
+FR-056-AC-10 is partial: the shipped corpus holds twenty-six measured rows. Ten are `verified` or
 `falsified` and all of the one IR-1022 clause and its mutants. Four are general-route V2 clauses that
-did not finish under Kani 0.68.0. Three are `other * offset + 3 <= 100`, operands
-`Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits, each `TimedOut` at 600 s. One is the control
-`other + offset <= 100` (no multiply) at n = 15: the kernel OOM-killed `cbmc` at the 24 GiB memory
-cap after 542.5 s (`anon-rss` 25055932 kB), so it is `memory_exhausted`, not a timeout. All were measured by
-`ir1526_probe_wide_integer_multiply_under_installed_kani`. Because the add-only clause fails too,
-the measurements do not show that the multiply is the cause. All ran on the general-route
-`rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
-measured not tractable for an add at 4 bits.
+did not finish under Kani 0.68.0, measured by `ir1526_probe_wide_integer_multiply_under_installed_kani`.
+Three are `other * offset + 3 <= 100`, operands `Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits,
+each `TimedOut` at 600 s. One is the control `other + offset <= 100` (no multiply) at n = 15: the kernel
+OOM-killed `cbmc` at the 24 GiB memory cap after 542.5 s (`anon-rss` 25055932 kB), so it is
+`memory_exhausted`, not a timeout; because the add-only clause fails too, those measurements do not show
+that the multiply is the cause. All four ran on the general-route `rt::Integer` carrier, which
+`docs/qualification/ir1530-general-route-scalar-not-tractable.md` measured not tractable for an add at 4
+bits. Twelve are native-route rows measured by `ir1526_probe_native_route_under_installed_kani` (PR #824,
+Kani 0.68.0, CBMC 6.11.0, 24 GiB lane, 600 s ceiling): integer add (`amount + 3 <= 100`), integer
+multiply (`amount * amount <= 100`) and the multiply-then-add chain (`amount * amount + 3 <= 100`) over
+`Int[0, 2^n - 1]` for n = 10, 15, 23 and 31, all `verified` (multiply at 31 bits in 491.8 s, the slowest).
+The native harness shape differs from the general-route probe: the native route renders no precondition
+with arithmetic, so each native row is a Boolean-result postcondition `result = (<cond>)` over one operand
+checked against a subject function, not a cover-only precondition. The shipped general-route table rows
+(multiply and add from 15 bits) therefore do not over-refuse native clauses: the host test
+`tc_070_the_native_probe_rows_carry_the_decider_features_and_are_not_refused` shows the decider returns
+`Run` for all twelve, and the corpus scores zero false-refuse and zero false-accept.
 CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
-multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Those rows are general-route rows and do not refuse native-route clauses; the corpus holds no native-route clause of 15 bits or more, so whether they over-refuse the native route is
-unmeasured. Still missing for AC-10: native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
-(`other * offset + 3 <= 100`) at any listed width (none measured; the AC-13 clause that Verified in
-235.5 s on the native route is `with_bounded_amount_implication` over `Int[0, 1000]`, 10 bits), Meter, decimal and pure-relational cases and a multi-operation clause that
-is not integer arithmetic. The ir1530 timeout is of the scalar harness, not a V2 clause, so it is
-not a corpus row. Those rows need new installed-Kani measurements. The add row's `peak_bytes` is the OOM-killed
-`cbmc` process's `anon-rss` from the kernel log; the multiply row's is `null`: the runner reported no peak. FR-056-AC-13 is coded as a kani-lane test and was executed under installed Kani 0.68.0: its clause
+multiply and integer add from 15 bits, the smallest measured-bad width, both general-route rows from this
+evidence. Still missing for AC-10: Meter, decimal and pure-relational cases and a multi-operation clause
+that is not integer arithmetic; native-route two-parameter and arithmetic precondition shapes cannot
+render natively, so they have no native row. The ir1530 timeout is of the scalar harness, not a V2
+clause, so it is not a corpus row. Those rows need new installed-Kani measurements. The add row's
+`peak_bytes` is the OOM-killed `cbmc` process's `anon-rss` from the kernel log; the multiply row's is
+`null`: the runner reported no peak. FR-056-AC-13 is coded as a kani-lane test and was executed under installed Kani 0.68.0: its clause
 ended `Verified` in 235.5 s on the native route. Its multiply refusal and pass-through fixtures also run as a host test
 (`tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`). The narrow multiply is negotiated on the
 general route because the native route renders no two-parameter precondition. FR-056-AC-1 to AC-12 and AC-14 need no Kani run and are host tests. FR-056-AC-13
