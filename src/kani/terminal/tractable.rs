@@ -3,7 +3,9 @@
 //! The measured table of FR-056 records the general integer scalar harness as not tractable
 //! (`docs/qualification/ir1530-general-route-scalar-not-tractable.md`). Generation keeps emitting
 //! that harness, because host tests exercise it; the refusal is made here, before any Kani process
-//! starts, through the one [`TractabilityDecider`] seam and the one
+//! starts, for a routed scalar harness on either route (its route is read from its identity), and
+//! only rows of that route apply. The refusal is opt-in: it happens only for a table the caller
+//! passes, and CG ships the general-route row for that purpose. Through the one [`TractabilityDecider`] seam and the one
 //! [`UnsupportedObligation::V2ClauseNotTractable`] arm. The wall-clock ceiling stays the backstop
 //! for everything the decider lets through.
 
@@ -72,8 +74,10 @@ impl std::error::Error for DecidedRunRefusal {
     }
 }
 
-/// Decide one harness. Only a routed scalar harness on the general integer route is asked; every
-/// other harness, and a native-route scalar, is `Ok` without consulting the decider.
+/// Decide one harness. Only a routed scalar harness is asked, on its own route (`general` for the
+/// `rt::Integer` carrier, `native` for the native integer carrier); every other harness is `Ok`
+/// without consulting the decider. A native-route scalar harness is therefore refused only by a
+/// `native` row, and the shipped table holds none.
 ///
 /// # Errors
 ///

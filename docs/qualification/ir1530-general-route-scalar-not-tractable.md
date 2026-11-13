@@ -60,7 +60,15 @@ refusal is FR-056-AC-15: `execute_kani_obligation_decided` and `execute_kani_obl
 operation id, width, the row with its Kani, CBMC, solver, generator and kernel versions). It is
 decided at the run, not at generation: a generation-level refusal broke the host tests that
 exercise this route (below), so generation still emits the harness and the wall-clock ceiling
-stays the backstop. The native-route harness is not refused.
+stays the backstop. The native-route harness is not refused only because the shipped table holds no
+`native` row: the decided wrappers ask the decider on the harness's own route, so a `native` row
+would refuse it.
+
+Rows apply per route across both shapes, a V2 clause at generation and a routed scalar harness at
+the run. What the row measures is the `rt::Integer` carrier, not the shape, so the same
+`general` add row would refuse a general-route V2 clause. The shipped scalar row is therefore
+scoped by use, not by schema: it is embedded for the decided run wrappers and must not be passed as
+a generation `tractability_table`.
 
 The refusal is opt-in: the caller passes the table to the decided wrappers, and with none passed
 the harness runs. CG ships the table in-crate (`TractabilityTable::shipped_general_route_scalar`,

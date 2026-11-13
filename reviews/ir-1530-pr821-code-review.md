@@ -51,6 +51,15 @@ correct in both directions the tests check. FND-001 is the substantive gap: the 
 opt-in and has no production caller; it should be dispositioned as deferred to a quire-driver
 ticket rather than fixed here. FND-002 to FND-004 are small and fixable in the same PR.
 
+## New findings (disposition pass 2)
+
+Checked at 7a7ceaa9, which merges origin/main (#819, #820, #822) and reconciles the route onto `IntegerRoute`.
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-005 | low | Stale docs after the reconciliation. `refuse_if_not_tractable` still says "Only a routed scalar harness on the general integer route is asked; every other harness, and a native-route scalar, is `Ok` without consulting the decider", but it now maps `ScalarIntegerRepresentation::Native` to `IntegerRoute::Native` and asks the decider for both routes. The module doc and the qualification doc's "The native-route harness is not refused" hold only because no native row ships. Update the rustdoc to say both routes are decided and that a native harness runs unless a native row qualifies. | src/kani/terminal/tractable.rs:1-8, src/kani/terminal/tractable.rs:75-92, docs/qualification/ir1530-general-route-scalar-not-tractable.md:63 |
+| FND-006 | low | With the route reduced to `general`/`native`, a row no longer says which shape it measured (V2 clause or routed scalar harness). The shipped scalar row (`general`, add at 4 bits) would refuse every general-route V2 clause with an add of 4 bits or more if a caller passed it, or merged it into, a generation table. The `table.json` V2 rows (`general`, add and mul at 15 bits) likewise apply to general-route scalar harnesses at run. That matches FR-056's reading that the `rt::Integer` carrier is the cost, but neither FR-056-AC-15 nor the qualification doc says the rows cross shapes. FR-056-AC-15 only says the row "never refuses a native-route harness". State it, or keep the shipped scalar row out of generation tables explicitly. | src/kani/tractability.rs:194-198, docs/qualification/ir1530-general-route-scalar-table.json:4, spec/kani/functional/FR-056-kani-tractability-refusal.md:140 |
+
 ## Dispositions
 
 Round 1, checked against 5443b94b (fix commit over c3a58c73).
@@ -61,3 +70,18 @@ Round 1, checked against 5443b94b (fix commit over c3a58c73).
 | FND-002 | fixed | The scan needle is restored to any `tractab` mention and also names `.decide(`, `obligation_decided`, `obligations_decided` and `refuse_if_not_tractable` (tests/it/kani_tractability.rs:653-658). |
 | FND-003 | fixed | Row `solver_version` is `cadical-3.0.0`. Checked by the reviewer: the installed `~/.kani/kani-0.68.0/bin/cbmc` reports `6.11.0 (cbmc-6.11.0)` and embeds the string `cadical-3.0.0`. FR-015-AC-99 records a real run on Kani 0.68.0, CBMC 6.11.0, CaDiCaL 3.0.0. The doc's TC-043 citation is stand-in fixture text, not a run log, but the value is correct. |
 | FND-004 | fixed | `impl Display for DecidedRunRefusal` (operation id and width for the refusal; the runner's message for `Execution`) and `impl std::error::Error` with `source()` returning the wrapped `KaniExecutionRefusal`; the test asserts the message holds the operation id and `4 bits`. |
+
+Round 2, checked against 7a7ceaa9 (5443b94b..7a7ceaa9, plus origin/main...HEAD for the merge).
+FND-001 to FND-004 keep their round-1 outcomes: the scan needle, the `cadical-3.0.0` row and
+`Display`/`Error` survived the merge, and FND-001 stays deferred to the quire-driver PR under IR-1530.
+No regression for IR-1526 consumers: `quire_contract_codegen::IntegerRoute` is still re-exported
+from the crate root (it moved from `negotiate` to `tractability`). `ClauseFeatures::new` gained a
+leading `route` argument and `V2ClauseNotTractable` gained `route`; no sibling repo under ~/dev
+uses either. The rows are labelled as main's FR-056 Status says (ir1022/ir1509 `native`;
+`table.json` and ir1526 `general`), and `route` is required with no default. fmt is clean.
+`it` `layout::`, `kani_tractability::` and `kani_obligations::`: 65 passed, 10 ignored. `--lib kani::`: 272 passed.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-005 | still-open | New in round 2; the docs are not yet updated. |
+| FND-006 | still-open | New in round 2; neither the spec nor the doc states that the rows cross shapes. |

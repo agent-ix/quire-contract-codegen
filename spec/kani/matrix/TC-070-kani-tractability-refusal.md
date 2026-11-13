@@ -21,7 +21,8 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
    the signature (FR-056-AC-1).
 2. Admit `a * b + c` at three widths and compare the exposed per-operation widths with those the
    oracle rendering computes. Mutate to the declared width; the multiply-then-add case must fail
-   (FR-056-AC-2). Assert the exposed route is `general` for an `IntegerRoute::General` negotiation
+   (FR-056-AC-2). Negotiate the same clause on each route with a recording decider and assert the
+   features it receives carry that route (a fixed route fails). Assert the exposed route is `general` for an `IntegerRoute::General` negotiation
    and `native` for `IntegerRoute::Native` on the same clause; a decider fed a fixed route fails.
 3. Load a valid table, an empty table and tables with an unknown verdict, a missing field and a
    fractional width, a missing `route` and an unknown `route`; assert the load results and the failing row index. Add a row for a fresh

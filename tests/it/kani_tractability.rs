@@ -918,7 +918,7 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
 /// wide multiply is refused and the narrow one is let through to a harness. The row is a
 /// general-route row, so the native route is not refused by it. The native route cannot render a two-parameter precondition at all
 /// (`RenderFailed`), so the narrow clause is checked on the general route.
-#[trace("FR-056-AC-13", "TC-070")]
+#[trace("FR-056-AC-13", "FR-056-AC-14", "FR-056-AC-4", "TC-070")]
 #[test]
 fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
     let directory = TemporaryDirectory::new("ir1526-ac13");
@@ -1135,6 +1135,50 @@ fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row
     // Narrower than the measured width is not refused.
     let narrow = features(vec![op_width(ADD, 3)]);
     assert!(matches!(table.decide(&narrow), Decision::Run));
+}
+
+/// A decider that records the features it is given and always runs.
+struct Recording(std::cell::RefCell<Vec<ClauseFeatures>>);
+
+impl TractabilityDecider for Recording {
+    fn decide(&self, features: &ClauseFeatures) -> Decision {
+        self.0.borrow_mut().push(features.clone());
+        Decision::Run
+    }
+}
+
+/// FR-056-AC-2 (route): negotiating `other * offset + 3 <= 100` on each route hands the decider
+/// features whose route is that route, with the same propagated widths; a fixed route fails.
+#[trace("FR-056-AC-2", "TC-070")]
+#[test]
+fn tc_070_the_decider_receives_the_negotiation_route() {
+    let seen = |route: IntegerRoute| {
+        let (package, clause) = package(1 << 9, 1 << 9, "other * offset + 3 <= 100");
+        let claim = crate::common::v2_claim::claim_for(&package, &clause);
+        let recording = Recording(std::cell::RefCell::new(Vec::new()));
+        quire_contract_codegen::negotiate_kani_obligations_with_decider(
+            &request(&[item(&package, &clause, &claim)]),
+            &recording,
+            route,
+        )
+        .expect("negotiates");
+        recording.0.into_inner()
+    };
+    let general = seen(IntegerRoute::General);
+    let native = seen(IntegerRoute::Native);
+    let [general] = general.as_slice() else {
+        panic!("one decision on the general route: {general:?}");
+    };
+    let [native] = native.as_slice() else {
+        panic!("one decision on the native route: {native:?}");
+    };
+    assert_eq!(general.route, IntegerRoute::General);
+    assert_eq!(native.route, IntegerRoute::Native);
+    assert_eq!(general.operations, native.operations);
+    assert!(general
+        .operations
+        .iter()
+        .any(|operation| operation.operation_id == MUL));
 }
 
 /// FR-056-AC-14 (decider level): rows match only features of their own route, in both

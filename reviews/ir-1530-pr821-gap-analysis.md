@@ -41,6 +41,13 @@ AC-14 is substantively covered and the assertions would fail on the main mutants
 (route-blind matching, refusing the native harness). The three findings are hardening of edges
 the AC text claims; none blocks merge.
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-004 | medium | FR-056-AC-2's route half has no binder. The two AC-2 tests check widths only, and TC-070 step 2 ("Assert the exposed route is `general` for an `IntegerRoute::General` negotiation and `native` for `IntegerRoute::Native` on the same clause; a decider fed a fixed route fails") is not implemented: no spy decider records the `ClauseFeatures` the negotiation builds. Yet TC-070 Status says "the route additions (steps 2 to 4, 7a and 10) are implemented (IR-1530)". A fixed-route mutant of `native_route(native)` is killed only incidentally, by `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`, which is tagged FR-056-AC-13 alone, so the matrix shows AC-2 bound by width tests while its route clause is untested under that id. Add a recording-decider test tagged FR-056-AC-2: negotiate `a * b + c` on both routes and assert `features.route` each time. | tests/it/kani_tractability.rs:188-270, src/kani/generate/negotiate.rs:336-342, spec/kani/matrix/TC-070-kani-tractability-refusal.md:22-25, spec/kani/matrix/TC-070-kani-tractability-refusal.md:82 |
+| FND-005 | low | The negotiation-level evidence for FR-056-AC-14 (TC-070 step 7a: a general row refuses the general clause and not the native one, and the reverse, with the refusal reporting `IntegerRoute::Native`) lives only in `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`, tagged FR-056-AC-13. The only AC-14 binder, `tc_070_rows_match_only_their_own_route`, is decider-level. Add `FR-056-AC-14` (and `FR-056-AC-2`, `FR-056-AC-4` for the route report) to that test's trace attribute. | tests/it/kani_tractability.rs:923-999, tests/it/kani_tractability.rs:1143 |
+
 ## Dispositions
 
 Round 1, checked against 5443b94b.
@@ -52,3 +59,15 @@ Round 1, checked against 5443b94b.
 | FND-003 | fixed | The qualification doc now says widths below the row's 4 bits are unmeasured, are not refused and are left to the wall-clock backstop; FR-056 Description says the same. |
 
 The new test `tc_070_the_embedded_general_route_table_is_the_docs_file` compares the embedded table with the docs file loaded at run time. Both come from the same file, so they are equal by construction. What the test does pin is that the `include_bytes!` path points at the docs file, not at a copy, and that the file parses to exactly one row. The real coverage is that both refusal tests now get their table from `shipped_general_route_scalar()`, so the shipped path itself is exercised. That is enough for its purpose, and it is not a defect.
+
+Round 2, checked against 7a7ceaa9. FND-001 and FND-003 keep `fixed`: the mixed batch and the
+unmeasured-width note survive. FND-002's route-less-row test was replaced, as main's FR-056 now
+requires: a row or features without `route` is malformed
+(`tc_070_a_missing_or_unknown_route_is_malformed`, tagged FR-056-AC-3), so the round-1 fix is
+superseded rather than regressed. Trace tags were renumbered: the three scalar tests are tagged
+FR-056-AC-15, and FR-056-AC-14 now binds `tc_070_rows_match_only_their_own_route`.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-004 | still-open | New in round 2; no recording-decider test for the AC-2 route feature, and TC-070 Status overclaims step 2. |
+| FND-005 | still-open | New in round 2; the negotiation-level AC-14 evidence is not yet tagged AC-14. |

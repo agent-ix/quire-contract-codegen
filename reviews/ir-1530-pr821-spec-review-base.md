@@ -49,3 +49,9 @@ Round 1, checked against 5443b94b.
 | FND-001 | fixed | FR-056 title, Description (run-level general-scalar route, opt-in, deliberate `V2ClauseNotTractable` reuse, shipped table, unmeasured narrower widths), Inputs (run-level table) and Behavior currency rule (route equality) now cover AC-14. |
 | FND-002 | fixed | TC-070 Status: "Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 14 is implemented and tagged (IR-1530)". |
 | FND-003 | fixed | FR-017-AC-27 now carries only a cross-reference: "see FR-056-AC-14 for its refusal". |
+
+Round 2, checked against 7a7ceaa9. No new spec findings. FR-056 now carries main's #822 route
+semantics (Terms `IntegerRoute`, required `route` key, route-scoped Lookup, AC-14) together with this
+PR's scalar AC, renumbered FR-056-AC-15. The Status reports the route implemented and labels the rows
+as #822's Status asked. FR-017-AC-27's cross-reference now points to FR-056-AC-15. FND-001 to
+FND-003 keep `fixed`. TC-070 step 2's Status overclaim is recorded as gap-analysis FND-004.

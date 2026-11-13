@@ -259,7 +259,7 @@ pub use kani::generate::frame::{
 };
 pub use kani::generate::negotiate::{
     negotiate_kani_native_obligations, negotiate_kani_obligations,
-    negotiate_kani_obligations_with_options,
+    negotiate_kani_obligations_with_decider, negotiate_kani_obligations_with_options,
 };
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
