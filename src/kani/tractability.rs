@@ -25,6 +25,26 @@ const fn kernel_version() -> u32 {
     KERNEL_VERSION
 }
 
+/// Which integer encoding a negotiation selects.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegerRoute {
+    /// `negotiate_kani_obligations`: the general encoding.
+    General,
+    /// `negotiate_kani_native_obligations`: the kernel-admitted native encoding.
+    Native,
+}
+
+impl IntegerRoute {
+    pub(crate) const fn from_native(native: bool) -> Self {
+        if native {
+            Self::Native
+        } else {
+            Self::General
+        }
+    }
+}
+
 /// One operation of a clause and its width after range propagation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +75,8 @@ pub struct InputBound {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClauseFeatures {
+    /// The integer route of the negotiation.
+    pub route: IntegerRoute,
     /// The ordered operations of the clause.
     pub operations: Vec<OperationWidth>,
     /// The input bounds.
@@ -74,11 +96,13 @@ impl ClauseFeatures {
     /// Features at CG's own generator and kernel versions.
     #[must_use]
     pub fn new(
+        route: IntegerRoute,
         operations: Vec<OperationWidth>,
         inputs: Vec<InputBound>,
         collection_bound: Option<u64>,
     ) -> Self {
         Self {
+            route,
             operations,
             inputs,
             collection_bound,
@@ -147,6 +171,8 @@ impl Serialize for WallSeconds {
 pub struct TractabilityRow {
     /// The catalog operation ids the probe exercised.
     pub operation_ids: Vec<String>,
+    /// The integer route the probe ran on. The key is required: there is no default route.
+    pub route: IntegerRoute,
     /// The operand bit width from which the probe did not finish: an operation at this width or
     /// wider is intractable.
     pub max_operand_bits: u32,
@@ -175,7 +201,8 @@ pub struct TractabilityRow {
 
 impl TractabilityRow {
     fn is_current(&self, features: &ClauseFeatures) -> bool {
-        self.generator_version == features.generator_version
+        self.route == features.route
+            && self.generator_version == features.generator_version
             && self.kernel_version == features.kernel_version
     }
 }

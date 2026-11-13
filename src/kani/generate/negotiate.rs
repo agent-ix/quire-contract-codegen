@@ -114,7 +114,7 @@ use crate::{
         ObligationKind, ProofDependencySnapshot, StateFrameHarness, V2ClauseClaimField,
         V2ClauseObligationClaim,
     },
-    kani::tractability::{GenerationOptions, TractabilityDecider, TractabilityTable},
+    kani::tractability::{GenerationOptions, IntegerRoute, TractabilityDecider, TractabilityTable},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -328,15 +328,6 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     negotiate_integer_policy(request, false, &TractabilityTable::empty())
-}
-
-/// Which integer encoding a negotiation selects.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IntegerRoute {
-    /// [`negotiate_kani_obligations`]: the general encoding.
-    General,
-    /// [`negotiate_kani_native_obligations`]: the kernel-admitted native encoding.
-    Native,
 }
 
 /// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
@@ -997,7 +988,14 @@ fn classify_v2_clause<'a>(
                     node_id: clause.clone(),
                 })
             }
-            Some(kind) => match lower_v2_clause(view, clause, kind, claim, decider) {
+            Some(kind) => match lower_v2_clause(
+                view,
+                clause,
+                kind,
+                claim,
+                IntegerRoute::from_native(native),
+                decider,
+            ) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
                 Err(reason) if !native => {
                     match lower_collection_operation(lookup.collection(), clause, claim) {

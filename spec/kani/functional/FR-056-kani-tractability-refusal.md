@@ -139,15 +139,17 @@ native-route clause, and the reverse. The decider does not infer one route from 
 ## Status
 
 PARTIAL (IR-1526). The route feature (Terms, Lookup, FR-056-AC-14, and the route additions to
-FR-056-AC-2 to AC-5, AC-7 and AC-10) is specified and not yet implemented. The decider and the
-table do not carry a route today, and the shipped table and corpus rows have no `route` key. When
-the route lands the rows are labelled by how they were measured: the `ir1022-*` and `ir1509-*`
-corpus rows are `native` (their harnesses come from `negotiate_kani_native_obligations`; see
-`docs/qualification/ir1022-kani-clause-measurements.md` and `ir1509-kani-clause-controls.md`), and
-the two `table.json` rows and the four `ir1526-*` corpus rows are `general`. The native `ir1022-*`
-rows (integer add at 10 bits) already cover AC-10's native add case below 15 bits. The
-host test `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound` negotiates on the general
-route and its expectations flip for the native route when the route lands.
+FR-056-AC-2 to AC-5, AC-7 and AC-10) is implemented and host-tested: `route` (`general` or `native`) is a
+clause feature, a required key of every table row and corpus row (no default; a missing or unknown
+route fails the load with the row index), lookup matches only rows on the clause's route, and
+`V2ClauseNotTractable` reports the route. The rows are labelled by how they were measured: the
+`ir1022-*` and `ir1509-*` corpus rows are `native` (their harnesses come from
+`negotiate_kani_native_obligations`; see `docs/qualification/ir1022-kani-clause-measurements.md` and
+`ir1509-kani-clause-controls.md`), and the two `table.json` rows and the four `ir1526-*` corpus
+rows are `general`. The native `ir1022-*` rows already cover AC-10's native add case below 15 bits.
+The host test `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound` negotiates the general-route
+row on both routes: the wide multiply is refused on the general route and is not refused as not
+tractable on the native route.
 FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
 FR-056-AC-10 is partial: the shipped corpus holds fourteen measured rows. Ten are `verified` or
@@ -161,10 +163,9 @@ the measurements do not show that the multiply is the cause. All ran on the gene
 `rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
 measured not tractable for an add at 4 bits.
 CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
-multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Until the route feature lands, the route is not a decider feature, so those rows also refuse clauses that would be tractable on the
-native route; the corpus holds no native-route clause of 15 bits or more, so that false-refuse is
-unmeasured. Still missing for AC-10: the route in the corpus features and in the decider,
-native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
+multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Those rows are general-route rows and no longer refuse native-route clauses; the corpus holds no
+native-route clause of 15 bits or more, so whether the general-route rows over-refuse native clauses
+is still unmeasured. Still missing for AC-10: native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
 (`other * offset + 3 <= 100`) at any listed width (none measured; the AC-13 clause that Verified in
 235.5 s on the native route is `with_bounded_amount_implication` over `Int[0, 1000]`, 10 bits), Meter, decimal and pure-relational cases and a multi-operation clause that
 is not integer arithmetic. The ir1530 timeout is of the scalar harness, not a V2 clause, so it is

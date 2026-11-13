@@ -3,6 +3,7 @@
     "operation_ids": [
       "quire.op.integer.mul"
     ],
+    "route": "general",
     "max_operand_bits": 15,
     "collection_bound": null,
     "verdict": "not_tractable",
@@ -18,6 +19,7 @@
     "operation_ids": [
       "quire.op.integer.add"
     ],
+    "route": "general",
     "max_operand_bits": 15,
     "collection_bound": null,
     "verdict": "not_tractable",

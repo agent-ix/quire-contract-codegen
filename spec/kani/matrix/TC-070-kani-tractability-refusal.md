@@ -68,4 +68,4 @@ unchanged.
 
 ## Status
 
-Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526) except the route additions (steps 2 to 4, 7a and 10), which are specified and not yet implemented; step 10 is partial (see FR-056 Status). Step 13 is coded as a kani-lane test and was executed under installed Kani 0.68.0 (Verified, 235.5 s); the multiply refusal half runs as a host test until an installed-Kani run covers it.
+Steps 1 to 9, 11 and 12 (including 7a) are implemented and tagged (IR-1526), including the route additions (steps 2 to 4, 7a and 10); step 10 is partial (see FR-056 Status): the native-route measurement families are missing. Step 13 is coded as a kani-lane test and was executed under installed Kani 0.68.0 (Verified, 235.5 s); the multiply refusal half runs as a host test until an installed-Kani run covers it.
