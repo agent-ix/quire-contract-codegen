@@ -55,8 +55,7 @@ preamble that first calls the subject at 999, reaches the sealed harness body an
 produced-result message (`the produced V2 Boolean result agrees with the independent checked condition`) and
 `panic did not contain expected string`, so it does not satisfy the control. It runs on the host through the
 stand-in above, not through Kani's `concrete_playback_run`; the Kani-backed playback via
-`execute_kani_concrete_playback` is FR-017-AC-60 (PLANNED, owner IR-917, to be rebuilt on current main after
-IR-1509 merges).
+`execute_kani_concrete_playback` is FR-017-AC-60, delivered by IR-917 (`ir917-kani-playback.md`).
 
 ## Installed Kani runs through CG's runner (FR-015-AC-151)
 
@@ -97,4 +96,4 @@ proof-phase evidence and a satisfied cover. The check counts and the helper play
 - Program-step counts are not part of the runner's evidence and were not recorded.
 - PLANNED, blocked on QSL operation bodies: a subject compiled by the pipeline. The subject is test-written;
   no CG or QSL step emits one because a QSL operation cannot carry a body (planner ruling 2026-11-12).
-- PLANNED, owner IR-917: the Kani-backed 999 playback (FR-017-AC-60). The 999 playback here is a host stand-in run.
+- The 999 playback here is a host stand-in run; the Kani-backed one is `ir917-kani-playback.md` (IR-917).

@@ -714,6 +714,35 @@ fn qsl_result_boolean_parameter_preserves_value_binding() {
         .contains("oracle_clause(parameter_other, result_result"));
 }
 
+/// A selected operation with no declared result is called as returning `()`, with the
+/// operation parameter as the only draw.
+#[trace("FR-025-AC-12", "TC-036")]
+#[test]
+fn qsl_operation_without_a_result_returns_unit_and_draws_only_its_parameter() {
+    let (package, clause) =
+        Twin::with_bounded_amount_condition("amount < 1000").emitted_package("BalanceNeverDrops");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        claim: &crate::common::v2_claim::claim_for(&package, &clause),
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the admitted postcondition without a result emits");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one postcondition harness");
+    };
+    assert!(harness.rust.contents.contains("let subject: () ="));
+    assert!(!harness.rust.contents.contains("subject_result"));
+    assert_eq!(harness.identity.arguments.len(), 1);
+    assert_eq!(harness.rust.contents.matches("kani::any()").count(), 1);
+}
+
 /// An unbounded selected result is refused before any scalar harness is exposed.
 #[trace("FR-025-AC-12", "TC-036")]
 #[test]
