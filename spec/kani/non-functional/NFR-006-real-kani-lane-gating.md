@@ -67,6 +67,7 @@ relationships:
   `make kani-gate` on the clean, stable candidate to be tagged. A copied release-ticket line is
   insufficient.
 - The `make ci` target shall not depend on `kani-gate` or `kani`.
+- The `make ci` target shall depend on `kani-mutations` (FR-055).
 - The Kani-touching set shall contain the target of every `include!`, `include_str!`,
   `include_bytes!` and `#[path]` named in a `tests/it` file that holds a lane test, and in each file
   those name in turn.
@@ -181,7 +182,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-9 | With a dirty working tree before the build, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
-| NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
+| NFR-006-AC-12 | `make -n ci` expands to no `kani-gate` command and no `kani` lane command other than `kani-mutations` ([FR-055](../functional/FR-055-kani-mutations-target.md)). | Test (TC-045) |
 | NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean candidate before opening it, and the merger runs it again on the clean current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
 | NFR-006-AC-15 | A Kani-touching pull request whose required lane did not run or failed remains unmerged and does not claim real-Kani verification; a written explanation does not waive the gate. | Inspection |
 | NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
