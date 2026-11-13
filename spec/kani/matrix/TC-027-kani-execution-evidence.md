@@ -220,7 +220,7 @@ the nested isolated package/external example path, fresh resolution, or sealed e
 checks remain UNRUN until the implementation executes them. The separate Unicode resolution
 failure and IR-705/IR-844 qualification are not resolved by this amendment.
 
-## Concrete playback execution (IR-917, planned)
+## Concrete playback execution (IR-917)
 
 These controls qualify the public playback entry and its installed
 `amount_current = 999` execution; TC-025 step 11 owns the separate

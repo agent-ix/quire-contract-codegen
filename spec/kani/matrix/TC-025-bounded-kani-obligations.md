@@ -829,7 +829,7 @@ with the required author `make kani-gate`; independent review and final acceptan
     native expectation remain unchanged. Do not count a generation-time Boolean
     as a proof result (FR-015-AC-118).
 
-## QSL-authored V2 clause runtime-helper mutation (IR-917, planned)
+## QSL-authored V2 clause runtime-helper mutation (IR-917; installed controls in FR-015-AC-151, pipeline subject planned)
 
 49. Author a QSL operation with one finite-bounded integer parameter
     `amount: Int[0, 1000]`, a declared Boolean result, and its postcondition
@@ -1069,9 +1069,9 @@ with the required author `make kani-gate`; independent review and final acceptan
     and require it to pass as an expected panic on the generated arithmetic assertion's message; run the
     same test against the unmutated owner and the `amount + 2` subject and require each to fail. Executed
     verdicts are in `docs/qualification/ir1509-kani-clause-controls.md`. Require the `amount + 2` playback
-    control to fail at the produced-result comparison, not at a preamble. PLANNED: the subject compiled by
-    the pipeline (blocked on QSL operation bodies) and the Kani-backed playback through
-    `execute_kani_concrete_playback` (FR-017-AC-60, owner IR-917).
+    control to fail at the produced-result comparison, not at a preamble. The Kani-backed playback through
+    `execute_kani_concrete_playback` is TC-027 step 5 (FR-017-AC-60, IR-917; `docs/qualification/ir917-kani-playback.md`).
+    PLANNED: the subject compiled by the pipeline (blocked on QSL operation bodies).
 
 ## Control construct lowering (IR-1447)
 
