@@ -51,3 +51,4 @@ is counted as delivered in one sentence and as missing in another (FND-003).
 | FND-003 | fixed | fixed at 6b3940be: the wrong-role mutant is listed only as not delivered ("the 'another field or role' clause is NOT evidenced") in FR-015:164, AC-106, TC-025:210 and tests.md:50, and the row states the lib tests are not run by `make kani-gate`. |
 | FND-004 | fixed | fixed at 6b3940be: TC-025:247-254 now lists only the unbacked steps and records what slice B delivered; tests.md:50 opens "Partial (IR-805 slices A and B)"; tests.md:136 says AC-100's graph clause "is covered by `graph_run_evidence_preserves_every_ordered_identity_option` for the relationship-end form". |
 | FND-005 | still-open | New this round: QSL-1905 (cancelled) is still cited at FR-015:951; text-only fix to cite IR-805 slice E. |
+| FND-005 | fixed | fixed at 13ce7558: a non-tautological `{0,3}` healthy claim (multi-reachability claims, IR-805 slice E: GraphClaim keyed by node+occurrence). |
