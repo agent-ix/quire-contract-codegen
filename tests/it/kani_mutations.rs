@@ -294,6 +294,7 @@ fn without_cargo_kani_every_mutant_is_unavailable_and_nothing_runs() {
         text.contains("total=3 pass=0 fail=0 malformed=0 unavailable=3"),
         "{text}"
     );
+    assert_eq!(sandbox.invocations(), "", "the runner was never invoked");
 }
 
 #[trace("FR-055-AC-8", "TC-069")]

@@ -31,3 +31,12 @@ Planless gap analysis, scoped to the diff, of the FR-055 chain from requirement 
 - Plan completion: not assessed
 - Untraced behaviour in the diff: none. Every branch of scripts/kani_mutations.rs maps to an FR-055 outcome rule.
 - Stubs or coverage inflation: none, apart from AC-1's tag on stand-in coverage (FND-001).
+
+## Dispositions
+
+Round 1, checked against fix commit 64d0a8b2 (main merge excluded).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The marker path and mutant 3 are fixed (SR-17940486709564847047753 FND-001, FND-002). The FR-055 Status now reads PARTIAL and says the real-Kani halves of AC-1 and AC-7 are not claimed |
+| FND-002 | deferred | A stand-in control-flow test for AC-7 now exists (weaken, then fail, then restore, then exit 0). The criterion itself says it is executed through installed Kani in the Kani lane, which this review was told not to run. Status discloses it as not run, so it is deferred to the Kani lane run |

@@ -33,3 +33,16 @@ Code review with the Rust lane (rust-review folded in) of PR #813 at 0eeade84, s
 - Rust lane: rust-style checks (error enum, exit-code mapping, process-group kill, Drop cleanup, no unsafe, no unwrap on fallible I/O in the gate) were applied to scripts/kani_mutations.rs and scripts/cg_gates.rs.
 - Anchors: each of the three anchors occurs exactly once in current src. Mutants 1 and 2 are in production `render_integer_arithmetic` code; mutant 3 is test-only (FND-002).
 - Focused tests: `cargo test --locked --test it kani_mutations` run via locked-build.sh with a throwaway target dir (see report). Kani and make ci were not run.
+
+## Dispositions
+
+Round 1, checked against fix commit 64d0a8b2 (`git diff 12c98cd8..64d0a8b2`, main merge excluded). Focused tests: 12 kani_mutations tests plus the scalar unit test `only_a_falsified_proof_emits_the_kani_rejection_verdict` passed. Kani and make ci were not run.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `KaniScalarNativeError::falsified_verdict` returns the marker only for `ProofNotVerified` with a `Falsified` outcome. The tc_027 tests print it with `println!` before panicking, and `--nocapture` sends it to the log the gate reads |
+| FND-002 | fixed | Mutant 3 now anchors the production `Statement::Assert { condition: expr("sound"...` in `render_scalar` (scalar.rs:781, which negotiate.rs:405 calls). It occurs exactly once. A new syn test refuses any anchor inside cfg(test) code |
+| FND-003 | fixed | One scratch root per run with a shared `CARGO_TARGET_DIR`, so only the first mutant builds cold. SIGINT, SIGTERM and SIGHUP set an atomic, the gate kills the group, and Drop removes the scratch; a test covers this. SIGKILL can still leak the scratch, which no handler can prevent |
+| FND-004 | fixed | `inject_and_run` now kills the group on every result other than `Exited`, I/O errors included |
+| FND-005 | fixed | `has_symlink_component` refuses, as `malformed`, a mutant path that passes through a symlink |
+| FND-006 | still-open | The AC-9 test now asserts the runner was never invoked. The AC-6 test (`without_cargo_kani_every_mutant_is_unavailable_and_nothing_runs`) still asserts only the printed rows and never checks `sandbox.invocations()` is empty |
