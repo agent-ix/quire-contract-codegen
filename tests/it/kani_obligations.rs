@@ -2592,7 +2592,12 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         scalar_limits: constrained_limits,
         target_directory: &target,
     })
-    .expect("verified proof and typed native incomplete receipt at zero result budget");
+    .unwrap_or_else(|error| {
+        verified_or_print_verdict(
+            &error,
+            "verified proof and typed native incomplete receipt at zero result budget",
+        )
+    });
 
     assert_eq!(
         constrained_receipt.proof_evidence().outcome,

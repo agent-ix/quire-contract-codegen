@@ -7,7 +7,7 @@ use std::{
     io,
     os::unix::{fs::symlink, process::CommandExt},
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Command, ExitStatus, Stdio},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     thread,
     time::{Duration, Instant},
@@ -244,19 +244,13 @@ fn evaluate(
         scratch,
         config.mutant_timeout.min(remaining),
     ) {
-        Ok(Run::Exited { success, output }) => {
-            if success {
-                (
-                    Outcome::Fail,
-                    "the proof verified the injected defect".into(),
-                )
+        Ok(Run::Exited { status, output }) => {
+            if status.success() {
+                (Outcome::Fail, explain_failure(&status, &output))
             } else if output.contains(REJECTION_MARKER) {
                 (Outcome::Pass, String::new())
             } else {
-                (
-                    Outcome::Fail,
-                    format!("the run failed without {REJECTION_MARKER}"),
-                )
+                (Outcome::Fail, explain_failure(&status, &output))
             }
         }
         Ok(Run::TimedOut) => (Outcome::Fail, "the run timed out".into()),
@@ -266,9 +260,35 @@ fn evaluate(
 }
 
 enum Run {
-    Exited { success: bool, output: String },
+    Exited { status: ExitStatus, output: String },
     TimedOut,
     Interrupted,
+}
+
+/// Lines of the owning test's captured output a `fail` row reports.
+const TAIL_LINES: usize = 40;
+
+/// Why a mutant run that exited was not a rejection: which of the four causes it was, the exit
+/// status and the last lines of the captured output.
+fn explain_failure(status: &ExitStatus, output: &str) -> String {
+    let cause = if status.success() {
+        if output.contains("running 0 tests") {
+            "the test filter matched no test, so nothing ran"
+        } else {
+            "the proof verified the injected defect (a surviving mutant)"
+        }
+    } else if output.contains("could not compile") || output.contains("error[E") {
+        "the mutant did not compile"
+    } else if output.contains("panicked at") || output.contains("test result: FAILED") {
+        "the test ran and failed without Kani's rejection verdict"
+    } else {
+        "the run failed before the owning test ran, or without any test output"
+    };
+    let lines: Vec<&str> = output.lines().collect();
+    let tail = lines[lines.len().saturating_sub(TAIL_LINES)..].join("\n");
+    format!(
+        "{cause}; the run exited {status} without {REJECTION_MARKER}; last {TAIL_LINES} lines of its output:\n{tail}"
+    )
 }
 
 fn has_symlink_component(path: &Path) -> bool {
@@ -328,10 +348,7 @@ fn wait_for(
     loop {
         if let Some(status) = child.try_wait()? {
             let output = String::from_utf8_lossy(&fs::read(log_path)?).into_owned();
-            return Ok(Run::Exited {
-                success: status.success(),
-                output,
-            });
+            return Ok(Run::Exited { status, output });
         }
         if INTERRUPTED.load(Ordering::SeqCst) {
             return Ok(Run::Interrupted);
