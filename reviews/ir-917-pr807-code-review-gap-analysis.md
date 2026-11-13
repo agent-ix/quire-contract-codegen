@@ -62,3 +62,8 @@ Progress, IR-1528 In Progress.
 |---|---|---|
 | FND-001 | fixed | FR-015-AC-119 now records FR-025-AC-11 to AC-13 as implemented (the FR-025 rows read Implemented, backed by the new structural tests and the two tc_036 installed runs) and gives the pipeline-compiled subject the owner chain IR-1509 behind QSL-1899 behind IR-1528, all In Progress |
 | FND-002 | deferred | planner ruling 2026-11-12. AC-126 is PARTIAL, credits the IR-917 profile (installed controls through AC-151 and AC-60, impossible-precondition control `CoverUnsatisfied`), and leaves the IR-948 profiles PLANNED under IR-948, closing with the last of the two owners. Follow-up for the lead: IR-948 is Done in Linear, so it must be reopened (or the profiles moved to an open ticket), or the row is parked under a closed ticket |
+
+Round 3, head c45da5e7: no finding's latest outcome is open, so no row is added. The only new test,
+`the_teardown_check_sees_a_live_process`, is tagged FR-017-AC-60 and TC-027 and runs in the default
+lane. The FND-002 follow-up is met: IR-948 is In Progress again in Linear, so the IR-948 profiles of
+FR-015-AC-126 are owned by an open ticket.

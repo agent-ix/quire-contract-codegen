@@ -43,3 +43,9 @@ Round 2, head b088fa31.
 | FND | outcome | reason |
 |---|---|---|
 | FND-001 | fixed | FR-014-AC-54 now says the four cases "each refuse as `V2ClauseRefusal::UnsupportedCondition` and no oracle", and the other `convert` identity "remains refused as `UnsupportedCondition`" |
+
+Round 3, head c45da5e7: no finding's latest outcome is open, so no row is added. The re-worded
+FR-017-AC-60 teardown clause names the target directory and the exact playback test name, matching
+`assert_no_process_of_playback`, and cites the live-process control. FR-015-AC-42's "Amended by
+IR-1448" and "Amended by IR-1447" sentences are main's text byte for byte; the PR does not touch that
+row.

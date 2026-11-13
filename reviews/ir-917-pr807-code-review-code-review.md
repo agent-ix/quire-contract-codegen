@@ -107,8 +107,34 @@ crate as working directory and passes no absolute crate path on any command line
 | FND-006 | fixed | "no summary" and "truncated tail" lib cases and the it case "pass line without a summary" added; M3 killed |
 | FND-007 | fixed | it case "second sealed copy" added; M4 killed |
 
+Round 3, head c45da5e7 (main 3cf04231 merged in: the PR's own +/- lines at f8674d3c are identical to
+b088fa31's, and FR-015-AC-42's "Amended by IR-1448"/"Amended by IR-1447" sentences are main's,
+byte for byte). The new default-lane control `the_teardown_check_sees_a_live_process` was run here
+(`cargo test --locked --test it -- the_teardown_check_sees_a_live_process`, 1 passed); the coder's
+log of the same test shows the check's panic naming the live `sh -c sleep 60; true
+ir917_teardown_control::playback_999 <target>/tmp/ir917-teardown-control` process, so the check
+fails on a live process and passes once it is reaped. Not racy: `Command::spawn` returns after exec,
+so the needles are on the command line before `pgrep` runs, and the second check runs after `wait`.
+In the installed runs the launcher reaps the leader only after cargo and the test binary have exited
+on their own (the `Completed` path), and a dying or zombie process has no command line for `pgrep -f`
+to match. The needle `ir917-kani-target` is shared by the three `tc_027` tests, so a parallel run of
+them would give a spurious failure (never a false pass); `make kani` enforces the serial run
+(`flock` plus `--test-threads=1`) and every such test is `#[ignore = "kani lane: run serially through
+make kani"]`.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `assert_no_process_of_playback(target, test_name)` runs `pgrep -a -f` for the run's target directory and the exact playback test name after every installed playback, and `the_teardown_check_sees_a_live_process` proves the check fails while a process carrying both needles lives |
+| FND-008 | fixed | `tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result` asserts the counterexample contains "the produced V2 result lies in its admitted domain" and not "the V2 postcondition holds for the produced result" |
+
 ## New findings (disposition pass 2)
 
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
 | FND-008 | low | `tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result` asserts `Falsified` and exactly one failed check but not which check, though its doc comment, FR-025-AC-13 and the record say it is the domain assertion. The conclusion holds only by deduction from the structural test (the harness has one domain assertion, and 1001 must fail it, so the single failure is that one); the installed run alone would also pass if the domain assertion were missing and the oracle failed instead. Assert the counterexample names the domain assertion's message | tests/it/kani_obligations_v2_clause_controls.rs:1313-1330 |
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-009 | low | The qualification record cites runs that predate the checks it now describes. The "Rerun on the review-fix head" figures (healthy 4.0 s, peak 724,164,608 B; mutant 132.3 s then 2.5 s, peak 11,747,831,808 B) are from the round-1 fix head, whose teardown check was the old `assert_no_process_of` that could not fail, yet the next sentence says owned teardown "is asserted after every installed playback by `assert_no_process_of_playback`"; the tc_036 out-of-domain row's "counterexample names ... the produced V2 result lies in its admitted domain" with wall 1.7 s is from a run made before that assertion existed. The coder's later runs with the current test code (healthy 4.1 s, peak 800,899,072 B; mutant 134.2 s then 2.5 s, peak 11,749,707,776 B; controls exit 1 twice; tc_036 out-of-domain `Falsified` 5.2 s) pass and are the evidence FR-017-AC-60 and FR-025-AC-13 rely on, but they are not in the record. Record those runs (or state that the cited figures predate the current checks) | docs/qualification/ir917-kani-playback.md:48-55, docs/qualification/ir917-kani-playback.md:72 |
