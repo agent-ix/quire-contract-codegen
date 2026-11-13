@@ -89,3 +89,15 @@ harness text is the same as main's, so the timeout is not introduced by this PR.
 | FND | outcome | reason |
 |---|---|---|
 | FND-001 | fixed | Forgets are restricted to the native route, so the general-route tail is byte-identical to main. The coder's lane run found the regression this finding warned of: the first version, which forgot on both routes, OOM-killed `kani_generation_real_v2_scalar_verifies` at 24 GiB within about a minute, against `TimedOut` at 600 s on base. Native-route lane tests pass (reviewer: the two AC-35 tests; coder: `native_original_tc027_increment_verifies`). The pre-existing general-route timeouts are out of this PR's scope |
+
+Round 2, reviewed head 3fde353d (one commit on 1380afbe). The delta `git diff 1380afbe..3fde353d`
+is only `tests/it/kani_obligations.rs` (`run_ac35_native`), `tests/it/requirement_records.rs`
+(`ac35_native_harness` and its one caller) and the three SR copies under `reviews/`, which are
+byte-identical to the reviewer's round-1 files. No `src/`, spec or docs change. Reviewer runs at
+this head (own worktree, `flock /tmp/cargo-slot.lock`, 24G scope): both AC-35 kani-lane tests
+passed, 2 passed in 74.39 s, with the crate now assembled from the AC-35 generation's own
+manifest.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-002 | fixed | `ac35_native_harness` returns `(harness, manifest)`, with the manifest taken from the same `generate_routed_native` call's `oracle_artifacts` (`Cargo.toml`), and `run_ac35_native` uses it; `native_scalar_increment()` is no longer called there |
