@@ -2981,6 +2981,7 @@ exit 0
                 totality_assertion_line: 4,
             }),
             kind: ObligationKind::Precondition,
+            requires: Vec::new(),
             oracle_symbol: "oracle".to_owned(),
             subject_path: "crate::subject".to_owned(),
             arguments: Vec::new(),

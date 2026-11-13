@@ -603,6 +603,7 @@ pub(super) fn render_collection_operation(
         } else {
             ObligationKind::Precondition
         },
+        requires: Vec::new(),
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: Vec::new(),
