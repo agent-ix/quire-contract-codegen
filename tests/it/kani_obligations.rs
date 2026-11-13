@@ -2378,6 +2378,19 @@ fn routed_scalar_binary_subtraction_with_artifacts() -> (
     )
 }
 
+fn native_scalar_binary_subtraction_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_native_scalar_with_artifacts(
+        package::bounded_binary_subtraction_package(),
+        package::BOUNDED_BINARY_SUBTRACTION,
+        49_102,
+        Bound::Integer(-9, 9),
+        REAL_KANI_TIMEOUT,
+    )
+}
+
 /// Writes the crate the way the driver does: the returned `Cargo.toml` and `library` as
 /// `src/lib.rs`.
 pub(super) fn write_scalar_crate(
@@ -2628,7 +2641,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     use quire_exact::Outcome;
 
-    let (harness, artifacts) = routed_scalar_binary_subtraction_with_artifacts();
+    let (harness, artifacts) = native_scalar_binary_subtraction_with_artifacts();
     assert_eq!(harness.identity.arguments.len(), 2);
     assert!(harness
         .identity

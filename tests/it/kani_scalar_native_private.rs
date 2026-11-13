@@ -216,6 +216,19 @@ pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec
     )
 }
 
+/// The same `x + 1` fixture on the native-integer route, the one real Kani can finish.
+pub(crate) fn native_fixture(
+    wall_clock: Duration,
+) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+    routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_190,
+        Bound::Integer(0, 9),
+        wall_clock,
+    )
+}
+
 fn limits() -> quire_exact::ScalarLimits {
     quire_exact::ScalarLimits {
         integer_bits: 101,
@@ -235,7 +248,7 @@ fn limits() -> quire_exact::ScalarLimits {
 #[test]
 #[ignore = "real Kani and native cleanup controls: run this private lib control explicitly and serially"]
 fn cleanup_success_and_failure_preserve_real_receipt_after_snapshot_removal() {
-    let (harness, artifacts) = fixture(Duration::from_secs(600));
+    let (harness, artifacts) = native_fixture(Duration::from_secs(600));
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("installed Kani");
     let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/private-scalar-cleanup");
@@ -408,7 +421,7 @@ fn seeded_false_bound_harness_produces_a_paired_completion_refusal() {
             execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeErrorClass,
         },
     };
-    let (original, artifacts) = fixture(Duration::from_secs(600));
+    let (original, artifacts) = native_fixture(Duration::from_secs(600));
     let harness = false_bound_harness_for_test(&original, &artifacts);
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("installed Kani");
@@ -450,7 +463,7 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
         ScalarOracleStopKind,
     };
     use std::os::unix::fs::PermissionsExt;
-    let (harness, artifacts) = fixture(Duration::from_secs(600));
+    let (harness, artifacts) = native_fixture(Duration::from_secs(600));
     let control = crate::core::test_support::discover_scratch("paired-oracle-stop");
     fs::create_dir_all(&control).unwrap();
     let helper = control.join("native-helper");

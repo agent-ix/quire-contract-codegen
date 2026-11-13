@@ -142,8 +142,9 @@ FR-017-AC-25) are verified by TC-043, not here.
 
 Refusals: request a run against an installation whose launcher is absent.
 
-Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
-(`x + 1` over `Int[0, 9]`) and assemble the crate the way the driver does — the returned
+Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed_native`
+(`x + 1` over `Int[0, 9]`; the general `generate_routed` integer scalar route is recorded not tractable in
+`docs/qualification/ir1530-general-route-scalar-not-tractable.md`) and assemble the crate the way the driver does — the returned
 `Cargo.toml` as the manifest and the harness's `rust.contents` as `src/lib.rs`, never the returned
 `src/lib.rs`. Run it through `execute_kani_obligation`: a crate whose `src/lib.rs` lacks the harness
 is `HarnessNotInCrate`, and the harness's covers classify a run the same way a contract harness's
@@ -404,7 +405,7 @@ typed and occurs before either child is started; changing an otherwise valid ope
 receipt for that exact ordered request, which cannot be substituted for a prior receipt.
 
 Paired routed-scalar proof/native receipt (FR-017-AC-27 to AC-31): generate a genuine routed
-`x + 1` harness for an admitted integer domain, retain its complete `oracle_artifacts` and
+`x + 1` harness with `generate_routed_native` for an admitted integer domain (see the IR-1530 record above), retain its complete `oracle_artifacts` and
 request `ScalarLimits` and request concrete operand `4` within the generated range. In the
 `make kani` lane, require the paired runner to stage the package and harness, run real Kani on the
 staged harness, and report `Verified`. Require the runner to execute the staged public oracle at
@@ -412,7 +413,7 @@ that operand with those exact limits; the opaque receipt must contain actual typ
 `Outcome::Completed(5)`, the exact operand and limits, the scalar identity, captured staged entries and Kani evidence. No result derived from the Kani verdict or supplied by the test caller
 counts.
 
-Order-sensitive binary receipt (FR-017-AC-31): generate a genuine routed subtraction operation
+Order-sensitive binary receipt (FR-017-AC-31): generate a genuine routed subtraction operation with `generate_routed_native`
 with two symbolic operands over a domain admitting both concrete vectors `[4, 1]` and `[1, 4]`,
 and one exact request `ScalarLimits` value.
 Run each vector through the paired runner separately in the `make kani` lane. Each run must execute
