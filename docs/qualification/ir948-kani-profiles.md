@@ -19,7 +19,7 @@ Kani 0.68.0, solver CaDiCaL, each test one at a time under the cargo slot lock i
 
 | Test | Outcome | Wall | cgroup peak |
 | --- | --- | --- | --- |
-| `..._verifies_the_profile_precondition_with_its_cover_satisfied` | `Verified`, cover satisfied, 1537 of 1558 checks successful | 6.1 s | 701,087,744 B |
+| `..._verifies_the_profile_precondition_with_its_cover_satisfied` | `Verified`, cover satisfied, 1537 of 1558 checks successful | 2.6 s (first run 6.1 s, 701,087,744 B) | 251,891,712 B |
 | `..._reports_the_impossible_profile_precondition_as_cover_unsatisfied` (`amount > 100`) | `CoverUnsatisfied { satisfied: 0, total: 1 }` | 2.6 s | 239,644,672 B |
 | `..._verifies_the_profile_invariant_with_its_cover_satisfied` | `Verified`, cover satisfied | 2.5 s | 251,686,912 B |
 | `..._falsifies_the_strengthened_invariant_mutant_at_balance_0` (`balance >= 1`) | `Falsified` from the witness phase, replay `ReproducedWithEvaluatedWitness` / `Violation` at `balance = 0` | 11.5 s | 1,261,543,424 B |
@@ -28,11 +28,27 @@ Kani 0.68.0, solver CaDiCaL, each test one at a time under the cargo slot lock i
 The impossible-precondition control that hit the backend memory wall earlier (17.2 GB at unwind 8) was a different
 package; over this `Int[0, 100]` package it completes in 2.6 s at 0.24 GB.
 
+A rerun after the review fixes (named-cover and 24 GiB-ceiling assertions, proof-phase and exact-count assertions, the
+replay transcript check) passed all five at the same outcomes: 2.6 s, 2.4 s, 2.5 s, 10.3 s and 10.3 s, peaks 251,891,712,
+240,427,008, 249,368,576, 1,261,338,624 and 1,262,383,104 B.
+
+## Run conditions
+
+The five installed tests assert the identity ceiling is 24 GiB and that the environment supplied a peak below it. The
+cgroup cap itself is the caller's: `make kani` runs the lane without a `systemd-run` scope (the same gap as the IR-917
+controls), so the cumulative `memory.peak` it would read is the session's, and the figures above are from the hand
+command shown.
+
 ## Not established
 
-- Postcondition: the V2 clause generator refuses a postcondition that reads state (`V2ClauseConditionNotRendered`), so no
-  harness exists to run. QSL also refuses the specified text `self.balance = pre(self.balance) - amount` with
-  `undefined_expression (unproved-range)`; the conjunction of `<=` and `>=` is accepted.
-- Frame: the profile package grants its only field, so the frame generator has nothing forbidden to check; the frame
-  members are those of FR-015-AC-31 and FR-015-AC-80 over the two-field twin.
-- The four-kind run over one package therefore has not been executed.
+- Postcondition: two blockers, each with an owner. QSL refuses the specified text
+  `self.balance = pre(self.balance) - amount` with `undefined_expression (unproved-range)` (QSL-1901, which blocks IR-948
+  for the postcondition member only); the guarded, `and`-guarded, reordered, sum and difference forms are refused the same
+  way, and the conjunction `self.balance <= pre(self.balance) - amount and self.balance >= pre(self.balance) - amount` is
+  accepted. The V2 clause generator refuses a postcondition that reads state (`V2ClauseConditionNotRendered`); the
+  renderer is IR-948 slice 2b, a second PR under the same ticket. The default-lane test
+  `the_postcondition_member_is_blocked_by_the_generator_and_by_qsl` pins both refusals so a fix flags the stale PARTIAL.
+  FR-015-AC-129 requires the `=` text; the conjunction is the interim fixture text and earns no credit.
+- Frame: the profile package grants its only field, so a frame harness has nothing to forbid; the frame member is covered
+  by FR-015-AC-31 and FR-015-AC-80 over the two-field twin and is not part of FR-015-AC-126.
+- The four-kind run over one package has therefore not been executed.
