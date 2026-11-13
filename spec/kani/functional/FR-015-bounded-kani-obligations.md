@@ -113,7 +113,7 @@ caller replays graph and collection cases, and the real-Kani replays of
 FR-015-AC-99 and FR-015-AC-106 replace them. V2 does not serve divide or
 remainder until IR-854, and the arithmetic slice records that coverage loss.
 FR-015-AC-96 to FR-015-AC-102 retain the collection implementation and partial
-statuses recorded below; graph clauses remain PLANNED. A QSL V2 constraint clause
+statuses recorded below; graph clauses are PARTIAL for the relationship-end form (IR-805 slice A) and PLANNED for the field-edge form. A QSL V2 constraint clause
 is a method parameter, not a separate obligation ([QSL FR-158](ix://agent-ix/quire-spec-language/FR-158);
 [ADR-021 SC-2/SC-3](ix://agent-ix/quire-spec-language/ADR-021)). When one is
 submitted as a standalone collection claim, CG SHALL settle it under AC-128;
@@ -125,8 +125,7 @@ adds no proof credit or current backend results.
 FR-015-AC-109 to FR-015-AC-111 state the slices and FR-015-AC-95 their end
 state. QSL-353 establishes that
 QSL-emitted packages read through Contract IR; it does not supply the symbolic
-corpus or the graph population input. The graph slice also waits for IR-805: CG integration of the merged IR-851/IR-852
-accessors and QSL-820 real-package population emission (after QSL-819). Retirement of each family waits for its V2
+corpus or the graph population input. The graph slice's relationship-end form is delivered (IR-805 slice A); its field-edge form still waits for a QSL population link (slice D). Retirement of each family waits for its V2
 path, among arithmetic, collection and graph, to serve the corpus through the one
 generator, with the symbolic domains of AC-96 to AC-102 and AD-004's shared
 renderer. The other criteria below own live interim behavior and do not mark
@@ -144,10 +143,10 @@ semantics pending IR-1157. TC-025
 retains the remaining capacity and refusal-precedence controls (IR-1091). FR-015-AC-99, -100
 and -101 remain partial: -99 has tagged collection symbolic draw and native replay controls, while the
 final reviewed-head Kani gate and graph family remain;
--100 has a tagged launcher comparison for the complete ordered option vector while its graph
-clause remains planned; and -101 has tagged representational-ceiling generator controls but lacks
-source-located QSL missing-field and Contract IR malformed-projection evidence. Graph clauses stay PLANNED
-under IR-805. They specify bounded collection claims in the V2 Kani item path. A claim
+-100 has a tagged launcher comparison for the complete ordered option vector, and its graph
+clause is covered for the relationship-end form by `graph_run_evidence_preserves_every_ordered_identity_option`; and -101 has tagged representational-ceiling generator controls but lacks
+source-located QSL missing-field and Contract IR malformed-projection evidence. Graph clauses are PARTIAL
+under IR-805 (relationship-end form delivered, field-edge form PLANNED). They specify bounded collection claims in the V2 Kani item path. A claim
 is an admitted QSL V2 clause/function body whose collection operation reads a
 selected bounded model collection field. QSL expresses collection properties
 as ordinary clauses or function bodies using `forall` or `exists`; the emitted
@@ -1047,8 +1046,8 @@ Generated artifacts and canonical identity inputs SHALL bind the actual selected
 The graph verification controls distinguish clause semantics from domain
 conformance and completeness. This clarification defines a test oracle, not an
 additional production generator, public input model or proof of delivery. The
-IR-805 symbolic-graph criteria remain planned until their required evidence
-exists.
+IR-805 symbolic-graph criteria stay PARTIAL until their required evidence
+exists (see each criterion's status).
 
 For a selected claim, let `D(g)` mean that the concrete active graph `g`
 belongs to the original authored domain: its population count is in `[0,N]`,

@@ -57,3 +57,15 @@ cover. FND-003 is an unguarded semantic gap for operation clauses. Fixing FND-00
 needs a non-empty, maximal draw, for example `object_count == {n}`. FND-001 needs either a non-tautological
 healthy claim (which requires multi-application conditions) or a spec status that gives these runs no
 healthy-case credit.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | deferred | Multi-reachability (e.g. transitivity) claims are not built in slice A and stay PLANNED in FR-015-AC-106. At b12cd890 the AC-106 text, the TC-025 and tests.md rows and the test doc comments label the {0,3} runs tautological smoke runs with no healthy-case credit. The overclaim is withdrawn; the missing capability is stated as a named gap. |
+| FND-002 | fixed | fixed at b12cd890: vec![Cover { |
+| FND-003 | fixed | fixed at b12cd890: if kind != ObligationKind::Invariant { |
+| FND-004 | deferred | qsl_replay agreement is slice B and stays PLANNED in AC-106. At b12cd890 the test comment and the AC-106 text both say the DFS check is NOT qsl_replay and is not this criterion's native-oracle evidence. The fragile playback decoding (split("vec![").skip(2), 3 + row * 4) is unchanged; that is acceptable for a smoke-level falsification check that earns no oracle credit. |
+| FND-005 | fixed | fixed at b12cd890: .map_err(\|_\| Reason::DomainNotRepresentable { |
+| FND-006 | fixed | fixed at b12cd890: let other_multiplicity = emitted(&narrowed.package, &[0]); |
+| FND-007 | fixed | fixed at b12cd890: #[trace("TC-025", "FR-015-AC-101")] |

@@ -41,3 +41,12 @@ Each criterion's clauses were compared with what its tagged tests actually asser
 Not mergeable as is. The AC-107 IMPLEMENTED status is not backed for four of its clauses. AC-108's claim
 that every reachable branch is tagged is false for `UnsupportedClaimShape` and several others. The
 unreachability statements need either QSL-refusal tests or a plain "Inspection only" label.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | fixed at b12cd890: PARTIAL (IR-805 slice A), evidence by clause. Tested ...: one reachability written twice ...; a field-edge and a relationship-end reachability in one condition yield separate items ... (`a_field_edge_and_a_relationship_end_reachability_are_separate_items`); a collection claim, a clause with no reachability and a path that names no reachability settle `unsupported` naming the missing claim ... NOT evidenced: one node under two clauses yielding two items with different identities. ... that clause stays PLANNED pending multi-clause emission. |
+| FND-002 | fixed | fixed at b12cd890: PARTIAL (IR-805 slice A), evidence by branch. Test (real QSL-emitted, IR-admitted package, AC-108-tagged): population `Unavailable` ...; `NotReachesApplication` ...; ... `UnsupportedClaimShape` (`a_claim_the_encoding_cannot_express_settles_unsupported_claim_shape`, ...); ... Inspection only, with no test: the population `requires_bound` branches ..., `PopulationTypeMismatch` and `HarnessSymbolCollision`; ... this criterion does not claim a test for them. |
+| FND-003 | fixed | fixed at b12cd890: fn qsl_or_ir_refuses_an_unbounded_end_before_a_package_exists() { ... assert!(error.contains("UnsupportedConstruct"), "{error}"); } |
+| FND-004 | fixed | fixed at b12cd890: The graph clause is implemented for the relationship-end form (IR-805 slice A): `a_domain_beyond_the_unwind_or_the_memory_ceiling_refuses_without_reducing_it` (AC-101/TC-025) asserts the unwind and memory-ceiling refusals naming the domain with no harness and no reduced population or multiplicity; the representational refusal (`DomainNotRepresentable`) is inspection only ... The field-edge graph clause stays PLANNED (slice D). |

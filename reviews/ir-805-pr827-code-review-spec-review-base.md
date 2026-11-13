@@ -37,3 +37,20 @@ Not mergeable as is. AC-106's healthy-half credit rests on tautological runs. AC
 is untested for four of its clauses (SR-17940486709564847047968 FND-001). The FR, TC and matrix statuses
 contradict each other. AC-108 should state its branch evidence explicitly. The answer to the brief's
 question is yes: the AC text should say which branches have no real-package test.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-006 | low | Some stale "planned" statements survive the fix round and contradict the new PARTIAL statuses. FR-015:116 says "graph clauses remain PLANNED". FR-015:147 says AC-100's "graph clause remains planned". FR-015:1050 says "The IR-805 symbolic-graph criteria remain planned until their required evidence exists". The tests.md:136 TC-025 summary row says the graph clauses of AC-99 to AC-102 and AC-105 to AC-108 "stay planned". | spec/kani/functional/FR-015-bounded-kani-obligations.md:116,147,1050, spec/kani/matrix/tests.md:136 |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | fixed at b12cd890: Installed-Kani `Verified` over a `{0,3}` unique and a `{0,3}` non-unique end asserts the tautology `reaches(...) or not reaches(...)`: these are smoke runs that show the harness compiles, draws and covers a non-empty maximum population, and they earn NO healthy-case credit ... The `Falsified` run ... is NOT `qsl_replay` over the authored clause, so it is not this criterion's native-oracle evidence, and the `qsl_replay` requirement stays PLANNED (slice B). |
+| FND-002 | fixed | fixed at b12cd890: Slice A of IR-805 (relationship-end graph claims) is delivered and every graph criterion is PARTIAL with its own stated gap ... Real-package relationship-end graph generation and its installed-Kani runs are delivered (IR-805 slice A); the field-edge form stays Planned pending a QSL population link (slice D). (TC-025 and the tests.md AC-96..AC-102 row updated to match; AC-101 graph clause now implemented for the relationship-end form.) |
+| FND-003 | fixed | fixed at b12cd890: The location refusal of AC-107 precedes this sequence, and within it the code reads the population, then the destination end, then checks the population type against the end's destination, then the end's upper bound, then the maximum's representability, and last the claim shape; the spec requires only that each refusal names its own input and that none reduces a domain. (AC-108 row: per-branch Test / Test of unreachability / Inspection only lists.) |
+| FND-004 | fixed | fixed at b12cd890: A graph claim that is a precondition or postcondition clause has no defined harness (the generated body never calls the subject, assumes no sibling preconditions and has no totality or satisfiability split) and settles `unsupported` naming `OperationClauseNotSupported`, with no harness (`operation_clause_graph_claims_settle_unsupported_with_no_harness`); a harness for them stays PLANNED. |
+| FND-005 | fixed | fixed at b12cd890: The single cover is `object_count == N`: it is satisfiable only when the assumptions admit a non-empty maximum-size population ... The edge-count endpoints `lower` and `upper` are evidenced by the rendered draw ranges (`relationship_domains_use_the_population_and_the_typed_destination_multiplicity`), not by a cover. |
+| FND-006 | still-open | New this round. At b12cd890 the stale "planned" statements are still present at FR-015:116, FR-015:147, FR-015:1050 and tests.md:136. A text-only fix is needed in this PR. |
