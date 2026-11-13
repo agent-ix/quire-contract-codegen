@@ -14,16 +14,15 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// CG's generator version: the version of this crate.
 pub const GENERATOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// CG's kernel version: the version of the `quire-exact` crate this build links, read from the
-/// lock file at build time.
-pub const KERNEL_VERSION: &str = env!("CG_QUIRE_EXACT_VERSION");
+/// CG's kernel version: the linked `quire-exact` crate's `KERNEL_VERSION`.
+pub const KERNEL_VERSION: u32 = quire_exact::KERNEL_VERSION;
 
 fn generator_version() -> String {
     GENERATOR_VERSION.to_owned()
 }
 
-fn kernel_version() -> String {
-    KERNEL_VERSION.to_owned()
+const fn kernel_version() -> u32 {
+    KERNEL_VERSION
 }
 
 /// The smallest bit count `n` such that every value of `[lower, upper]` is representable in `n`
@@ -90,7 +89,7 @@ pub struct ClauseFeatures {
     pub generator_version: String,
     /// CG's kernel version.
     #[serde(default = "kernel_version")]
-    pub kernel_version: String,
+    pub kernel_version: u32,
 }
 
 impl ClauseFeatures {
@@ -191,7 +190,7 @@ pub struct TractabilityRow {
     /// The generator version the probe ran against.
     pub generator_version: String,
     /// The kernel version the probe ran against.
-    pub kernel_version: String,
+    pub kernel_version: u32,
 }
 
 impl TractabilityRow {

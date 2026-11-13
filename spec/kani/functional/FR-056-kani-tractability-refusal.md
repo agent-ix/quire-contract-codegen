@@ -49,8 +49,8 @@ Terms:
   Because the native carrier is signed, `Int[0, 2^k]` is counted as `k + 1` bits; `Int[0, 2^63 - 1]`
   is 63 unsigned bits and `Int[0, 2^64 - 1]` is 64.
 - The *generator version* is the CG crate version (`CARGO_PKG_VERSION` of this crate); the *kernel
-  version* is the version of the quire-exact crate CG links. CG exposes one constant for each; no
-  hash or pin is involved.
+  version* is the integer `quire_exact::KERNEL_VERSION` of the quire-exact crate CG links (a row's
+  kernel version is that integer). CG exposes one constant for each; no hash or pin is involved.
 
 ## Inputs
 

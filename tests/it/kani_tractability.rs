@@ -573,10 +573,14 @@ fn tc_070_a_stale_row_is_ignored() {
     };
     let current = row_json(&[MUL], 1, "not_tractable");
     assert!(refused(current.clone()));
-    for field in ["generator_version", "kernel_version"] {
-        let mut stale = current.clone();
-        stale[field] = json!("0.0.0-stale");
-        assert!(!refused(stale), "{field}");
+    let mut stale_generator = current.clone();
+    stale_generator["generator_version"] = json!("0.0.0-stale");
+    assert!(!refused(stale_generator), "generator_version");
+    // The kernel half: `quire_exact::KERNEL_VERSION` is an integer, so any other value is stale.
+    for other in [KERNEL_VERSION + 1, KERNEL_VERSION.wrapping_sub(1)] {
+        let mut stale_kernel = current.clone();
+        stale_kernel["kernel_version"] = json!(other);
+        assert!(!refused(stale_kernel), "kernel_version {other}");
     }
     for field in ["kani_version", "cbmc_version", "solver_version"] {
         let mut other = current.clone();
