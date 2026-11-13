@@ -85,8 +85,10 @@ pub struct GraphReplayInputs<'a> {
     pub anchor: SelectedAnchor,
     /// The current snapshot's identity labels.
     pub snapshot_label: DocumentLabel,
-    /// The graph decoded from the playback; `None` until [`Self::decode_falsification`].
-    pub witness: Option<GraphWitness>,
+    /// The graph decoded from the playback; `None` until [`Self::decode_falsification`]. Private:
+    /// only a decoded playback of the harness sets it, so a caller cannot replay a graph Kani
+    /// never drew.
+    witness: Option<GraphWitness>,
 }
 
 #[derive(Serialize, FixedShape)]
@@ -119,10 +121,53 @@ struct GraphSnapshotDocument {
     relationships: Vec<RelationshipEntry>,
 }
 
-impl GraphReplayInputs<'_> {
+impl<'a> GraphReplayInputs<'a> {
+    /// The inputs of one graph replay, with no witness yet.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        run: ReplayInputs,
+        packages: Vec<ProvidedDocument>,
+        package: &'a CheckedPackageV2,
+        clause_node: &'a CheckedNodeId,
+        clause: ClauseName,
+        address: GraphReplayAddress,
+        anchor: SelectedAnchor,
+        snapshot_label: DocumentLabel,
+    ) -> Self {
+        Self {
+            run,
+            packages,
+            package,
+            clause_node,
+            clause,
+            address,
+            anchor,
+            snapshot_label,
+            witness: None,
+        }
+    }
+
+    /// The graph decoded from the playback, once [`Self::decode_falsification`] succeeded.
+    #[must_use]
+    pub fn witness(&self) -> Option<&GraphWitness> {
+        self.witness.as_ref()
+    }
+
+    /// Test seam: a witness no playback produced, to reach the snapshot paths a Kani run does not
+    /// (the reverse direction and a non-unique end).
+    #[cfg(test)]
+    pub(crate) fn with_witness(&mut self, witness: GraphWitness) {
+        self.witness = Some(witness);
+    }
+
     /// Decodes a parsed falsified graph harness playback into the graph it drew. The slots are
     /// read in the generated draw order (`object_count`, `start`, `target`, then each row's degree
-    /// and `upper` edge slots) and checked against the harness's own domain.
+    /// and `upper` edge slots) and checked against the harness's own domain. That domain (population
+    /// maximum, edge `lower`, `upper` and `unique`) is read from the harness identity, which the
+    /// generator filled from the authored package's `select_population` and `relationship_end`
+    /// projections; this check does not re-derive it from the package, so it is a consistency
+    /// check of the playback against the harness, not an independent domain oracle.
     ///
     /// # Errors
     ///

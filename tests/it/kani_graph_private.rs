@@ -9,9 +9,12 @@
 //! reachability): the negated claim must reproduce as a violation, and each source mutant, whose
 //! authored clause holds natively, must settle as a verdict disagreement.
 //!
-//! The wrong-role mutant makes the closure follow a role that holds no instance in the drawn graph
-//! (the helper's edge count is replaced by zero). The harness draws one end only, so following a
-//! different populated role cannot be expressed by editing it.
+//! There is NO wrong-role mutant. The harness draws one end only, so a closure that follows
+//! another role cannot be expressed by editing it, and a closure that follows no edge is the
+//! rejected-self-loop mutant again. AC-106's "another field or role" clause is NOT evidenced.
+//!
+//! These are lib tests, so `make kani-gate` (which runs `--test it` with the Kani filters) does not
+//! run them; run them with the command above inside the flock and the memory scope.
 
 use crate::{
     core::artifact::Artifact,
@@ -55,15 +58,15 @@ fn generated(identity: &str) -> Value {
                           "inputIdentities": [identity]}})
 }
 
-fn relation(name: &str, lower: u64, upper: u64) -> Value {
+fn relation(name: &str, lower: u64, upper: u64, unique: bool) -> Value {
     json!({
         "identity": format!("ix://ir268.test/domain/relationship/Node-{name}"),
         "category": "structural", "composite": false, "direction": "source-to-target",
         "origin": {"source": {"sourceIdentity": SOURCE, "path": "spec.qspec", "startLine": 1, "startColumn": 1}},
         "sourceEnd": {"type": NODE, "role": name,
-                      "multiplicity": {"lower": 0, "upper": 9, "ordered": false, "unique": true}},
+                      "multiplicity": {"lower": 0, "upper": 9, "ordered": false, "unique": unique}},
         "targetEnd": {"type": NODE,
-                      "multiplicity": {"lower": lower, "upper": upper, "ordered": false, "unique": true}}
+                      "multiplicity": {"lower": lower, "upper": upper, "ordered": false, "unique": unique}}
     })
 }
 
@@ -89,7 +92,12 @@ fn domain_document() -> Vec<u8> {
             "roles": [], "origin": generated(NODE),
             "constraints": [], "extensions": [], "unknownPolicy": "reject", "supertypes": [],
             "fields": [],
-            "relationships": [relation("loop", 1, 1), relation("empty", 0, 0)],
+            "relationships": [
+                relation("loop", 1, 1, true),
+                relation("empty", 0, 0, true),
+                relation("kids", 0, 3, true),
+                relation("litter", 0, 3, false)
+            ],
             "operations": [{
                 "identity": format!("{NODE}/visit"), "name": "visit",
                 "params": [], "pre": [], "post": [],
@@ -220,6 +228,13 @@ impl Drop for Scratch {
 
 /// Runs `harness` under the installed backend and returns the Falsified counterexample.
 fn run_falsified(harness: &KaniGraphObligationHarness, label: &str) -> String {
+    let KaniRunOutcome::Falsified { counterexample } = run_outcome(harness, label) else {
+        panic!("{label}: the run must falsify");
+    };
+    counterexample
+}
+
+fn run_outcome(harness: &KaniGraphObligationHarness, label: &str) -> KaniRunOutcome {
     let scratch = Scratch::create(label);
     fs::write(
         scratch.0.join("Cargo.toml"),
@@ -271,10 +286,7 @@ fn run_falsified(harness: &KaniGraphObligationHarness, label: &str) -> String {
         std::mem::discriminant(&evidence.outcome),
         started.elapsed()
     );
-    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
-        panic!("{label}: the mutant must falsify: {:?}", evidence.outcome);
-    };
-    counterexample
+    evidence.outcome
 }
 
 fn scalar_limits() -> ScalarLimits {
@@ -299,8 +311,8 @@ const UNBOUNDED: WitnessDecodeLimits = WitnessDecodeLimits {
 };
 
 fn graph_inputs<'a>(authored: &'a Authored, relationship: &str) -> GraphReplayInputs<'a> {
-    GraphReplayInputs {
-        run: ReplayInputs {
+    GraphReplayInputs::new(
+        ReplayInputs {
             decode_limits: UNBOUNDED,
             package_name: "graph".to_owned(),
             source: LockedSource {
@@ -318,27 +330,26 @@ fn graph_inputs<'a>(authored: &'a Authored, relationship: &str) -> GraphReplayIn
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         },
-        packages: vec![ProvidedDocument {
+        vec![ProvidedDocument {
             bytes: authored.domain.clone(),
         }],
-        package: &authored.package,
-        clause_node: &authored.clause,
-        clause: ClauseName(Identifier::new("Graph").unwrap()),
-        address: GraphReplayAddress {
+        &authored.package,
+        &authored.clause,
+        ClauseName(Identifier::new("Graph").unwrap()),
+        GraphReplayAddress {
             population: POPULATION.to_owned(),
             object_type: NODE.to_owned(),
             relationship: relationship.to_owned(),
         },
-        anchor: SelectedAnchor {
+        SelectedAnchor {
             kind: AnchorKind::Handler,
             name: "visit".to_owned(),
         },
-        snapshot_label: DocumentLabel {
+        DocumentLabel {
             authority: "test".to_owned(),
             identity: "graph-current".to_owned(),
         },
-        witness: None,
-    }
+    )
 }
 
 /// Decodes the counterexample into the drawn graph and replays the authored clause over it
@@ -362,7 +373,7 @@ fn replay(
     inputs
         .decode_falsification(harness, &playback, unbounded)
         .expect("the playback decodes in the harness's domain");
-    let witness = inputs.witness.clone().expect("a decoded graph");
+    let witness = inputs.witness().cloned().expect("a decoded graph");
     let replay = StateClauseReplay::new_graph_invariant(inputs).expect("the replay is built");
     let result = replay.replay().expect("QSL settles the graph replay");
     (witness, result)
@@ -461,28 +472,10 @@ fn real_kani_rejected_self_loop_mutant_falsifies_and_qsl_replay_disagrees() {
     assert_clause_holds(&result);
 }
 
-/// Wrong-role mutant: the closure follows a role with no instance in the drawn graph, so the
-/// forced self-loop reads unreachable. The authored clause holds natively.
-#[trace("TC-025", "FR-015-AC-106")]
-#[test]
-#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
-fn real_kani_wrong_role_mutant_falsifies_and_qsl_replay_disagrees() {
-    let authored = authored("reaches(self, self, loop)", 1);
-    let healthy = harness(&authored, &[]);
-    let mutant = mutated(
-        &healthy,
-        "(edge as i64) < degrees[row]",
-        "(edge as i64) < 0",
-    );
-    let counterexample = run_falsified(&mutant, "wrong-role");
-    let (witness, result) = replay(&authored, &mutant, &counterexample, &relationship("loop"));
-    assert_eq!(witness.edges, vec![vec![0]]);
-    assert_clause_holds(&result);
-}
-
 /// No Kani: a hand-authored graph is put before QSL and the authored clause judges it. A forced
-/// self-loop violates `not reaches(self, self, loop)` and satisfies `reaches(self, self, loop)`,
-/// and a witness the harness could not have drawn is refused before QSL is asked.
+/// self-loop violates `not reaches(self, self, loop)` and satisfies `reaches(self, self, loop)`.
+/// The witness is set through a test seam: a public caller can only obtain one by decoding a
+/// playback.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 fn qsl_replay_judges_a_concrete_graph_by_the_authored_clause() {
@@ -498,7 +491,7 @@ fn qsl_replay_judges_a_concrete_graph_by_the_authored_clause() {
     ] {
         let authored = authored(condition, 1);
         let mut inputs = graph_inputs(&authored, &relationship("loop"));
-        inputs.witness = Some(witness.clone());
+        inputs.with_witness(witness.clone());
         let result = StateClauseReplay::new_graph_invariant(inputs)
             .expect("the replay is built")
             .replay()
@@ -511,7 +504,7 @@ fn qsl_replay_judges_a_concrete_graph_by_the_authored_clause() {
     }
     let authored = authored("not reaches(self, self, empty)", 3);
     let mut inputs = graph_inputs(&authored, &relationship("empty"));
-    inputs.witness = Some(crate::GraphWitness {
+    inputs.with_witness(crate::GraphWitness {
         objects: 2,
         start: 0,
         edges: vec![vec![], vec![]],
@@ -522,4 +515,224 @@ fn qsl_replay_judges_a_concrete_graph_by_the_authored_clause() {
         .replay()
         .expect("QSL settles the graph replay");
     assert_clause_holds(&result);
+}
+
+const GRAPH_CHECK: &str = "\"the symbolic graph satisfies the admitted clause condition\"";
+
+/// Hand-authored Kani playback text for `harness`, one little-endian `i64` per draw.
+fn playback_text(harness: &KaniGraphObligationHarness, check: &str, values: &[i64]) -> String {
+    let entries: String = values
+        .iter()
+        .map(|value| {
+            let bytes = value
+                .to_le_bytes()
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("        // {value}\n        vec![{bytes}],\n")
+        })
+        .collect();
+    format!(
+        "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"{check}\"\n#[test]\nfn kani_concrete_playback_check_1() {{\n    let concrete_vals: Vec<Vec<u8>> = vec![\n{entries}    ];\n    kani::concrete_playback_run(concrete_vals, check);\n}}\n",
+        harness.identity.module_symbol.as_str(),
+        harness.identity.harness_symbol.as_str(),
+    )
+}
+
+fn decode(
+    inputs: &mut GraphReplayInputs<'_>,
+    harness: &KaniGraphObligationHarness,
+    check: &str,
+    values: &[i64],
+) -> Result<(), crate::StateClauseReplayError> {
+    let text = playback_text(harness, check, values);
+    let playback = parse_assertion_playback(
+        &text,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the hand-authored playback parses");
+    inputs.decode_falsification(harness, &playback, UNBOUNDED)
+}
+
+/// Slot layout for a population of 3 and an end of upper bound 3: `object_count`, `start`,
+/// `target`, then `degree` and three edge slots per row.
+fn slots(count: i64, start: i64, target: i64, rows: [[i64; 4]; 3]) -> Vec<i64> {
+    let mut slots = vec![count, start, target];
+    slots.extend(rows.into_iter().flatten());
+    slots
+}
+
+const EMPTY_ROW: [i64; 4] = [0, 0, 0, 0];
+
+/// Every refusal of `decode_falsification`, on a unique `{0,3}` end at population 3, and the `{1,1}`
+/// lower bound at population 1.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+fn decode_falsification_refuses_every_playback_the_harness_could_not_draw() {
+    use crate::StateClauseReplayError as Error;
+    let authored = authored("not reaches(self, self, kids)", 3);
+    let harness = harness(&authored, &[0]);
+    let fresh = || graph_inputs(&authored, &relationship("kids"));
+    let ok = slots(1, 0, 0, [[1, 0, 0, 0], EMPTY_ROW, EMPTY_ROW]);
+    let mut inputs = fresh();
+    decode(&mut inputs, &harness, GRAPH_CHECK, &ok).expect("a drawable graph decodes");
+    let witness = inputs.witness().unwrap();
+    assert_eq!((witness.objects, witness.start), (1, 0));
+    assert_eq!(witness.edges, vec![vec![0]]);
+    // A second decode is refused.
+    assert!(matches!(
+        decode(&mut inputs, &harness, GRAPH_CHECK, &ok),
+        Err(Error::PlaybackAlreadySupplied)
+    ));
+    let refused = |values: Vec<i64>| decode(&mut fresh(), &harness, GRAPH_CHECK, &values);
+    for (label, values) in [
+        ("empty population", slots(0, 0, 0, [EMPTY_ROW; 3])),
+        ("count above N", slots(4, 0, 0, [EMPTY_ROW; 3])),
+        ("negative count", slots(-1, 0, 0, [EMPTY_ROW; 3])),
+        ("start out of range", slots(1, 1, 1, [EMPTY_ROW; 3])),
+        (
+            "degree above upper",
+            slots(1, 0, 0, [[4, 0, 0, 0], EMPTY_ROW, EMPTY_ROW]),
+        ),
+        (
+            "target out of range",
+            slots(1, 0, 0, [[1, 1, 0, 0], EMPTY_ROW, EMPTY_ROW]),
+        ),
+        (
+            "repeated target on a unique end",
+            slots(2, 0, 0, [[2, 1, 1, 0], EMPTY_ROW, EMPTY_ROW]),
+        ),
+    ] {
+        assert!(
+            matches!(refused(values), Err(Error::GraphWitnessNotInDomain)),
+            "{label}"
+        );
+    }
+    assert!(matches!(
+        refused(slots(2, 0, 1, [EMPTY_ROW; 3])),
+        Err(Error::GraphStartIsNotTarget)
+    ));
+    // The assertion must be the harness's own.
+    assert!(matches!(
+        decode(&mut fresh(), &harness, "\"another assertion\"", &ok),
+        Err(Error::AssertionMismatch)
+    ));
+    // A harness whose public fields changed since generation is refused.
+    let mut tampered = harness.clone();
+    tampered.rust.contents.push_str("\n// changed");
+    assert!(matches!(
+        decode(&mut fresh(), &tampered, GRAPH_CHECK, &ok),
+        Err(Error::Decode(_))
+    ));
+    // A harness of another clause is refused.
+    let other_node = authored
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| &node.node_id)
+        .find(|node| **node != authored.clause)
+        .expect("another node");
+    let mut elsewhere = fresh();
+    elsewhere.clause_node = other_node;
+    assert!(matches!(
+        decode(&mut elsewhere, &harness, GRAPH_CHECK, &ok),
+        Err(Error::HarnessMismatch { .. })
+    ));
+    // The edge lower bound: a `{1,1}` end draws one edge per live object.
+    let forced = self::authored("not reaches(self, self, loop)", 1);
+    let forced_harness = self::harness(&forced, &[0]);
+    let mut inputs = graph_inputs(&forced, &relationship("loop"));
+    assert!(matches!(
+        decode(&mut inputs, &forced_harness, GRAPH_CHECK, &[1, 0, 0, 0, 0]),
+        Err(Error::GraphWitnessNotInDomain)
+    ));
+    decode(&mut inputs, &forced_harness, GRAPH_CHECK, &[1, 0, 0, 1, 0])
+        .expect("the forced self-loop decodes");
+}
+
+fn snapshot_instances(replay: &StateClauseReplay) -> Value {
+    replay
+        .wire
+        .documents
+        .iter()
+        .filter_map(|bytes| serde_json::from_slice::<Value>(bytes).ok())
+        .find(|document| document["format"] == "quire.state.snapshot/v1")
+        .expect("the snapshot")["relationships"][0]["instances"]
+        .clone()
+}
+
+/// The reverse direction swaps each instance's source and target, and QSL admits both
+/// snapshots of a two-cycle; a non-unique end writes a repeated target as repeated instances,
+/// which QSL either admits or refuses by itself (recorded below).
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+fn the_reverse_direction_and_a_non_unique_end_reach_the_snapshot() {
+    let cycle = |forward| crate::GraphWitness {
+        objects: 2,
+        start: 0,
+        edges: vec![vec![1], vec![0]],
+        forward,
+    };
+    let authored = authored("not reaches(self, self, kids)", 3);
+    let mut results = Vec::new();
+    for forward in [true, false] {
+        let mut inputs = graph_inputs(&authored, &relationship("kids"));
+        inputs.with_witness(cycle(forward));
+        let replay = StateClauseReplay::new_graph_invariant(inputs).expect("built");
+        let instances = snapshot_instances(&replay);
+        assert_eq!(
+            instances[0]["source"]["key"],
+            if forward { "n0" } else { "n1" }
+        );
+        assert_eq!(
+            instances[0]["target"]["key"],
+            if forward { "n1" } else { "n0" }
+        );
+        results.push(settled(&replay.replay().expect("QSL settles")));
+    }
+    // A cycle reaches itself in either direction: the same violation.
+    assert_eq!(results[0], results[1]);
+    assert_eq!(results[0].1, Category::Violation);
+
+    let authored = self::authored("not reaches(self, self, litter)", 3);
+    let mut inputs = graph_inputs(&authored, &relationship("litter"));
+    inputs.with_witness(crate::GraphWitness {
+        objects: 2,
+        start: 0,
+        edges: vec![vec![1, 1], vec![]],
+        forward: true,
+    });
+    let replay = StateClauseReplay::new_graph_invariant(inputs).expect("built");
+    assert_eq!(snapshot_instances(&replay).as_array().unwrap().len(), 2);
+    // Object 1 has no edge, so object 0 does not reach itself: the clause holds.
+    assert_clause_holds(&replay.replay().expect("QSL settles the repeated instances"));
+}
+
+/// Healthy controls on this fixture for the claims the mutants falsify: the unmutated harness
+/// verifies, so each Falsified mutant run is the mutation's doing.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_healthy_controls_verify_on_the_slice_b_fixture() {
+    for (label, condition, maximum, path) in [
+        (
+            "healthy-empty",
+            "not reaches(self, self, empty)",
+            3,
+            vec![0],
+        ),
+        ("healthy-loop", "reaches(self, self, loop)", 1, vec![]),
+    ] {
+        let authored = authored(condition, maximum);
+        let healthy = harness(&authored, &path);
+        assert!(
+            matches!(run_outcome(&healthy, label), KaniRunOutcome::Verified),
+            "{label}"
+        );
+    }
 }
