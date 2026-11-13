@@ -125,7 +125,8 @@ kani-gate: $(GATES_BIN)
 # The mutant gate (FR-055): standalone, never part of `make ci`, a Kani-affecting merge gate
 # alongside `make kani-gate`. Each declared mutant (scripts/kani-mutants.json) is injected into a
 # scratch copy and its owning proof must fail with `VERIFICATION:- FAILED`. Serial, under the host lock.
-# The per-mutant timeout and the total budget (seconds) are this target's configuration.
+# The per-mutant timeout and the total budget (seconds) are this target's configuration. SIGINT, SIGTERM
+# and SIGHUP kill the running proof's process group and remove the scratch copy and its build cache.
 KANI_MUTANTS ?= scripts/kani-mutants.json
 KANI_MUTANT_TIMEOUT ?= 3600
 KANI_MUTATIONS_BUDGET ?= 21600

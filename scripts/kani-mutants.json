@@ -13,8 +13,8 @@
   },
   {
     "file": "src/kani/generate/scalar.rs",
-    "anchor": "        assert!(sound, \\\"the oracle must complete",
-    "replacement": "        assert!(!sound, \\\"the oracle must complete",
+    "anchor": "Statement::Assert { condition: expr(\"sound\".to_owned())?",
+    "replacement": "Statement::Assert { condition: expr(\"!sound\".to_owned())?",
     "proof": "kani_obligations::tc_027_attested_scalar_receipt_binds_real_proof_and_native_result"
   }
 ]

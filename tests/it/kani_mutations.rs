@@ -19,12 +19,15 @@ static NEXT_SANDBOX: AtomicU64 = AtomicU64::new(0);
 /// replacement reached the scratch copy it runs in.
 const RUNNER: &str = r##"#!/usr/bin/env bash
 proof="${@: -1}"
+[ -n "$RUNNER_LOG" ] && echo "$proof" >> "$RUNNER_LOG"
+[ -n "$RUNNER_PID" ] && echo "$$" > "$RUNNER_PID"
 grep -q 'MUTATED' src/lib.rs || { echo 'replacement was not injected'; exit 9; }
 case "$proof" in
   *ok*) echo 'VERIFICATION:- FAILED'; exit 101 ;;
   *survive*) echo 'VERIFICATION:- SUCCESSFUL'; exit 0 ;;
   *silent*) echo 'error[E0425]: cannot find value'; exit 101 ;;
   *hang*) sleep 60 ;;
+  *weak*) if grep -q TRIVIAL src/harness.txt; then echo 'VERIFICATION:- SUCCESSFUL'; exit 0; fi; echo 'VERIFICATION:- FAILED'; exit 101 ;;
 esac
 "##;
 
@@ -49,6 +52,11 @@ impl Sandbox {
         )
         .expect("source");
         let sandbox = Self { root, bin };
+        fs::write(
+            sandbox.root.join("src/harness.txt"),
+            "assert!(real_proposition)\n",
+        )
+        .expect("harness");
         sandbox.executable("cargo-kani", "#!/bin/sh\nexit 0\n");
         sandbox.executable("runner", RUNNER);
         sandbox
@@ -92,9 +100,15 @@ impl Sandbox {
             ])
             .arg(self.bin.join("runner"))
             .env("PATH", path)
+            .env("RUNNER_LOG", self.root.join("invocations"))
+            .env("RUNNER_PID", self.root.join("pid"))
             .current_dir(&self.root)
             .output()
             .expect("run the target")
+    }
+
+    fn invocations(&self) -> String {
+        fs::read_to_string(self.root.join("invocations")).unwrap_or_default()
     }
 
     fn source(&self) -> String {
@@ -304,6 +318,7 @@ fn fewer_than_three_declared_mutants_is_refused_with_exit_two_and_runs_nothing()
         assert_eq!(output.status.code(), Some(2), "{}", err(&output));
         assert!(err(&output).contains("refused"), "{}", err(&output));
         assert!(!out(&output).contains("outcome="), "nothing ran");
+        assert_eq!(sandbox.invocations(), "", "the runner was never invoked");
     }
 }
 
@@ -329,5 +344,131 @@ fn the_shipped_declaration_holds_at_least_three_complete_entries_with_unique_anc
         );
         assert_ne!(field("anchor"), field("replacement"));
         field("proof");
+    }
+}
+
+#[trace("FR-055-AC-7", "TC-069")]
+#[test]
+fn a_weakened_harness_makes_its_mutant_fail_and_restoring_it_returns_zero() {
+    // Control flow only: the stand-in verifies the mutant exactly while the harness is trivial.
+    // The same flow through installed Kani runs in the Kani lane.
+    let sandbox = Sandbox::new();
+    sandbox.declare(&[
+        ("ORIGINAL", "m::weak_1"),
+        ("OTHER", "m::ok_2"),
+        ("fn a", "m::ok_3"),
+    ]);
+    let harness = sandbox.root.join("src/harness.txt");
+    let healthy = fs::read_to_string(&harness).expect("harness");
+
+    fs::write(&harness, "assert!(TRIVIAL)\n").expect("weaken");
+    let weakened = sandbox.run(30, 120, true);
+    assert!(!weakened.status.success());
+    assert!(
+        out(&weakened)
+            .lines()
+            .any(|l| l.contains("harness=m::weak_1 ") && l.ends_with("outcome=fail")),
+        "{}",
+        out(&weakened)
+    );
+
+    fs::write(&harness, healthy).expect("restore");
+    let restored = sandbox.run(30, 120, true);
+    assert!(restored.status.success(), "{}", out(&restored));
+}
+
+#[trace("FR-055-AC-1", "TC-069")]
+#[test]
+fn a_termination_signal_kills_the_runner_group_and_removes_the_scratch() {
+    let sandbox = Sandbox::new();
+    sandbox.declare(&[
+        ("ORIGINAL", "m::hang_1"),
+        ("OTHER", "m::ok_2"),
+        ("fn a", "m::ok_3"),
+    ]);
+    let tmp = sandbox.root.join("tmp");
+    fs::create_dir(&tmp).expect("tmp");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cg_gates"))
+        .args(["kani-mutations", "mutants.json", "60", "600", "--"])
+        .arg(sandbox.bin.join("runner"))
+        .env("PATH", format!("{}:/usr/bin:/bin", sandbox.bin.display()))
+        .env("TMPDIR", &tmp)
+        .env("RUNNER_PID", sandbox.root.join("pid"))
+        .current_dir(&sandbox.root)
+        .spawn()
+        .expect("start the target");
+    let pid_file = sandbox.root.join("pid");
+    let started = std::time::Instant::now();
+    while !pid_file.exists() {
+        assert!(started.elapsed().as_secs() < 30, "the runner started");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let runner: String = fs::read_to_string(&pid_file)
+        .expect("pid")
+        .trim()
+        .to_owned();
+    Command::new("kill")
+        .arg(child.id().to_string())
+        .status()
+        .expect("kill");
+    let status = child.wait().expect("exit");
+    assert!(!status.success());
+    assert_eq!(
+        fs::read_dir(&tmp).expect("tmp").count(),
+        0,
+        "the scratch root was removed"
+    );
+    let gone = (0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        !Path::new(&format!("/proc/{runner}")).exists()
+    });
+    assert!(gone, "the runner process was killed");
+}
+
+#[trace("FR-055-AC-9", "TC-069")]
+#[test]
+fn no_shipped_anchor_lies_in_cfg_test_code() {
+    struct TestRanges(Vec<(usize, usize)>);
+    impl<'ast> syn::visit::Visit<'ast> for TestRanges {
+        fn visit_item(&mut self, item: &'ast syn::Item) {
+            use syn::spanned::Spanned;
+            let attrs: &[syn::Attribute] = match item {
+                syn::Item::Mod(i) => &i.attrs,
+                syn::Item::Fn(i) => &i.attrs,
+                syn::Item::Impl(i) => &i.attrs,
+                _ => &[],
+            };
+            if attrs.iter().any(|a| {
+                a.path().is_ident("cfg")
+                    && quote::ToTokens::to_token_stream(a)
+                        .to_string()
+                        .contains("test")
+            }) {
+                let span = item.span();
+                self.0.push((span.start().line, span.end().line));
+            } else {
+                syn::visit::visit_item(self, item);
+            }
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let text = fs::read_to_string(root.join("scripts/kani-mutants.json")).expect("declaration");
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&text).expect("declaration JSON");
+    for entry in &entries {
+        let file = entry["file"].as_str().expect("file");
+        let source = fs::read_to_string(root.join(file)).expect("source");
+        let offset = source
+            .find(entry["anchor"].as_str().expect("anchor"))
+            .expect("anchor present");
+        let line = source[..offset].matches('\n').count() + 1;
+        let mut ranges = TestRanges(Vec::new());
+        syn::visit::Visit::visit_file(&mut ranges, &syn::parse_file(&source).expect("parse"));
+        assert!(
+            ranges
+                .0
+                .iter()
+                .all(|(start, end)| line < *start || line > *end),
+            "{file}:{line} is inside cfg(test) code, which a production build never compiles"
+        );
     }
 }

@@ -8,6 +8,7 @@ use std::{
     os::unix::{fs::symlink, process::CommandExt},
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -18,6 +19,27 @@ use serde::Deserialize;
 const FLOOR: usize = 3;
 const REJECTION_MARKER: &str = "VERIFICATION:- FAILED";
 const POLL: Duration = Duration::from_millis(50);
+/// Set by SIGINT, SIGTERM and SIGHUP: the run stops, kills the child's process group and removes
+/// its scratch directory instead of dying with the scratch on disk and Kani still running.
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn on_signal(_signal: libc::c_int) {
+    INTERRUPTED.store(true, Ordering::SeqCst);
+}
+
+fn install_signal_handlers() {
+    for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+        // SAFETY: `on_signal` only stores to an atomic, which is async-signal-safe, and has the
+        // `extern "C" fn(c_int)` signature `signal(2)` expects.
+        unsafe {
+            libc::signal(
+                signal,
+                on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+            );
+        }
+    }
+}
+
 /// Directories that are build output or version control, never part of the candidate.
 const SKIPPED: &[&str] = &[".git", ".worktrees", "node_modules"];
 
@@ -97,12 +119,17 @@ pub fn run(args: &[String]) -> Result<(), Stop> {
             mutants.len()
         )));
     }
+    install_signal_handlers();
+    // One scratch root per run: every mutant's tree is rebuilt at `tree`, and they all share the
+    // build cache in `target`, so only the first mutant pays for the dependencies.
+    let scratch =
+        Scratch::new().map_err(|error| Stop::Failed(format!("scratch directory: {error}")))?;
     let available = kani_on_path();
     let start = Instant::now();
     let mut outcomes = Vec::with_capacity(mutants.len());
     for mutant in &mutants {
         let (outcome, detail) = if available {
-            evaluate(mutant, &config, start)
+            evaluate(mutant, &config, start, &scratch)
         } else {
             (Outcome::Unavailable, "cargo-kani is not on PATH".into())
         };
@@ -132,6 +159,9 @@ pub fn run(args: &[String]) -> Result<(), Stop> {
         count(Outcome::Malformed),
         count(Outcome::Unavailable)
     );
+    if INTERRUPTED.load(Ordering::SeqCst) {
+        return Err(Stop::Failed("kani-mutations: interrupted".into()));
+    }
     if count(Outcome::Pass) == outcomes.len() {
         Ok(())
     } else {
@@ -151,7 +181,12 @@ fn kani_on_path() -> bool {
     })
 }
 
-fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, String) {
+fn evaluate(
+    mutant: &Mutant,
+    config: &Config,
+    start: Instant,
+    scratch: &Scratch,
+) -> (Outcome, String) {
     let source = Path::new(&mutant.file);
     if source.is_absolute()
         || source
@@ -161,6 +196,12 @@ fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, Strin
         return (
             Outcome::Malformed,
             format!("{} is not a path inside the repository", mutant.file),
+        );
+    }
+    if has_symlink_component(source) {
+        return (
+            Outcome::Malformed,
+            format!("{} passes through a symbolic link", mutant.file),
         );
     }
     let Ok(text) = fs::read_to_string(source) else {
@@ -183,6 +224,9 @@ fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, Strin
             ),
         );
     }
+    if INTERRUPTED.load(Ordering::SeqCst) {
+        return (Outcome::Fail, "interrupted before this mutant ran".into());
+    }
     let Some(remaining) = config
         .budget
         .checked_sub(start.elapsed())
@@ -193,7 +237,13 @@ fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, Strin
             "total wall-clock budget exhausted before this mutant ran".into(),
         );
     };
-    match inject_and_run(mutant, &text, config, config.mutant_timeout.min(remaining)) {
+    match inject_and_run(
+        mutant,
+        &text,
+        config,
+        scratch,
+        config.mutant_timeout.min(remaining),
+    ) {
         Ok(Run::Exited { success, output }) => {
             if success {
                 (
@@ -210,6 +260,7 @@ fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, Strin
             }
         }
         Ok(Run::TimedOut) => (Outcome::Fail, "the run timed out".into()),
+        Ok(Run::Interrupted) => (Outcome::Fail, "the run was interrupted".into()),
         Err(error) => (Outcome::Fail, format!("could not run the mutant: {error}")),
     }
 }
@@ -217,48 +268,75 @@ fn evaluate(mutant: &Mutant, config: &Config, start: Instant) -> (Outcome, Strin
 enum Run {
     Exited { success: bool, output: String },
     TimedOut,
+    Interrupted,
+}
+
+fn has_symlink_component(path: &Path) -> bool {
+    let mut walked = PathBuf::new();
+    path.components().any(|component| {
+        walked.push(component);
+        fs::symlink_metadata(&walked).is_ok_and(|meta| meta.file_type().is_symlink())
+    })
 }
 
 fn inject_and_run(
     mutant: &Mutant,
     text: &str,
     config: &Config,
+    scratch: &Scratch,
     limit: Duration,
 ) -> io::Result<Run> {
-    let scratch = Scratch::new()?;
-    copy_tree(Path::new("."), scratch.path())?;
+    let tree = scratch.path().join("tree");
+    let _ = fs::remove_dir_all(&tree);
+    fs::create_dir(&tree)?;
+    copy_tree(Path::new("."), &tree, scratch.path())?;
     // A symlinked source would write through to the working tree; replace the link itself.
-    let target = scratch.path().join(&mutant.file);
+    let target = tree.join(&mutant.file);
     fs::remove_file(&target)?;
     fs::write(
         &target,
         text.replacen(&mutant.anchor, &mutant.replacement, 1),
     )?;
 
-    let log_path = scratch.path().join(".kani-mutations.log");
+    let log_path = scratch.path().join("run.log");
     let log = File::create(&log_path)?;
     let mut command = Command::new(&config.command[0]);
     command
         .args(&config.command[1..])
         .arg(&mutant.proof)
-        .current_dir(scratch.path())
+        .current_dir(&tree)
+        .env("CARGO_TARGET_DIR", scratch.path().join("target"))
         .stdin(Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log)
         .process_group(0);
     let mut child = command.spawn()?;
-    let deadline = Instant::now() + limit;
+    let result = wait_for(&mut child, &log_path, Instant::now() + limit);
+    if !matches!(result, Ok(Run::Exited { .. })) {
+        // Every way out other than a normal exit (timeout, signal, I/O error) ends the whole group.
+        kill_group(&child);
+        let _ = child.wait();
+    }
+    result
+}
+
+fn wait_for(
+    child: &mut std::process::Child,
+    log_path: &Path,
+    deadline: Instant,
+) -> io::Result<Run> {
     loop {
         if let Some(status) = child.try_wait()? {
-            let output = String::from_utf8_lossy(&fs::read(&log_path)?).into_owned();
+            let output = String::from_utf8_lossy(&fs::read(log_path)?).into_owned();
             return Ok(Run::Exited {
                 success: status.success(),
                 output,
             });
         }
+        if INTERRUPTED.load(Ordering::SeqCst) {
+            return Ok(Run::Interrupted);
+        }
         if Instant::now() >= deadline {
-            kill_group(&child);
-            child.wait()?;
             return Ok(Run::TimedOut);
         }
         thread::sleep(POLL);
@@ -276,11 +354,14 @@ fn kill_group(child: &std::process::Child) {
     let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
 }
 
-fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
+fn copy_tree(from: &Path, to: &Path, skip: &Path) -> io::Result<()> {
     for entry in fs::read_dir(from)? {
         let entry = entry?;
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
+        if fs::canonicalize(entry.path()).is_ok_and(|path| path == skip) {
+            continue;
+        }
         let is_build_dir = name_text.starts_with("target") || name_text.ends_with("-target");
         if SKIPPED.contains(&name_text.as_ref()) || (is_build_dir && entry.path().is_dir()) {
             continue;
@@ -291,7 +372,7 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
             symlink(fs::read_link(entry.path())?, &destination)?;
         } else if kind.is_dir() {
             fs::create_dir(&destination)?;
-            copy_tree(&entry.path(), &destination)?;
+            copy_tree(&entry.path(), &destination, skip)?;
         } else {
             fs::copy(entry.path(), &destination)?;
         }
@@ -303,8 +384,8 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new() -> io::Result<Self> {
-        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!("cg-kani-mutations-{}-{id}", std::process::id()));
         fs::create_dir(&path)?;
         Ok(Self(path))

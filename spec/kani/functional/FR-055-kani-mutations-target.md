@@ -129,7 +129,7 @@ does not fix a number. The target runs outside `make ci`, so its cost is not cha
 
 ## Status
 
-IMPLEMENTED on the host (IR-1437): `make kani-mutations` (`scripts/kani_mutations.rs`, declaration
-`scripts/kani-mutants.json`) is tagged and tested for FR-055-AC-2 to AC-6, AC-8, AC-9 and AC-10 and for
-the stand-in form of AC-1 (`tests/it/kani_mutations.rs`). FR-055-AC-7, and AC-1 against real proofs,
-need installed Kani and have not been run.
+PARTIAL (IR-1437): `make kani-mutations` (`scripts/kani_mutations.rs`, declaration `scripts/kani-mutants.json`)
+exists and `tests/it/kani_mutations.rs` backs FR-055-AC-2 to AC-6, AC-8, AC-9 and AC-10 with stand-ins, and the
+control flow of FR-055-AC-1 and AC-7. The real-Kani halves of FR-055-AC-1 and FR-055-AC-7 have not been run
+and are not claimed.

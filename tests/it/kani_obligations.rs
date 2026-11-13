@@ -2543,7 +2543,9 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         scalar_limits: limits,
         target_directory: &target,
     })
-    .expect("verified proof and typed native receipt");
+    .unwrap_or_else(|error| {
+        verified_or_print_verdict(&error, "verified proof and typed native receipt")
+    });
     assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
     assert_eq!(receipt.operands(), operands);
     assert_eq!(receipt.scalar_limits(), &limits);
@@ -2640,7 +2642,9 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         scalar_limits: limits,
         target_directory: &target,
     })
-    .expect("verified proof and typed native receipt for [4, 1]");
+    .unwrap_or_else(|error| {
+        verified_or_print_verdict(&error, "verified proof and typed native receipt for [4, 1]")
+    });
 
     let right_first = [1_i64, 4_i64];
     let right_first_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
@@ -2652,7 +2656,9 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         scalar_limits: limits,
         target_directory: &target,
     })
-    .expect("verified proof and typed native receipt for [1, 4]");
+    .unwrap_or_else(|error| {
+        verified_or_print_verdict(&error, "verified proof and typed native receipt for [1, 4]")
+    });
 
     assert_eq!(
         left_first_receipt.proof_evidence().outcome,
@@ -3086,4 +3092,17 @@ fn message_safe_label(raw: &str) -> String {
             other => other.to_string(),
         })
         .collect()
+}
+
+/// Panics for a scalar proof that did not verify, first printing Kani's own `VERIFICATION:- FAILED`
+/// verdict when the proof was falsified: the launcher pipes Kani's report, so `make kani-mutations`
+/// (FR-055) recognises a rejected mutant by this line in the test output.
+fn verified_or_print_verdict<T>(
+    error: &quire_contract_codegen::KaniScalarNativeError,
+    what: &str,
+) -> T {
+    if let Some(verdict) = error.falsified_verdict() {
+        println!("{verdict}");
+    }
+    panic!("{what}: {error:?}");
 }
