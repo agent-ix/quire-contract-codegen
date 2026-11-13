@@ -217,9 +217,7 @@ pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec
 }
 
 /// The same `x + 1` fixture on the native-integer route, the one real Kani can finish.
-pub(crate) fn native_fixture(
-    wall_clock: Duration,
-) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+pub(crate) fn native_fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     routed_native_scalar_with_artifacts(
         package::bounded_increment_package(),
         package::BOUNDED_INCREMENT,
