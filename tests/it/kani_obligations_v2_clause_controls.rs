@@ -1459,7 +1459,8 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         tractability_table: Some(table),
     };
     let negotiate = |package: &quire_contract_model::CheckedPackageV2,
-                     clause: &quire_contract_model::CheckedNodeId| {
+                     clause: &quire_contract_model::CheckedNodeId,
+                     route: IntegerRoute| {
         negotiate_kani_obligations_with_options(
             &KaniObligationRequest {
                 ceilings: INSTALLED_CEILINGS,
@@ -1473,7 +1474,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
                 unwind: 3,
             },
             &options,
-            IntegerRoute::Native,
+            route,
         )
         .expect("the request negotiates")
     };
@@ -1485,7 +1486,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         "other * offset + 3 <= 100",
     )
     .emitted_package("TwoParameters");
-    let refused = negotiate(&package, &clause);
+    let refused = negotiate(&package, &clause, IntegerRoute::General);
     assert!(matches!(
         &refused.records()[0].disposition,
         quire_contract_codegen::ObligationDisposition::Unsupported {
@@ -1500,7 +1501,9 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         panic!("the request is valid");
     };
     assert!(v2_clause_harnesses.is_empty(), "no harness, so no launch");
-    // A multiply narrower than the row's bound is not refused.
+    // A multiply narrower than the row's bound is not refused. The native route renders no
+    // two-parameter precondition, so the clause is negotiated on the general route; the
+    // decision is the same on both and no Kani is launched for it.
     let (narrow, narrow_clause) = Twin::with_two_parameter_precondition(
         (0, 1 << 9),
         (0, 1 << 9),
@@ -1508,7 +1511,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
     )
     .emitted_package("TwoParameters");
     assert!(matches!(
-        &negotiate(&narrow, &narrow_clause).records()[0].disposition,
+        &negotiate(&narrow, &narrow_clause, IntegerRoute::General).records()[0].disposition,
         quire_contract_codegen::ObligationDisposition::Supported { .. }
     ));
 
@@ -1518,7 +1521,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
     let KaniObligationOutcome::Emitted {
         mut v2_clause_harnesses,
         ..
-    } = negotiate(&package, &clause)
+    } = negotiate(&package, &clause, IntegerRoute::Native)
     else {
         panic!("the clause negotiates");
     };

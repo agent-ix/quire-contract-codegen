@@ -134,9 +134,14 @@ PARTIAL (IR-1526). FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and te
 FR-056-AC-10 is partial: the shipped corpus holds ten measured rows, all `verified` or `falsified`
 and all of the one IR-1022 clause and its mutants. It has no `timed_out` row (CG's own evidence has
 no measured wall-clock timeout of a V2 clause), no Meter, decimal or pure-relational case and no other
-multi-operation clause, so the false-accept count is not exercised by the shipped file. Those rows
+multi-operation clause, so the false-accept count is not exercised by the shipped file. The one timeout
+CG does hold (`docs/qualification/ir1530-general-route-scalar-not-tractable.md`) is of the general-route
+`rt::Integer` scalar harness, which is not a V2 clause: the same features verify in seconds on the native
+route, so it is out-of-domain evidence and is not a corpus row. Those rows
 need new installed-Kani measurements. FR-056-AC-13 is coded as an ignored kani-lane test and has not
-been run under installed Kani. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13
+been run under installed Kani; its multiply refusal and pass-through fixtures also run as a host test
+(`tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`). The narrow multiply is negotiated on the
+general route because the native route renders no two-parameter precondition. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13
 needs an installed Kani run and is the only criterion that does; FR-056-AC-10 is an inspection of the
 corpus.
 Out of scope: a threshold classifier, predicting combined cost, and state-frame, collection and
