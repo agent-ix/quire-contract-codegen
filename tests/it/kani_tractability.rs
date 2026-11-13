@@ -722,8 +722,47 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Loads the corpus row by row, so a malformed row is reported by its index.
+fn try_load_corpus(path: &Path) -> Result<Vec<CorpusRow>, String> {
+    let values: Vec<Value> = serde_json::from_slice(&fs::read(path).unwrap())
+        .map_err(|error| format!("not a JSON array: {error}"))?;
+    values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            serde_json::from_value(value).map_err(|error| format!("row {index}: {error}"))
+        })
+        .collect()
+}
+
 fn load_corpus(path: &Path) -> Vec<CorpusRow> {
-    serde_json::from_slice(&fs::read(path).unwrap()).expect("a corpus file")
+    try_load_corpus(path).expect("a corpus file")
+}
+
+/// FR-056-AC-10: a corpus row without `route`, or with an unknown one, fails the load naming
+/// its index.
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_a_corpus_row_without_a_route_fails_the_load_naming_its_index() {
+    let directory = TemporaryDirectory::new("ir1526-corpus-route");
+    let rows: Vec<Value> =
+        serde_json::from_slice(&fs::read(fixture_path("corpus.json")).unwrap()).unwrap();
+    let broken = |mutate: &dyn Fn(&mut Value)| {
+        let mut rows = rows.clone();
+        mutate(&mut rows[2]["features"]);
+        let path = directory.path.join("corpus.json");
+        fs::write(&path, serde_json::to_vec(&rows).unwrap()).unwrap();
+        try_load_corpus(&path).expect_err("a malformed corpus row fails the load")
+    };
+    let missing = broken(&|features| {
+        features.as_object_mut().unwrap().remove("route");
+    });
+    assert!(
+        missing.starts_with("row 2:") && missing.contains("route"),
+        "{missing}"
+    );
+    let unknown = broken(&|features| features["route"] = json!("fast"));
+    assert!(unknown.starts_with("row 2:"), "{unknown}");
 }
 
 /// The false-refuse and false-accept counts of `decider` over `corpus`.
@@ -1018,6 +1057,7 @@ fn tc_070_lookup_matches_rows_only_for_the_clause_route() {
 
 /// FR-056-AC-2 and FR-056-AC-14 through generation: the same clause is refused as not tractable
 /// on the route of the row and reports that route, and is not refused on the other route.
+#[trace("FR-056-AC-2", "TC-070")]
 #[trace("FR-056-AC-14", "TC-070")]
 #[test]
 fn tc_070_the_negotiated_route_decides_the_refusal() {

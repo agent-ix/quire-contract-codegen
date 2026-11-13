@@ -35,16 +35,6 @@ pub enum IntegerRoute {
     Native,
 }
 
-impl IntegerRoute {
-    pub(crate) const fn from_native(native: bool) -> Self {
-        if native {
-            Self::Native
-        } else {
-            Self::General
-        }
-    }
-}
-
 /// One operation of a clause and its width after range propagation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

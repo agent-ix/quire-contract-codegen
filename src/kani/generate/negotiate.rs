@@ -327,7 +327,7 @@ impl<'a> ScalarFormLookups<'a> {
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, false, &TractabilityTable::empty())
+    negotiate_integer_policy(request, IntegerRoute::General, &TractabilityTable::empty())
 }
 
 /// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
@@ -342,7 +342,7 @@ pub fn negotiate_kani_obligations_with_options(
     let table = options
         .load_table()
         .map_err(KaniObligationError::TractabilityTable)?;
-    negotiate_integer_policy(request, route == IntegerRoute::Native, &table)
+    negotiate_integer_policy(request, route, &table)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.
@@ -352,15 +352,16 @@ pub fn negotiate_kani_obligations_with_options(
 pub fn negotiate_kani_native_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, true, &TractabilityTable::empty())
+    negotiate_integer_policy(request, IntegerRoute::Native, &TractabilityTable::empty())
 }
 
 fn negotiate_integer_policy(
     request: &KaniObligationRequest<'_>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
+    let native = route == IntegerRoute::Native;
     let mut scalar_lookups = BTreeMap::new();
     let mut checked_lookups = BTreeMap::new();
     let mut states = request
@@ -373,7 +374,7 @@ fn negotiate_integer_policy(
                 request.ceilings,
                 &mut scalar_lookups,
                 &mut checked_lookups,
-                native,
+                route,
                 decider,
             )
         })
@@ -813,9 +814,10 @@ fn classify<'a>(
         ContractLookup<'a>,
     >,
     checked_lookups: &mut CheckedLookups<'a>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> ItemState {
+    let native = route == IntegerRoute::Native;
     match *item {
         ObligationItem::ConstrainedMethod { request: method } => {
             let lookup = checked_lookup(checked_lookups, method.safety.package);
@@ -876,7 +878,7 @@ fn classify<'a>(
             clause,
             claim,
             dependencies,
-            native,
+            route,
             decider,
         ),
         ObligationItem::ScalarClaim {
@@ -942,9 +944,10 @@ fn classify_v2_clause<'a>(
     clause: &'a CheckedNodeId,
     claim: &V2ClauseObligationClaim,
     dependencies: Option<&[ProofDependencyRequest<'_>]>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> ItemState {
+    let native = route == IntegerRoute::Native;
     let package = lookup.package;
     let view = lookup.clause();
     let graph_node = view.node(clause);
@@ -988,14 +991,7 @@ fn classify_v2_clause<'a>(
                     node_id: clause.clone(),
                 })
             }
-            Some(kind) => match lower_v2_clause(
-                view,
-                clause,
-                kind,
-                claim,
-                IntegerRoute::from_native(native),
-                decider,
-            ) {
+            Some(kind) => match lower_v2_clause(view, clause, kind, claim, route, decider) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
                 Err(reason) if !native => {
                     match lower_collection_operation(lookup.collection(), clause, claim) {
