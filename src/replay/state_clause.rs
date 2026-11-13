@@ -21,6 +21,7 @@
 //! against the admitted model table. An `IntRange` fitting `i64` is checked and becomes a
 //! `DeclaredDomain`; a present field without one remains an integer without an assumption.
 
+pub mod graph;
 pub mod invariant;
 
 use std::{collections::BTreeMap, fmt};
@@ -330,6 +331,11 @@ pub enum StateClauseReplayError {
         /// What it declares.
         declaration: OperationDeclaration,
     },
+    /// A graph playback slot lies outside the domain the harness assumed.
+    GraphWitnessNotInDomain,
+    /// A graph playback starts from one object and targets another, which the replay of a
+    /// `self, self` claim cannot express.
+    GraphStartIsNotTarget,
     /// QSL refused the request or the envelope before settling a result.
     Refused(Box<ReplayRefusal>),
 }
@@ -394,6 +400,12 @@ impl fmt::Display for StateClauseReplayError {
                  state-clause replay supports neither",
                 declaration.parameters, declaration.result
             ),
+            Self::GraphWitnessNotInDomain => {
+                f.write_str("a graph playback slot lies outside the harness's domain")
+            }
+            Self::GraphStartIsNotTarget => {
+                f.write_str("the graph playback starts from one object and targets another")
+            }
             Self::Refused(refusal) => write!(f, "the state-clause replay was refused: {refusal}"),
         }
     }
@@ -431,6 +443,8 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::OutOfDomain { .. }
             | StateClauseReplayError::UnreadValueForReadField { .. }
             | StateClauseReplayError::UnreadFieldNotRanged { .. }
+            | StateClauseReplayError::GraphWitnessNotInDomain
+            | StateClauseReplayError::GraphStartIsNotTarget
             | StateClauseReplayError::UnsupportedOperationShape { .. } => Self::CgDefect,
             StateClauseReplayError::Refused(refusal) => Self::Refused(refusal),
         }
