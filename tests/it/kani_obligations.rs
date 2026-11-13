@@ -2190,14 +2190,18 @@ fn routed_scalar_increment_with_artifacts() -> (
     )
 }
 
-fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
-    let (harness, artifacts) = routed_native_scalar_with_artifacts(
+fn native_scalar_increment_with_artifacts() -> (KaniScalarObligationHarness, Vec<Artifact>) {
+    routed_native_scalar_with_artifacts(
         package::bounded_increment_package(),
         package::BOUNDED_INCREMENT,
         49_100,
         Bound::Integer(0, 9),
         REAL_KANI_TIMEOUT,
-    );
+    )
+}
+
+fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
+    let (harness, artifacts) = native_scalar_increment_with_artifacts();
     let manifest = artifacts
         .iter()
         .find(|artifact| artifact.path == "Cargo.toml")
@@ -2471,7 +2475,7 @@ pub(crate) fn run_scalar_under_real_kani(
 
 pub(crate) fn verify_routed_scalar_harness_real_kani() {
     let cancel = quire_exact::Cancel::new();
-    let (harness, manifest) = routed_scalar_increment();
+    let (harness, manifest) = native_scalar_increment();
     let evidence = run_scalar_under_real_kani("scalar-real", &harness, &manifest);
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert_eq!(evidence.kind, None);
@@ -2484,11 +2488,17 @@ pub(crate) fn verify_routed_scalar_harness_real_kani() {
             .display()
             .to_string()
     );
-    assert_eq!(evidence.arguments.len(), harness.identity.options.len() + 1);
+    let options = harness.identity.options.len();
+    assert_eq!(evidence.arguments[0], "kani");
     assert_eq!(
-        evidence.arguments[1..=harness.identity.options.len()],
+        evidence.arguments[1..=options],
         harness.identity.options[..]
     );
+    assert_eq!(
+        evidence.arguments[options + 1..=options + 3],
+        ["-Z", "unstable-options", "--export-json"]
+    );
+    assert_eq!(evidence.arguments.len(), options + 5);
     assert_eq!(evidence.unwind, harness.identity.unwind);
     assert_eq!(evidence.solver, harness.identity.solver);
     assert_eq!(evidence.exit_code, Some(0));
@@ -2528,7 +2538,7 @@ pub(crate) fn verify_routed_scalar_harness_real_kani() {
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     use quire_exact::{ChargePoint, LimitKind, Outcome};
-    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
+    let (harness, artifacts) = native_scalar_increment_with_artifacts();
     let operands = [4_i64, 1_i64];
     let limits = attested_scalar_limits();
     let cancel = quire_exact::Cancel::new();
@@ -2924,7 +2934,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
-    let (mut harness, manifest) = routed_scalar_increment();
+    let (mut harness, manifest) = native_scalar_increment();
     let domain_upper = "exact <= i128::from(9_i64);";
     assert_eq!(harness.rust.contents.matches(domain_upper).count(), 1);
     harness.rust.contents = harness
@@ -2949,17 +2959,17 @@ fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
-    let (harness, manifest) = routed_scalar_increment();
+    let (harness, manifest) = native_scalar_increment();
     let healthy = run_scalar_under_real_kani("scalar-arith-healthy", &harness, &manifest);
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified);
 
-    let call = "rt::IntegerArithmetic::Add(left, right)";
+    let call = "nx::NativeIntegerOperation::Add {";
     let mut mutated = harness.clone();
     assert_eq!(mutated.rust.contents.matches(call).count(), 1);
     mutated.rust.contents = mutated
         .rust
         .contents
-        .replace(call, "rt::IntegerArithmetic::Subtract(left, right)");
+        .replace(call, "nx::NativeIntegerOperation::Subtract {");
     let evidence = run_scalar_under_real_kani("scalar-arith-mutated", &mutated, &manifest);
     let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
         panic!("the mutated arithmetic must be falsified: {evidence:?}");
