@@ -21,6 +21,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::kani_obligations_state_frame::native_twin::Twin;
+use super::kani_probes::{native_probe_clause, NativeOp, IR1526_NATIVE_WIDTHS};
 use crate::scratch_crate::TemporaryDirectory;
 
 const MUL: &str = "quire.op.integer.mul";
@@ -1343,6 +1344,69 @@ fn probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
             .collect(),
         None,
     )
+}
+
+/// The features the decider computes on `route` for the AC-10 native probe clause of `op` at
+/// `operand_bits`, built from the one definition the probe measures.
+fn native_probe_features(op: NativeOp, operand_bits: u32, route: IntegerRoute) -> ClauseFeatures {
+    let (package, clause) = native_probe_clause(op, operand_bits);
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
+    ClauseFeatures::new(
+        route,
+        derive_v2_clause_operation_widths(&package, &clause)
+            .expect("widths")
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    )
+}
+
+/// The native-route probe rows carry exactly the features the decider computes, are measured
+/// `verified`, and the shipped general-route table does not refuse them (FR-056-AC-10, AC-14).
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_the_native_probe_rows_carry_the_decider_features_and_are_not_refused() {
+    let corpus = load_corpus(&fixture_path("corpus.json"));
+    let table = TractabilityTable::load(&fixture_path("table.json")).expect("the measured table");
+    for op in NativeOp::ALL {
+        for bits in IR1526_NATIVE_WIDTHS {
+            let id = format!("ir1526-native-{}-{bits}bit-operands", op.corpus_name());
+            let row = corpus.iter().find(|row| row.id == id).expect(&id);
+            assert!(matches!(row.ground_truth, GroundTruth::Verified), "{id}");
+            assert!(row.wall_seconds.is_some(), "{id} was measured");
+            let mut computed = native_probe_features(op, bits, IntegerRoute::Native);
+            computed.generator_version = row.features.generator_version.clone();
+            computed.kernel_version = row.features.kernel_version;
+            assert_eq!(row.features, computed, "{id}");
+            assert_eq!(
+                table.decide(&row.features),
+                Decision::Run,
+                "{id}: a general-route row does not refuse a native clause"
+            );
+            // A lookup that ignored the route would refuse the verified native rows from 15 bits:
+            // the same features on the general route are refused there and run at 10 bits, where
+            // only the chain's 20-bit add is wide enough to match.
+            let mut on_general = computed;
+            on_general.route = IntegerRoute::General;
+            let refused = matches!(table.decide(&on_general), Decision::Refuse { .. });
+            let expected = bits >= 15 || matches!(op, NativeOp::Chain);
+            assert_eq!(
+                refused, expected,
+                "{id}: the same clause on the general route"
+            );
+        }
+    }
 }
 
 /// The probe rows of the shipped corpus carry exactly the features the decider computes, at the

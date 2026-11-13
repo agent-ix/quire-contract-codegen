@@ -48,7 +48,7 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
 9. With a fake backend that exceeds the wall-clock ceiling on a clause the decider runs, assert the
    `KaniRunOutcome::Inconclusive` timed-out reason of FR-028-AC-2 and no tractability refusal (FR-056-AC-9).
 10. Inspect the corpus file for the fields including `route` on every row, the seed families, the
-    native-route measurement families of FR-056-AC-10 (reported as present or missing, not assumed)
+    native-route measurement families of FR-056-AC-10 (add, multiply and multiply-then-add chain as Boolean-result postconditions over one operand; the two-parameter native shape cannot render; reported as present or missing, not assumed)
     and a measurement source on every row (FR-056-AC-10).
 11. Run the scoring test. Assert it prints false-refuse and false-accept, passes at the recorded
     baseline, and fails for an always-`Refuse` decider and an always-`Run` decider

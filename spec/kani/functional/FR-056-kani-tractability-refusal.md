@@ -132,7 +132,7 @@ native-route clause, and the reverse. The decider does not infer one route from 
 | FR-056-AC-7 | A row whose generator version or kernel version differs from CG's is ignored: a clause that a current copy of the row would refuse runs, and changing only the row's Kani version, CBMC version or solver version does not make it stale (nor does the route, which FR-056-AC-14 matches). Mutant: ignoring the version check refuses the clause. | Test |
 | FR-056-AC-8 | When several rows qualify, the reported refusal is the one of FR-056 Behavior (smallest `max_operand_bits`, then file order; first qualifying operation); reordering unrelated rows does not change it. Mutant: reporting the last qualifying row fails. | Test |
 | FR-056-AC-9 | The wall-clock ceiling is unchanged: a clause the decider runs and that exceeds the ceiling still ends `KaniRunOutcome::Inconclusive` with the timed-out reason (FR-028-AC-2) and the decider is not consulted again. Mutant: converting that outcome into a `V2ClauseNotTractable` refusal fails. | Test |
-| FR-056-AC-10 | A tractability corpus file holds clauses as plain data, each row recording its features (FR-056 Behavior), its MEASURED ground-truth verdict (`verified`, `falsified`, `timed_out` or `memory_exhausted`, with `wall_seconds` where measured) and its measurement source. It is seeded from probe rows (each recording its route as a feature), the IR-1022 clause and its mutants, the Meter, integer and decimal cases, and a few multi-operation and relational clauses. It holds `route` as a feature of every row; a row without it is malformed like a table row. The corpus holds `native`-route rows as well as `general`-route rows: for each of integer add, integer multiply and a two-operation chain (`other * offset + 3 <= 100` shape) on the `native` route, at least one measured width below 15 bits and one at or above 15 bits (the 15, 23 and 31 bit unsigned operand widths of the general-route rows are the natural choice), so the corpus shows whether the general-route rows over-refuse native clauses. A row is ground-truth `timed_out` or `memory_exhausted` only if a run was measured and ended that way; a row never takes its verdict from the decider. | Inspection |
+| FR-056-AC-10 | A tractability corpus file holds clauses as plain data, each row recording its features (FR-056 Behavior), its MEASURED ground-truth verdict (`verified`, `falsified`, `timed_out` or `memory_exhausted`, with `wall_seconds` where measured) and its measurement source. It is seeded from probe rows (each recording its route as a feature), the IR-1022 clause and its mutants, the Meter, integer and decimal cases, and a few multi-operation and relational clauses. It holds `route` as a feature of every row; a row without it is malformed like a table row. The corpus holds `native`-route rows as well as `general`-route rows: for each of integer add, integer multiply and a multiply-then-add chain on the `native` route, in the shape the native route can render (a Boolean-result postcondition `result = (<cond>)` over one operand `amount`, checked against a subject function: `amount + 3 <= 100`, `amount * amount <= 100`, `amount * amount + 3 <= 100`; the two-parameter `other * offset + 3 <= 100` precondition shape cannot render on the native route), at least one measured width below 15 bits and one at or above 15 bits (the 15, 23 and 31 bit unsigned operand widths of the general-route rows are the natural choice), so the corpus shows whether the general-route rows over-refuse native clauses. A row is ground-truth `timed_out` or `memory_exhausted` only if a run was measured and ended that way; a row never takes its verdict from the decider. | Inspection |
 | FR-056-AC-11 | A scoring test runs the current decider over every corpus row, prints the false-refuse count (decider `Refuse`, ground truth `verified` or `falsified`) and the false-accept count (decider `Run`, ground truth `timed_out` or `memory_exhausted`), and passes when neither count exceeds its value in the baseline file, a data file in this repository beside the corpus; it fails when either count exceeds it and does not require zero. A count below the baseline passes. Mutants: a decider that refuses everything fails on false-refuse; a decider that runs everything fails on false-accept. | Test |
 | FR-056-AC-12 | Adding a corpus row changes the scored counts with no source change, and a second decider implementing the FR-056-AC-1 interface (for example, one that always returns `Run`) is scored against the same file with no change to the corpus or the scoring test. | Test |
 | FR-056-AC-13 | Through CG's runner under installed Kani, one clause the table lets through ends with an executed verdict (`Verified` or `Falsified`), recorded with its wall time, the Kani version and CG's generator and kernel versions; and a clause holding a measured-bad row for an integer operation the V2 path accepts (integer multiply at a width at or above the row's bound) is refused as `V2ClauseNotTractable` with no Kani launch, and a narrower multiply is not refused. The Decimal multiply at full width row is exercised the same way only once IR-1444 lets it reach the decider. A probe record does not substitute. | Test (installed Kani) |
@@ -164,24 +164,35 @@ implemented and host-tested. The host test `tc_070_the_ac13_multiply_fixtures_sp
 negotiates on both routes: the general-route row refuses the general clause and not the native one.
 FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
-FR-056-AC-10 is partial: the shipped corpus holds fourteen measured rows. Ten are `verified` or
+FR-056-AC-10 is partial: the shipped corpus holds twenty-six measured rows. Ten are `verified` or
 `falsified` and all of the one IR-1022 clause and its mutants. Four are general-route V2 clauses that
-did not finish under Kani 0.68.0. Three are `other * offset + 3 <= 100`, operands
-`Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits, each `TimedOut` at 600 s. One is the control
-`other + offset <= 100` (no multiply) at n = 15: the kernel OOM-killed `cbmc` at the 24 GiB memory
-cap after 542.5 s (`anon-rss` 25055932 kB), so it is `memory_exhausted`, not a timeout. All were measured by
-`ir1526_probe_wide_integer_multiply_under_installed_kani`. Because the add-only clause fails too,
-the measurements do not show that the multiply is the cause. All ran on the general-route
-`rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
-measured not tractable for an add from 2 bits (IR-1530).
+did not finish under Kani 0.68.0, measured by `ir1526_probe_wide_integer_multiply_under_installed_kani`.
+Three are `other * offset + 3 <= 100`, operands `Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits,
+each `TimedOut` at 600 s. One is the control `other + offset <= 100` (no multiply) at n = 15: the kernel
+OOM-killed `cbmc` at the 24 GiB memory cap after 542.5 s (`anon-rss` 25055932 kB), so it is
+`memory_exhausted`, not a timeout; because the add-only clause fails too, those measurements do not show
+that the multiply is the cause. All four ran on the general-route `rt::Integer` carrier, which
+`docs/qualification/ir1530-general-route-scalar-not-tractable.md` measured not tractable for an add from 2
+bits (IR-1530). Twelve are native-route rows measured by `ir1526_probe_native_route_under_installed_kani` (PR #824,
+Kani 0.68.0, CBMC 6.11.0, 24 GiB lane, 600 s ceiling): integer add (`amount + 3 <= 100`), integer
+multiply (`amount * amount <= 100`) and the multiply-then-add chain (`amount * amount + 3 <= 100`) over
+`Int[0, 2^n - 1]` for n = 10, 15, 23 and 31, all `verified` (multiply at 31 bits in 491.8 s, the slowest).
+The native and general-route rows differ in carrier, harness shape (a postcondition checked against a
+subject versus a cover-only precondition), operand count (one versus two) and subject all at once, so
+their verdicts are not a like-for-like comparison of the carriers. What the corpus does show is that a
+decider matching rows without the route would refuse the nine native rows of add, multiply and chain at
+15, 23 and 31 bits, all of which verified; the route-matched lookup (FR-056-AC-14) runs them. The host
+test `tc_070_the_native_probe_rows_carry_the_decider_features_and_are_not_refused` asserts that the
+shipped table returns `Run` for all twelve native rows and that the same features on the general route
+are refused from 15 bits, and the corpus scores zero false-refuse and zero false-accept.
 CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
-multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Those rows are general-route rows and do not refuse native-route clauses; the corpus holds no native-route clause of 15 bits or more, so whether they over-refuse the native route is
-unmeasured. Still missing for AC-10: native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain
-(`other * offset + 3 <= 100`) at any listed width (none measured; the AC-13 clause that Verified in
-235.5 s on the native route is `with_bounded_amount_implication` over `Int[0, 1000]`, 10 bits), Meter, decimal and pure-relational cases and a multi-operation clause that
-is not integer arithmetic. The ir1530 timeout is of the scalar harness, not a V2 clause, so it is
-not a corpus row. Those rows need new installed-Kani measurements. The add row's `peak_bytes` is the OOM-killed
-`cbmc` process's `anon-rss` from the kernel log; the multiply row's is `null`: the runner reported no peak. FR-056-AC-13 is coded as a kani-lane test and was executed under installed Kani 0.68.0: its clause
+multiply and integer add from 15 bits, the smallest measured-bad width, both general-route rows from this
+evidence. Still missing for AC-10: Meter, decimal and pure-relational cases and a multi-operation clause
+that is not integer arithmetic; native-route two-parameter and arithmetic precondition shapes cannot
+render natively, so they have no native row. The ir1530 timeout is of the scalar harness, not a V2
+clause, so it is not a corpus row. Those rows need new installed-Kani measurements. The add row's
+`peak_bytes` is the OOM-killed `cbmc` process's `anon-rss` from the kernel log; the multiply row's is
+`null`: the runner reported no peak. FR-056-AC-13 is coded as a kani-lane test and was executed under installed Kani 0.68.0: its clause
 ended `Verified` in 235.5 s on the native route. Its multiply refusal and pass-through fixtures also run as a host test
 (`tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`). The narrow multiply is negotiated on the
 general route because the native route renders no two-parameter precondition. FR-056-AC-1 to AC-12 and AC-14 need no Kani run and are host tests. FR-056-AC-13
