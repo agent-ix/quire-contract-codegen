@@ -370,7 +370,7 @@
     "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row 'helper body returns false'"
   },
   {
-    "id": "ir1526-wide-multiply-16bit-operands",
+    "id": "ir1526-wide-multiply-15bit-operands",
     "features": {
       "operations": [
         {
@@ -396,14 +396,16 @@
           "upper": 32767
         }
       ],
-      "collection_bound": null
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
     },
     "ground_truth": "timed_out",
     "wall_seconds": 600.0,
-    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=16: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
+    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=15, IR1526_PROBE_OP=mul, operands Int[0, 2^15 - 1]; run labelled 16 before the width convention was fixed: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
   },
   {
-    "id": "ir1526-wide-multiply-24bit-operands",
+    "id": "ir1526-wide-multiply-23bit-operands",
     "features": {
       "operations": [
         {
@@ -429,14 +431,16 @@
           "upper": 8388607
         }
       ],
-      "collection_bound": null
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
     },
     "ground_truth": "timed_out",
     "wall_seconds": 600.0,
-    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=24: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
+    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=23, IR1526_PROBE_OP=mul, operands Int[0, 2^23 - 1]; run labelled 24 before the width convention was fixed: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
   },
   {
-    "id": "ir1526-wide-multiply-32bit-operands",
+    "id": "ir1526-wide-multiply-31bit-operands",
     "features": {
       "operations": [
         {
@@ -462,10 +466,12 @@
           "upper": 2147483647
         }
       ],
-      "collection_bound": null
+      "collection_bound": null,
+      "generator_version": "0.1.0",
+      "kernel_version": 1
     },
     "ground_truth": "timed_out",
     "wall_seconds": 600.0,
-    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=32: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
+    "measurement_source": "IR-1526 probe test ir1526_probe_wide_integer_multiply_under_installed_kani (PR #819), IR1526_PROBE_BITS=31, IR1526_PROBE_OP=mul, operands Int[0, 2^31 - 1]; run labelled 32 before the width convention was fixed: clause 'other * offset + 3 <= 100', General route, empty table, Kani 0.68.0, CBMC 6.11.0, TimedOut at the 600 s ceiling"
   }
 ]

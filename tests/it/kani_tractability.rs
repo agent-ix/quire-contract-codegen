@@ -292,6 +292,13 @@ fn tc_070_the_table_loads_from_data_and_a_bad_row_fails_the_load() {
     unknown_verdict["verdict"] = json!("slow");
     let mut missing_field = row_json(&[MUL], 64, "not_tractable");
     missing_field.as_object_mut().unwrap().remove("peak_bytes");
+    let mut null_peak = row_json(&[MUL], 64, "not_tractable");
+    null_peak["peak_bytes"] = json!(null);
+    let null_peak = write_table(&directory, "null-peak.json", &[null_peak]);
+    assert_eq!(
+        TractabilityTable::load(&null_peak).unwrap().rows()[0].peak_bytes,
+        None
+    );
     let mut missing_nullable = row_json(&[MUL], 64, "not_tractable");
     missing_nullable
         .as_object_mut()
@@ -931,9 +938,9 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
 }
 
 /// The features the decider computes for `other * offset + 3 <= 100` with both operands
-/// `Int[0, 2^(operand_bits - 1) - 1]`.
+/// `Int[0, 2^operand_bits - 1]` (`operand_bits` unsigned bits, FR-056 Terms).
 fn probe_features(operand_bits: u32) -> ClauseFeatures {
-    let upper = (1_i64 << (operand_bits - 1)) - 1;
+    let upper = (1_i64 << operand_bits) - 1;
     let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
     let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
     ClauseFeatures::new(
@@ -956,15 +963,25 @@ fn probe_features(operand_bits: u32) -> ClauseFeatures {
     )
 }
 
-/// The probe rows of the shipped corpus carry exactly the features the decider computes.
+/// The probe rows of the shipped corpus carry exactly the features the decider computes, at the
+/// generator and kernel versions the probe ran against (which the row records, so that scoring
+/// does not depend on the current crate version).
 #[trace("FR-056-AC-10", "TC-070")]
 #[test]
 fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
     let corpus = load_corpus(&fixture_path("corpus.json"));
-    for bits in [16, 24, 32] {
+    for bits in [15, 23, 31] {
         let id = format!("ir1526-wide-multiply-{bits}bit-operands");
         let row = corpus.iter().find(|row| row.id == id).expect(&id);
         assert!(matches!(row.ground_truth, GroundTruth::TimedOut), "{id}");
-        assert_eq!(row.features, probe_features(bits), "{id}");
+        let mut computed = probe_features(bits);
+        computed.generator_version = row.features.generator_version.clone();
+        computed.kernel_version = row.features.kernel_version;
+        assert_eq!(row.features, computed, "{id}");
+        assert_eq!(
+            row.features.operations[0].bits,
+            Some(bits),
+            "{id}: mul width"
+        );
     }
 }

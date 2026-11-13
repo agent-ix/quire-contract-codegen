@@ -157,8 +157,10 @@ pub struct TractabilityRow {
     pub verdict: RowVerdict,
     /// Wall-clock seconds the probe took, fractional allowed.
     pub wall_seconds: WallSeconds,
-    /// Peak memory of the probe in bytes.
-    pub peak_bytes: u64,
+    /// Peak memory of the probe in bytes, `null` when the runner reported none. The key is
+    /// required.
+    #[serde(deserialize_with = "required")]
+    pub peak_bytes: Option<u64>,
     /// The Kani version the probe ran under.
     pub kani_version: String,
     /// The CBMC version the probe ran under.
