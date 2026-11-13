@@ -724,6 +724,105 @@ pub enum CollectionKindIdentity {
     OrderedSet,
 }
 
+/// The destination end whose finite multiplicity bounds every symbolic object's edges.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphEdgeIdentity {
+    /// Relationship declaration that owns the selected end.
+    pub declaration: CheckedNodeId,
+    /// Whether the application names the source end's role, so the destination is the target
+    /// end; with the declaration this selects the one end.
+    pub forward: bool,
+    /// Inclusive lower edge count.
+    pub lower: u64,
+    /// Inclusive upper edge count.
+    pub upper: u64,
+    /// Whether the end is declared ordered.
+    pub ordered: bool,
+    /// Whether the end forbids a repeated target.
+    pub unique: bool,
+}
+
+/// The exact selected graph claim and execution configuration of one generated harness.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphObligationIdentity {
+    /// Backend ceilings.
+    pub ceilings: ProofCeilings,
+    /// Admitted package identity.
+    pub package: ContractSourceV1,
+    /// The state clause containing the claim.
+    pub clause_id: CheckedNodeId,
+    /// The admitted invariant, precondition or postcondition form.
+    pub kind: ObligationKind,
+    /// Argument positions from the clause condition to the reachability application.
+    pub argument_path: Vec<usize>,
+    /// The reachability application node.
+    pub application_id: CheckedNodeId,
+    /// The population binding `select_population` read.
+    pub population_id: CheckedNodeId,
+    /// The covering object type of the population.
+    pub object_type: CheckedNodeId,
+    /// Inclusive maximum population count; the minimum is zero.
+    pub maximum_population: u64,
+    /// The selected edge domain.
+    pub edge: GraphEdgeIdentity,
+    /// Caller-selected subject label.
+    pub subject_path: String,
+    /// Solver.
+    pub solver: KaniSolver,
+    /// Loop unwind bound.
+    pub unwind: u32,
+    /// Every Kani flag passed after `cargo kani`.
+    pub options: Vec<String>,
+    /// The witness vector.
+    pub witness_options: Vec<String>,
+    /// Harness module symbol.
+    pub module_symbol: ModuleSymbol,
+    /// Harness function symbol.
+    pub harness_symbol: HarnessSymbol,
+}
+
+/// A generated Kani harness for one admitted symbolic graph claim.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniGraphObligationHarness {
+    /// Persisted exact claim and run identity.
+    pub identity: GraphObligationIdentity,
+    /// Self-contained generated Rust.
+    pub rust: Artifact,
+    /// Persisted identity/source-path record.
+    pub record: Artifact,
+    generated_identity: GraphObligationIdentity,
+    generated_rust: Artifact,
+    generated_record: Artifact,
+}
+
+impl KaniGraphObligationHarness {
+    /// Construct the immutable generator-origin seal for one graph harness.
+    pub(crate) fn generated(
+        identity: GraphObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+    ) -> Self {
+        Self {
+            generated_identity: identity.clone(),
+            generated_rust: rust.clone(),
+            generated_record: record.clone(),
+            identity,
+            rust,
+            record,
+        }
+    }
+
+    /// Whether public fields still match the immutable generator-origin seal.
+    #[must_use]
+    pub(crate) fn has_valid_provenance(&self) -> bool {
+        self.identity == self.generated_identity
+            && self.rust == self.generated_rust
+            && self.record == self.generated_record
+    }
+}
+
 /// The exact selected V2 collection claim and execution configuration of one generated harness.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

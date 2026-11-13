@@ -6,9 +6,9 @@ use crate::{
     kani::abi::KaniSolver,
     kani::identity::{
         CollectionElementIdentity, CollectionObligationIdentity, KaniCollectionObligationHarness,
-        KaniObligationHarness, KaniScalarObligationHarness, KaniV2ClauseObligationHarness,
-        ObligationKind, StateFrameHarness, StateFrameProperty, SymbolicArgumentBounds,
-        SymbolicBounds,
+        KaniGraphObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
+        KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness, StateFrameProperty,
+        SymbolicArgumentBounds, SymbolicBounds,
     },
 };
 
@@ -28,6 +28,8 @@ pub enum KaniExecutableHarness<'a> {
     StateFrame(&'a StateFrameHarness),
     /// A V2 admitted symbolic collection claim.
     Collection(&'a KaniCollectionObligationHarness),
+    /// An admitted symbolic graph claim.
+    Graph(&'a KaniGraphObligationHarness),
     /// A V2 operation-clause precondition harness, including admitted collection clauses.
     V2Clause(&'a KaniV2ClauseObligationHarness),
 }
@@ -47,6 +49,12 @@ impl<'a> From<&'a KaniScalarObligationHarness> for KaniExecutableHarness<'a> {
 impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
     fn from(harness: &'a StateFrameHarness) -> Self {
         Self::StateFrame(harness)
+    }
+}
+
+impl<'a> From<&'a KaniGraphObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniGraphObligationHarness) -> Self {
+        Self::Graph(harness)
     }
 }
 
@@ -88,12 +96,14 @@ impl<'a> KaniExecutableHarness<'a> {
             | Self::Scalar(_)
             | Self::StateFrame(_)
             | Self::Collection(_)
+            | Self::Graph(_)
             | Self::Constrained(_) => None,
         }
     }
     pub(super) fn has_valid_provenance(self) -> bool {
         match self {
             Self::Collection(harness) => harness.has_valid_provenance(),
+            Self::Graph(harness) => harness.has_valid_provenance(),
             Self::V2Clause(harness) => harness.has_valid_provenance(),
             Self::Contract(_) | Self::Scalar(_) | Self::StateFrame(_) | Self::Constrained(_) => {
                 true
@@ -205,6 +215,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     .collect()
             }
             Self::Collection(harness) => collection_arguments(&harness.identity),
+            Self::Graph(harness) => graph_arguments(&harness.identity),
             Self::V2Clause(harness) => {
                 if let Some(context) = &harness.identity.collection_operation {
                     let mut arguments = context
@@ -314,6 +325,19 @@ impl<'a> KaniExecutableHarness<'a> {
                     witness_options: &identity.witness_options,
                 }
             }
+            Self::Graph(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    ceilings: identity.ceilings,
+                    rust: &harness.rust,
+                    selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+                    kind: Some(identity.kind),
+                    unwind: identity.unwind,
+                    solver: identity.solver,
+                    options: &identity.options,
+                    witness_options: &identity.witness_options,
+                }
+            }
             Self::V2Clause(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
@@ -329,6 +353,33 @@ impl<'a> KaniExecutableHarness<'a> {
             }
         }
     }
+}
+
+/// The symbolic slots of a graph harness, in the order its generated source draws them.
+fn graph_arguments(
+    identity: &crate::kani::identity::GraphObligationIdentity,
+) -> Vec<SymbolicArgumentBounds> {
+    let clamp = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
+    let last = clamp(identity.maximum_population.saturating_sub(1));
+    let slot = |identifier: String, maximum: i64| SymbolicArgumentBounds {
+        identifier,
+        bounds: SymbolicBounds::Integer {
+            minimum: 0,
+            maximum,
+        },
+    };
+    let mut slots = vec![
+        slot("object_count".into(), clamp(identity.maximum_population)),
+        slot("start".into(), last),
+        slot("target".into(), last),
+    ];
+    for row in 0..identity.maximum_population {
+        slots.push(slot(format!("degree_{row}"), clamp(identity.edge.upper)));
+        for column in 0..identity.edge.upper {
+            slots.push(slot(format!("edge_{row}_{column}"), last));
+        }
+    }
+    slots
 }
 
 fn collection_arguments(identity: &CollectionObligationIdentity) -> Vec<SymbolicArgumentBounds> {

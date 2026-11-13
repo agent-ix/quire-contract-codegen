@@ -72,6 +72,9 @@ mod request_lookup_work {
 
 mod guard;
 
+use crate::kani::generate::graph::{
+    graph_kind, lower_graph, refusal as graph_refusal, render_graph, GraphRefusal, LoweredGraph,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -416,6 +419,7 @@ fn negotiate_integer_policy(
     let mut state_frame_harnesses = Vec::new();
     let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
         Vec::new();
+    let mut graph_harnesses: Vec<crate::kani::identity::KaniGraphObligationHarness> = Vec::new();
     let mut v2_clause_harnesses = Vec::new();
     let mut constrained_harnesses = Vec::new();
     let mut scalar_source_authorities = BTreeMap::new();
@@ -458,6 +462,31 @@ fn negotiate_integer_policy(
                         v2_clause_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
+                        }
+                    }
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
+                },
+                Outcome::LoweredGraph(lowered) => match render_graph(request, &lowered) {
+                    Ok(harness) => {
+                        let collides = graph_harnesses.iter().any(|existing| {
+                            existing.identity.module_symbol == harness.identity.module_symbol
+                                && existing.identity.harness_symbol
+                                    == harness.identity.harness_symbol
+                        });
+                        if collides {
+                            ObligationDisposition::Unsupported {
+                                reason: graph_refusal(
+                                    &harness.identity.clause_id,
+                                    &harness.identity.argument_path,
+                                    crate::kani::generate::outcome::GraphUnsupportedReason::HarnessSymbolCollision,
+                                ),
+                            }
+                        } else {
+                            let symbol = harness.identity.harness_symbol.clone();
+                            graph_harnesses.push(harness);
+                            ObligationDisposition::Supported {
+                                harness_symbol: symbol,
+                            }
                         }
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
@@ -555,6 +584,7 @@ fn negotiate_integer_policy(
             scalar_harnesses,
             state_frame_harnesses,
             collection_harnesses,
+            graph_harnesses,
             v2_clause_harnesses,
             constrained_harnesses,
         }
@@ -724,6 +754,11 @@ enum ItemIdentity {
         function: CheckedNodeId,
         quantifier: CheckedNodeId,
     },
+    Graph {
+        package: ContractSourceV1,
+        clause: CheckedNodeId,
+        path: Vec<usize>,
+    },
     V2Clause {
         package: ContractSourceV1,
         clause: CheckedNodeId,
@@ -735,6 +770,7 @@ enum Outcome {
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
     LoweredCollectionOperation(Box<LoweredCollectionClaim>),
+    LoweredGraph(Box<LoweredGraph>),
     LoweredV2Clause(Box<LoweredV2Clause>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
@@ -759,6 +795,7 @@ impl Outcome {
             | Self::LoweredScalar(_)
             | Self::LoweredCollection(_)
             | Self::LoweredCollectionOperation(_)
+            | Self::LoweredGraph(_)
             | Self::LoweredV2Clause(_)
             | Self::StateFrame(_)
             | Self::RequiresBound(_)
@@ -786,6 +823,10 @@ impl Outcome {
                     Err(reason) => ObligationDisposition::Unsupported { reason },
                 }
             }
+            Self::LoweredGraph(lowered) => match render_graph(request, &lowered) {
+                Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
+                Err(reason) => ObligationDisposition::Unsupported { reason },
+            },
             Self::LoweredV2Clause(lowered) => match render_v2_clause(request, &lowered) {
                 Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
                 Err(reason) => ObligationDisposition::Unsupported { reason },
@@ -924,6 +965,15 @@ fn classify<'a>(
         } => classify_collection(
             function_id,
             node_id,
+            checked_lookup(checked_lookups, package),
+        ),
+        ObligationItem::GraphClaim {
+            package,
+            clause_id,
+            argument_path,
+        } => classify_graph(
+            clause_id,
+            argument_path,
             checked_lookup(checked_lookups, package),
         ),
         ObligationItem::StateFrame {
@@ -1145,6 +1195,37 @@ fn classify_collection<'a>(
             },
             function: function_id.clone(),
             quantifier: node_id.clone(),
+        }),
+        outcome,
+    }
+}
+
+fn classify_graph<'a>(
+    clause: &'a CheckedNodeId,
+    path: &'a [usize],
+    lookup: &mut CheckedLookup<'a>,
+) -> ItemState {
+    let package = lookup.package;
+    let outcome = match lower_graph(package, clause, path) {
+        Ok(lowered) => Outcome::LoweredGraph(Box::new(lowered)),
+        Err(GraphRefusal::RequiresBound(bound)) => Outcome::RequiresBound(bound),
+        Err(GraphRefusal::Unsupported(reason)) => {
+            Outcome::Unsupported(graph_refusal(clause, path, reason))
+        }
+    };
+    ItemState {
+        kind: graph_kind(package, clause),
+        subject: ObligationSubject::CheckedNode {
+            node_id: clause.clone(),
+            source_map: lookup.occurrences(clause),
+        },
+        identity: Some(ItemIdentity::Graph {
+            package: ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
+            clause: clause.clone(),
+            path: path.to_vec(),
         }),
         outcome,
     }
@@ -1372,6 +1453,7 @@ pub(crate) fn classify_scalar_form<'a>(
         | Outcome::LoweredCollection(_)
         | Outcome::LoweredCollectionOperation(_)
         | Outcome::LoweredV2Clause(_)
+        | Outcome::LoweredGraph(_)
         | Outcome::StateFrame(_)
         | Outcome::StateFrameRefused(_) => {
             ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode)
