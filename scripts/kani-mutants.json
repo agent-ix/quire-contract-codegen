@@ -1,0 +1,20 @@
+[
+  {
+    "file": "src/oracle/scalar/render.rs",
+    "anchor": "IntegerOperator::Add => (binary(\"&rt::Integer\"), \"Add(left, right)\"),",
+    "replacement": "IntegerOperator::Add => (binary(\"&rt::Integer\"), \"Subtract(left, right)\"),",
+    "proof": "kani_obligations::tc_027_attested_scalar_receipt_binds_real_proof_and_native_result"
+  },
+  {
+    "file": "src/oracle/scalar/render.rs",
+    "anchor": "IntegerOperator::Subtract => (binary(\"&rt::Integer\"), \"Subtract(left, right)\"),",
+    "replacement": "IntegerOperator::Subtract => (binary(\"&rt::Integer\"), \"Add(left, right)\"),",
+    "proof": "kani_obligations::tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders"
+  },
+  {
+    "file": "src/kani/generate/scalar.rs",
+    "anchor": "        assert!(sound, \\\"the oracle must complete",
+    "replacement": "        assert!(!sound, \\\"the oracle must complete",
+    "proof": "kani_obligations::tc_027_attested_scalar_receipt_binds_real_proof_and_native_result"
+  }
+]

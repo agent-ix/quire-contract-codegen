@@ -1,5 +1,7 @@
 //! Host controls for the Kani lane and QSpec fixture preflight.
 
+mod kani_mutations;
+
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
@@ -22,12 +24,20 @@ fn main() {
 fn dispatch(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() {
         return Err(
-            "usage: cg_gates kani-scope | kani-gate LOCK -- CARGO ... | qspec-selftest".into(),
+            "usage: cg_gates kani-scope | kani-gate LOCK -- CARGO ... | kani-mutations ... | qspec-selftest".into(),
         );
     }
     match args.remove(0).as_str() {
         "kani-scope" => scope(&args),
         "kani-gate" => gate(&args),
+        "kani-mutations" => match kani_mutations::run(&args) {
+            Ok(()) => Ok(()),
+            Err(kani_mutations::Stop::Refused(message)) => {
+                eprintln!("{message}");
+                std::process::exit(2);
+            }
+            Err(kani_mutations::Stop::Failed(message)) => Err(message),
+        },
         "qspec-selftest" if args.is_empty() => qspec_selftest(),
         _ => Err("invalid cg_gates command".into()),
     }

@@ -129,5 +129,7 @@ does not fix a number. The target runs outside `make ci`, so its cost is not cha
 
 ## Status
 
-PLANNED (IR-1437): no `kani-mutations` target exists in CG; no criterion is implemented or tagged.
-Execution of FR-055-AC-1 and FR-055-AC-7 needs installed Kani and runs through the Kani lane.
+IMPLEMENTED on the host (IR-1437): `make kani-mutations` (`scripts/kani_mutations.rs`, declaration
+`scripts/kani-mutants.json`) is tagged and tested for FR-055-AC-2 to AC-6, AC-8, AC-9 and AC-10 and for
+the stand-in form of AC-1 (`tests/it/kani_mutations.rs`). FR-055-AC-7, and AC-1 against real proofs,
+need installed Kani and have not been run.

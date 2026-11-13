@@ -24,6 +24,7 @@ help:
 	@echo "  make kani             - Run the Kani obligation lane serially"
 	@echo "  make kani-scope       - Show whether changed paths require the real-Kani lane"
 	@echo "  make kani-gate        - Run and verify the full real-Kani lane"
+	@echo "  make kani-mutations   - Require every declared mutant to fail its owning proof (standalone merge gate)"
 	@echo "  make tools            - Install the host tools the tests drive (llvm-tools, cargo-llvm-cov, Kani)"
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
@@ -120,6 +121,19 @@ kani-scope: $(GATES_BIN)
 
 kani-gate: $(GATES_BIN)
 	$(GATES_BIN) kani-gate $(KANI_LOCK) -- $(KANI_TEST)
+
+# The mutant gate (FR-055): standalone, never part of `make ci`, a Kani-affecting merge gate
+# alongside `make kani-gate`. Each declared mutant (scripts/kani-mutants.json) is injected into a
+# scratch copy and its owning proof must fail with `VERIFICATION:- FAILED`. Serial, under the host lock.
+# The per-mutant timeout and the total budget (seconds) are this target's configuration.
+KANI_MUTANTS ?= scripts/kani-mutants.json
+KANI_MUTANT_TIMEOUT ?= 3600
+KANI_MUTATIONS_BUDGET ?= 21600
+KANI_MUTANT_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it -- --ignored --test-threads=1 --nocapture --exact
+
+.PHONY: kani-mutations
+kani-mutations: $(GATES_BIN)
+	flock $(KANI_LOCK) $(GATES_BIN) kani-mutations $(KANI_MUTANTS) $(KANI_MUTANT_TIMEOUT) $(KANI_MUTATIONS_BUDGET) -- $(KANI_MUTANT_TEST)
 
 .PHONY: build
 build:
