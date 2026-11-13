@@ -55,3 +55,7 @@ semantics (Terms `IntegerRoute`, required `route` key, route-scoped Lookup, AC-1
 PR's scalar AC, renumbered FR-056-AC-15. The Status reports the route implemented and labels the rows
 as #822's Status asked. FR-017-AC-27's cross-reference now points to FR-056-AC-15. FND-001 to
 FND-003 keep `fixed`. TC-070 step 2's Status overclaim is recorded as gap-analysis FND-004.
+
+Round 3, checked against 5e6e2bbe. No new spec findings; the FR-056-AC-15 and TC-070 step 2
+edits are consistent with the code. TC-070 step 2 repeats its route assertion (nit, noted in the
+code-review round-3 prose).

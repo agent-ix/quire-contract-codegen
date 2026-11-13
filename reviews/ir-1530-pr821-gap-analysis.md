@@ -71,3 +71,10 @@ FR-056-AC-15, and FR-056-AC-14 now binds `tc_070_rows_match_only_their_own_route
 |---|---|---|
 | FND-004 | still-open | New in round 2; no recording-decider test for the AC-2 route feature, and TC-070 Status overclaims step 2. |
 | FND-005 | still-open | New in round 2; the negotiation-level AC-14 evidence is not yet tagged AC-14. |
+
+Round 3, checked against 5e6e2bbe.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-004 | fixed | `tc_070_the_decider_receives_the_negotiation_route` (tagged FR-056-AC-2) negotiates `other * offset + 3 <= 100` through `negotiate_kani_obligations_with_decider` with a recording decider on each route and asserts one decision whose `features.route` is that route, with the same operations; a fixed-route mutant fails one of the two asserts. TC-070 step 2 now names the recording decider, so its Status claim holds. |
+| FND-005 | fixed | `tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound` is now tagged `FR-056-AC-13`, `FR-056-AC-14`, `FR-056-AC-4`, `TC-070`. |

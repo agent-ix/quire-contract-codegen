@@ -85,3 +85,17 @@ uses either. The rows are labelled as main's FR-056 Status says (ir1022/ir1509 `
 |---|---|---|
 | FND-005 | still-open | New in round 2; the docs are not yet updated. |
 | FND-006 | still-open | New in round 2; neither the spec nor the doc states that the rows cross shapes. |
+
+Round 3, checked against 5e6e2bbe (7a7ceaa9..5e6e2bbe). fmt clean; `it` layout/kani_tractability/kani_obligations 66 passed, 10 ignored. The new public
+`negotiate_kani_obligations_with_decider(request, decider, route)` is a thin entry over the same
+`negotiate_integer_policy` and `&dyn TractabilityDecider` seam. `negotiate_kani_obligations_with_options`
+now delegates to it after loading the table. It adds no second mechanism or decision path: the
+trait was already public, and FR-056-AC-1 and AC-12 already allow other implementations. The table
+lookup stays the only decider CG constructs. Non-blocking nits, not findings: TC-070 step 2 now
+states the route assertion twice (new sentence plus the old one), and the `tractable.rs` module doc
+has a sentence fragment ("Through the one [`TractabilityDecider`] seam and the one ...").
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-005 | fixed | Rustdoc and qualification doc now say both routes are decided and a native harness is refused only by a `native` row, none shipped. |
+| FND-006 | fixed | FR-056-AC-15 and the qualification doc now state rows apply per route across both shapes (the cost is the `rt::Integer` carrier) and the shipped scalar row is scoped by use, for the decided run wrappers, not a generation `tractability_table`. |

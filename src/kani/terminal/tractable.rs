@@ -5,9 +5,9 @@
 //! that harness, because host tests exercise it; the refusal is made here, before any Kani process
 //! starts, for a routed scalar harness on either route (its route is read from its identity), and
 //! only rows of that route apply. The refusal is opt-in: it happens only for a table the caller
-//! passes, and CG ships the general-route row for that purpose. Through the one [`TractabilityDecider`] seam and the one
-//! [`UnsupportedObligation::V2ClauseNotTractable`] arm. The wall-clock ceiling stays the backstop
-//! for everything the decider lets through.
+//! passes, and CG ships the general-route row for that purpose. It goes through the one
+//! [`TractabilityDecider`] seam and the one [`UnsupportedObligation::V2ClauseNotTractable`] arm.
+//! The wall-clock ceiling stays the backstop for everything the decider lets through.
 
 use crate::{
     kani::{
