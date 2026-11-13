@@ -95,7 +95,7 @@ fn named_member<'a>(node: &'a CheckedSemanticNodeV2, name: &str) -> Option<&'a C
     })
 }
 
-fn model_document() -> Value {
+pub(crate) fn model_document() -> Value {
     let field = |name: &str,
                  type_ref: &str,
                  lower: u64,
