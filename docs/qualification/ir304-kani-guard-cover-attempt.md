@@ -34,4 +34,4 @@ native machine integers, finished in under 100 s; this harness shape does not.
 - The feasible-guard run was not started: it has the same program shape and the infeasible run
   had already exhausted the cap.
 
-FR-022-AC-35 was then delivered on the native harness.
+The same scenario on the native harness is recorded in `ir304-kani-guard-native-harness.md`.

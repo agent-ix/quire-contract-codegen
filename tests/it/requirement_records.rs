@@ -1843,7 +1843,7 @@ fn an_unlowered_second_guard_precedes_unsatisfiability() {
 
 /// The native-route harness of the FR-022-AC-35 scenario `if x OP y then x + 1 else 0` with
 /// `x: Int[5, 9]` and `y: Int[0, 4]` into `Int[0, 10]`, guarded by `(x OP y, holds=true)`.
-fn ac35_native_harness(
+pub(crate) fn ac35_native_harness(
     comparison: &str,
     identity: &'static str,
 ) -> quire_contract_codegen::KaniScalarObligationHarness {

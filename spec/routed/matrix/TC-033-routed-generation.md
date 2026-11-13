@@ -310,11 +310,13 @@ diagnostic-string parsing.
     `Integer { minimum: 0, maximum: 9 }`, with no harness, also for `20 < x`; the Boolean case
     names the inner `p` guard, `p` and `Boolean`; the unguarded control remains
     `result_bound_unreachable` (FR-022-AC-34).
-28. Kani 0.68.0 run on the native harness (docs/qualification/ir304-kani-guard-native-harness.md): the
-    infeasible-guard harness reports `CoverUnsatisfied` and the feasible one `Verified`; the
-    harness text computes on native integers, forgets its meter and outcome and ends with the
-    `cover_reached` cover; the mutants (oracle `Add` to `Multiply`, `exact` plus one, guard
-    assumption deleted) fail their named steps (FR-022-AC-35).
+28. Kani lane (`#[ignore]`, `make kani`): both `generate_routed_native` harnesses run through
+    `execute_kani_obligation` under installed Kani. The infeasible-guard harness reports
+    `CoverUnsatisfied { satisfied: 0, total: 1 }` and the feasible one `Verified`. Replacing the
+    oracle `Add` with `Multiply` or adding one to `exact` is falsified, and deleting the guard
+    assumption loses `CoverUnsatisfied`. A non-ignored test asserts the harness text computes on native
+    integers, forgets its meter and outcome and ends with the `cover_reached` cover
+    (FR-022-AC-35).
 29. The `NotApplicable` control keeps its result; the recorded node and the attached requirement
     each yield `OccurrenceNotSelected`; the `OwnResult` route is accepted (FR-022-AC-36).
 30. The reported refusals are `ScalarSelectionMismatch` at the higher index, `RequirementRecord`,
@@ -326,5 +328,5 @@ diagnostic-string parsing.
 
 FR-022-AC-26 to AC-34, AC-36 and AC-37 are covered (IR-304 slices (a) and (b)), and AC-38 is
 retired. Step 28, the real-Kani `CoverUnsatisfied`/`Verified` execution of FR-022-AC-35, is
-covered by the native harness runs in docs/qualification/ir304-kani-guard-native-harness.md. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
+covered by the kani-lane tests of step 28; measurements are in docs/qualification/ir304-kani-guard-native-harness.md. FR-022-AC-1 and AC-20 are separate analysis obligations; the source/API analysis is
 recorded in FR-022 and receives no backend-execution credit.

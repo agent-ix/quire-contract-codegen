@@ -6,16 +6,23 @@ attempt in `ir304-kani-guard-cover-attempt.md`, which ran the same scenario on t
 
 ## What changed in the harness
 
-The routed scalar harness for integer arithmetic now follows the IR-1022 recipe (FR-015-AC-7,
+The native-route scalar harness for integer arithmetic (`generate_routed_native` only) now follows the IR-1022 recipe (FR-015-AC-7,
 `ir1022-kani-clause-measurements.md`):
 
 - Native integer arithmetic. The routed native route (`generate_routed_native`) holds each operand
   as `nx::NativeInteger` and the oracle is the exact kernel's `evaluate_native_integer_arithmetic`
   on an admitted plan, so there is no bignum allocation or drop glue.
-- The `meter` and the `outcome` (whose `Refused` arm holds a heap value) are never dropped:
+- On the native route the `meter` and the `outcome` (whose `Refused` arm holds a heap value) are never dropped:
   `core::mem::forget(meter); core::mem::forget(outcome);`.
 - The cover stays the last and only `kani::cover!`. Its condition is read into
   `let cover_reached: bool = completed;` before the forgets, then `kani::cover!(cover_reached, ..)`.
+
+The general route (ordinary `generate_routed`, `rt::Integer`) keeps its previous tail, the cover
+read directly from `completed` with nothing forgotten. A first version of the change forgot on both
+routes; the existing general-route lane test `kani_generation_real_v2_scalar_verifies` (routed
+`x + 1`) was then OOM-killed at the 24 GiB scope limit within about a minute, while the unchanged
+base ended `Inconclusive { reason: TimedOut }` at its 600 s budget (14.5 GB at 8 min). The forgets
+were therefore restricted to the native route.
 
 ## What was run
 
@@ -24,8 +31,7 @@ The routed scalar harness for integer arithmetic now follows the IR-1022 recipe 
   with path condition `[(x OP y, holds=true)]`, unwind 3. `OP` is `<` (infeasible: every `x >= 5`
   exceeds every `y <= 4`) or `>` (feasible). The generated file was copied unchanged to a scratch
   crate whose only dependency is quire-exact `main` at the commit CG's `Cargo.lock` records; the
-  harness is self-contained and calls no subject. Obtained by a throwaway test (not committed)
-  that wrote `RoutedGeneration` harness contents to disk.
+  harness is self-contained and calls no subject.
 - Command (Kani 0.68.0, CBMC 6.11.0), one run at a time inside `flock /tmp/cargo-slot.lock`,
   `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, `timeout 1800`:
 
@@ -36,6 +42,23 @@ The routed scalar harness for integer arithmetic now follows the IR-1022 recipe 
   Wall is the whole `cargo kani` invocation (compilation included) measured after the lock was
   taken; peak is the cgroup `memory.peak` of the scope, sampled every second.
 - Mutants edit the scratch copy of the generated source at the named site.
+
+## Reproduction
+
+The harness text, the verdicts and the mutants are produced by two committed kani-lane tests in
+`tests/it/kani_obligations.rs`, which build the harnesses with `generate_routed_native` (via
+`ac35_native_harness` in `tests/it/requirement_records.rs`) and run them through CG's
+`execute_kani_obligation`:
+
+- `tc_033_native_guarded_harness_reports_cover_unsatisfied_and_verified`
+- `tc_033_native_guarded_harness_mutants_are_detected`
+
+      cargo test --locked --test it -- --ignored --test-threads=1 tc_033_native_guarded
+
+The Results table below is the earlier raw `cargo kani` measurement of the harness text that
+`generate_routed_native` produced at head 3c7845ca (the tests assert that text, so a later head that
+changes it fails them rather than invalidating this table silently). The runner executions are
+recorded after the table.
 
 ## Results
 
@@ -57,12 +80,30 @@ Before the change, the general harness for the same infeasible scenario produced
 hand-written probe of the target shape ran first: 95,330 steps, 3.09 s symex, 4.28 s verification
 for the infeasible case (0.585 GB), and the feasible case 6.0 s in total (0.606 GB).
 
+## Runner executions (CG `execute_kani_obligation`)
+
+Kani 0.68.0, one run at a time inside `flock /tmp/cargo-slot.lock`, `systemd-run --user --scope
+-p MemoryMax=24G -p MemorySwapMax=0`, `timeout 1800`. The two tests above passed: the infeasible
+guard classified `CoverUnsatisfied { satisfied: 0, total: 1 }`, the feasible guard `Verified`,
+mutants A and B `Falsified`, and mutant C `Verified` (it lost `CoverUnsatisfied`). The five Kani
+runs together finished in 75.95 s of test time; the scope's cgroup `memory.peak`, which also covers
+the cargo test process, was 3.7 GB. A re-run after the forgets were restricted to the native route
+passed again: the verdict test in 19 s and the mutant test in 59 s of wall time.
+
+## Existing real-Kani scalar tests after the change
+
+- Native route, unchanged and passing: `native_original_tc027_increment_verifies` (`Verified`, 7 s).
+- General-route tests `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified` and
+  `tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic` end `Inconclusive { reason:
+  TimedOut }` at their 600 s budget on this machine, as does
+  `kani_generation_real_v2_scalar_verifies` on the unchanged base. The general harness text is
+  byte-identical to the base after the restriction, so these timeouts predate this change and are not
+  addressed here. `tc_027_attested_scalar_receipt_binds_real_proof_and_native_result` was not run.
+
 ## What this does not establish
 
-- Not CG's runner: no `run_kani`-style launch, no FR-017-AC-63 two-phase run and no
-  classification code ran. The FR-017 column maps Kani's cover result onto the verdict names by
-  the rule FR-017 states (a successful verification with an unsatisfied cover is
-  `CoverUnsatisfied`).
+- The table above was raw `cargo kani`; the FR-017 column there maps Kani's cover result onto the
+  verdict names by hand. The runner executions after it are the classified ones.
 - The subject is not called: the harness checks the oracle against the independent native
   expectation.
 - Division, modulo and the other scalar families are not measured.
