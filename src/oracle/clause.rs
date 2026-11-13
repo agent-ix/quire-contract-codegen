@@ -551,6 +551,27 @@ enum StepTerm {
     },
 }
 
+/// A checked literal narrowing keeps its integer value when the target admits it.
+/// This is shared by the oracle plan and the independent harness expectation.
+pub(crate) fn admitted_literal_narrow(term: &ClauseTerm) -> Option<&ClauseTerm> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        result_bound: Some((minimum, maximum)),
+    } = term
+    else {
+        return None;
+    };
+    if identity != "quire.op.numeric.narrow" {
+        return None;
+    }
+    let [literal @ ClauseTerm::Integer(value)] = arguments.as_slice() else {
+        return None;
+    };
+    let integer = value.parse::<i128>().ok()?;
+    (*minimum..=*maximum).contains(&integer).then_some(literal)
+}
+
 struct Step {
     kind: ValueKind,
     term: StepTerm,
@@ -587,6 +608,11 @@ fn lower(
             arguments,
             result_bound,
         } => {
+            if identity == "quire.op.numeric.narrow" {
+                let literal =
+                    admitted_literal_narrow(term).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
+                return lower(literal, names, plan);
+            }
             let operation = clause_scalar_operation(identity, *result_bound)
                 .ok_or(V2ClauseRefusal::UnsupportedCondition)?;
             let children = arguments
@@ -844,6 +870,91 @@ mod tests {
     use ix_trace_rs::trace;
 
     use super::*;
+
+    #[trace("FR-014-AC-54", "TC-024")]
+    #[test]
+    fn a_literal_narrow_is_elided_only_when_its_value_is_inside_the_target() {
+        let narrow = |value: &str, bound| ClauseTerm::Operation {
+            identity: "quire.op.numeric.narrow".to_owned(),
+            arguments: vec![ClauseTerm::Integer(value.to_owned())],
+            result_bound: bound,
+        };
+        let mut plan = Vec::new();
+        let index = lower(&narrow("0", Some((0, 1000))), &BTreeMap::new(), &mut plan)
+            .expect("admitted literal keeps its exact value");
+        assert_eq!(index, 0);
+        assert_eq!(plan.len(), 1);
+        assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
+        let sibling = lower(&ClauseTerm::Boolean(true), &BTreeMap::new(), &mut plan)
+            .expect("an independent sibling remains lowerable");
+        assert_eq!(sibling, 1);
+        assert_eq!(plan.len(), 2);
+
+        for (value, low, high) in [
+            ("-5", -10_i128, 10_i128),
+            ("-9223372036854775808", i128::from(i64::MIN), 0),
+            ("9223372036854775807", 0, i128::from(i64::MAX)),
+            ("9223372036854775808", 0, i128::from(i64::MAX) + 10),
+            ("-9223372036854775809", i128::from(i64::MIN) - 10, 0),
+        ] {
+            let mut edge = Vec::new();
+            lower(
+                &narrow(value, Some((low, high))),
+                &BTreeMap::new(),
+                &mut edge,
+            )
+            .unwrap_or_else(|_| panic!("{value} is inside [{low}, {high}]"));
+            assert!(matches!(&edge[0].term, StepTerm::Integer(kept) if kept == value));
+        }
+        assert!(lower(
+            &narrow("9223372036854775808", Some((0, i128::from(i64::MAX)))),
+            &BTreeMap::new(),
+            &mut Vec::new()
+        )
+        .is_err());
+
+        for refused in [
+            narrow("-1", Some((0, 1000))),
+            narrow("1001", Some((0, 1000))),
+            narrow("0", None),
+            narrow("outside-i128", Some((0, 1000))),
+            ClauseTerm::Operation {
+                identity: "quire.op.numeric.narrow".to_owned(),
+                arguments: Vec::new(),
+                result_bound: Some((0, 1000)),
+            },
+            ClauseTerm::Operation {
+                identity: "quire.op.numeric.narrow".to_owned(),
+                arguments: vec![ClauseTerm::Input(ClauseInput {
+                    name: "amount".to_owned(),
+                    side: ClauseInputSide::Parameter,
+                    declaring_node_id: None,
+                    boolean: false,
+                    lower: 0,
+                    upper: 1000,
+                })],
+                result_bound: Some((0, 1000)),
+            },
+            ClauseTerm::Operation {
+                identity: "quire.op.numeric.narrow".to_owned(),
+                arguments: vec![ClauseTerm::Boolean(true)],
+                result_bound: Some((0, 1000)),
+            },
+            ClauseTerm::Operation {
+                identity: "quire.op.quantity.convert".to_owned(),
+                arguments: vec![ClauseTerm::Integer("0".to_owned())],
+                result_bound: Some((0, 1000)),
+            },
+        ] {
+            assert!(matches!(
+                lower(&refused, &BTreeMap::new(), &mut plan),
+                Err(V2ClauseRefusal::UnsupportedCondition)
+            ));
+            assert_eq!(plan.len(), 2, "a refused term must not disturb a sibling");
+            assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
+            assert!(matches!(&plan[1].term, StepTerm::Boolean(true)));
+        }
+    }
 
     fn integer_leaf(spelling: &str) -> String {
         let step = Step {

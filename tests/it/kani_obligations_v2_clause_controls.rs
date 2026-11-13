@@ -22,9 +22,11 @@ use std::{
 
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
-    execute_kani_obligation, negotiate_kani_native_obligations, KaniExecutionRequest,
+    execute_kani_concrete_playback, execute_kani_obligation, negotiate_kani_native_obligations,
+    KaniConcretePlayback, KaniConcretePlaybackOutcome, KaniExecutionRequest,
     KaniInconclusiveReason, KaniInstallation, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniV2ClauseObligationHarness, ObligationItem, ProofCeilings,
+    KaniRunOutcome, KaniV2ClauseObligationHarness, MemoryObservation, MemoryUnit, ObligationItem,
+    PeakMemorySource, PeakReading, ProofCeilings,
 };
 
 use super::kani_obligations_state_frame::native_twin::Twin;
@@ -109,8 +111,11 @@ fn playback_test_with(subject_preamble: bool) -> String {
 }
 
 fn fixture() -> KaniV2ClauseObligationHarness {
-    let (package, clause) =
-        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    fixture_of(Twin::with_bounded_amount_implication(), "BalanceNeverDrops")
+}
+
+fn fixture_of(twin: Twin, clause_name: &str) -> KaniV2ClauseObligationHarness {
+    let (package, clause) = twin.emitted_package(clause_name);
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
@@ -879,6 +884,474 @@ fn tc_025_real_kani_runner_falsifies_the_helper_mutant_by_the_produced_result_co
     let (scratch, harness) = kani_crate("ir1509-kani-helper", Some(&HELPER_FALSE), HEALTHY_SUBJECT);
     let run = run_installed(&scratch, &harness);
     let _ = assert_two_phase_falsified(&run, &harness, RESULT_CHECK);
+}
+
+// ---- the public playback entry over a launcher stand-in (FR-017-AC-60) ---------------------
+
+/// A scratch crate holding `lib` and a `cargo-kani` stand-in script that records its arguments
+/// and prints `stdout`.
+struct PlaybackStandIn {
+    directory: TemporaryDirectory,
+    installation: KaniInstallation,
+    calls: PathBuf,
+}
+
+impl PlaybackStandIn {
+    fn new(label: &str, lib: &str, stdout: &str) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = TemporaryDirectory::new(label);
+        fs::create_dir_all(directory.path.join("src")).unwrap();
+        fs::write(directory.path.join("src/lib.rs"), lib).unwrap();
+        let launcher = directory.path.join("cargo-kani");
+        let calls = directory.path.join("calls");
+        let printed = directory.path.join("stdout");
+        fs::write(&printed, stdout).unwrap();
+        fs::write(
+            &launcher,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'cargo-kani 0.68.0'; exit 0; fi\necho \"$@\" >> '{}'\ncat '{}'\n",
+                calls.display(),
+                printed.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+        Self {
+            directory,
+            installation: KaniInstallation::new(launcher),
+            calls,
+        }
+    }
+
+    fn launches(&self) -> Vec<String> {
+        fs::read_to_string(&self.calls)
+            .map(|calls| calls.lines().map(str::to_owned).collect())
+            .unwrap_or_default()
+    }
+
+    fn run(
+        &self,
+        harness: &KaniV2ClauseObligationHarness,
+        test_name: &str,
+        appended: &str,
+    ) -> Result<KaniConcretePlaybackOutcome, quire_contract_codegen::KaniExecutionRefusal> {
+        let cancel = quire_exact::Cancel::new();
+        execute_kani_concrete_playback(
+            &KaniExecutionRequest {
+                cancel: &cancel,
+                installation: &self.installation,
+                harness: harness.into(),
+                crate_directory: &self.directory.path,
+                target_directory: &self.directory.path.join("target"),
+                home_directory: None,
+            },
+            &KaniConcretePlayback {
+                test_name,
+                appended_test: appended,
+            },
+        )
+    }
+}
+
+#[trace("FR-017-AC-57", "FR-017-AC-59", "TC-027")]
+#[test]
+fn the_playback_entry_launches_only_for_the_sealed_artifact_with_one_appended_test() {
+    use quire_contract_codegen::KaniExecutionRefusal as Refusal;
+    let harness = fixture();
+    let sealed = &harness.rust.contents;
+    let name = "playback_999_arithmetic";
+    let appended = kani_playback_test(name, true, true);
+    let test_name = format!("{}::{name}", harness.identity.module_symbol);
+    let with_test = append_inside_module(sealed, &appended);
+    let ok_output = format!(
+        "running 1 test\ntest {test_name} - should panic ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n"
+    );
+
+    // The sealed artifact plus exactly the declared test launches one exact playback.
+    let accepted = PlaybackStandIn::new("ir917-playback-accepted", &with_test, &ok_output);
+    let outcome = accepted
+        .run(&harness, &test_name, &appended)
+        .expect("launches");
+    let KaniConcretePlaybackOutcome::Completed {
+        succeeded, stdout, ..
+    } = outcome
+    else {
+        panic!("the stand-in exits on its own");
+    };
+    assert!(succeeded);
+    assert!(String::from_utf8_lossy(&stdout).contains("should panic ... ok"));
+    let launches = accepted.launches();
+    assert_eq!(launches.len(), 1, "{launches:?}");
+    for argument in [
+        "kani playback",
+        "--lib",
+        "-Z function-contracts",
+        "-Z concrete-playback",
+        &test_name,
+        "--exact",
+    ] {
+        assert!(launches[0].contains(argument), "{argument}: {launches:?}");
+    }
+
+    // Each of these refuses before any launch.
+    let altered_oracle = with_test.replacen("fn oracle", "fn  oracle", 1);
+    let altered_header = with_test.replacen(
+        "SPDX-License-Identifier: MIT",
+        "SPDX-License-Identifier: XIT",
+        1,
+    );
+    assert_ne!(
+        altered_header, with_test,
+        "the sealed header carries the SPDX line"
+    );
+    assert_ne!(
+        altered_oracle, with_test,
+        "the sealed text carries the oracle function"
+    );
+    let duplicated = format!(
+        "{}{appended}{}",
+        &with_test[..with_test.rfind('}').unwrap()],
+        &with_test[with_test.rfind('}').unwrap()..]
+    );
+    for (case, lib) in [
+        ("test absent", sealed.to_string()),
+        ("oracle altered", altered_oracle),
+        ("header altered", altered_header),
+        ("test duplicated", duplicated),
+        ("second sealed copy", format!("{with_test}\n{sealed}")),
+    ] {
+        let refused = PlaybackStandIn::new(
+            &format!("ir917-playback-{}", case.replace(' ', "-")),
+            &lib,
+            &ok_output,
+        );
+        assert!(
+            matches!(
+                refused.run(&harness, &test_name, &appended),
+                Err(Refusal::ConcretePlaybackSourceMismatch { .. })
+            ),
+            "{case}"
+        );
+        assert!(refused.launches().is_empty(), "{case}: no launch");
+    }
+    let wrong_module = PlaybackStandIn::new("ir917-playback-wrong-module", &with_test, &ok_output);
+    assert!(matches!(
+        wrong_module.run(&harness, &format!("other::{name}"), &appended),
+        Err(Refusal::ConcretePlaybackSourceMismatch { .. })
+    ));
+    assert!(wrong_module.launches().is_empty());
+
+    // A zero-match or failed libtest run is never read as a passing playback.
+    for (case, output) in [
+        (
+            "zero matches",
+            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out\n".to_owned(),
+        ),
+        (
+            "pass line without a summary",
+            format!("running 1 test\ntest {test_name} - should panic ... ok\n"),
+        ),
+        (
+            "another test passed",
+            "running 1 test\ntest other::t ... ok\n\ntest result: ok. 1 passed; 0 failed;\n".to_owned(),
+        ),
+    ] {
+        let unobserved = PlaybackStandIn::new(&format!("ir917-playback-{}", case.replace(' ', "-")), &with_test, &output);
+        assert!(
+            matches!(
+                unobserved.run(&harness, &test_name, &appended),
+                Err(Refusal::ConcretePlaybackTestNotObserved { .. })
+            ),
+            "{case}"
+        );
+    }
+}
+
+// ---- Kani-backed concrete playback at 999 (FR-017-AC-60) ---------------------------------
+
+/// The Kani playback test: the real `kani` crate replays the bytes of 999 through the sealed
+/// harness body. `expected` is the arithmetic assertion's message, or absent for the healthy run.
+fn kani_playback_test(name: &str, expect_arithmetic_panic: bool, subject_preamble: bool) -> String {
+    let attribute = if expect_arithmetic_panic {
+        format!("    #[should_panic(expected = \"{ARITHMETIC_MESSAGE}\")]\n")
+    } else {
+        String::new()
+    };
+    let preamble = if subject_preamble {
+        "        assert!(crate::subject::check(999), \"the unchanged subject returns normally at 999\");\n"
+    } else {
+        ""
+    };
+    format!(
+        "    #[test]\n{attribute}    fn {name}() {{\n{preamble}        kani::concrete_playback_run(vec![999_i64.to_le_bytes().to_vec()], prove_clause);\n    }}\n"
+    )
+}
+
+/// The environment's peak: the `memory.peak` of the cgroup scope this process runs in (the
+/// `systemd-run` scope that caps the run). It is cumulative over the scope, so it bounds the
+/// playback's own peak from above.
+#[derive(Debug)]
+struct ScopePeak;
+
+impl PeakMemorySource for ScopePeak {
+    fn name(&self) -> &str {
+        "cgroup-memory.peak"
+    }
+
+    fn peak(&self, _launcher: u32) -> Option<PeakReading> {
+        let membership = fs::read_to_string("/proc/self/cgroup").ok()?;
+        let path = membership
+            .lines()
+            .find_map(|line| line.strip_prefix("0::"))?;
+        let value = fs::read_to_string(format!("/sys/fs/cgroup{path}/memory.peak")).ok()?;
+        Some(PeakReading {
+            value: value.trim().parse().ok()?,
+            unit: MemoryUnit::Bytes,
+        })
+    }
+}
+
+/// Owned teardown: once a playback has concluded, no process of the run (the launcher, cargo,
+/// rustc or the playback test binary, all of which name the scratch crate) is left alive.
+fn assert_no_process_of(directory: &Path) {
+    let needle = directory.to_string_lossy().into_owned();
+    let output = Command::new("pgrep")
+        .args(["-f", "--", &needle])
+        .output()
+        .expect("pgrep");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a process of the concluded playback is still alive: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+/// Writes the sealed artifact with `appended` inside its module, beside the subject, into the
+/// scratch crate's library and runs the playback through CG's public entry.
+fn run_installed_playback(
+    scratch: &ScratchCrate,
+    harness: &KaniV2ClauseObligationHarness,
+    subject_body: &str,
+    name: &str,
+    appended: &str,
+) -> (bool, Option<i32>, String, String, MemoryObservation) {
+    let sealed = &harness.rust.contents;
+    let with_test = append_inside_module(sealed, appended);
+    assert_eq!(
+        remove_appended(&with_test, appended),
+        *sealed,
+        "removing exactly the appended bytes restores the sealed artifact"
+    );
+    fs::write(
+        scratch.directory.path.join("src/lib.rs"),
+        format!("{with_test}{}", subject_module(subject_body)),
+    )
+    .unwrap();
+    let test_name = format!("{}::{name}", harness.identity.module_symbol);
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover()
+        .expect("cargo-kani is installed")
+        .with_peak_memory_source(std::sync::Arc::new(ScopePeak));
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ir917-kani-target");
+    let started = Instant::now();
+    let outcome = execute_kani_concrete_playback(
+        &KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: harness.into(),
+            crate_directory: &scratch.directory.path,
+            target_directory: &target,
+            home_directory: None,
+        },
+        &KaniConcretePlayback {
+            test_name: &test_name,
+            appended_test: appended,
+        },
+    );
+    let wall = started.elapsed();
+    let outcome = outcome.unwrap_or_else(|refusal| panic!("{test_name}: {refusal}"));
+    assert_no_process_of(&scratch.directory.path);
+    let KaniConcretePlaybackOutcome::Completed {
+        succeeded,
+        exit_code,
+        stdout,
+        stderr,
+        memory,
+    } = outcome
+    else {
+        panic!("{test_name}: the playback must complete on its own: {outcome:?}");
+    };
+    println!(
+        "IR917 {test_name}: succeeded={succeeded} exit={exit_code:?} wall={:.1}s memory={memory:?}",
+        wall.as_secs_f64()
+    );
+    (
+        succeeded,
+        exit_code,
+        String::from_utf8_lossy(&stdout).into_owned(),
+        String::from_utf8_lossy(&stderr).into_owned(),
+        memory,
+    )
+}
+
+#[trace("FR-017-AC-60", "FR-015-AC-41", "TC-027")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_kani_playback_at_999_passes_the_healthy_clause() {
+    let (scratch, harness) = kani_crate("ir917-playback-healthy", None, HEALTHY_SUBJECT);
+    let appended = kani_playback_test("playback_999_healthy", false, true);
+    let (succeeded, _, stdout, _, memory) = run_installed_playback(
+        &scratch,
+        &harness,
+        HEALTHY_SUBJECT,
+        "playback_999_healthy",
+        &appended,
+    );
+    assert!(succeeded, "{stdout}");
+    assert!(stdout.contains("playback_999_healthy ... ok"), "{stdout}");
+    assert!(stdout.contains("1 passed; 0 failed"), "{stdout}");
+    assert_eq!(memory.source.as_deref(), Some("cgroup-memory.peak"));
+    assert!(memory.peak_resident_bytes.is_some_and(|peak| peak > 0));
+}
+
+#[trace("FR-017-AC-60", "FR-015-AC-41", "FR-017-AC-63", "TC-027")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_kani_playback_at_999_fails_the_arithmetic_assertion_under_the_plus_one_owner_mutant() {
+    let (scratch, harness) =
+        kani_crate("ir917-playback-plus-one", Some(&PLUS_ONE), HEALTHY_SUBJECT);
+    // The separate unconstrained two-phase run of the same sealed artifact comes first.
+    let run = run_installed(&scratch, &harness);
+    let values = assert_two_phase_falsified(&run, &harness, ARITHMETIC_MESSAGE);
+    assert!(values.iter().all(|value| *value < 1000), "{values:?}");
+
+    let name = "playback_999_arithmetic";
+    let appended = kani_playback_test(name, true, true);
+    let (succeeded, _, stdout, stderr, memory) =
+        run_installed_playback(&scratch, &harness, HEALTHY_SUBJECT, name, &appended);
+    assert!(succeeded, "{stdout}");
+    assert!(
+        stdout.contains(&format!("{name} - should panic ... ok")),
+        "{stdout}"
+    );
+    assert!(stdout.contains("1 passed; 0 failed"), "{stdout}");
+    assert!(
+        format!("{stdout}{stderr}").contains(ARITHMETIC_MESSAGE),
+        "the panic names the generated arithmetic assertion:\n{stdout}\n{stderr}"
+    );
+    assert_eq!(memory.source.as_deref(), Some("cgroup-memory.peak"));
+    assert!(memory.peak_resident_bytes.is_some_and(|peak| peak > 0));
+}
+
+#[trace("FR-017-AC-60", "TC-027")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_kani_playback_at_999_controls_do_not_satisfy_the_arithmetic_expectation() {
+    // The unmutated owner does not fail the arithmetic assertion at 999.
+    let name = "playback_999_arithmetic";
+    let (scratch, harness) = kani_crate("ir917-playback-control-owner", None, HEALTHY_SUBJECT);
+    let appended = kani_playback_test(name, true, true);
+    let (succeeded, _, stdout, _, _) =
+        run_installed_playback(&scratch, &harness, HEALTHY_SUBJECT, name, &appended);
+    assert!(!succeeded, "{stdout}");
+    assert!(
+        stdout.contains("test did not panic as expected"),
+        "{stdout}"
+    );
+
+    // The compiled-subject `+ 2` mutant reaches the produced-result comparison, not the
+    // arithmetic assertion.
+    let other = "quire_contract_runtime::operators::implies_short_circuit(amount < 1000, || amount + 2 <= 1000)";
+    let (scratch, harness) = kani_crate("ir917-playback-control-subject", None, other);
+    let appended = kani_playback_test(name, true, false);
+    let (succeeded, _, stdout, _, _) =
+        run_installed_playback(&scratch, &harness, other, name, &appended);
+    assert!(!succeeded, "{stdout}");
+    assert!(
+        stdout.contains(
+            "the produced V2 Boolean result agrees with the independent checked condition"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("panic did not contain expected string"),
+        "{stdout}"
+    );
+}
+
+/// The result-bearing subject `check() -> i64`, drawing nothing, returns `value`.
+fn result_subject_module(value: i64) -> String {
+    format!("\npub mod subject {{\n    pub fn check() -> i64 {{ {value} }}\n}}\n")
+}
+
+fn run_result_domain(label: &str, produced: i64) -> InstalledRun {
+    let harness = fixture_of(Twin::with_bounded_result_postcondition(), "DepositResult");
+    let lib = format!(
+        "{}{}",
+        harness.rust.contents,
+        result_subject_module(produced)
+    );
+    let scratch = ScratchCrate::new(label, &lib, None);
+    run_installed(&scratch, &harness)
+}
+
+/// A produced Integer inside the admitted `Int[0, 1000]` result domain verifies.
+#[trace("FR-025-AC-13", "TC-036")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_036_real_kani_runner_verifies_an_in_domain_produced_result() {
+    let run = run_result_domain("ir948-result-domain-healthy", 1000);
+    assert!(
+        matches!(run.evidence.outcome, KaniRunOutcome::Verified),
+        "{:?}",
+        run.evidence.outcome
+    );
+}
+
+/// A produced Integer outside the domain (1001 satisfies the clause `result >= 0`) falsifies
+/// exactly the domain assertion, so the clause cannot mask an out-of-domain return.
+#[trace("FR-025-AC-13", "TC-036")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result() {
+    let run = run_result_domain("ir948-result-domain-out", 1001);
+    assert!(
+        matches!(run.evidence.outcome, KaniRunOutcome::Falsified { .. }),
+        "{:?}",
+        run.evidence.outcome
+    );
+    let failed = run
+        .evidence
+        .checks
+        .iter()
+        .filter(|check| format!("{:?}", check.status) == "Failure")
+        .count();
+    assert_eq!(failed, 1, "only the domain assertion fails");
+}
+
+/// The QSL precondition `other > 1000` over the `Int[0, 1000]` parameter `other` cannot hold on
+/// any admitted input, so the installed proof ends with its final cover unsatisfied, neither
+/// resource exhaustion nor a vacuous `Verified`.
+#[trace("FR-015-AC-126", "FR-017-AC-63", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_runner_reports_an_impossible_precondition_as_cover_unsatisfied() {
+    let harness = fixture_of(
+        Twin::with_bounded_other_precondition_condition("other > 1000"),
+        "OtherBelowLimit",
+    );
+    let lib = format!("{}{}", harness.rust.contents, subject_module("true"));
+    let scratch = ScratchCrate::new("ir917-kani-impossible-precondition", &lib, None);
+    let run = run_installed(&scratch, &harness);
+    assert!(
+        matches!(
+            run.evidence.outcome,
+            KaniRunOutcome::CoverUnsatisfied { .. }
+        ),
+        "{:?}",
+        run.evidence.outcome
+    );
 }
 
 #[trace("FR-015-AC-132", "FR-017-AC-64", "TC-025")]
