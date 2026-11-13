@@ -149,6 +149,7 @@ fn the_state_reading_postcondition_yields_a_harness_with_requires_and_a_mut_subj
     let call =
         position("crate::subject::check(&mut post_balance_current, parameter_amount_current);");
     let domain = position("the produced V2 state field lies in its admitted domain");
+    let expected = position("let expected = ");
     let oracle = call
         + source[call..]
             .find("oracle_clause(")
