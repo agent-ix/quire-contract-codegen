@@ -11,10 +11,10 @@ use ix_trace_rs::trace;
 use quire_contract_codegen::{
     derive_v2_clause_operation_widths, generate_v2_clause_native_oracle, interval_bits,
     negotiate_kani_obligations, negotiate_kani_obligations_with_options, ClauseFeatures, Decision,
-    GenerationOptions, InputBound, KaniObligationError, KaniObligationOutcome,
+    GenerationOptions, InputBound, IntegerRoute, KaniObligationError, KaniObligationOutcome,
     KaniObligationRequest, NotTractable, ObligationDisposition, ObligationItem, OperationWidth,
     TractabilityDecider, TractabilityLoadError, TractabilityRow, TractabilityTable,
-    UnsupportedObligation, GENERATOR_VERSION, KERNEL_VERSION,
+    UnsupportedObligation, WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde::Deserialize;
@@ -29,7 +29,14 @@ const ADD: &str = "quire.op.integer.add";
 fn op_width(operation_id: &str, bits: u32) -> OperationWidth {
     OperationWidth {
         operation_id: operation_id.to_owned(),
-        bits,
+        bits: Some(bits),
+    }
+}
+
+fn unknown_width(operation_id: &str) -> OperationWidth {
+    OperationWidth {
+        operation_id: operation_id.to_owned(),
+        bits: None,
     }
 }
 
@@ -88,7 +95,7 @@ fn negotiate_with(
     items: &[ObligationItem<'_>],
     options: &GenerationOptions,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_kani_obligations_with_options(&request(items), options, false)
+    negotiate_kani_obligations_with_options(&request(items), options, IntegerRoute::General)
 }
 
 fn request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
@@ -202,7 +209,10 @@ fn tc_070_the_exposed_width_is_the_propagated_width() {
                     .unwrap()
             })
             .collect();
-        let exposed: Vec<u32> = widths.iter().map(|(_, bits)| *bits).collect();
+        let exposed: Vec<u32> = widths
+            .iter()
+            .map(|(_, bits)| bits.expect("an integer operation has a width"))
+            .collect();
         assert_eq!(exposed, rendered, "k = {k}");
         // `Int[0, 2^k]` counts as k + 1 bits; the product reaches 2k + 1.
         assert_eq!(exposed[0], k + 1, "multiply, k = {k}");
@@ -211,6 +221,46 @@ fn tc_070_the_exposed_width_is_the_propagated_width() {
             "the add after the multiply carries the propagated width, not the declared one, k = {k}"
         );
     }
+}
+
+/// FR-056-AC-2 past the native kernel's capacity: the widths come from CG's own `i128` interval
+/// propagation, so they exist at 32, 33, 64 and 65 bits (the product reaches 2^64) and an
+/// operand that leaves `i128` has an unknown width, never zero.
+#[trace("FR-056-AC-2", "TC-070")]
+#[test]
+fn tc_070_widths_exist_past_the_native_kernel_capacity() {
+    let le = "quire.op.integer.le";
+    let widths = |upper: i64| {
+        let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
+        derive_v2_clause_operation_widths(&package, &clause).expect("widths")
+    };
+    let some = |operations: [(&str, u32); 3]| -> Vec<(String, Option<u32>)> {
+        operations
+            .into_iter()
+            .map(|(id, bits)| (id.to_owned(), Some(bits)))
+            .collect()
+    };
+    // Int[0, 2^32 - 1] is 32 bits; the product is below 2^64.
+    assert_eq!(
+        widths((1 << 32) - 1),
+        some([(MUL, 32), (ADD, 64), (le, 64)])
+    );
+    // Int[0, 2^32] is 33 bits; the product is 2^64, 65 bits.
+    assert_eq!(widths(1 << 32), some([(MUL, 33), (ADD, 65), (le, 65)]));
+    // Int[0, 2^62]: the product 2^124 still fits i128.
+    assert_eq!(widths(1 << 62), some([(MUL, 63), (ADD, 125), (le, 125)]));
+    // A chained multiply leaves i128: the second multiply's operand width is known, its result,
+    // and so the add after it, is unknown.
+    let (package, clause) = package(1 << 62, 1 << 62, "other * offset * offset + 3 <= 100");
+    let chained = derive_v2_clause_operation_widths(&package, &clause).expect("widths");
+    let ids: Vec<&str> = chained.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, [MUL, MUL, ADD, le]);
+    assert_eq!(chained[0].1, Some(63));
+    assert_eq!(chained[1].1, Some(125));
+    assert_eq!(
+        chained[2].1, None,
+        "an operand beyond i128 is unknown, not zero"
+    );
 }
 
 /// FR-056-AC-3: the file format, the typed load errors naming the row, the empty table, and a
@@ -229,6 +279,12 @@ fn tc_070_the_table_loads_from_data_and_a_bad_row_fails_the_load() {
     );
     let table = TractabilityTable::load(&valid).expect("a valid table loads");
     assert_eq!(table.rows().len(), 2);
+    // Fractional seconds load and are kept as milliseconds.
+    let mut fractional = row_json(&[MUL], 64, "not_tractable");
+    fractional["wall_seconds"] = json!(44.625);
+    let fractional = write_table(&directory, "fractional.json", &[fractional]);
+    let loaded = TractabilityTable::load(&fractional).unwrap();
+    assert_eq!(loaded.rows()[0].wall_seconds.millis(), 44_625);
     let empty = write_table(&directory, "empty.json", &[]);
     assert!(TractabilityTable::load(&empty).unwrap().rows().is_empty());
 
@@ -324,21 +380,25 @@ fn tc_070_a_named_table_that_does_not_load_fails_the_request() {
     assert_eq!(harness_count(&absent), 1);
 }
 
-/// FR-056-AC-4: a clause with a current `not_tractable` row for its operation at or above its
+/// FR-056-AC-4: a clause with a current `not_tractable` row for its operation at or below its
 /// width is refused with the typed reason and no harness; a sibling keeps its harness; an
 /// operator the V2 path refuses keeps its own reason.
 #[trace("FR-056-AC-4", "TC-070")]
 #[test]
 fn tc_070_a_measured_bad_row_refuses_the_clause_before_generation() {
     let directory = TemporaryDirectory::new("ir1526-refusal");
-    let bad = row_json(&[MUL], 64, "not_tractable");
+    let bad = row_json(&[MUL], 21, "not_tractable");
     let path = write_table(&directory, "table.json", std::slice::from_ref(&bad));
 
     let (wide, wide_clause) = package(1 << 20, 1 << 20, "other * offset + 3 <= 100");
     let wide_claim = crate::common::v2_claim::claim_for(&wide, &wide_clause);
     let (sibling, sibling_clause) = package(1000, 10, "other < 1000 and offset > 0");
     let sibling_claim = crate::common::v2_claim::claim_for(&sibling, &sibling_clause);
-    let (division, division_clause) = package(1000, 10, "other mod offset > 0");
+    let (division, division_clause) = package(
+        1 << 20,
+        1 << 20,
+        "other * offset > 0 and other mod offset > 0",
+    );
     let division_claim = crate::common::v2_claim::claim_for(&division, &division_clause);
     let items = [
         item(&wide, &wide_clause, &wide_claim),
@@ -373,6 +433,8 @@ fn tc_070_a_measured_bad_row_refuses_the_clause_before_generation() {
             reason: UnsupportedObligation::V2ClauseOperatorNotSupported { .. }
         }
     ));
+    // The operator-refused clause also holds a multiply the row would refuse at 21 bits: a
+    // decider placed before the operator check would report `V2ClauseNotTractable` here.
     assert_eq!(harness_count(&outcome), 1, "only the sibling has a harness");
 }
 
@@ -388,11 +450,11 @@ fn tc_070_the_boundary_is_inclusive_in_bits_and_per_operation() {
     assert_eq!(interval_bits(0, 1 << 32), 33);
     assert_eq!(interval_bits(0, (1_i128 << 64) - 1), 64);
     assert_eq!(interval_bits(0, 1_i128 << 64), 65);
-    assert!(refused(vec![op_width(MUL, 33)]));
+    assert!(!refused(vec![op_width(MUL, 33)]));
     assert!(refused(vec![op_width(MUL, 64)]));
-    assert!(!refused(vec![op_width(MUL, 65)]));
+    assert!(refused(vec![op_width(MUL, 65)]));
     // The row for multiply says nothing of add.
-    assert!(!refused(vec![op_width(ADD, 8)]));
+    assert!(!refused(vec![op_width(ADD, 80)]));
     // A clause holding both refuses on the multiply.
     match table.decide(&features(vec![op_width(ADD, 8), op_width(MUL, 64)])) {
         Decision::Refuse { reason, .. } => assert_eq!(reason.operation_id, MUL),
@@ -400,23 +462,32 @@ fn tc_070_the_boundary_is_inclusive_in_bits_and_per_operation() {
     }
 }
 
-/// FR-056-AC-5 through generation: a row at 21 bits refuses a 21-bit multiply and not a 22-bit
-/// one.
+/// FR-056-AC-5 through generation at 33, 64 and 65 bits: a row at `B` bits refuses an operation
+/// of `B` bits or more and runs a narrower one. The add after `other * offset` carries the
+/// product's width: 64 bits for operands up to `2^32 - 1`, 65 for `2^32`.
 #[trace("FR-056-AC-5", "TC-070")]
 #[test]
 fn tc_070_the_boundary_holds_through_generation() {
     let directory = TemporaryDirectory::new("ir1526-boundary");
-    let path = write_table(
-        &directory,
-        "table.json",
-        &[row_json(&[MUL], 21, "not_tractable")],
-    );
-    // Int[0, 2^20] is 21 bits, Int[0, 2^21 - 1] is 21 bits, Int[0, 2^21] is 22.
-    for (upper, refused) in [
-        (1_i64 << 20, true),
-        ((1_i64 << 21) - 1, true),
-        (1_i64 << 21, false),
-    ] {
+    // (operation, row bits, parameter upper bound, refused)
+    let cases = [
+        // The multiply of two `Int[0, 2^32]` operands is 33 bits.
+        (MUL, 33, 1_i64 << 32, true),
+        (MUL, 33, (1_i64 << 32) - 1, false),
+        (MUL, 34, 1_i64 << 32, false),
+        // The add after the multiply: 64 bits at `2^32 - 1`, 65 at `2^32`.
+        (ADD, 64, (1_i64 << 32) - 1, true),
+        (ADD, 64, 1_i64 << 32, true),
+        (ADD, 65, (1_i64 << 32) - 1, false),
+        (ADD, 65, 1_i64 << 32, true),
+        (ADD, 66, 1_i64 << 32, false),
+    ];
+    for (operation, bits, upper, refused) in cases {
+        let path = write_table(
+            &directory,
+            "table.json",
+            &[row_json(&[operation], bits, "not_tractable")],
+        );
         let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
         let claim = crate::common::v2_claim::claim_for(&package, &clause);
         let outcome = negotiate_with(&[item(&package, &clause, &claim)], &options(&path)).unwrap();
@@ -426,29 +497,26 @@ fn tc_070_the_boundary_holds_through_generation() {
                 reason: UnsupportedObligation::V2ClauseNotTractable { .. }
             }
         );
-        assert_eq!(is_refused, refused, "upper = {upper}");
+        assert_eq!(
+            is_refused, refused,
+            "{operation} row at {bits} bits, upper = {upper}"
+        );
+        assert_eq!(harness_count(&outcome), usize::from(!refused));
     }
 }
 
-/// An operation whose complete population the native kernel cannot retain has no propagated
-/// interval, so no width: the decider is not asked and the clause proceeds as before (the native
-/// route refuses it as `NativeV2ClauseCapability` itself).
-#[trace("TC-070")]
+/// An operation with no known width never matches a row, however low the row's bound.
+#[trace("FR-056-AC-5", "TC-070")]
 #[test]
-fn tc_070_a_clause_beyond_native_capacity_has_no_width_and_is_not_refused_here() {
-    let directory = TemporaryDirectory::new("ir1526-capacity");
-    let path = write_table(
-        &directory,
-        "table.json",
-        &[row_json(&[MUL], 128, "not_tractable")],
+fn tc_070_an_unknown_width_runs() {
+    let table = table_of(&[row_json(&[MUL], 0, "not_tractable")]);
+    assert_eq!(
+        table.decide(&features(vec![unknown_width(MUL), op_width(ADD, 1)])),
+        Decision::Run
     );
-    let (package, clause) = package(1 << 40, 1 << 40, "other * offset + 3 <= 100");
-    assert!(derive_v2_clause_operation_widths(&package, &clause).is_err());
-    let claim = crate::common::v2_claim::claim_for(&package, &clause);
-    let outcome = negotiate_with(&[item(&package, &clause, &claim)], &options(&path)).unwrap();
     assert!(matches!(
-        disposition(&outcome, 0),
-        ObligationDisposition::Supported { .. }
+        table.decide(&features(vec![unknown_width(MUL), op_width(MUL, 0)])),
+        Decision::Refuse { .. }
     ));
 }
 
@@ -466,12 +534,12 @@ fn tc_070_an_unqualified_clause_is_generated_unchanged() {
     let nonmatching = write_table(
         &directory,
         "nonmatching.json",
-        &[row_json(&["quire.op.integer.sub"], 64, "not_tractable")],
+        &[row_json(&["quire.op.integer.sub"], 1, "not_tractable")],
     );
     let tractable = write_table(
         &directory,
         "tractable.json",
-        &[row_json(&[MUL], 64, "tractable")],
+        &[row_json(&[MUL], 1, "tractable")],
     );
     for path in [nonmatching, tractable] {
         let outcome = negotiate_with(&items, &options(&path)).unwrap();
@@ -503,7 +571,7 @@ fn tc_070_a_stale_row_is_ignored() {
             }
         )
     };
-    let current = row_json(&[MUL], 64, "not_tractable");
+    let current = row_json(&[MUL], 1, "not_tractable");
     assert!(refused(current.clone()));
     for field in ["generator_version", "kernel_version"] {
         let mut stale = current.clone();
@@ -530,10 +598,12 @@ fn tc_070_the_reported_row_is_deterministic() {
         } => (reason.operation_id, evidence_row.max_operand_bits),
         Decision::Run => panic!("a row qualifies"),
     };
-    let wide = row_json(&[MUL], 64, "not_tractable");
-    let narrow = row_json(&[ADD], 48, "not_tractable");
-    let unrelated = row_json(&["quire.op.integer.sub"], 8, "not_tractable");
-    let expected = (ADD.to_owned(), 48);
+    // A row qualifies when the operation's width reaches its bound: MUL is 20 bits, ADD 30.
+    let wide = row_json(&[MUL], 12, "not_tractable");
+    let narrow = row_json(&[ADD], 5, "not_tractable");
+    let unrelated = row_json(&["quire.op.integer.sub"], 1, "not_tractable");
+    let beyond = row_json(&[MUL], 25, "not_tractable");
+    let expected = (ADD.to_owned(), 5);
     assert_eq!(reported(&[wide.clone(), narrow.clone()]), expected);
     assert_eq!(reported(&[narrow.clone(), wide.clone()]), expected);
     assert_eq!(
@@ -541,21 +611,21 @@ fn tc_070_the_reported_row_is_deterministic() {
         expected
     );
     assert_eq!(
-        reported(&[wide.clone(), unrelated, narrow.clone()]),
+        reported(&[wide.clone(), unrelated, narrow.clone(), beyond]),
         expected
     );
     // Equal bits: file order.
-    let first = row_json(&[MUL], 50, "not_tractable");
-    let second = row_json(&[ADD], 50, "not_tractable");
+    let first = row_json(&[MUL], 8, "not_tractable");
+    let second = row_json(&[ADD], 8, "not_tractable");
     assert_eq!(
         reported(&[first.clone(), second.clone()]),
-        (MUL.to_owned(), 50)
+        (MUL.to_owned(), 8)
     );
-    assert_eq!(reported(&[second, first]), (ADD.to_owned(), 50));
+    assert_eq!(reported(&[second, first]), (ADD.to_owned(), 8));
     // One row naming both operations: the clause's first qualifying operation.
     assert_eq!(
-        reported(&[row_json(&[ADD, MUL], 64, "not_tractable")]),
-        (MUL.to_owned(), 64)
+        reported(&[row_json(&[ADD, MUL], 10, "not_tractable")]),
+        (MUL.to_owned(), 10)
     );
 }
 
@@ -609,7 +679,7 @@ struct CorpusRow {
     features: ClauseFeatures,
     ground_truth: GroundTruth,
     #[serde(default)]
-    wall_seconds: Option<f64>,
+    wall_seconds: Option<WallSeconds>,
     measurement_source: String,
 }
 
@@ -706,18 +776,19 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
         false_refuse: 0,
         false_accept: 0,
     };
-    let table = table_of(&[row_json(&[MUL], 40, "not_tractable")]);
-    let table_score = score(&table, &synthetic);
-    // The synthetic table refuses widths up to 40, so the 60-bit row is a false accept and the
-    // 20-bit row a false refuse: both counts register.
-    assert_eq!(
-        table_score,
-        Score {
-            false_refuse: 1,
-            false_accept: 1
-        }
-    );
-    assert!(regressed(&table_score, &zero));
+    // A table refusing from 40 bits on is right about both rows.
+    let right = table_of(&[row_json(&[MUL], 40, "not_tractable")]);
+    assert_eq!(score(&right, &synthetic), zero);
+    // One refusing from 10 bits on refuses the verified 20-bit row.
+    let too_eager = table_of(&[row_json(&[MUL], 10, "not_tractable")]);
+    let eager_score = score(&too_eager, &synthetic);
+    assert_eq!(eager_score.false_refuse, 1);
+    assert!(regressed(&eager_score, &zero));
+    // One refusing from 70 bits on lets the timed-out 60-bit row through.
+    let too_lax = table_of(&[row_json(&[MUL], 70, "not_tractable")]);
+    let lax_score = score(&too_lax, &synthetic);
+    assert_eq!(lax_score.false_accept, 1);
+    assert!(regressed(&lax_score, &zero));
     let refuse_all = score(&AlwaysRefuse, &synthetic);
     assert_eq!(refuse_all.false_refuse, 1);
     assert!(
@@ -729,6 +800,11 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     assert!(
         regressed(&run_all, &zero),
         "run-everything fails on false-accept"
+    );
+    // On the shipped corpus the refuse-everything decider regresses too.
+    assert!(
+        regressed(&score(&AlwaysRefuse, &corpus), &baseline),
+        "refuse-everything fails on the shipped corpus"
     );
     // A count below the baseline passes.
     assert!(!regressed(
@@ -756,7 +832,7 @@ fn corpus_row(id: &str, operation: &str, bits: u32, truth: GroundTruth) -> Corpu
             None,
         ),
         ground_truth: truth,
-        wall_seconds: Some(1.0),
+        wall_seconds: Some(serde_json::from_value(json!(1.0)).unwrap()),
         measurement_source: "synthetic".to_owned(),
     }
 }
@@ -787,7 +863,7 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     let after = score(&AlwaysRun, &load_corpus(&copy));
     assert_eq!(after.false_accept, before.false_accept + 1);
     // The table decider scores the same file through the same function.
-    let table = table_of(&[row_json(&[MUL], 64, "not_tractable")]);
+    let table = table_of(&[row_json(&[MUL], 63, "not_tractable")]);
     assert_eq!(
         score(&table, &load_corpus(&copy)).false_accept,
         before.false_accept,

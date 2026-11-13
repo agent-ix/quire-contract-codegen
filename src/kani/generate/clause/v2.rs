@@ -310,9 +310,7 @@ fn lower_with_census<'a>(
 }
 
 /// The FR-056 refusal point. It runs after the operator check, so it sees only operations the
-/// V2 clause path accepts. When range propagation cannot give every operation a width (the native
-/// kernel cannot retain an operation's population), the decider has nothing to read and the clause
-/// proceeds as before; the native route refuses such a clause itself.
+/// V2 clause path accepts. An operation without a known width never matches a row.
 fn refuse_if_not_tractable(
     view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,

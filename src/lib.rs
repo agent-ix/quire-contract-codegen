@@ -254,7 +254,7 @@ pub use kani::generate::frame::{
 };
 pub use kani::generate::negotiate::{
     negotiate_kani_native_obligations, negotiate_kani_obligations,
-    negotiate_kani_obligations_with_options,
+    negotiate_kani_obligations_with_options, IntegerRoute,
 };
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
@@ -285,7 +285,7 @@ pub use kani::output::playback::{
 pub use kani::tractability::{
     interval_bits, ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable,
     OperationWidth, RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow,
-    TractabilityTable, GENERATOR_VERSION, KERNEL_VERSION,
+    TractabilityTable, WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{

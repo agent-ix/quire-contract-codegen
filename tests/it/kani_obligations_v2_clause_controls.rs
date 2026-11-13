@@ -912,8 +912,8 @@ fn the_matrix_status_of_the_enumeration_rows_says_enumeration_evidence_without_p
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measured_bad_multiply() {
     use quire_contract_codegen::{
-        negotiate_kani_obligations_with_options, GenerationOptions, GENERATOR_VERSION,
-        KERNEL_VERSION,
+        negotiate_kani_obligations_with_options, GenerationOptions, IntegerRoute,
+        GENERATOR_VERSION, KERNEL_VERSION,
     };
     let scratch = TemporaryDirectory::new("ir1526-kani-table");
     let table = scratch.path.join("table.json");
@@ -921,7 +921,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         &table,
         serde_json::to_vec(&[serde_json::json!({
             "operation_ids": ["quire.op.integer.mul"],
-            "max_operand_bits": 64,
+            "max_operand_bits": 21,
             "collection_bound": null,
             "verdict": "not_tractable",
             "wall_seconds": 600,
@@ -953,7 +953,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
                 unwind: 3,
             },
             &options,
-            true,
+            IntegerRoute::Native,
         )
         .expect("the request negotiates")
     };
@@ -980,6 +980,17 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         panic!("the request is valid");
     };
     assert!(v2_clause_harnesses.is_empty(), "no harness, so no launch");
+    // A multiply narrower than the row's bound is not refused.
+    let (narrow, narrow_clause) = Twin::with_two_parameter_precondition(
+        (0, 1 << 9),
+        (0, 1 << 9),
+        "other * offset + 3 <= 100",
+    )
+    .emitted_package("TwoParameters");
+    assert!(matches!(
+        &negotiate(&narrow, &narrow_clause).records()[0].disposition,
+        quire_contract_codegen::ObligationDisposition::Supported { .. }
+    ));
 
     // The clause the table lets through runs under installed Kani to an executed verdict.
     let (package, clause) =

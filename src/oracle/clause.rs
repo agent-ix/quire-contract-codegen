@@ -14,6 +14,7 @@ use crate::core::ir::clause::{
 use crate::core::source_map::SourceProbe;
 
 use super::claim::{ClaimDisposition, ClaimMap};
+use super::operator_catalog::IntegerOperator;
 use super::scalar::render::{clause_scalar_operation, render_clause_operation_helpers};
 use super::scalar::{
     BooleanOperator, EqualityOperandKind, ExactScalarOperation, OperationProvenance,
@@ -166,56 +167,115 @@ pub(crate) fn derive_v2_clause_descriptor_with_view(
 }
 
 /// The width of each operation of a clause after range propagation (FR-056-AC-2): the largest
-/// bit width, over the operation's operands, of the interval the native rendering feeds it.
-/// Entries follow [`V2ClauseDescriptor::operation_identities`]; a Boolean operation has no
-/// integer operand and width zero.
+/// bit width, over the operation's operands, of the inclusive interval propagated to it. Entries
+/// follow [`V2ClauseDescriptor::operation_identities`].
+///
+/// Intervals are propagated in `i128`, with the same image and semantic-domain clipping the
+/// native rendering uses, but without the native kernel's capacity limit. The width is `None`
+/// for an operation with no integer operand and for one whose operand interval leaves `i128`.
 ///
 /// # Errors
 ///
-/// The refusal the native rendering gives when a source operation cannot retain its complete
-/// population in the native kernel.
+/// The refusal of the clause plan.
 pub fn derive_v2_clause_operation_widths(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
-) -> Result<Vec<(String, u32)>, V2ClauseRefusal> {
+) -> Result<Vec<(String, Option<u32>)>, V2ClauseRefusal> {
     clause_operation_widths(node_id, &ClauseGraphView::new(package))
 }
+
+type Interval = (i128, i128);
 
 pub(crate) fn clause_operation_widths(
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
-) -> Result<Vec<(String, u32)>, V2ClauseRefusal> {
+) -> Result<Vec<(String, Option<u32>)>, V2ClauseRefusal> {
+    use crate::kani::tractability::interval_bits;
     let prepared = plan_clause(node_id, nodes)?;
-    let (_, selection) = native::helpers(&prepared.plan, node_id)?;
-    let bits = |operand: &crate::core::native_integer::NativeIntegerIntervalDecision| {
-        let lower = operand.lower.parse::<i128>().ok()?;
-        let upper = operand.upper.parse::<i128>().ok()?;
-        Some(crate::kani::tractability::interval_bits(lower, upper))
-    };
-    prepared
-        .plan
-        .iter()
-        .enumerate()
-        .filter_map(|(index, step)| match &step.term {
-            StepTerm::Operation { identity, .. } => Some((index, identity)),
-            _ => None,
-        })
-        .map(|(index, identity)| {
-            let width = selection
-                .operations
-                .iter()
-                .find(|decision| decision.step == index)
-                .map_or(Some(0), |decision| {
-                    decision
-                        .operands
+    let mut ranges: Vec<Option<Interval>> = Vec::with_capacity(prepared.plan.len());
+    let mut widths = Vec::new();
+    for step in &prepared.plan {
+        let range = match &step.term {
+            StepTerm::Boolean(_) => None,
+            StepTerm::Integer(value) => value.parse::<i128>().ok().map(|value| (value, value)),
+            StepTerm::Input(input) if input.boolean => None,
+            StepTerm::Input(input) => Some((input.lower, input.upper)),
+            StepTerm::Operation {
+                identity,
+                operation,
+                arguments,
+            } => {
+                let operands: Vec<Option<Interval>> = arguments
+                    .iter()
+                    .map(|child| ranges.get(*child).copied().flatten())
+                    .collect();
+                let width = match operation {
+                    ExactScalarOperation::Ordering { .. }
+                    | ExactScalarOperation::Equality {
+                        operands: EqualityOperandKind::Integer,
+                        ..
+                    }
+                    | ExactScalarOperation::IntegerArithmetic { .. } => operands
                         .iter()
-                        .map(bits)
+                        .map(|operand| operand.map(|(lower, upper)| interval_bits(lower, upper)))
                         .try_fold(0, |widest: u32, bits| bits.map(|bits| widest.max(bits)))
-                })
-                .ok_or(V2ClauseRefusal::Render)?;
-            Ok((identity.clone(), width))
-        })
-        .collect()
+                        .filter(|_| !operands.is_empty()),
+                    _ => None,
+                };
+                widths.push((identity.clone(), width));
+                match operation {
+                    ExactScalarOperation::IntegerArithmetic { operator, domain } => {
+                        image(*operator, &operands).map(|capacity| clip(capacity, domain))
+                    }
+                    _ => None,
+                }
+            }
+        };
+        ranges.push(range);
+    }
+    Ok(widths)
+}
+
+/// The exact image of an integer operation over operand intervals, or `None` past `i128`.
+fn image(operator: IntegerOperator, operands: &[Option<Interval>]) -> Option<Interval> {
+    match (operator, operands) {
+        (IntegerOperator::Negate, [Some((lower, upper))]) => {
+            Some((upper.checked_neg()?, lower.checked_neg()?))
+        }
+        (IntegerOperator::Add, [Some((a, b)), Some((c, d))]) => {
+            Some((a.checked_add(*c)?, b.checked_add(*d)?))
+        }
+        (IntegerOperator::Subtract, [Some((a, b)), Some((c, d))]) => {
+            Some((a.checked_sub(*d)?, b.checked_sub(*c)?))
+        }
+        (IntegerOperator::Multiply, [Some((a, b)), Some((c, d))]) => {
+            let products = [
+                a.checked_mul(*c)?,
+                a.checked_mul(*d)?,
+                b.checked_mul(*c)?,
+                b.checked_mul(*d)?,
+            ];
+            Some((*products.iter().min()?, *products.iter().max()?))
+        }
+        _ => None,
+    }
+}
+
+/// The values that complete the semantic-domain check: the image clipped to a bounded domain,
+/// the whole image when the clip is empty (as the native rendering retains it).
+fn clip(capacity: Interval, domain: &quire_exact::IntegerDomain) -> Interval {
+    let quire_exact::IntegerDomain::Bounded(bound) = domain else {
+        return capacity;
+    };
+    let Ok(bound) = quire_exact::NativeIntegerInterval::try_from(bound) else {
+        return capacity;
+    };
+    let (lower, upper) = (capacity.0.max(bound.lower()), capacity.1.min(bound.upper()));
+    if lower <= upper {
+        (lower, upper)
+    } else {
+        capacity
+    }
 }
 
 /// Settle one selected clause as one typed claim-map entry.

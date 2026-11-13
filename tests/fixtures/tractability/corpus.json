@@ -17,11 +17,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -54,11 +54,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -91,11 +91,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -128,11 +128,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -165,11 +165,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -202,11 +202,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -239,11 +239,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -276,11 +276,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -313,11 +313,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -350,11 +350,11 @@
         },
         {
           "operation_id": "quire.op.boolean.implies",
-          "bits": 0
+          "bits": null
         },
         {
           "operation_id": "quire.op.boolean.eq",
-          "bits": 0
+          "bits": null
         }
       ],
       "inputs": [
@@ -368,34 +368,5 @@
     "ground_truth": "falsified",
     "wall_seconds": 119.6,
     "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row 'helper body returns false'"
-  },
-  {
-    "id": "ir304-guarded-scalar-general-integer",
-    "features": {
-      "operations": [
-        {
-          "operation_id": "quire.op.integer.lt",
-          "bits": 4
-        },
-        {
-          "operation_id": "quire.op.integer.add",
-          "bits": 4
-        }
-      ],
-      "inputs": [
-        {
-          "lower": 5,
-          "upper": 9
-        },
-        {
-          "lower": 0,
-          "upper": 4
-        }
-      ],
-      "collection_bound": null
-    },
-    "ground_truth": "timed_out",
-    "wall_seconds": 1800.7,
-    "measurement_source": "docs/qualification/ir304-kani-guard-cover-attempt.md, Result table: killed by the 1800 s cap (exit 124) with no verdict. NOT a V2 clause: the routed scalar harness for 'if x < y then x + 1 else 0' on arbitrary-precision rt::Integer values; only its lt and add operations are recorded as features, and the cost came from the bignum harness shape, which the features do not carry"
   }
 ]

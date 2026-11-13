@@ -55,7 +55,10 @@ pub struct OperationWidth {
     /// The catalog operation id.
     pub operation_id: String,
     /// The largest bit width, over its operands, of the interval range propagation yields.
-    pub bits: u32,
+    /// `None` when the operation has no integer operand or an operand's interval is unknown
+    /// (it exceeds `i128`); such an operation never matches a row.
+    #[serde(default)]
+    pub bits: Option<u32>,
 }
 
 /// An input's inclusive bounds.
@@ -126,21 +129,57 @@ where
     Option::<T>::deserialize(deserializer)
 }
 
+/// A measured wall-clock duration, kept as whole milliseconds so rows stay `Eq`. It reads and
+/// writes seconds, integer or fractional.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WallSeconds(u64);
+
+impl WallSeconds {
+    /// Whole milliseconds.
+    #[must_use]
+    pub const fn millis(self) -> u64 {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for WallSeconds {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let seconds = f64::deserialize(deserializer)?;
+        if !seconds.is_finite() || seconds < 0.0 || seconds > 1.0e12 {
+            return Err(serde::de::Error::custom(
+                "wall_seconds must be a finite, non-negative number of seconds",
+            ));
+        }
+        // Bounded and non-negative above, so the rounded value fits.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Ok(Self((seconds * 1000.0).round() as u64))
+    }
+}
+
+impl Serialize for WallSeconds {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Milliseconds below 1e15 are exact in an f64.
+        #[allow(clippy::cast_precision_loss)]
+        serializer.serialize_f64(self.0 as f64 / 1000.0)
+    }
+}
+
 /// One measured probe.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TractabilityRow {
     /// The catalog operation ids the probe exercised.
     pub operation_ids: Vec<String>,
-    /// The largest operand bit width the probe covered.
+    /// The operand bit width from which the probe did not finish: an operation at this width or
+    /// wider is intractable.
     pub max_operand_bits: u32,
     /// The collection bound of the probe, `null` when it had none. The key is required.
     #[serde(deserialize_with = "required")]
     pub collection_bound: Option<u64>,
     /// The measured verdict.
     pub verdict: RowVerdict,
-    /// Whole wall-clock seconds the probe took.
-    pub wall_seconds: u64,
+    /// Wall-clock seconds the probe took, fractional allowed.
+    pub wall_seconds: WallSeconds,
     /// Peak memory of the probe in bytes.
     pub peak_bytes: u64,
     /// The Kani version the probe ran under.
@@ -310,30 +349,34 @@ impl TractabilityTable {
 
 impl TractabilityDecider for TractabilityTable {
     /// Refuse when some operation of the clause appears in a current `not_tractable` row whose
-    /// `max_operand_bits` is at least that operation's width. Of several qualifying rows the
-    /// smallest `max_operand_bits` wins, then file order, then the clause's operation order.
+    /// `max_operand_bits` is at most that operation's width: a row at `B` bits says the
+    /// operation is intractable at `B` bits and wider. An operation with no known width never
+    /// matches. Of several qualifying rows the smallest `max_operand_bits` wins, then file
+    /// order, then the clause's operation order.
     fn decide(&self, features: &ClauseFeatures) -> Decision {
-        let mut best: Option<(&TractabilityRow, &OperationWidth)> = None;
+        let mut best: Option<(&TractabilityRow, &str, u32)> = None;
         for row in &self.rows {
             if row.verdict != RowVerdict::NotTractable || !row.is_current(features) {
                 continue;
             }
-            let Some(operation) = features.operations.iter().find(|operation| {
-                row.max_operand_bits >= operation.bits
-                    && row.operation_ids.contains(&operation.operation_id)
+            let Some((operation, bits)) = features.operations.iter().find_map(|operation| {
+                let bits = operation.bits?;
+                (bits >= row.max_operand_bits
+                    && row.operation_ids.contains(&operation.operation_id))
+                .then_some((operation.operation_id.as_str(), bits))
             }) else {
                 continue;
             };
             // A later row replaces the best only with strictly fewer bits, so file order breaks
             // ties.
-            if best.is_none_or(|(held, _)| row.max_operand_bits < held.max_operand_bits) {
-                best = Some((row, operation));
+            if best.is_none_or(|(held, ..)| row.max_operand_bits < held.max_operand_bits) {
+                best = Some((row, operation, bits));
             }
         }
-        best.map_or(Decision::Run, |(row, operation)| Decision::Refuse {
+        best.map_or(Decision::Run, |(row, operation, bits)| Decision::Refuse {
             reason: NotTractable {
-                operation_id: operation.operation_id.clone(),
-                width_bits: operation.bits,
+                operation_id: operation.to_owned(),
+                width_bits: bits,
             },
             evidence_row: Box::new(row.clone()),
         })

@@ -330,19 +330,28 @@ pub fn negotiate_kani_obligations(
     negotiate_integer_policy(request, false, &TractabilityTable::empty())
 }
 
-/// [`negotiate_kani_obligations`] with the generation request's options: the measured table
+/// Which integer encoding a negotiation selects.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntegerRoute {
+    /// [`negotiate_kani_obligations`]: the general encoding.
+    General,
+    /// [`negotiate_kani_native_obligations`]: the kernel-admitted native encoding.
+    Native,
+}
+
+/// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
 /// named by `tractability_table` decides which V2 clauses are refused as not tractable
 /// (FR-056). A named table that does not load fails the request and generates nothing.
 // Implements: FR-056
 pub fn negotiate_kani_obligations_with_options(
     request: &KaniObligationRequest<'_>,
     options: &GenerationOptions,
-    native: bool,
+    route: IntegerRoute,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     let table = options
         .load_table()
         .map_err(KaniObligationError::TractabilityTable)?;
-    negotiate_integer_policy(request, native, &table)
+    negotiate_integer_policy(request, route == IntegerRoute::Native, &table)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.
