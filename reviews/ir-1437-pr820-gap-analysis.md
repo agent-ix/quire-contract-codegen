@@ -31,3 +31,12 @@ Planless gap analysis of PR #820, scoped to the diff, covering the chain from FR
 - FR-055-AC-1: `every_owning_proof_is_an_ignored_lane_test_that_prints_the_verdict_on_failure` (new) checks the source shape that AC-1's real run depends on. It is supporting evidence, not the run itself. The Status line correctly does not claim AC-1's real half.
 - FR-055-AC-7: unchanged, still no real-Kani run, disclosed in the Status line.
 - Code with no owning requirement: none. The `falsified_verdict` change implements FR-055's `pass` marker for the scalar harness.
+
+## Dispositions
+
+Round 1, checked against fix commit 25f513ff (`git diff 22a44fc1..25f513ff`). Focused tests passed: 17 `kani_mutations::` tests. Kani was not run. The FR-055 and TC-069 Status lines are unchanged, and AC-1 and AC-7 are still not claimed.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | interface-001:374 now says that only the FR-029 terminal map and the scalar native run (`proof_failure_class` and `falsified_verdict`, which also requires a failed non-cover check) read the cause |
+| FND-002 | fixed | `every_shipped_mutant_still_parses_as_rust_once_injected` is now tagged FR-055-AC-9 |

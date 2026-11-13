@@ -36,3 +36,14 @@ The coder's diagnosis (`FailedWithoutCounterexample` with `PropertiesFailed`) is
 - Soundness of the `PropertiesFailed` arm traced from the report (`error_details[].exit_status`) through `Record::of` to `falsified_verdict`. Timeout, OOM, exit-code, unknown and missing causes all return `None`, and the unit test covers four of them.
 - Test strength: the new unit assertions fail without the new arm. In `a_fail_row_names_its_cause_exit_status_and_the_tail_of_the_output`, each cause branch has a distinct stand-in, and the tail test fails if the whole output is printed. `every_owning_proof_is_an_ignored_lane_test_that_prints_the_verdict_on_failure` fails if a declared proof uses a bare `.expect` (the tc_027 receipt fix at kani_obligations.rs:2595 is what makes it pass).
 - No scope creep, pins or ceremony. The change is confined to the gate, the verdict helper and its tests.
+
+## Dispositions
+
+Round 1, checked against fix commit 25f513ff (`git diff 22a44fc1..25f513ff`). Focused tests passed: the scalar unit test `only_a_falsified_proof_emits_the_kani_rejection_verdict` and 17 `kani_mutations::` tests. A local libtest probe under `--ignored --test-threads=1 --nocapture --exact`, with stdout and stderr in one file, confirmed the line layout. libtest writes `test <name> ... ` with no newline before the test's own output, so without the leading `println!()` the marker lands on that line and no exact line exists. With it, the marker is a line of its own. A panic Debug that quotes Kani's console keeps the marker inside an escaped string on a longer line. No other process writes the line: Kani's stdout and stderr are piped (launch.rs:357-358), `--exact` runs one test, and `src/kani` has no custom `Debug` impl. Kani and make ci were not run.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `has_marker_line` accepts only a line that, with trailing whitespace trimmed, equals the marker. `verified_or_print_verdict` prints `println!()` before the verdict. `only_a_line_that_is_exactly_the_verdict_rejects_a_mutant` puts the marker inside a panic line and requires `fail` |
+| FND-002 | fixed | The `FailedWithoutCounterexample` arm also requires a check of class `Other(_)` with status `Failure`, the `failed_property` rule. The unit test pins `None` for an undetermined check, a failed cover, a successful check and no check |
+| FND-003 | fixed | `explain_failure` decides first on a `running 1 test` line, which is libtest's start of the owning test, before any compile-error text. The `ranbuild` stand-in covers this |
+| FND-004 | fixed | After the 40-line cut, the tail is capped at 8192 bytes and cut forward to a char boundary. The `huge` stand-in (100 000 bytes on one line) checks the bound |
