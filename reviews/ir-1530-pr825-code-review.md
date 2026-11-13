@@ -40,3 +40,18 @@ IR-1526 consumers (question d): no behaviour change. Generation tables (`tests/f
 The data change is sound and the tests match it; the embedded table equals the docs file. Not
 mergeable yet: FND-001 is a recoverable data correction (no re-probe), and FND-002 is about
 reproducibility of the evidence. Both are small and fit in this PR.
+
+## Dispositions
+
+Round 1, checked against d1c36471 (212a7dfd..d1c36471). fmt clean; `it` tractability, layout and every fixture-user module (kani_obligations, routed_generation, exact_scalar_*, kani_gate, kani_scalar_native_*, kani_obligations_state_frame): 308 passed, 16 ignored. The fixture refactor preserves behaviour:
+`bounded_increment_package()` now calls `increment_package_over(Bound::Integer(0, 9))`, whose body
+is the old body with the local `let bound = Bound::Integer(0, 9)` turned into the parameter. The
+code, application, operation and literal are unchanged, so every caller still gets the same
+`Int[0, 9]` package. The probe was not rerun under Kani at this source. It compiles, is
+`#[ignore]`d, and asserts the operand bounds `[(2, 2), (1, 1)]`. That is acceptable: its run is
+the journal-recorded one by the same name.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | Row `peak_bytes` is 14602888806 (13.6 * 2^30), and the doc labels it the systemd scope peak of the 2-bit probe, build included, not the runner's. |
+| FND-002 | fixed | The probe is committed as the ignored Kani-lane test `ir1530_probe_general_route_two_bit_add` (tests/it/kani_obligations.rs:3168-3214), which asserts `Inconclusive { TimedOut }`, and the doc names it and its fixture. |

@@ -31,3 +31,9 @@ tautologies.
 ## Verdict
 
 Clean. Coverage of the two-row table is complete at the decider and wrapper levels.
+
+## Dispositions
+
+Round 1, checked against d1c36471. No findings to dispose. The new native-route assertions at 2,
+3 and 4 bits strengthen the FR-056-AC-15 binder, and the ignored probe adds a Kani-lane binder with
+no trace tag. That is consistent with the #819 probe precedent.

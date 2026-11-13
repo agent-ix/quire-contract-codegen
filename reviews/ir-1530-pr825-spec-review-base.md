@@ -27,3 +27,12 @@ from 2 bits") and TC-070 step 14, which this PR leaves unchanged, against the ne
 ## Verdict
 
 Wording only. Neither finding changes behaviour, and both fit in this PR's fix round.
+
+## Dispositions
+
+Round 1, checked against d1c36471.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | FR-056 Description: "Widths below a row's `max_operand_bits` (2 for add, 4 for sub) on the general route are unmeasured". |
+| FND-002 | fixed | TC-070 step 14 now asserts add refused at 2, 3 and 4 bits and run at 1, sub refused at 4 and run at 3, and native features at the same widths run; the test adds the native add assertions at 2, 3 and 4 bits. |
