@@ -342,7 +342,19 @@ pub fn negotiate_kani_obligations_with_options(
     let table = options
         .load_table()
         .map_err(KaniObligationError::TractabilityTable)?;
-    negotiate_integer_policy(request, route, &table)
+    negotiate_kani_obligations_with_decider(request, &table, route)
+}
+
+/// [`negotiate_kani_obligations_with_options`] with the decider given directly (FR-056-AC-1): any
+/// implementation of the one [`TractabilityDecider`] interface decides which V2 clauses are
+/// refused on `route`, and receives that route in its clause features (FR-056-AC-2).
+// Implements: FR-056
+pub fn negotiate_kani_obligations_with_decider(
+    request: &KaniObligationRequest<'_>,
+    decider: &dyn TractabilityDecider,
+    route: IntegerRoute,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, route, decider)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.

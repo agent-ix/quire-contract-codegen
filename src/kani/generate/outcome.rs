@@ -316,7 +316,7 @@ pub enum UnsupportedObligation {
         operation_identity: String,
         /// The operation's width in bits after range propagation.
         width_bits: u32,
-        /// The integer route of the refused negotiation.
+        /// The route of the refused clause, the one the matching row measured.
         route: crate::kani::tractability::IntegerRoute,
         /// The measured row, with its Kani, CBMC, solver, generator and kernel versions.
         row: Box<crate::kani::tractability::TractabilityRow>,

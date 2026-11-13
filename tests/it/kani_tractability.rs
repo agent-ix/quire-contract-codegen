@@ -48,15 +48,11 @@ fn features_on(route: IntegerRoute, operations: Vec<OperationWidth>) -> ClauseFe
     ClauseFeatures::new(route, operations, Vec::new(), None)
 }
 
-/// A general-route row as table-file JSON, current at CG's own generator and kernel versions.
+/// A row as table-file JSON, current at CG's own generator and kernel versions.
 fn row_json(ids: &[&str], max_operand_bits: u32, verdict: &str) -> Value {
-    row_json_on("general", ids, max_operand_bits, verdict)
-}
-
-fn row_json_on(route: &str, ids: &[&str], max_operand_bits: u32, verdict: &str) -> Value {
     json!({
         "operation_ids": ids,
-        "route": route,
+        "route": "general",
         "max_operand_bits": max_operand_bits,
         "collection_bound": null,
         "verdict": verdict,
@@ -315,12 +311,7 @@ fn tc_070_the_table_loads_from_data_and_a_bad_row_fails_the_load() {
         .remove("collection_bound");
     let mut fractional_width = row_json(&[MUL], 64, "not_tractable");
     fractional_width["max_operand_bits"] = json!(64.5);
-    let mut missing_route = row_json(&[MUL], 64, "not_tractable");
-    missing_route.as_object_mut().unwrap().remove("route");
-    let unknown_route = row_json_on("fast", &[MUL], 64, "not_tractable");
     for (name, bad) in [
-        ("missing-route", missing_route),
-        ("unknown-route", unknown_route),
         ("unknown-verdict", unknown_verdict),
         ("missing-field", missing_field),
         ("missing-nullable", missing_nullable),
@@ -658,7 +649,9 @@ fn tc_070_the_reported_row_is_deterministic() {
 /// FR-056-AC-9: the runner never consults the decider, so a clause the decider lets through that
 /// exceeds the wall-clock ceiling ends `Inconclusive` with the timed-out reason, which the
 /// unchanged two-phase runner test `a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling`
-/// asserts. Here: no non-test source under `src/kani/run/` mentions the decider.
+/// asserts. Here: no non-test source under `src/kani/run/` consults the decider; the
+/// pre-launch wrapper of IR-1530 lives in `src/kani/terminal/tractable.rs`, decides before any
+/// process starts and is never reached from the launch, classification or timeout code.
 #[trace("FR-056-AC-9", "TC-070")]
 #[test]
 fn tc_070_the_runner_does_not_consult_the_decider() {
@@ -670,7 +663,13 @@ fn tc_070_the_runner_does_not_consult_the_decider() {
             } else if path.extension().is_some_and(|extension| extension == "rs") {
                 let name = path.file_name().unwrap().to_string_lossy().into_owned();
                 let source = fs::read_to_string(&path).unwrap();
-                if !name.contains("test") && source.to_lowercase().contains("tractab") {
+                if !name.contains("test")
+                    && (source.to_lowercase().contains("tractab")
+                        || source.contains(".decide(")
+                        || source.contains("obligation_decided")
+                        || source.contains("obligations_decided")
+                        || source.contains("refuse_if_not_tractable"))
+                {
                     found.push(path);
                 }
             }
@@ -803,14 +802,6 @@ fn tc_070_every_corpus_row_names_its_measurement() {
             row.id
         );
         assert!(!row.features.operations.is_empty(), "{}", row.id);
-        // The route a row was measured on: the ir1526 probes ran the general carrier, the ir1022
-        // and ir1509 controls came from the native negotiation.
-        let expected = if row.id.starts_with("ir1526-") {
-            IntegerRoute::General
-        } else {
-            IntegerRoute::Native
-        };
-        assert_eq!(row.features.route, expected, "{}", row.id);
         if matches!(
             row.ground_truth,
             GroundTruth::Verified | GroundTruth::Falsified
@@ -962,12 +953,11 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     );
 }
 
-/// The multiply fixtures of the installed-Kani FR-056-AC-13 test, negotiated on the host. The
-/// table row is a general-route row, so the wide multiply is refused on the general route and is
-/// not refused as not tractable on the native route (which renders no two-parameter
-/// precondition, so it ends `RenderFailed`); the narrow multiply is let through to a harness on
-/// the general route.
-#[trace("FR-056-AC-13", "TC-070")]
+/// The multiply fixtures of the installed-Kani FR-056-AC-13 test, negotiated on the host: the
+/// wide multiply is refused and the narrow one is let through to a harness. The row is a
+/// general-route row, so the native route is not refused by it. The native route cannot render a two-parameter precondition at all
+/// (`RenderFailed`), so the narrow clause is checked on the general route.
+#[trace("FR-056-AC-13", "FR-056-AC-14", "FR-056-AC-4", "TC-070")]
 #[test]
 fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
     let directory = TemporaryDirectory::new("ir1526-ac13");
@@ -994,17 +984,47 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
         }
     ));
     assert_eq!(harness_count(&wide), 0);
+    // The row is a general-route row: the native route is not refused by it (it ends in another
+    // disposition, the native route rendering no two-parameter precondition).
     let native_wide = negotiate(1 << 20, IntegerRoute::Native);
-    assert!(
-        !matches!(
-            disposition(&native_wide, 0),
-            ObligationDisposition::Unsupported {
-                reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+    assert!(!matches!(
+        disposition(&native_wide, 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
+    // The reverse: a native-route row refuses the native clause, reports the native route and
+    // leaves the general clause alone (FR-056-AC-2, AC-4, AC-14 through negotiation).
+    let native_path = {
+        let mut native_row = row_json(&[MUL], 21, "not_tractable");
+        native_row["route"] = json!("native");
+        write_table(&directory, "native-table.json", &[native_row])
+    };
+    let negotiate_on = |route: IntegerRoute| {
+        let (package, clause) = package(1 << 20, 1 << 20, "other * offset + 3 <= 100");
+        let claim = crate::common::v2_claim::claim_for(&package, &clause);
+        negotiate_kani_obligations_with_options(
+            &request(&[item(&package, &clause, &claim)]),
+            &options(&native_path),
+            route,
+        )
+        .unwrap()
+    };
+    assert!(matches!(
+        disposition(&negotiate_on(IntegerRoute::Native), 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable {
+                route: IntegerRoute::Native,
+                ..
             }
-        ),
-        "{:?}",
-        disposition(&native_wide, 0)
-    );
+        }
+    ));
+    assert!(!matches!(
+        disposition(&negotiate_on(IntegerRoute::General), 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
     let narrow = negotiate(1 << 9, IntegerRoute::General);
     assert_eq!(harness_count(&narrow), 1);
     assert!(
@@ -1017,90 +1037,254 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
     );
 }
 
-/// FR-056-AC-2 and FR-056-AC-14 at the decider: a row matches only its own route, the refusal
-/// reports the clause's route, a `tractable` row never refuses, and a native row at a smaller
-/// bound does not take precedence over a qualifying general row.
-#[trace("FR-056-AC-14", "TC-070")]
+// IR-1530: the run-level refusal of the general `rt::Integer` scalar route, through the same
+// decider seam, table and `V2ClauseNotTractable` arm.
+
+const GENERAL_SCALAR_TABLE: &str = "docs/qualification/ir1530-general-route-scalar-table.json";
+
+fn general_scalar_table() -> TractabilityTable {
+    TractabilityTable::shipped_general_route_scalar().expect("the embedded row loads")
+}
+
+#[trace("TC-070", "FR-056-AC-15")]
 #[test]
-fn tc_070_lookup_matches_rows_only_for_the_clause_route() {
-    let on = |route| features_on(route, vec![op_width(MUL, 30)]);
-    for (row_route, row_side, other_side) in [
-        ("general", IntegerRoute::General, IntegerRoute::Native),
-        ("native", IntegerRoute::Native, IntegerRoute::General),
-    ] {
-        let table = table_of(&[row_json_on(row_route, &[MUL], 21, "not_tractable")]);
-        match table.decide(&on(row_side)) {
-            Decision::Refuse { evidence_row, .. } => assert_eq!(evidence_row.route, row_side),
-            Decision::Run => panic!("the {row_route} clause is refused by its own route's row"),
-        }
-        assert_eq!(table.decide(&on(other_side)), Decision::Run, "{row_route}");
-        let tractable = table_of(&[
-            row_json_on("general", &[MUL], 21, "tractable"),
-            row_json_on("native", &[MUL], 21, "tractable"),
-        ]);
-        assert_eq!(tractable.decide(&on(row_side)), Decision::Run);
-        assert_eq!(tractable.decide(&on(other_side)), Decision::Run);
-    }
-    // A native row at 10 bits does not displace the general row at 21 bits on the general route.
-    let table = table_of(&[
-        row_json_on("native", &[MUL], 10, "not_tractable"),
-        row_json_on("general", &[MUL], 21, "not_tractable"),
-    ]);
-    match table.decide(&on(IntegerRoute::General)) {
-        Decision::Refuse { evidence_row, .. } => {
-            assert_eq!(evidence_row.route, IntegerRoute::General);
-            assert_eq!(evidence_row.max_operand_bits, 21);
-        }
-        Decision::Run => panic!("the general row qualifies"),
+fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
+    let from_file =
+        TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
+            .expect("the docs file loads");
+    assert_eq!(general_scalar_table(), from_file);
+    assert_eq!(from_file.rows().len(), 1);
+}
+
+/// A request whose launcher and crate do not exist: any attempt to run it would be a different
+/// refusal (`Tool` or `HarnessNotInCrate`), so a `NotTractable` refusal proves no launch.
+fn unlaunchable<'a>(
+    cancel: &'a quire_exact::Cancel,
+    installation: &'a quire_contract_codegen::KaniInstallation,
+    harness: quire_contract_codegen::KaniExecutableHarness<'a>,
+    missing: &'a Path,
+) -> quire_contract_codegen::KaniExecutionRequest<'a> {
+    quire_contract_codegen::KaniExecutionRequest {
+        cancel,
+        installation,
+        harness,
+        crate_directory: missing,
+        target_directory: missing,
+        home_directory: None,
     }
 }
 
-/// FR-056-AC-2 and FR-056-AC-14 through generation: the same clause is refused as not tractable
-/// on the route of the row and reports that route, and is not refused on the other route.
+#[trace("TC-070", "FR-056-AC-15")]
+#[test]
+fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
+    use quire_contract_codegen::{
+        execute_kani_obligation_decided, execute_kani_obligations_decided, DecidedRunRefusal,
+    };
+    let table = general_scalar_table();
+    let (harness, _) = super::kani_obligations::routed_scalar_increment();
+    let cancel = quire_exact::Cancel::new();
+    let installation = quire_contract_codegen::KaniInstallation::new("/nonexistent/cargo-kani");
+    let missing = Path::new("/nonexistent/crate");
+    let request = unlaunchable(&cancel, &installation, (&harness).into(), missing);
+
+    let refusal = execute_kani_obligation_decided(&request, &table)
+        .expect_err("the general route is a measured not-tractable row");
+    let DecidedRunRefusal::NotTractable {
+        harness_path,
+        refusal,
+    } = refusal
+    else {
+        panic!("expected NotTractable, got {refusal:?}");
+    };
+    assert_eq!(harness_path, harness.rust.path);
+    let UnsupportedObligation::V2ClauseNotTractable {
+        node_id,
+        operation_identity,
+        width_bits,
+        route,
+        row,
+    } = *refusal
+    else {
+        panic!("the one refusal arm is V2ClauseNotTractable");
+    };
+    assert_eq!(node_id, harness.identity.node_id);
+    assert_eq!(operation_identity, ADD);
+    assert_eq!(operation_identity, harness.identity.operation_identity);
+    assert_eq!(width_bits, 4, "Int[0, 9] is 4 bits");
+    assert_eq!(route, IntegerRoute::General);
+    assert_eq!(&*row, &general_scalar_table().rows()[0]);
+    assert_eq!(row.max_operand_bits, 4);
+    assert_eq!(row.kani_version, "0.68.0");
+    assert_eq!(row.cbmc_version, "6.11.0");
+    assert_eq!(row.solver_version, "cadical-3.0.0");
+    assert_eq!(row.generator_version, GENERATOR_VERSION);
+    assert_eq!(row.kernel_version, KERNEL_VERSION);
+
+    // A batch is refused whole, before any process starts.
+    let batch = execute_kani_obligations_decided(std::slice::from_ref(&request), &table);
+    assert!(matches!(batch, Err(DecidedRunRefusal::NotTractable { .. })));
+
+    // A mixed batch, the general harness second, is refused whole: the check does not stop at the
+    // first member and a refused member does not leave the others to run.
+    let (native, _) = super::kani_obligations::native_scalar_increment();
+    let native_request = unlaunchable(&cancel, &installation, (&native).into(), missing);
+    let mixed = [native_request, request];
+    match execute_kani_obligations_decided(&mixed, &table) {
+        Err(DecidedRunRefusal::NotTractable { harness_path, .. }) => {
+            assert_eq!(harness_path, harness.rust.path);
+        }
+        other => panic!("a mixed batch is refused whole: {other:?}"),
+    }
+    // The refusal is an error value with a message.
+    let message = execute_kani_obligations_decided(&mixed, &table)
+        .err()
+        .map(|refusal| refusal.to_string())
+        .unwrap();
+    assert!(
+        message.contains(ADD) && message.contains("4 bits"),
+        "{message}"
+    );
+}
+
+#[trace("TC-070", "FR-056-AC-15")]
+#[test]
+fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row() {
+    use quire_contract_codegen::{
+        execute_kani_obligation_decided, DecidedRunRefusal, KaniExecutionRefusal,
+    };
+    let table = general_scalar_table();
+    let (native, _) = super::kani_obligations::native_scalar_increment();
+    let cancel = quire_exact::Cancel::new();
+    let installation = quire_contract_codegen::KaniInstallation::new("/nonexistent/cargo-kani");
+    let missing = Path::new("/nonexistent/crate");
+    let request = unlaunchable(&cancel, &installation, (&native).into(), missing);
+    // The decider lets the native harness through: the run proceeds to its own refusals.
+    assert!(matches!(
+        execute_kani_obligation_decided(&request, &table),
+        Err(DecidedRunRefusal::Execution(
+            KaniExecutionRefusal::HarnessNotInCrate { .. } | KaniExecutionRefusal::Tool(_)
+        ))
+    ));
+
+    // The same operation at the same width on the native route matches no general row.
+    let general = features(vec![op_width(ADD, 4)]);
+    assert!(matches!(table.decide(&general), Decision::Refuse { .. }));
+    let native_features = features_on(IntegerRoute::Native, vec![op_width(ADD, 4)]);
+    assert!(matches!(table.decide(&native_features), Decision::Run));
+    // Narrower than the measured width is not refused.
+    let narrow = features(vec![op_width(ADD, 3)]);
+    assert!(matches!(table.decide(&narrow), Decision::Run));
+}
+
+/// A decider that records the features it is given and always runs.
+struct Recording(std::cell::RefCell<Vec<ClauseFeatures>>);
+
+impl TractabilityDecider for Recording {
+    fn decide(&self, features: &ClauseFeatures) -> Decision {
+        self.0.borrow_mut().push(features.clone());
+        Decision::Run
+    }
+}
+
+/// FR-056-AC-2 (route): negotiating `other * offset + 3 <= 100` on each route hands the decider
+/// features whose route is that route, with the same propagated widths; a fixed route fails.
 #[trace("FR-056-AC-2", "TC-070")]
+#[test]
+fn tc_070_the_decider_receives_the_negotiation_route() {
+    let seen = |route: IntegerRoute| {
+        let (package, clause) = package(1 << 9, 1 << 9, "other * offset + 3 <= 100");
+        let claim = crate::common::v2_claim::claim_for(&package, &clause);
+        let recording = Recording(std::cell::RefCell::new(Vec::new()));
+        quire_contract_codegen::negotiate_kani_obligations_with_decider(
+            &request(&[item(&package, &clause, &claim)]),
+            &recording,
+            route,
+        )
+        .expect("negotiates");
+        recording.0.into_inner()
+    };
+    let general = seen(IntegerRoute::General);
+    let native = seen(IntegerRoute::Native);
+    let [general] = general.as_slice() else {
+        panic!("one decision on the general route: {general:?}");
+    };
+    let [native] = native.as_slice() else {
+        panic!("one decision on the native route: {native:?}");
+    };
+    assert_eq!(general.route, IntegerRoute::General);
+    assert_eq!(native.route, IntegerRoute::Native);
+    assert_eq!(general.operations, native.operations);
+    assert!(general
+        .operations
+        .iter()
+        .any(|operation| operation.operation_id == MUL));
+}
+
+/// FR-056-AC-14 (decider level): rows match only features of their own route, in both
+/// directions, a `tractable` row never refuses, the report names the route and a native row at a
+/// smaller bound does not take precedence on the general route.
 #[trace("FR-056-AC-14", "TC-070")]
 #[test]
-fn tc_070_the_negotiated_route_decides_the_refusal() {
-    let directory = TemporaryDirectory::new("ir1526-route");
-    let (package, clause) = package(1 << 20, 1 << 20, "other * offset + 3 <= 100");
-    let claim = crate::common::v2_claim::claim_for(&package, &clause);
-    let items = [item(&package, &clause, &claim)];
-    for (row_route, row_side, other_side) in [
+fn tc_070_rows_match_only_their_own_route() {
+    let row = |route: &str, bits: u32, verdict: &str| {
+        let mut row = row_json(&[ADD], bits, verdict);
+        row["route"] = json!(route);
+        row
+    };
+    for (row_route, clause_route, other) in [
         ("general", IntegerRoute::General, IntegerRoute::Native),
         ("native", IntegerRoute::Native, IntegerRoute::General),
     ] {
+        let table = table_of(&[row(row_route, 8, "not_tractable")]);
+        let same = features_on(clause_route, vec![op_width(ADD, 8)]);
+        let Decision::Refuse { evidence_row, .. } = table.decide(&same) else {
+            panic!("a same-route row refuses");
+        };
+        assert_eq!(evidence_row.route, clause_route);
+        let across = features_on(other, vec![op_width(ADD, 8)]);
+        assert!(matches!(table.decide(&across), Decision::Run));
+        let tractable = table_of(&[row(row_route, 8, "tractable")]);
+        assert!(matches!(tractable.decide(&same), Decision::Run));
+    }
+    let table = table_of(&[
+        row("native", 2, "not_tractable"),
+        row("general", 8, "not_tractable"),
+    ]);
+    let Decision::Refuse { evidence_row, .. } = table.decide(&features(vec![op_width(ADD, 8)]))
+    else {
+        panic!("the general row refuses");
+    };
+    assert_eq!(evidence_row.max_operand_bits, 8);
+}
+
+/// FR-056-AC-3 (route): a row or features without a `route` key, or with another value, are
+/// malformed; there is no default route.
+#[trace("FR-056-AC-3", "TC-070")]
+#[test]
+fn tc_070_a_missing_or_unknown_route_is_malformed() {
+    let directory = TemporaryDirectory::new("tc070-route");
+    for (index, mutate) in [None, Some("other")].into_iter().enumerate() {
+        let mut bad = row_json(&[ADD], 8, "not_tractable");
+        match mutate {
+            None => {
+                bad.as_object_mut().unwrap().remove("route");
+            }
+            Some(value) => bad["route"] = json!(value),
+        }
         let path = write_table(
             &directory,
-            &format!("{row_route}.json"),
-            &[row_json_on(row_route, &[MUL], 21, "not_tractable")],
+            &format!("route-{index}.json"),
+            &[row_json(&[ADD], 8, "tractable"), bad],
         );
-        let negotiate = |route| {
-            negotiate_kani_obligations_with_options(&request(&items), &options(&path), route)
-                .unwrap()
-        };
-        let refused = negotiate(row_side);
-        assert!(
-            matches!(
-                disposition(&refused, 0),
-                ObligationDisposition::Unsupported {
-                    reason: UnsupportedObligation::V2ClauseNotTractable { route, .. }
-                } if *route == row_side
-            ),
-            "{row_route}: {:?}",
-            disposition(&refused, 0)
-        );
-        let other = negotiate(other_side);
-        assert!(
-            !matches!(
-                disposition(&other, 0),
-                ObligationDisposition::Unsupported {
-                    reason: UnsupportedObligation::V2ClauseNotTractable { .. }
-                }
-            ),
-            "{row_route}: {:?}",
-            disposition(&other, 0)
-        );
+        assert!(matches!(
+            TractabilityTable::load(&path),
+            Err(TractabilityLoadError::MalformedRow { row: 1, .. })
+        ));
     }
+    let mut feature = serde_json::to_value(features(vec![op_width(ADD, 8)])).unwrap();
+    assert_eq!(feature["route"], json!("general"));
+    feature.as_object_mut().unwrap().remove("route");
+    assert!(serde_json::from_value::<ClauseFeatures>(feature).is_err());
 }
 
 /// The features the decider computes for `condition` over `other` and `offset`, both

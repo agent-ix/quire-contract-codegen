@@ -49,14 +49,41 @@ Evidence for the row:
 The cost is the `rt::Integer` bignum heap shape, which no forget placement removes, so the general
 integer scalar route is not tractable at unwind 3, 600 s and 24 GiB.
 
-## Refusal of the general route: not built here
+## Refusal of the general route: built at the run level
 
-Refusal of the general integer scalar route is NOT built in this change. IR-1526 (FR-056) covers V2
-clauses only. A generation-level refusal breaks 84 host tests that exercise this route, so the
-refusal, if wanted, belongs at the Kani run/verdict level (a run-time refusal to attempt the
-real-Kani lane on this shape). That is a proposed follow-up awaiting a planner ruling.
+The row above is shipped as data in `ir1530-general-route-scalar-table.json` (the FR-056 table
+shape, with `"route": "general"`, the FR-056 route of the `rt::Integer` carrier, so it never applies to the native route). The
+refusal is FR-056-AC-15: `execute_kani_obligation_decided` and `execute_kani_obligations_decided`
+(`src/kani/terminal/tractable.rs`) ask the one `TractabilityDecider` seam, with features on the
+`general` route, before any Kani process starts, and return
+`DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node,
+operation id, width, the row with its Kani, CBMC, solver, generator and kernel versions). It is
+decided at the run, not at generation: a generation-level refusal broke the host tests that
+exercise this route (below), so generation still emits the harness and the wall-clock ceiling
+stays the backstop. The native-route harness is not refused only because the shipped table holds no
+`native` row: the decided wrappers ask the decider on the harness's own route, so a `native` row
+would refuse it.
 
-Blast-radius evidence. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
+Rows apply per route across both shapes, a V2 clause at generation and a routed scalar harness at
+the run. What the row measures is the `rt::Integer` carrier, not the shape, so the same
+`general` add row would refuse a general-route V2 clause. The shipped scalar row is therefore
+scoped by use, not by schema: it is embedded for the decided run wrappers and must not be passed as
+a generation `tractability_table`.
+
+The refusal is opt-in: the caller passes the table to the decided wrappers, and with none passed
+the harness runs. CG ships the table in-crate (`TractabilityTable::shipped_general_route_scalar`,
+embedded from the JSON file, which is the single source; a test pins the equality). The production
+caller is quire-driver (`src/provider.rs` ~308, `src/upstream.rs` ~191, which call
+`execute_kani_obligation` on `generate_routed` harnesses); it will be wired to the decided wrapper
+in a quire-driver PR under IR-1530. Operand widths below the row's 4 bits on this route are
+unmeasured: nothing narrower was probed, so such a harness is not refused and is left to the
+wall-clock backstop.
+
+The `solver_version` of the row, `cadical-3.0.0`, was not captured in the #816 probe logs. It is the
+CaDiCaL that the same Kani 0.68.0 / CBMC 6.11.0 installation reports ("Solving with CaDiCaL 3.0.0"
+the FR-015-AC-99 close-out run is the real run record; the TC-043 mention is fixture text, not a run log).
+
+Blast-radius evidence for the rejected generation-level alternative. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
 stable serde code, carrying the node, the operation identity and `use_instead:
 "generate_routed_native"`) replaced the Add, Subtract, Multiply and Negate scalars in
 `negotiate_integer_policy` whenever the integer policy was not native (Implies untouched). It
@@ -81,7 +108,7 @@ shared-fixture cascade is possible):
 About 50 test call sites use `generate_routed`; the crate has no other production caller of it
 outside its own routing code.
 
-What this change delivers: the real-Kani scalar lane tests below run on the native route with
+What IR-1530 delivers: the typed run-level refusal above; the real-Kani scalar lane tests below run on the native route with
 executed verdicts, and the general route is recorded not tractable in the table-shaped row above.
 
 ## Tests moved to the native route

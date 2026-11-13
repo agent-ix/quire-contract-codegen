@@ -25,8 +25,9 @@ const fn kernel_version() -> u32 {
     KERNEL_VERSION
 }
 
-/// Which integer encoding a negotiation selects.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+/// Which integer encoding a negotiation selects. It is also the tractability route (FR-056): the
+/// `general` and `native` keys of the measured table and the clause features.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IntegerRoute {
     /// `negotiate_kani_obligations`: the general encoding.
@@ -65,8 +66,6 @@ pub struct InputBound {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClauseFeatures {
-    /// The integer route of the negotiation.
-    pub route: IntegerRoute,
     /// The ordered operations of the clause.
     pub operations: Vec<OperationWidth>,
     /// The input bounds.
@@ -74,6 +73,8 @@ pub struct ClauseFeatures {
     /// The collection bound, absent when the clause has none.
     #[serde(default)]
     pub collection_bound: Option<u64>,
+    /// The route of the negotiation. The key is required; there is no default route.
+    pub route: IntegerRoute,
     /// CG's generator version.
     #[serde(default = "generator_version")]
     pub generator_version: String,
@@ -83,7 +84,7 @@ pub struct ClauseFeatures {
 }
 
 impl ClauseFeatures {
-    /// Features at CG's own generator and kernel versions.
+    /// Features on `route` at CG's own generator and kernel versions.
     #[must_use]
     pub fn new(
         route: IntegerRoute,
@@ -92,10 +93,10 @@ impl ClauseFeatures {
         collection_bound: Option<u64>,
     ) -> Self {
         Self {
-            route,
             operations,
             inputs,
             collection_bound,
+            route,
             generator_version: generator_version(),
             kernel_version: kernel_version(),
         }
@@ -161,7 +162,7 @@ impl Serialize for WallSeconds {
 pub struct TractabilityRow {
     /// The catalog operation ids the probe exercised.
     pub operation_ids: Vec<String>,
-    /// The integer route the probe ran on. The key is required: there is no default route.
+    /// The route the probe measured. The key is required; there is no default route.
     pub route: IntegerRoute,
     /// The operand bit width from which the probe did not finish: an operation at this width or
     /// wider is intractable.
@@ -320,6 +321,20 @@ impl TractabilityTable {
             message: error.to_string(),
         })?;
         Self::parse(path, &bytes)
+    }
+
+    /// The measured row of the general `rt::Integer` scalar route (IR-1530), embedded from
+    /// `docs/qualification/ir1530-general-route-scalar-table.json`, the single source. A caller
+    /// passes it to the decided run wrappers to opt in to the refusal (FR-056-AC-15).
+    ///
+    /// # Errors
+    ///
+    /// [`TractabilityLoadError`] if the embedded file is malformed (a build defect a test pins).
+    pub fn shipped_general_route_scalar() -> Result<Self, TractabilityLoadError> {
+        Self::parse(
+            Path::new("docs/qualification/ir1530-general-route-scalar-table.json"),
+            include_bytes!("../../docs/qualification/ir1530-general-route-scalar-table.json"),
+        )
     }
 
     fn parse(path: &Path, bytes: &[u8]) -> Result<Self, TractabilityLoadError> {
