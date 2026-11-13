@@ -77,3 +77,21 @@ contract's not-tractable branch is not fully met, though: the typed-refusal half
 whose scope excludes it (FND-001, needs a planner decision), and the row is not in a usable form
 (FND-002). Not mergeable until FND-001 is resolved, either by a filed and owned follow-up that the
 record cites or by a scope amendment.
+
+## Dispositions
+
+Round 1, reviewed head 7be5af40 (four commits on c17e1ee3: 61a49047, 10bd2b48, d3690eef, 7be5af40). Reviewer runs at this head (PR worktree, `flock /tmp/cargo-slot.lock`, `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, foreground, one at a time; log `/tmp/claude-1000/-home-peter-dev/946968da-15f0-4263-9043-0b20b68f7193/scratchpad/rev1530-r1.log`): `tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders` ok 19.56 s, peak 0.94 GB; private lib `routed::scalar_native_private::seeded_false_bound_harness_produces_a_paired_completion_refusal` ok 31.68 s, peak 3.10 GB.
+
+Ruling relayed by the coordinator: option 3, the refusal is not built in this PR. The coder's
+generation-level experiment (a `GeneralIntegerScalarNotTractable` arm in `negotiate_integer_policy`
+for non-native Add/Subtract/Multiply/Negate) broke 3 `--lib` and 81 `--test it` tests. The reviewer did
+not re-run it. The claim is credible: there are 58 `generate_routed(` call sites in `src/` and
+`tests/`, and the shared general fixtures feed host-only harness-text, record, playback, replay and
+settlement tests that never run Kani. The per-file distribution matches that pattern. So the argument
+that refusing at generation is the wrong layer holds: it would remove host evidence that does not
+depend on Kani tractability.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | deferred | The typed refusal is outside this PR: FR-056/IR-1526 is V2-clause only, and a generation-level refusal is the wrong layer (84-test blast radius, recorded). The record and PR body now say plainly that refusal is not built and is a proposed run/verdict-level follow-up awaiting the planner's ruling. The false claim that it "stays with IR-1526" is removed. IR-1530 must stay In Progress (not Done) until the planner rules and either a follow-up ticket exists or the contract clause is dropped |
+| FND-002 | fixed | The record now carries a table-shaped row: operation_ids `quire.op.integer.add`/`quire.op.integer.sub` (matching the catalog ids in `src/`), max_operand_bits 4, collection_bound none, verdict not_tractable, wall 600, peak bytes, Kani 0.68.0 / CBMC 6.11.0 / cadical / unwind 3, generator main bb3e6176, kernel quire-exact e82db487 (matches Cargo.lock), host and date |

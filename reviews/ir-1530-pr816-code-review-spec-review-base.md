@@ -48,3 +48,12 @@ arithmetic mutant on the admitted native-integer API, so the move agrees with it
 Not mergeable as is: FND-001 leaves FR-017-AC-27 and TC-027 describing the general route while the
 evidence runs the native route. The fix is a small spec edit in this PR. FND-002 is a one-line
 cross-reference. The other examined rows stay accurate.
+
+## Dispositions
+
+Round 1, reviewed head 7be5af40 (four commits on c17e1ee3: 61a49047, 10bd2b48, d3690eef, 7be5af40). Reviewer runs at this head (PR worktree, `flock /tmp/cargo-slot.lock`, `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, foreground, one at a time; log `/tmp/claude-1000/-home-peter-dev/946968da-15f0-4263-9043-0b20b68f7193/scratchpad/rev1530-r1.log`): `tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders` ok 19.56 s, peak 0.94 GB; private lib `routed::scalar_native_private::seeded_false_bound_harness_produces_a_paired_completion_refusal` ok 31.68 s, peak 3.10 GB.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | FR-017-AC-27 now reads "from `generate_routed_native` (the general `generate_routed` integer scalar route is recorded not tractable in `docs/qualification/ir1530-general-route-scalar-not-tractable.md`)". The TC-027 AC-11 paragraph, the paired-receipt paragraph and the AC-31 paragraph name `generate_routed_native` |
+| FND-002 | fixed | The IR-304 record has a forward reference at line 20 and a "Superseded by ir1530-general-route-scalar-not-tractable.md" note heading its "Existing real-Kani scalar tests" section |

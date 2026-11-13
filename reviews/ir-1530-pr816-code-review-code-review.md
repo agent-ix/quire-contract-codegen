@@ -57,3 +57,13 @@ The four moved tests are correct, keep every assertion (one is stricter), and tw
 Not mergeable at c17e1ee3: FND-001 leaves a red general-route test in the same lane the PR claims to
 make green, with the same cause. FND-002 and FND-003 are record completeness, fixable in the same
 round.
+
+## Dispositions
+
+Round 1, reviewed head 7be5af40 (four commits on c17e1ee3: 61a49047, 10bd2b48, d3690eef, 7be5af40). Reviewer runs at this head (PR worktree, `flock /tmp/cargo-slot.lock`, `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, foreground, one at a time; log `/tmp/claude-1000/-home-peter-dev/946968da-15f0-4263-9043-0b20b68f7193/scratchpad/rev1530-r1.log`): `tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders` ok 19.56 s, peak 0.94 GB; private lib `routed::scalar_native_private::seeded_false_bound_harness_produces_a_paired_completion_refusal` ok 31.68 s, peak 3.10 GB. The only `src/` change is in `#[cfg(test)] false_bound_harness_for_test`, which now copies `native_integer_selection` from the original harness. A general original still carries `None`, so its output is unchanged.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The subtraction receipt test uses the new `native_scalar_binary_subtraction_with_artifacts()` (`routed_native_scalar_with_artifacts`, same package, code 49_102 and `Int[-9, 9]`) with every assertion kept; reviewer run Verified in both orders, 19.56 s; record row added |
+| FND-002 | fixed | The three private controls use `native_fixture()` (same package and code 49_190, native route); the codegen-only control at line 524 stays general (no verification). Reviewer ran `seeded_false_bound_harness_produces_a_paired_completion_refusal`: ok 31.68 s. The record lists all three with verdicts |
+| FND-003 | fixed | The probe was re-run and is recorded: exact generator edit (unguarded forgets), fixture swap, scope OOM-kill at 57 s per the user journal (`Failed with result 'oom-kill'`, cbmc anon-rss 25.0 GB), Kani 0.68.0 / CBMC 6.11.0, edits reverted; the earlier log-less probe is named as superseded |
