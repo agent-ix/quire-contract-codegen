@@ -131,20 +131,26 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 
 PARTIAL (IR-1526). FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
-FR-056-AC-10 is partial: the shipped corpus holds thirteen measured rows. Ten are `verified` or
-`falsified` and all of the one IR-1022 clause and its mutants. Three are `timed_out` general-route V2
-clauses (`other * offset + 3 <= 100`, operands `Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits,
-each `TimedOut` at the 600 s ceiling under Kani 0.68.0), measured by
-`ir1526_probe_wide_integer_multiply_under_installed_kani`. Every one of them also holds an add and a
-compare at twice the multiply's width, and all ran on the general-route `rt::Integer` carrier, which
-`docs/qualification/ir1530-general-route-scalar-not-tractable.md` measured not tractable for an add at
-4 bits; the corpus features carry no route, so these rows do not show that the multiply is the cause.
-CG's measured table (`tests/fixtures/tractability/table.json`) holds one `not_tractable` row, integer
-multiply from 15 bits, whose attribution waits on the add control probe (`IR1526_PROBE_OP=add`).
-Still missing for AC-10: a route feature in the corpus features, Meter, decimal and pure-relational
-cases and a multi-operation clause that is not integer arithmetic. The ir1530 timeout is of the
-scalar harness, not a V2 clause, so it is not a corpus row. Those rows need new installed-Kani
-measurements. The probe rows' `peak_bytes` is `null`: the runner reported no peak. FR-056-AC-13 is coded as an ignored kani-lane test and has not
+FR-056-AC-10 is partial: the shipped corpus holds fourteen measured rows. Ten are `verified` or
+`falsified` and all of the one IR-1022 clause and its mutants. Four are general-route V2 clauses that
+did not finish under Kani 0.68.0 within the ceiling. Three are `other * offset + 3 <= 100`, operands
+`Int[0, 2^n - 1]` for n = 15, 23 and 31 unsigned bits, each `TimedOut` at 600 s. One is the control
+`other + offset <= 100` (no multiply) at n = 15, which ended `FailedWithoutCounterexample` after
+542.5 s, not a clean timeout; the corpus schema has no value for it, so it is recorded as `timed_out`
+with its exact outcome in the measurement source. All were measured by
+`ir1526_probe_wide_integer_multiply_under_installed_kani`. Because the add-only clause fails too,
+the measurements do not show that the multiply is the cause. All ran on the general-route
+`rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
+measured not tractable for an add at 4 bits.
+CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
+multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. The
+route is not a decider feature, so those rows also refuse clauses that would be tractable on the
+native route; the corpus holds no native-route clause of 15 bits or more, so that false-refuse is
+unmeasured. Still missing for AC-10: a route feature in the corpus features and in the decider,
+native-route wide cases, Meter, decimal and pure-relational cases and a multi-operation clause that
+is not integer arithmetic. The ir1530 timeout is of the scalar harness, not a V2 clause, so it is
+not a corpus row. Those rows need new installed-Kani measurements. The probe rows' `peak_bytes` is
+`null`: the runner reported no peak. FR-056-AC-13 is coded as an ignored kani-lane test and has not
 been run under installed Kani; its multiply refusal and pass-through fixtures also run as a host test
 (`tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound`). The narrow multiply is negotiated on the
 general route because the native route renders no two-parameter precondition. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13

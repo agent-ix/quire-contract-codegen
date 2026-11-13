@@ -937,11 +937,11 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
     );
 }
 
-/// The features the decider computes for `other * offset + 3 <= 100` with both operands
+/// The features the decider computes for `condition` over `other` and `offset`, both
 /// `Int[0, 2^operand_bits - 1]` (`operand_bits` unsigned bits, FR-056 Terms).
-fn probe_features(operand_bits: u32) -> ClauseFeatures {
+fn probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
     let upper = (1_i64 << operand_bits) - 1;
-    let (package, clause) = package(upper, upper, "other * offset + 3 <= 100");
+    let (package, clause) = package(upper, upper, condition);
     let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
     ClauseFeatures::new(
         derive_v2_clause_operation_widths(&package, &clause)
@@ -974,7 +974,7 @@ fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
         let id = format!("ir1526-wide-multiply-{bits}bit-operands");
         let row = corpus.iter().find(|row| row.id == id).expect(&id);
         assert!(matches!(row.ground_truth, GroundTruth::TimedOut), "{id}");
-        let mut computed = probe_features(bits);
+        let mut computed = probe_features("other * offset + 3 <= 100", bits);
         computed.generator_version = row.features.generator_version.clone();
         computed.kernel_version = row.features.kernel_version;
         assert_eq!(row.features, computed, "{id}");
@@ -984,4 +984,16 @@ fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
             "{id}: mul width"
         );
     }
+    // The add control holds no multiply.
+    let id = "ir1526-wide-add-15bit-operands";
+    let row = corpus.iter().find(|row| row.id == id).expect(id);
+    let mut computed = probe_features("other + offset <= 100", 15);
+    computed.generator_version = row.features.generator_version.clone();
+    computed.kernel_version = row.features.kernel_version;
+    assert_eq!(row.features, computed, "{id}");
+    assert!(row
+        .features
+        .operations
+        .iter()
+        .all(|op| op.operation_id != MUL));
 }

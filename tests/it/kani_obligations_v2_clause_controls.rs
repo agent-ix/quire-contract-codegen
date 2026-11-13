@@ -1679,7 +1679,9 @@ fn the_wide_probe_clauses_negotiate_supported_with_one_harness_at_every_width() 
 /// (default, `other * offset + 3 <= 100`) or `add` (the control, `other + offset <= 100`, which
 /// holds no multiply). Measured on terra (Kani 0.68.0, CBMC 6.11.0, generator 0.1.0, kernel 1,
 /// 24 GiB lane), op `mul`: operands of 15, 23 and 31 unsigned bits each ended `TimedOut` at the
-/// 600 s ceiling (wall 600.0 s, 600.1 s, 600.1 s). The runner reported no peak memory.
+/// 600 s ceiling (wall 600.0 s, 600.1 s, 600.1 s). Control, op `add` at 15 bits (no multiply):
+/// `Inconclusive(FailedWithoutCounterexample)` after 542.5 s, so an add-only general-route clause
+/// does not verify either. The runner reported no peak memory.
 #[test]
 #[ignore = "kani lane: IR1526_PROBE_BITS=<15|23|31> IR1526_PROBE_OP=<mul|add>, one run each, serially"]
 fn ir1526_probe_wide_integer_multiply_under_installed_kani() {
