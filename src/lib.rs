@@ -244,7 +244,7 @@ pub use crate::core::native_integer::{
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
     derive_v2_clause_descriptor, derive_v2_clause_operation_widths, generate_v2_clause_claim_map,
-    generate_v2_clause_native_oracle, generate_v2_clause_oracle, ClauseOracleInput,
+    generate_v2_clause_native_oracle, generate_v2_clause_oracle, interval_bits, ClauseOracleInput,
     ClauseOracleStateField, NativeClauseCapabilityReason, V2ClauseClaim, V2ClauseCoverageRegion,
     V2ClauseDescriptor, V2ClauseOracle, V2ClauseRefusal,
 };
@@ -284,9 +284,9 @@ pub use kani::output::playback::{
     PlaybackRefusal, PlaybackRefusalCode, WitnessDecodeLimits,
 };
 pub use kani::tractability::{
-    interval_bits, ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable,
-    OperationWidth, RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow,
-    TractabilityTable, WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
+    ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable, OperationWidth,
+    RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow, TractabilityTable,
+    WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{

@@ -25,28 +25,6 @@ const fn kernel_version() -> u32 {
     KERNEL_VERSION
 }
 
-/// The smallest bit count `n` such that every value of `[lower, upper]` is representable in `n`
-/// bits: unsigned `bits(upper)` when `lower >= 0`, else two's complement signed.
-///
-/// The native carrier is signed, so `[0, 2^k]` counts as `k + 1` bits.
-#[must_use]
-pub fn interval_bits(lower: i128, upper: i128) -> u32 {
-    let unsigned_bits = |value: u128| u128::BITS - value.leading_zeros();
-    if lower >= 0 {
-        // A non-negative lower bound is at most `upper`; `upper` is non-negative.
-        unsigned_bits(upper.unsigned_abs())
-    } else {
-        // `!lower` is `-lower - 1`, the magnitude two's complement needs for a negative bound.
-        let negative = unsigned_bits((!lower).unsigned_abs());
-        let positive = if upper >= 0 {
-            unsigned_bits(upper.unsigned_abs())
-        } else {
-            0
-        };
-        negative.max(positive) + 1
-    }
-}
-
 /// One operation of a clause and its width after range propagation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -405,7 +383,7 @@ impl GenerationOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::oracle::clause::interval_bits;
 
     #[test]
     fn interval_bits_follow_the_spec_definition() {

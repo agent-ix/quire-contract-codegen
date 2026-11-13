@@ -184,13 +184,34 @@ pub fn derive_v2_clause_operation_widths(
     clause_operation_widths(node_id, &ClauseGraphView::new(package))
 }
 
+/// The smallest bit count `n` such that every value of `[lower, upper]` is representable in `n`
+/// bits: unsigned `bits(upper)` when `lower >= 0`, else two's complement signed.
+///
+/// The native carrier is signed, so `[0, 2^k]` counts as `k + 1` bits.
+#[must_use]
+pub fn interval_bits(lower: i128, upper: i128) -> u32 {
+    let unsigned_bits = |value: u128| u128::BITS - value.leading_zeros();
+    if lower >= 0 {
+        // A non-negative lower bound is at most `upper`; `upper` is non-negative.
+        unsigned_bits(upper.unsigned_abs())
+    } else {
+        // `!lower` is `-lower - 1`, the magnitude two's complement needs for a negative bound.
+        let negative = unsigned_bits((!lower).unsigned_abs());
+        let positive = if upper >= 0 {
+            unsigned_bits(upper.unsigned_abs())
+        } else {
+            0
+        };
+        negative.max(positive) + 1
+    }
+}
+
 type Interval = (i128, i128);
 
 pub(crate) fn clause_operation_widths(
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
 ) -> Result<Vec<(String, Option<u32>)>, V2ClauseRefusal> {
-    use crate::kani::tractability::interval_bits;
     let prepared = plan_clause(node_id, nodes)?;
     let mut ranges: Vec<Option<Interval>> = Vec::with_capacity(prepared.plan.len());
     let mut widths = Vec::new();
