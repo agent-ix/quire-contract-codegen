@@ -307,7 +307,14 @@ fn a_matching_witness_without_a_playback_has_no_counterexample() {
 
 /// (c) A witness launch that overruns the wall-clock ceiling, and one that would finish with a
 /// verifying report only at 1.25 times it, are stopped at the unchanged ceiling.
-#[trace("TC-027", "TC-039", "FR-017-AC-63", "FR-028-AC-2")]
+#[trace(
+    "TC-027",
+    "TC-039",
+    "TC-070",
+    "FR-017-AC-63",
+    "FR-028-AC-2",
+    "FR-056-AC-9"
+)]
 #[test]
 fn a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling() {
     let verifying = report_at(

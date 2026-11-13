@@ -59,5 +59,5 @@ unchanged.
 
 ## Status
 
-PLANNED (IR-1526): nothing is implemented or tagged. Steps 1 to 12 are host tests; only step 13
+Steps 1 to 12 are implemented and tagged (IR-1526). Step 13 is coded as an ignored kani-lane test and
 needs an installed Kani run.

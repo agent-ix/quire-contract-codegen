@@ -89,6 +89,7 @@ mod kani_obligations_symbolic_domains;
 mod kani_obligations_v2_clause_controls;
 mod kani_run_scan;
 mod kani_stdout_capture;
+mod kani_tractability;
 mod layout;
 mod model_enum_scalar;
 mod native_v2_helper_playback;

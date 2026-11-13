@@ -902,3 +902,121 @@ fn the_matrix_status_of_the_enumeration_rows_says_enumeration_evidence_without_p
         }
     }
 }
+
+/// FR-056-AC-13 (IR-1526): through CG's runner under installed Kani, the clause a measured table
+/// lets through ends with an executed verdict, recorded with its wall time, the Kani version and
+/// CG's generator and kernel versions; and integer multiply under a measured-bad row is refused
+/// before any Kani launch. The Decimal multiply row waits for IR-1444.
+#[trace("FR-056-AC-13", "TC-070")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measured_bad_multiply() {
+    use quire_contract_codegen::{
+        negotiate_kani_obligations_with_options, GenerationOptions, GENERATOR_VERSION,
+        KERNEL_VERSION,
+    };
+    let scratch = TemporaryDirectory::new("ir1526-kani-table");
+    let table = scratch.path.join("table.json");
+    fs::write(
+        &table,
+        serde_json::to_vec(&[serde_json::json!({
+            "operation_ids": ["quire.op.integer.mul"],
+            "max_operand_bits": 64,
+            "collection_bound": null,
+            "verdict": "not_tractable",
+            "wall_seconds": 600,
+            "peak_bytes": 17_179_869_184_u64,
+            "kani_version": "0.68.0",
+            "cbmc_version": "6.11.0",
+            "solver_version": "cadical",
+            "generator_version": GENERATOR_VERSION,
+            "kernel_version": KERNEL_VERSION,
+        })])
+        .unwrap(),
+    )
+    .unwrap();
+    let options = GenerationOptions {
+        tractability_table: Some(table),
+    };
+    let negotiate = |package: &quire_contract_model::CheckedPackageV2,
+                     clause: &quire_contract_model::CheckedNodeId| {
+        negotiate_kani_obligations_with_options(
+            &KaniObligationRequest {
+                ceilings: INSTALLED_CEILINGS,
+                items: &[ObligationItem::V2Clause {
+                    package,
+                    clause,
+                    claim: &crate::common::v2_claim::claim_for(package, clause),
+                    dependencies: None,
+                }],
+                subject_path: SUBJECT,
+                unwind: 3,
+            },
+            &options,
+            true,
+        )
+        .expect("the request negotiates")
+    };
+
+    // The multiply is refused before a harness exists, so no Kani launch can follow.
+    let (package, clause) = Twin::with_two_parameter_precondition(
+        (0, 1 << 20),
+        (0, 1 << 20),
+        "other * offset + 3 <= 100",
+    )
+    .emitted_package("TwoParameters");
+    let refused = negotiate(&package, &clause);
+    assert!(matches!(
+        &refused.records()[0].disposition,
+        quire_contract_codegen::ObligationDisposition::Unsupported {
+            reason: quire_contract_codegen::UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = refused
+    else {
+        panic!("the request is valid");
+    };
+    assert!(v2_clause_harnesses.is_empty(), "no harness, so no launch");
+
+    // The clause the table lets through runs under installed Kani to an executed verdict.
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let KaniObligationOutcome::Emitted {
+        mut v2_clause_harnesses,
+        ..
+    } = negotiate(&package, &clause)
+    else {
+        panic!("the clause negotiates");
+    };
+    let harness = v2_clause_harnesses.remove(0);
+    let lib = format!(
+        "{}{}",
+        harness.rust.contents,
+        subject_module(HEALTHY_SUBJECT)
+    );
+    let crate_scratch = ScratchCrate::new("ir1526-kani-healthy", &lib, None);
+    let started = Instant::now();
+    let run = run_installed(&crate_scratch, &harness);
+    let wall = started.elapsed();
+    assert!(
+        matches!(
+            run.evidence.outcome,
+            KaniRunOutcome::Verified | KaniRunOutcome::Falsified { .. }
+        ),
+        "an executed verdict, got {:?}",
+        run.evidence.outcome
+    );
+    let kani_version = Command::new("cargo")
+        .args(["kani", "--version"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default();
+    println!(
+        "IR1526 verdict={:?} wall={:.1}s kani=`{kani_version}` generator={GENERATOR_VERSION} kernel={KERNEL_VERSION}",
+        run.evidence.outcome,
+        wall.as_secs_f64()
+    );
+}

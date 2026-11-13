@@ -20,6 +20,9 @@ use std::fmt::Write as _;
 
 use qsl_replay::ObligationIdentity;
 
+use crate::kani::tractability::{
+    ClauseFeatures, Decision, InputBound, OperationWidth, TractabilityDecider,
+};
 use crate::{
     core::ir::{
         checked_term::{application, bound_members, literal, reference},
@@ -44,7 +47,8 @@ use crate::{
         },
     },
     oracle::clause::{
-        generate_v2_clause_native_oracle, generate_v2_clause_oracle_with_view, V2ClauseOracle,
+        clause_operation_widths, generate_v2_clause_native_oracle,
+        generate_v2_clause_oracle_with_view, V2ClauseOracle,
     },
 };
 
@@ -104,8 +108,9 @@ pub(in crate::kani::generate) fn lower(
     clause: &CheckedNodeId,
     kind: ObligationKind,
     claim: &V2ClauseObligationClaim,
+    decider: &dyn TractabilityDecider,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
-    lower_with_census(view, clause, kind, claim, |package, context| {
+    lower_with_census(view, clause, kind, claim, decider, |package, context| {
         package.model_operations(context, 65_536)
     })
 }
@@ -115,6 +120,7 @@ fn lower_with_census<'a>(
     clause: &CheckedNodeId,
     kind: ObligationKind,
     claim: &V2ClauseObligationClaim,
+    decider: &dyn TractabilityDecider,
     census: impl FnOnce(
         &'a CheckedPackageV2,
         &CheckedNodeId,
@@ -253,6 +259,7 @@ fn lower_with_census<'a>(
     } else {
         (None, Vec::new(), None)
     };
+    refuse_if_not_tractable(view, clause, &oracle, decider)?;
     // Kani includes the module in generated filenames. Use the full admitted pair so two
     // revisions of one declaration cannot collide on a readable clause name.
     let package_identity = ContractSourceV1 {
@@ -300,6 +307,50 @@ fn lower_with_census<'a>(
         }
         .to_owned(),
     })
+}
+
+/// The FR-056 refusal point. It runs after the operator check, so it sees only operations the
+/// V2 clause path accepts. When range propagation cannot give every operation a width (the native
+/// kernel cannot retain an operation's population), the decider has nothing to read and the clause
+/// proceeds as before; the native route refuses such a clause itself.
+fn refuse_if_not_tractable(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+    oracle: &V2ClauseOracle,
+    decider: &dyn TractabilityDecider,
+) -> Result<(), UnsupportedObligation> {
+    let Ok(widths) = clause_operation_widths(clause, view) else {
+        return Ok(());
+    };
+    let features = ClauseFeatures::new(
+        widths
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    );
+    match decider.decide(&features) {
+        Decision::Run => Ok(()),
+        Decision::Refuse {
+            reason,
+            evidence_row,
+        } => Err(UnsupportedObligation::V2ClauseNotTractable {
+            node_id: clause.clone(),
+            operation_identity: reason.operation_id,
+            width_bits: reason.width_bits,
+            row: evidence_row,
+        }),
+    }
 }
 
 fn machine_scalar(member: &CheckedMemberType) -> Option<MachineScalar> {
@@ -1831,6 +1882,7 @@ mod postcondition_signature_tests {
                     state_reads: Vec::new(),
                 },
             },
+            &crate::kani::tractability::TractabilityTable::empty(),
             |p, c| p.model_operations(c, 0),
         ) {
             Err(refusal) => refusal,

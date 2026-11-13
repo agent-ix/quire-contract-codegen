@@ -127,9 +127,14 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 
 ## Status
 
-PLANNED (IR-1526). FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13 needs an
+IMPLEMENTED for FR-056-AC-1 to AC-12 (IR-1526; host tests in `tests/it/kani_tractability.rs`, corpus and baseline in `tests/fixtures/tractability/`); FR-056-AC-13 is coded as an ignored kani-lane test and not yet run under installed Kani. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13 needs an
 installed Kani run and is the only criterion that does; FR-056-AC-10 is an inspection of the corpus.
 Out of scope: a threshold classifier, predicting combined cost, and state-frame, collection and
 scalar-claim forms beyond what the descriptor already exposes (named as a follow-up only if the
 probes show a need). The table's source rows are measured elsewhere and loaded at run time; CG
 does not hold a copy of another repository's table.
+
+Known limit (IR-1526): range propagation is the native kernel's. An operation whose complete
+population exceeds the kernel's capacity (for example multiply of two operands wider than about 31
+bits) yields no interval, so the clause has no widths and the decider is not asked; the native
+route refuses such a clause as `NativeV2ClauseCapability`, the general route generates it as before.

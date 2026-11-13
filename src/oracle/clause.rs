@@ -165,6 +165,59 @@ pub(crate) fn derive_v2_clause_descriptor_with_view(
     Ok(plan_clause(node_id, nodes)?.descriptor)
 }
 
+/// The width of each operation of a clause after range propagation (FR-056-AC-2): the largest
+/// bit width, over the operation's operands, of the interval the native rendering feeds it.
+/// Entries follow [`V2ClauseDescriptor::operation_identities`]; a Boolean operation has no
+/// integer operand and width zero.
+///
+/// # Errors
+///
+/// The refusal the native rendering gives when a source operation cannot retain its complete
+/// population in the native kernel.
+pub fn derive_v2_clause_operation_widths(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Result<Vec<(String, u32)>, V2ClauseRefusal> {
+    clause_operation_widths(node_id, &ClauseGraphView::new(package))
+}
+
+pub(crate) fn clause_operation_widths(
+    node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
+) -> Result<Vec<(String, u32)>, V2ClauseRefusal> {
+    let prepared = plan_clause(node_id, nodes)?;
+    let (_, selection) = native::helpers(&prepared.plan, node_id)?;
+    let bits = |operand: &crate::core::native_integer::NativeIntegerIntervalDecision| {
+        let lower = operand.lower.parse::<i128>().ok()?;
+        let upper = operand.upper.parse::<i128>().ok()?;
+        Some(crate::kani::tractability::interval_bits(lower, upper))
+    };
+    prepared
+        .plan
+        .iter()
+        .enumerate()
+        .filter_map(|(index, step)| match &step.term {
+            StepTerm::Operation { identity, .. } => Some((index, identity)),
+            _ => None,
+        })
+        .map(|(index, identity)| {
+            let width = selection
+                .operations
+                .iter()
+                .find(|decision| decision.step == index)
+                .map_or(Some(0), |decision| {
+                    decision
+                        .operands
+                        .iter()
+                        .map(bits)
+                        .try_fold(0, |widest: u32, bits| bits.map(|bits| widest.max(bits)))
+                })
+                .ok_or(V2ClauseRefusal::Render)?;
+            Ok((identity.clone(), width))
+        })
+        .collect()
+}
+
 /// Settle one selected clause as one typed claim-map entry.
 pub fn generate_v2_clause_claim_map(
     package: &CheckedPackageV2,

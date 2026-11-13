@@ -734,7 +734,17 @@ impl Twin {
 
     /// A QSL precondition over two operation parameters with different integer ranges.
     pub fn with_two_bounded_parameter_precondition() -> Self {
-        let mut twin = Self::with_field_ranges((0, 1000), (-5, 10));
+        Self::with_two_parameter_precondition((0, 1000), (-5, 10), "other < 1000 and offset > 0")
+    }
+
+    /// A QSL precondition `condition` over the operation parameters `other` (range `balance`)
+    /// and `offset` (range `audit`).
+    pub fn with_two_parameter_precondition(
+        balance: (i64, i64),
+        audit: (i64, i64),
+        condition: &str,
+    ) -> Self {
+        let mut twin = Self::with_field_ranges(balance, audit);
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
         let account = domain["types"]
             .as_array_mut()
@@ -772,7 +782,7 @@ impl Twin {
         let source = String::from_utf8(twin.unit).expect("native unit");
         let changed = source.replace(
             "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
-            "pre TwoParameters using v on Bank::Account::deposit { other < 1000 and offset > 0 }",
+            &format!("pre TwoParameters using v on Bank::Account::deposit {{ {condition} }}"),
         );
         assert_ne!(
             changed, source,
