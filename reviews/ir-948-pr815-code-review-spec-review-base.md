@@ -43,3 +43,12 @@ AC-126 and AC-129 are clean.
 The AC-126 and AC-129 amendments are accurate and consistent with the executed runs and the
 planner ruling. FND-001 should be resolved in this PR, because it is the criterion the PR claims
 to advance. FND-002 is wording.
+
+## Dispositions
+
+Round 1, checked against 44518c44.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | AC-43's PARTIAL now states the delivered path embeds each sibling as its own native oracle in a nested module, assumes it `Completed(true)` before the call and records the node ids in `requires`, "this meets the statement's `requires` and embedded-oracle recording for that path", and lists what is still unmet (other scalar postcondition shapes, typed subject ABI) |
+| FND-002 | fixed | AC-39's PARTIAL cites FR-015-AC-43 for the `()` return and FR-025-AC-8 for the pre-state copy, and states that fields are ordered by field name rather than declaration order, the two coinciding only for the one-field profile, with declaration order planned |

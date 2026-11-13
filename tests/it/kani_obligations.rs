@@ -2973,6 +2973,83 @@ fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
     );
 }
 
+/// Runs one AC-35 native harness, possibly mutated by replacing `site` with `with`, through the
+/// execution module under the real Kani backend.
+fn run_ac35_native(
+    name: &str,
+    comparison: &str,
+    identity: &'static str,
+    mutation: Option<(&str, &str)>,
+) -> quire_contract_codegen::KaniExecutionEvidence {
+    let (mut harness, manifest) =
+        crate::requirement_records::ac35_native_harness(comparison, identity);
+    if let Some((site, with)) = mutation {
+        assert_eq!(harness.rust.contents.matches(site).count(), 1, "{site}");
+        harness.rust.contents = harness.rust.contents.replace(site, with);
+    }
+    run_scalar_under_real_kani(name, &harness, &manifest)
+}
+
+/// The jointly infeasible guard `x < y` reports `CoverUnsatisfied`, never `Verified`; the same
+/// harness with the feasible guard `x > y` reports `Verified`.
+#[trace("TC-033", "FR-022-AC-35")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_033_native_guarded_harness_reports_cover_unsatisfied_and_verified() {
+    let infeasible = run_ac35_native("ac35-lt", "<", "quire.op.integer.lt", None);
+    assert_eq!(
+        infeasible.outcome,
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        },
+        "{infeasible:?}"
+    );
+    let feasible = run_ac35_native("ac35-gt", ">", "quire.op.integer.gt", None);
+    assert_eq!(feasible.outcome, KaniRunOutcome::Verified, "{feasible:?}");
+}
+
+/// Mutants A and B (a wrong oracle plan, a wrong expectation) are falsified on the feasible
+/// harness; mutant C (the guard not assumed) loses `CoverUnsatisfied` on the infeasible one.
+#[trace("TC-033", "FR-022-AC-35")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_033_native_guarded_harness_mutants_are_detected() {
+    let plan = "nx::NativeIntegerOperation::Add {";
+    let a = run_ac35_native(
+        "ac35-mut-a",
+        ">",
+        "quire.op.integer.gt",
+        Some((plan, "nx::NativeIntegerOperation::Multiply {")),
+    );
+    assert!(
+        matches!(a.outcome, KaniRunOutcome::Falsified { .. }),
+        "{a:?}"
+    );
+    let exact = "i128::from(left_native) + i128::from(right_native);";
+    let b = run_ac35_native(
+        "ac35-mut-b",
+        ">",
+        "quire.op.integer.gt",
+        Some((
+            exact,
+            "i128::from(left_native) + i128::from(right_native) + 1;",
+        )),
+    );
+    assert!(
+        matches!(b.outcome, KaniRunOutcome::Falsified { .. }),
+        "{b:?}"
+    );
+    let assumption = "kani::assume(left_native < guard_0);";
+    let c = run_ac35_native(
+        "ac35-mut-c",
+        "<",
+        "quire.op.integer.lt",
+        Some((assumption, "")),
+    );
+    assert_eq!(c.outcome, KaniRunOutcome::Verified, "{c:?}");
+}
+
 #[test]
 #[trace("TC-027", "FR-017-AC-51")]
 fn tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity() {

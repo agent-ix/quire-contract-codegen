@@ -83,3 +83,30 @@ Remaining refusals in `negotiate.rs` (question 5) still hold: a missing sibling 
 `scalar_postcondition_distinguishes_unsupported_from_unrendered_siblings` test (a parameter-only
 postcondition) still exercises that last arm. The state path's own sibling refusals have no test;
 gap-analysis records this.
+
+## Dispositions
+
+Round 1, checked against 44518c44 (fix commits 4b73e1a3 merge of 8a1ed73f, 2f13590c, 44518c44; #812 is
+MERGED and `origin/code/ir-948-v2-profiles` is an ancestor of the head). Reviewer reruns at 44518c44, each
+under `flock /tmp/cargo-slot.lock` in a 24G / no-swap `systemd-run` scope, foreground, one Kani job at a
+time: healthy postcondition `Verified` 2464 of 2490, proof phase only, 74.2 s, 4,634,083,328 B; reordered
+`CanAfford` precondition `Verified` 1537 of 1558, 2.7 s, 297,254,912 B; under-debiting mutant `Falsified`,
+two-phase, 2464 of 2491, 284.8 s, 22,196,752,384 B; all test assertions pass (named decode, native subject). Default lane (`kani_obligations_v2_profiles`, `kani_obligations_state_frame`,
+`kani_obligations_state_clause_replay`, `kani_collection_operation`, `state_clause_invariant_replay`) 165
+passed / 14 ignored; lib `kani::generate` 123 passed; fmt and clippy `--all-targets -D warnings` clean.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | #812 tip 8a1ed73f merged (4b73e1a3); every new Kani test calls `named_cover_satisfied` (postcondition cover by message) and `assert_within_cap`; both postcondition verdicts rerun on the merged head |
+| FND-002 | fixed | `render_clause` now draws state fields before parameters (`drawn.sort_by_key(|(_, input)| input.state_field.is_none())`, stable, oracle argument order unchanged); `a_mixed_precondition_draws_its_state_field_first_and_decodes_by_name` pins draw order and name-correct decode for `amount <= self.balance` |
+| FND-003 | fixed | the native `requires` expression is gone; each sibling's own native oracle is embedded as `mod requires_<n> { <oracle source> }` (the source carries its own `use quire_exact as nx/rt`, so the nested module resolves and its `oracle_clause`/`value_N`/`ClauseStop` items no longer share the harness module's namespace) and assumed `matches!(&requires_n_outcome, Ok(true))` over the drawn pre-state and parameters; the healthy run's final cover is satisfied, so the assumption is not vacuous |
+| FND-004 | fixed | the default-lane test asserts the sibling input bindings, `pre_balance` from `pre_balance_current`, `current_balance` from `post_balance_current`, and that `expected` reads both the post and pre variables |
+| FND-005 | fixed | the mutant test asserts the decoded names `pre_balance_current` and `parameter_amount_current`, and runs the same compiled subject (`bank_subject!` macro defines it for the test and the Kani source) over the decoded witness before evaluating `debited` |
+
+Round-1 verdict note (memory margin): the coder's mutant run peaked at 21,956,521,984 B, 85 % of the
+24 GiB cap; the reviewer rerun peaked at 22,196,752,384 B (86 %, 3.6 GB headroom). Measured run-to-run spread is
+about 0.6 to 1.1 % (19.71 vs 19.84 GB at 4c909c4a; 21.96 vs 22.20 GB at 44518c44), so the headroom is several
+times the noise, and the
+record states the margin and that a `MemoryExhausted` would be `Inconclusive`. Judged acceptable for this
+control: the postcondition member earns no credit until QSL-1901, and the control must be rerun on the
+specified `=` text then anyway. No finding.

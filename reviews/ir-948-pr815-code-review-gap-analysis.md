@@ -44,3 +44,12 @@ FND-002).
 
 Coverage of the executed members is real and reproduced. FND-001 is the one coverage gap that
 matters: a refusal the amended spec states as delivered has no test. FND-002 is trace hygiene.
+
+## Dispositions
+
+Round 1, checked against 44518c44.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `an_arithmetic_sibling_precondition_refuses_the_state_postcondition` (sibling `amount + 1 <= self.balance` refuses with `V2ClauseSiblingRequiresNotRendered`, no harness for the postcondition); `qsl_refuses_a_pre_read_in_a_sibling_precondition` pins that the `pre(...)` sibling arm is unreachable (QSL `forbidden-pre-read`), and AC-43 now says so; `state_postcondition_shape_tests::every_unrepresentable_state_shape_is_refused` covers the Boolean parameter, Boolean field, undeclared field, result read, narrowed parameter, two-domain field and same-name-two-nodes refusals |
+| FND-002 | fixed | FR-025-AC-8 is now bound by its own test `the_postcondition_subject_receives_a_mut_copy_and_the_pre_state_survives` tagged `TC-036`, and the TC-025 test no longer claims it; the `spec/kani/matrix/tests.md` row aggregates FR-025-AC-2 through AC-8, most still unbound, so leaving it Planned is accurate |

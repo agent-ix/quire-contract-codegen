@@ -1,6 +1,6 @@
 # IR-304 installed-Kani attempt on the guarded scalar harness (FR-022-AC-35)
 
-This records a run that produced no verdict. FR-022-AC-35 and TC-033 step 28 stay Planned.
+This records a run that produced no verdict on the general (`rt::Integer`) harness. The native harness that replaced it, and the verdicts it gave, are in `ir304-kani-guard-native-harness.md`.
 
 ## What was run
 
@@ -34,4 +34,4 @@ native machine integers, finished in under 100 s; this harness shape does not.
 - The feasible-guard run was not started: it has the same program shape and the infeasible run
   had already exhausted the cap.
 
-FR-022-AC-35 stays with IR-304, which delivers a native-integer routed scalar harness next.
+The same scenario on the native harness is recorded in `ir304-kani-guard-native-harness.md`.
