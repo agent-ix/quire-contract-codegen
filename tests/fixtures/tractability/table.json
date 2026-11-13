@@ -1,0 +1,34 @@
+[
+  {
+    "operation_ids": [
+      "quire.op.integer.mul"
+    ],
+    "route": "general",
+    "max_operand_bits": 15,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.integer.add"
+    ],
+    "route": "general",
+    "max_operand_bits": 15,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 542.5,
+    "peak_bytes": 25657274368,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  }
+]

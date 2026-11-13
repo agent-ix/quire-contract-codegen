@@ -1,7 +1,7 @@
 [
   {
     "operation_ids": ["quire.op.integer.add", "quire.op.integer.sub"],
-    "route": "general_scalar",
+    "route": "general",
     "max_operand_bits": 4,
     "collection_bound": null,
     "verdict": "not_tractable",

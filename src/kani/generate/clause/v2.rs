@@ -21,7 +21,7 @@ use std::fmt::Write as _;
 use qsl_replay::ObligationIdentity;
 
 use crate::kani::tractability::{
-    ClauseFeatures, Decision, InputBound, OperationWidth, TractabilityDecider,
+    ClauseFeatures, Decision, InputBound, IntegerRoute, OperationWidth, TractabilityDecider,
 };
 use crate::{
     core::ir::{
@@ -149,11 +149,18 @@ pub(in crate::kani::generate) fn lower(
     clause: &CheckedNodeId,
     kind: ObligationKind,
     claim: &V2ClauseObligationClaim,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
-    lower_with_census(view, clause, kind, claim, decider, |package, context| {
-        package.model_operations(context, 65_536)
-    })
+    lower_with_census(
+        view,
+        clause,
+        kind,
+        claim,
+        route,
+        decider,
+        |package, context| package.model_operations(context, 65_536),
+    )
 }
 
 fn lower_with_census<'a>(
@@ -161,6 +168,7 @@ fn lower_with_census<'a>(
     clause: &CheckedNodeId,
     kind: ObligationKind,
     claim: &V2ClauseObligationClaim,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
     census: impl FnOnce(
         &'a CheckedPackageV2,
@@ -325,7 +333,7 @@ fn lower_with_census<'a>(
     } else {
         (None, Vec::new(), None)
     };
-    refuse_if_not_tractable(view, clause, &oracle, decider)?;
+    refuse_if_not_tractable(view, clause, &oracle, route, decider)?;
     // Kani includes the module in generated filenames. Use the full admitted pair so two
     // revisions of one declaration cannot collide on a readable clause name.
     let package_identity = ContractSourceV1 {
@@ -382,12 +390,14 @@ fn refuse_if_not_tractable(
     view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,
     oracle: &V2ClauseOracle,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> Result<(), UnsupportedObligation> {
     let Ok(widths) = clause_operation_widths(clause, view) else {
         return Ok(());
     };
     let features = ClauseFeatures::new(
+        route,
         widths
             .into_iter()
             .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
@@ -413,6 +423,7 @@ fn refuse_if_not_tractable(
             node_id: clause.clone(),
             operation_identity: reason.operation_id,
             width_bits: reason.width_bits,
+            route,
             row: evidence_row,
         }),
     }
@@ -2494,6 +2505,7 @@ mod postcondition_signature_tests {
                     state_reads: Vec::new(),
                 },
             },
+            IntegerRoute::General,
             &crate::kani::tractability::TractabilityTable::empty(),
             |p, c| p.model_operations(c, 0),
         ) {

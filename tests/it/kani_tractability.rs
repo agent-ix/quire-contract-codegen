@@ -41,13 +41,18 @@ fn unknown_width(operation_id: &str) -> OperationWidth {
 }
 
 fn features(operations: Vec<OperationWidth>) -> ClauseFeatures {
-    ClauseFeatures::new(operations, Vec::new(), None)
+    features_on(IntegerRoute::General, operations)
+}
+
+fn features_on(route: IntegerRoute, operations: Vec<OperationWidth>) -> ClauseFeatures {
+    ClauseFeatures::new(route, operations, Vec::new(), None)
 }
 
 /// A row as table-file JSON, current at CG's own generator and kernel versions.
 fn row_json(ids: &[&str], max_operand_bits: u32, verdict: &str) -> Value {
     json!({
         "operation_ids": ids,
+        "route": "general",
         "max_operand_bits": max_operand_bits,
         "collection_bound": null,
         "verdict": verdict,
@@ -292,6 +297,13 @@ fn tc_070_the_table_loads_from_data_and_a_bad_row_fails_the_load() {
     unknown_verdict["verdict"] = json!("slow");
     let mut missing_field = row_json(&[MUL], 64, "not_tractable");
     missing_field.as_object_mut().unwrap().remove("peak_bytes");
+    let mut null_peak = row_json(&[MUL], 64, "not_tractable");
+    null_peak["peak_bytes"] = json!(null);
+    let null_peak = write_table(&directory, "null-peak.json", &[null_peak]);
+    assert_eq!(
+        TractabilityTable::load(&null_peak).unwrap().rows()[0].peak_bytes,
+        None
+    );
     let mut missing_nullable = row_json(&[MUL], 64, "not_tractable");
     missing_nullable
         .as_object_mut()
@@ -414,6 +426,7 @@ fn tc_070_a_measured_bad_row_refuses_the_clause_before_generation() {
                 node_id: wide_clause.clone(),
                 operation_identity: MUL.to_owned(),
                 width_bits: 21,
+                route: IntegerRoute::General,
                 row: Box::new(expected_row.clone()),
             }
         }
@@ -683,6 +696,7 @@ enum GroundTruth {
     Verified,
     Falsified,
     TimedOut,
+    MemoryExhausted,
 }
 
 #[derive(Debug, Deserialize)]
@@ -721,7 +735,9 @@ fn score(decider: &dyn TractabilityDecider, corpus: &[CorpusRow]) -> Score {
         let refused = matches!(decider.decide(&row.features), Decision::Refuse { .. });
         match (&row.ground_truth, refused) {
             (GroundTruth::Verified | GroundTruth::Falsified, true) => score.false_refuse += 1,
-            (GroundTruth::TimedOut, false) => score.false_accept += 1,
+            (GroundTruth::TimedOut | GroundTruth::MemoryExhausted, false) => {
+                score.false_accept += 1
+            }
             _ => {}
         }
     }
@@ -764,8 +780,9 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     let corpus = load_corpus(&fixture_path("corpus.json"));
     let baseline: Score =
         serde_json::from_slice(&fs::read(fixture_path("baseline.json")).unwrap()).unwrap();
-    // CG holds no measured table: the current production decider runs with the empty table.
-    let current = score(&TractabilityTable::empty(), &corpus);
+    // The production decider is the table lookup over CG's own measured table.
+    let table = TractabilityTable::load(&fixture_path("table.json")).expect("the measured table");
+    let current = score(&table, &corpus);
     println!(
         "tractability corpus ({} rows): false-refuse {} (baseline {}), false-accept {} (baseline {})",
         corpus.len(),
@@ -818,6 +835,10 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
         regressed(&score(&AlwaysRefuse, &corpus), &baseline),
         "refuse-everything fails on the shipped corpus"
     );
+    assert!(
+        regressed(&score(&AlwaysRun, &corpus), &baseline),
+        "run-everything fails on the shipped corpus"
+    );
     // A count below the baseline passes.
     assert!(!regressed(
         &Score {
@@ -835,6 +856,7 @@ fn corpus_row(id: &str, operation: &str, bits: u32, truth: GroundTruth) -> Corpu
     CorpusRow {
         id: id.to_owned(),
         features: ClauseFeatures::new(
+            IntegerRoute::General,
             vec![op_width(operation, bits)],
             vec![InputBound {
                 lower: 0,
@@ -863,6 +885,7 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     rows.push(json!({
         "id": "appended-timed-out-multiply",
         "features": {
+            "route": "general",
             "operations": [{"operation_id": MUL, "bits": 63}],
             "inputs": [{"lower": 0, "upper": i64::MAX}],
             "collection_bound": null
@@ -874,6 +897,14 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     fs::write(&copy, serde_json::to_vec(&rows).unwrap()).unwrap();
     let after = score(&AlwaysRun, &load_corpus(&copy));
     assert_eq!(after.false_accept, before.false_accept + 1);
+    let mut exhausted = rows.clone();
+    exhausted.last_mut().unwrap()["ground_truth"] = json!("memory_exhausted");
+    fs::write(&copy, serde_json::to_vec(&exhausted).unwrap()).unwrap();
+    assert_eq!(
+        score(&AlwaysRun, &load_corpus(&copy)).false_accept,
+        before.false_accept + 1,
+        "a memory-exhausted row scores as a false-accept"
+    );
     // The table decider scores the same file through the same function.
     let table = table_of(&[row_json(&[MUL], 63, "not_tractable")]);
     assert_eq!(
@@ -884,8 +915,8 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
 }
 
 /// The multiply fixtures of the installed-Kani FR-056-AC-13 test, negotiated on the host: the
-/// wide multiply is refused and the narrow one is let through to a harness. The decision does
-/// not depend on the route. The native route cannot render a two-parameter precondition at all
+/// wide multiply is refused and the narrow one is let through to a harness. The row is a
+/// general-route row, so the native route is not refused by it. The native route cannot render a two-parameter precondition at all
 /// (`RenderFailed`), so the narrow clause is checked on the general route.
 #[trace("FR-056-AC-13", "TC-070")]
 #[test]
@@ -914,9 +945,43 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
         }
     ));
     assert_eq!(harness_count(&wide), 0);
+    // The row is a general-route row: the native route is not refused by it (it ends in another
+    // disposition, the native route rendering no two-parameter precondition).
     let native_wide = negotiate(1 << 20, IntegerRoute::Native);
-    assert!(matches!(
+    assert!(!matches!(
         disposition(&native_wide, 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable { .. }
+        }
+    ));
+    // The reverse: a native-route row refuses the native clause, reports the native route and
+    // leaves the general clause alone (FR-056-AC-2, AC-4, AC-14 through negotiation).
+    let native_path = {
+        let mut native_row = row_json(&[MUL], 21, "not_tractable");
+        native_row["route"] = json!("native");
+        write_table(&directory, "native-table.json", &[native_row])
+    };
+    let negotiate_on = |route: IntegerRoute| {
+        let (package, clause) = package(1 << 20, 1 << 20, "other * offset + 3 <= 100");
+        let claim = crate::common::v2_claim::claim_for(&package, &clause);
+        negotiate_kani_obligations_with_options(
+            &request(&[item(&package, &clause, &claim)]),
+            &options(&native_path),
+            route,
+        )
+        .unwrap()
+    };
+    assert!(matches!(
+        disposition(&negotiate_on(IntegerRoute::Native), 0),
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseNotTractable {
+                route: IntegerRoute::Native,
+                ..
+            }
+        }
+    ));
+    assert!(!matches!(
+        disposition(&negotiate_on(IntegerRoute::General), 0),
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::V2ClauseNotTractable { .. }
         }
@@ -942,7 +1007,7 @@ fn general_scalar_table() -> TractabilityTable {
     TractabilityTable::shipped_general_route_scalar().expect("the embedded row loads")
 }
 
-#[trace("TC-070", "FR-056-AC-14")]
+#[trace("TC-070", "FR-056-AC-15")]
 #[test]
 fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
     let from_file =
@@ -970,7 +1035,7 @@ fn unlaunchable<'a>(
     }
 }
 
-#[trace("TC-070", "FR-056-AC-14")]
+#[trace("TC-070", "FR-056-AC-15")]
 #[test]
 fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
     use quire_contract_codegen::{
@@ -997,6 +1062,7 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
         node_id,
         operation_identity,
         width_bits,
+        route,
         row,
     } = *refusal
     else {
@@ -1006,6 +1072,7 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
     assert_eq!(operation_identity, ADD);
     assert_eq!(operation_identity, harness.identity.operation_identity);
     assert_eq!(width_bits, 4, "Int[0, 9] is 4 bits");
+    assert_eq!(route, IntegerRoute::General);
     assert_eq!(&*row, &general_scalar_table().rows()[0]);
     assert_eq!(row.max_operand_bits, 4);
     assert_eq!(row.kani_version, "0.68.0");
@@ -1040,11 +1107,11 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
     );
 }
 
-#[trace("TC-070", "FR-056-AC-14")]
+#[trace("TC-070", "FR-056-AC-15")]
 #[test]
 fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row() {
     use quire_contract_codegen::{
-        execute_kani_obligation_decided, DecidedRunRefusal, KaniExecutionRefusal, TractabilityRoute,
+        execute_kani_obligation_decided, DecidedRunRefusal, KaniExecutionRefusal,
     };
     let table = general_scalar_table();
     let (native, _) = super::kani_obligations::native_scalar_increment();
@@ -1060,22 +1127,145 @@ fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row
         ))
     ));
 
-    // The same operation at the same width on the V2 clause route matches no general row.
-    let v2 = features(vec![op_width(ADD, 4)]);
-    assert!(matches!(table.decide(&v2), Decision::Run));
-    let general = v2.on_route(TractabilityRoute::GeneralScalar);
+    // The same operation at the same width on the native route matches no general row.
+    let general = features(vec![op_width(ADD, 4)]);
     assert!(matches!(table.decide(&general), Decision::Refuse { .. }));
-    // A row without a `route` key applies to V2 clauses only: it leaves general-route features
-    // alone, and refuses the V2 clause features it names.
-    let routeless = table_of(&[row_json(&[ADD], 4, "not_tractable")]);
-    let general_features =
-        features(vec![op_width(ADD, 4)]).on_route(TractabilityRoute::GeneralScalar);
-    assert!(matches!(routeless.decide(&general_features), Decision::Run));
-    assert!(matches!(
-        routeless.decide(&features(vec![op_width(ADD, 4)])),
-        Decision::Refuse { .. }
-    ));
+    let native_features = features_on(IntegerRoute::Native, vec![op_width(ADD, 4)]);
+    assert!(matches!(table.decide(&native_features), Decision::Run));
     // Narrower than the measured width is not refused.
-    let narrow = features(vec![op_width(ADD, 3)]).on_route(TractabilityRoute::GeneralScalar);
+    let narrow = features(vec![op_width(ADD, 3)]);
     assert!(matches!(table.decide(&narrow), Decision::Run));
+}
+
+/// FR-056-AC-14 (decider level): rows match only features of their own route, in both
+/// directions, a `tractable` row never refuses, the report names the route and a native row at a
+/// smaller bound does not take precedence on the general route.
+#[trace("FR-056-AC-14", "TC-070")]
+#[test]
+fn tc_070_rows_match_only_their_own_route() {
+    let row = |route: &str, bits: u32, verdict: &str| {
+        let mut row = row_json(&[ADD], bits, verdict);
+        row["route"] = json!(route);
+        row
+    };
+    for (row_route, clause_route, other) in [
+        ("general", IntegerRoute::General, IntegerRoute::Native),
+        ("native", IntegerRoute::Native, IntegerRoute::General),
+    ] {
+        let table = table_of(&[row(row_route, 8, "not_tractable")]);
+        let same = features_on(clause_route, vec![op_width(ADD, 8)]);
+        let Decision::Refuse { evidence_row, .. } = table.decide(&same) else {
+            panic!("a same-route row refuses");
+        };
+        assert_eq!(evidence_row.route, clause_route);
+        let across = features_on(other, vec![op_width(ADD, 8)]);
+        assert!(matches!(table.decide(&across), Decision::Run));
+        let tractable = table_of(&[row(row_route, 8, "tractable")]);
+        assert!(matches!(tractable.decide(&same), Decision::Run));
+    }
+    let table = table_of(&[
+        row("native", 2, "not_tractable"),
+        row("general", 8, "not_tractable"),
+    ]);
+    let Decision::Refuse { evidence_row, .. } = table.decide(&features(vec![op_width(ADD, 8)]))
+    else {
+        panic!("the general row refuses");
+    };
+    assert_eq!(evidence_row.max_operand_bits, 8);
+}
+
+/// FR-056-AC-3 (route): a row or features without a `route` key, or with another value, are
+/// malformed; there is no default route.
+#[trace("FR-056-AC-3", "TC-070")]
+#[test]
+fn tc_070_a_missing_or_unknown_route_is_malformed() {
+    let directory = TemporaryDirectory::new("tc070-route");
+    for (index, mutate) in [None, Some("other")].into_iter().enumerate() {
+        let mut bad = row_json(&[ADD], 8, "not_tractable");
+        match mutate {
+            None => {
+                bad.as_object_mut().unwrap().remove("route");
+            }
+            Some(value) => bad["route"] = json!(value),
+        }
+        let path = write_table(
+            &directory,
+            &format!("route-{index}.json"),
+            &[row_json(&[ADD], 8, "tractable"), bad],
+        );
+        assert!(matches!(
+            TractabilityTable::load(&path),
+            Err(TractabilityLoadError::MalformedRow { row: 1, .. })
+        ));
+    }
+    let mut feature = serde_json::to_value(features(vec![op_width(ADD, 8)])).unwrap();
+    assert_eq!(feature["route"], json!("general"));
+    feature.as_object_mut().unwrap().remove("route");
+    assert!(serde_json::from_value::<ClauseFeatures>(feature).is_err());
+}
+
+/// The features the decider computes for `condition` over `other` and `offset`, both
+/// `Int[0, 2^operand_bits - 1]` (`operand_bits` unsigned bits, FR-056 Terms).
+fn probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
+    let upper = (1_i64 << operand_bits) - 1;
+    let (package, clause) = package(upper, upper, condition);
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
+    ClauseFeatures::new(
+        IntegerRoute::General,
+        derive_v2_clause_operation_widths(&package, &clause)
+            .expect("widths")
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    )
+}
+
+/// The probe rows of the shipped corpus carry exactly the features the decider computes, at the
+/// generator and kernel versions the probe ran against (which the row records, so that scoring
+/// does not depend on the current crate version).
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
+    let corpus = load_corpus(&fixture_path("corpus.json"));
+    for bits in [15, 23, 31] {
+        let id = format!("ir1526-wide-multiply-{bits}bit-operands");
+        let row = corpus.iter().find(|row| row.id == id).expect(&id);
+        assert!(matches!(row.ground_truth, GroundTruth::TimedOut), "{id}");
+        let mut computed = probe_features("other * offset + 3 <= 100", bits);
+        computed.generator_version = row.features.generator_version.clone();
+        computed.kernel_version = row.features.kernel_version;
+        assert_eq!(row.features, computed, "{id}");
+        assert_eq!(
+            row.features.operations[0].bits,
+            Some(bits),
+            "{id}: mul width"
+        );
+    }
+    // The add control holds no multiply.
+    let id = "ir1526-wide-add-15bit-operands";
+    let row = corpus.iter().find(|row| row.id == id).expect(id);
+    assert!(
+        matches!(row.ground_truth, GroundTruth::MemoryExhausted),
+        "{id}"
+    );
+    let mut computed = probe_features("other + offset <= 100", 15);
+    computed.generator_version = row.features.generator_version.clone();
+    computed.kernel_version = row.features.kernel_version;
+    assert_eq!(row.features, computed, "{id}");
+    assert!(row
+        .features
+        .operations
+        .iter()
+        .all(|op| op.operation_id != MUL));
 }

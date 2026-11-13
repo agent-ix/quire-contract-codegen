@@ -19,8 +19,7 @@ use crate::{
             harness::KaniExecutableHarness,
         },
         tractability::{
-            ClauseFeatures, Decision, InputBound, OperationWidth, TractabilityDecider,
-            TractabilityRoute,
+            ClauseFeatures, Decision, InputBound, IntegerRoute, OperationWidth, TractabilityDecider,
         },
     },
     oracle::clause::interval_bits,
@@ -29,7 +28,7 @@ use crate::{
 /// Why a decided run did not produce evidence.
 #[derive(Debug)]
 pub enum DecidedRunRefusal {
-    /// The decider refused the harness before any Kani process started (FR-056-AC-14). The
+    /// The decider refused the harness before any Kani process started (FR-056-AC-15). The
     /// refusal is the one `UnsupportedObligation::V2ClauseNotTractable` arm, naming the node,
     /// operation id, width and the measured row with its versions.
     NotTractable {
@@ -87,15 +86,17 @@ pub fn refuse_if_not_tractable(
         return Ok(());
     };
     let identity = &scalar.identity;
-    if identity.integer_representation != ScalarIntegerRepresentation::General {
-        return Ok(());
-    }
+    let route = match identity.integer_representation {
+        ScalarIntegerRepresentation::General => IntegerRoute::General,
+        ScalarIntegerRepresentation::Native => IntegerRoute::Native,
+    };
     let bits = identity
         .arguments
         .iter()
         .map(|argument| interval_bits(i128::from(argument.minimum), i128::from(argument.maximum)))
         .max();
     let features = ClauseFeatures::new(
+        route,
         vec![OperationWidth {
             operation_id: identity.operation_identity.clone(),
             bits,
@@ -110,8 +111,7 @@ pub fn refuse_if_not_tractable(
             })
             .collect(),
         None,
-    )
-    .on_route(TractabilityRoute::GeneralScalar);
+    );
     match decider.decide(&features) {
         Decision::Run => Ok(()),
         Decision::Refuse {
@@ -123,6 +123,7 @@ pub fn refuse_if_not_tractable(
                 node_id: identity.node_id.clone(),
                 operation_identity: reason.operation_id,
                 width_bits: reason.width_bits,
+                route,
                 row: evidence_row,
             }),
         }),

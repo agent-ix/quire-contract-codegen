@@ -25,23 +25,15 @@ const fn kernel_version() -> u32 {
     KERNEL_VERSION
 }
 
-/// The route a clause's features and a table row describe. A row applies only to features of its
-/// own route, so a measurement of the general `rt::Integer` scalar harness never refuses the
-/// same operation on the V2 clause or native-integer route, where it finishes (IR-1530).
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+/// Which integer encoding a negotiation selects. It is also the tractability route (FR-056): the
+/// `general` and `native` keys of the measured table and the clause features.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum TractabilityRoute {
-    /// A V2 clause, decided at generation (the default; rows without a `route` key).
-    #[default]
-    V2Clause,
-    /// A routed exact-scalar harness on the general `rt::Integer` route, decided at run.
-    GeneralScalar,
-}
-
-impl TractabilityRoute {
-    fn is_default(&self) -> bool {
-        *self == Self::V2Clause
-    }
+pub enum IntegerRoute {
+    /// `negotiate_kani_obligations`: the general encoding.
+    General,
+    /// `negotiate_kani_native_obligations`: the kernel-admitted native encoding.
+    Native,
 }
 
 /// One operation of a clause and its width after range propagation.
@@ -81,9 +73,8 @@ pub struct ClauseFeatures {
     /// The collection bound, absent when the clause has none.
     #[serde(default)]
     pub collection_bound: Option<u64>,
-    /// The route the features describe; absent means a V2 clause.
-    #[serde(default, skip_serializing_if = "TractabilityRoute::is_default")]
-    pub route: TractabilityRoute,
+    /// The route of the negotiation. The key is required; there is no default route.
+    pub route: IntegerRoute,
     /// CG's generator version.
     #[serde(default = "generator_version")]
     pub generator_version: String,
@@ -93,9 +84,10 @@ pub struct ClauseFeatures {
 }
 
 impl ClauseFeatures {
-    /// Features at CG's own generator and kernel versions.
+    /// Features on `route` at CG's own generator and kernel versions.
     #[must_use]
     pub fn new(
+        route: IntegerRoute,
         operations: Vec<OperationWidth>,
         inputs: Vec<InputBound>,
         collection_bound: Option<u64>,
@@ -104,17 +96,10 @@ impl ClauseFeatures {
             operations,
             inputs,
             collection_bound,
-            route: TractabilityRoute::V2Clause,
+            route,
             generator_version: generator_version(),
             kernel_version: kernel_version(),
         }
-    }
-
-    /// The same features on `route`.
-    #[must_use]
-    pub fn on_route(mut self, route: TractabilityRoute) -> Self {
-        self.route = route;
-        self
     }
 }
 
@@ -177,9 +162,8 @@ impl Serialize for WallSeconds {
 pub struct TractabilityRow {
     /// The catalog operation ids the probe exercised.
     pub operation_ids: Vec<String>,
-    /// The route the probe measured; absent means a V2 clause.
-    #[serde(default, skip_serializing_if = "TractabilityRoute::is_default")]
-    pub route: TractabilityRoute,
+    /// The route the probe measured. The key is required; there is no default route.
+    pub route: IntegerRoute,
     /// The operand bit width from which the probe did not finish: an operation at this width or
     /// wider is intractable.
     pub max_operand_bits: u32,
@@ -190,8 +174,10 @@ pub struct TractabilityRow {
     pub verdict: RowVerdict,
     /// Wall-clock seconds the probe took, fractional allowed.
     pub wall_seconds: WallSeconds,
-    /// Peak memory of the probe in bytes.
-    pub peak_bytes: u64,
+    /// Peak memory of the probe in bytes, `null` when the runner reported none. The key is
+    /// required.
+    #[serde(deserialize_with = "required")]
+    pub peak_bytes: Option<u64>,
     /// The Kani version the probe ran under.
     pub kani_version: String,
     /// The CBMC version the probe ran under.
@@ -339,7 +325,7 @@ impl TractabilityTable {
 
     /// The measured row of the general `rt::Integer` scalar route (IR-1530), embedded from
     /// `docs/qualification/ir1530-general-route-scalar-table.json`, the single source. A caller
-    /// passes it to the decided run wrappers to opt in to the refusal (FR-056-AC-14).
+    /// passes it to the decided run wrappers to opt in to the refusal (FR-056-AC-15).
     ///
     /// # Errors
     ///

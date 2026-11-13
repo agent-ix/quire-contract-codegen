@@ -52,10 +52,10 @@ integer scalar route is not tractable at unwind 3, 600 s and 24 GiB.
 ## Refusal of the general route: built at the run level
 
 The row above is shipped as data in `ir1530-general-route-scalar-table.json` (the FR-056 table
-shape, with `"route": "general_scalar"` so it never applies to V2 clauses or the native route). The
-refusal is FR-056-AC-14: `execute_kani_obligation_decided` and `execute_kani_obligations_decided`
+shape, with `"route": "general"`, the FR-056 route of the `rt::Integer` carrier, so it never applies to the native route). The
+refusal is FR-056-AC-15: `execute_kani_obligation_decided` and `execute_kani_obligations_decided`
 (`src/kani/terminal/tractable.rs`) ask the one `TractabilityDecider` seam, with features on the
-`general_scalar` route, before any Kani process starts, and return
+`general` route, before any Kani process starts, and return
 `DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node,
 operation id, width, the row with its Kani, CBMC, solver, generator and kernel versions). It is
 decided at the run, not at generation: a generation-level refusal broke the host tests that
