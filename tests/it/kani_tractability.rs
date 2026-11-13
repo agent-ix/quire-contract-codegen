@@ -292,6 +292,13 @@ fn tc_070_the_table_loads_from_data_and_a_bad_row_fails_the_load() {
     unknown_verdict["verdict"] = json!("slow");
     let mut missing_field = row_json(&[MUL], 64, "not_tractable");
     missing_field.as_object_mut().unwrap().remove("peak_bytes");
+    let mut null_peak = row_json(&[MUL], 64, "not_tractable");
+    null_peak["peak_bytes"] = json!(null);
+    let null_peak = write_table(&directory, "null-peak.json", &[null_peak]);
+    assert_eq!(
+        TractabilityTable::load(&null_peak).unwrap().rows()[0].peak_bytes,
+        None
+    );
     let mut missing_nullable = row_json(&[MUL], 64, "not_tractable");
     missing_nullable
         .as_object_mut()
@@ -675,6 +682,7 @@ enum GroundTruth {
     Verified,
     Falsified,
     TimedOut,
+    MemoryExhausted,
 }
 
 #[derive(Debug, Deserialize)]
@@ -713,7 +721,9 @@ fn score(decider: &dyn TractabilityDecider, corpus: &[CorpusRow]) -> Score {
         let refused = matches!(decider.decide(&row.features), Decision::Refuse { .. });
         match (&row.ground_truth, refused) {
             (GroundTruth::Verified | GroundTruth::Falsified, true) => score.false_refuse += 1,
-            (GroundTruth::TimedOut, false) => score.false_accept += 1,
+            (GroundTruth::TimedOut | GroundTruth::MemoryExhausted, false) => {
+                score.false_accept += 1
+            }
             _ => {}
         }
     }
@@ -756,8 +766,9 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     let corpus = load_corpus(&fixture_path("corpus.json"));
     let baseline: Score =
         serde_json::from_slice(&fs::read(fixture_path("baseline.json")).unwrap()).unwrap();
-    // CG holds no measured table: the current production decider runs with the empty table.
-    let current = score(&TractabilityTable::empty(), &corpus);
+    // The production decider is the table lookup over CG's own measured table.
+    let table = TractabilityTable::load(&fixture_path("table.json")).expect("the measured table");
+    let current = score(&table, &corpus);
     println!(
         "tractability corpus ({} rows): false-refuse {} (baseline {}), false-accept {} (baseline {})",
         corpus.len(),
@@ -809,6 +820,10 @@ fn tc_070_the_current_decider_scores_no_worse_than_the_baseline() {
     assert!(
         regressed(&score(&AlwaysRefuse, &corpus), &baseline),
         "refuse-everything fails on the shipped corpus"
+    );
+    assert!(
+        regressed(&score(&AlwaysRun, &corpus), &baseline),
+        "run-everything fails on the shipped corpus"
     );
     // A count below the baseline passes.
     assert!(!regressed(
@@ -866,6 +881,14 @@ fn tc_070_a_new_corpus_row_and_a_second_decider_need_no_source_change() {
     fs::write(&copy, serde_json::to_vec(&rows).unwrap()).unwrap();
     let after = score(&AlwaysRun, &load_corpus(&copy));
     assert_eq!(after.false_accept, before.false_accept + 1);
+    let mut exhausted = rows.clone();
+    exhausted.last_mut().unwrap()["ground_truth"] = json!("memory_exhausted");
+    fs::write(&copy, serde_json::to_vec(&exhausted).unwrap()).unwrap();
+    assert_eq!(
+        score(&AlwaysRun, &load_corpus(&copy)).false_accept,
+        before.false_accept + 1,
+        "a memory-exhausted row scores as a false-accept"
+    );
     // The table decider scores the same file through the same function.
     let table = table_of(&[row_json(&[MUL], 63, "not_tractable")]);
     assert_eq!(
@@ -923,4 +946,69 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
         "{:?}",
         disposition(&narrow, 0)
     );
+}
+
+/// The features the decider computes for `condition` over `other` and `offset`, both
+/// `Int[0, 2^operand_bits - 1]` (`operand_bits` unsigned bits, FR-056 Terms).
+fn probe_features(condition: &str, operand_bits: u32) -> ClauseFeatures {
+    let upper = (1_i64 << operand_bits) - 1;
+    let (package, clause) = package(upper, upper, condition);
+    let oracle = generate_v2_clause_native_oracle(&package, &clause).expect("native oracle");
+    ClauseFeatures::new(
+        derive_v2_clause_operation_widths(&package, &clause)
+            .expect("widths")
+            .into_iter()
+            .map(|(operation_id, bits)| OperationWidth { operation_id, bits })
+            .collect(),
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| InputBound {
+                lower: input.lower,
+                upper: input.upper,
+                boolean: input.boolean,
+            })
+            .collect(),
+        None,
+    )
+}
+
+/// The probe rows of the shipped corpus carry exactly the features the decider computes, at the
+/// generator and kernel versions the probe ran against (which the row records, so that scoring
+/// does not depend on the current crate version).
+#[trace("FR-056-AC-10", "TC-070")]
+#[test]
+fn tc_070_the_probe_corpus_rows_carry_the_decider_features() {
+    let corpus = load_corpus(&fixture_path("corpus.json"));
+    for bits in [15, 23, 31] {
+        let id = format!("ir1526-wide-multiply-{bits}bit-operands");
+        let row = corpus.iter().find(|row| row.id == id).expect(&id);
+        assert!(matches!(row.ground_truth, GroundTruth::TimedOut), "{id}");
+        let mut computed = probe_features("other * offset + 3 <= 100", bits);
+        computed.generator_version = row.features.generator_version.clone();
+        computed.kernel_version = row.features.kernel_version;
+        assert_eq!(row.features, computed, "{id}");
+        assert_eq!(
+            row.features.operations[0].bits,
+            Some(bits),
+            "{id}: mul width"
+        );
+    }
+    // The add control holds no multiply.
+    let id = "ir1526-wide-add-15bit-operands";
+    let row = corpus.iter().find(|row| row.id == id).expect(id);
+    assert!(
+        matches!(row.ground_truth, GroundTruth::MemoryExhausted),
+        "{id}"
+    );
+    let mut computed = probe_features("other + offset <= 100", 15);
+    computed.generator_version = row.features.generator_version.clone();
+    computed.kernel_version = row.features.kernel_version;
+    assert_eq!(row.features, computed, "{id}");
+    assert!(row
+        .features
+        .operations
+        .iter()
+        .all(|op| op.operation_id != MUL));
 }
