@@ -1554,3 +1554,116 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         wall.as_secs_f64()
     );
 }
+
+/// The operand widths (bits, sign included) the AC-10 probe can measure; `IR1526_PROBE_BITS`
+/// picks one per run.
+const IR1526_PROBE_WIDTHS: [u32; 3] = [16, 24, 32];
+
+/// The wall-clock ceiling of the probe run.
+const IR1526_PROBE_CEILINGS: ProofCeilings = ProofCeilings {
+    memory_bytes: std::num::NonZeroU64::new(24 * 1024 * 1024 * 1024).unwrap(),
+    wall_clock: Duration::from_secs(600),
+};
+
+fn probe_bits() -> u32 {
+    let bits = std::env::var("IR1526_PROBE_BITS")
+        .ok()
+        .map_or(IR1526_PROBE_WIDTHS[0], |value| {
+            value.parse().expect("IR1526_PROBE_BITS is a number")
+        });
+    assert!(
+        IR1526_PROBE_WIDTHS.contains(&bits),
+        "IR1526_PROBE_BITS must be one of {IR1526_PROBE_WIDTHS:?}"
+    );
+    bits
+}
+
+/// A clause `other * offset + 3 <= 100` with both operands `Int[0, 2^(bits-1) - 1]`,
+/// negotiated on the general route with an empty tractability table.
+fn probe_harness(bits: u32) -> KaniV2ClauseObligationHarness {
+    use quire_contract_codegen::{
+        negotiate_kani_obligations_with_options, GenerationOptions, IntegerRoute,
+    };
+    let scratch = TemporaryDirectory::new("ir1526-probe-table");
+    let table = scratch.path.join("table.json");
+    fs::write(&table, b"[]").unwrap();
+    let upper = (1_i64 << (bits - 1)) - 1;
+    let (package, clause) =
+        Twin::with_two_parameter_precondition((0, upper), (0, upper), "other * offset + 3 <= 100")
+            .emitted_package("TwoParameters");
+    let outcome = negotiate_kani_obligations_with_options(
+        &KaniObligationRequest {
+            ceilings: IR1526_PROBE_CEILINGS,
+            items: &[ObligationItem::V2Clause {
+                package: &package,
+                clause: &clause,
+                claim: &crate::common::v2_claim::claim_for(&package, &clause),
+                dependencies: None,
+            }],
+            subject_path: SUBJECT,
+            unwind: 3,
+        },
+        &GenerationOptions {
+            tractability_table: Some(table),
+        },
+        IntegerRoute::General,
+    )
+    .expect("the request negotiates");
+    assert!(matches!(
+        &outcome.records()[0].disposition,
+        quire_contract_codegen::ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        mut v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the request is valid");
+    };
+    assert_eq!(v2_clause_harnesses.len(), 1, "one contract harness");
+    v2_clause_harnesses.remove(0)
+}
+
+#[test]
+fn the_wide_multiply_probe_clause_negotiates_supported_with_one_harness_at_every_width() {
+    for bits in IR1526_PROBE_WIDTHS {
+        let harness = probe_harness(bits);
+        assert!(
+            harness.rust.contents.contains("scalar_2")
+                && harness
+                    .rust
+                    .contents
+                    .contains(&format!("<= {}_i64", (1_i64 << (bits - 1)) - 1)),
+            "the multiply and the {bits}-bit bound are rendered"
+        );
+    }
+}
+
+/// Measures, never asserts a verdict: the AC-10 wide integer multiply row.
+#[test]
+#[ignore = "kani lane: IR1526_PROBE_BITS=<16|24|32>, one run each, serially"]
+fn ir1526_probe_wide_integer_multiply_under_installed_kani() {
+    use quire_contract_codegen::{GENERATOR_VERSION, KERNEL_VERSION};
+    let bits = probe_bits();
+    let harness = probe_harness(bits);
+    // A precondition harness reaches no subject, so the crate is the harness alone.
+    let crate_scratch = ScratchCrate::new("ir1526-probe", &harness.rust.contents, None);
+    let started = Instant::now();
+    let run = run_installed(&crate_scratch, &harness);
+    let wall = started.elapsed();
+    let verdict = match &run.evidence.outcome {
+        KaniRunOutcome::Verified => "Verified".to_owned(),
+        KaniRunOutcome::Falsified { .. } => "Falsified".to_owned(),
+        KaniRunOutcome::Inconclusive { reason } => format!("{reason:?}"),
+        other => format!("{other:?}"),
+    };
+    let kani_version = Command::new("cargo")
+        .args(["kani", "--version"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default();
+    println!(
+        "IR1526-PROBE op=quire.op.integer.mul bits={bits} verdict={verdict} wall={:.1}s kani={kani_version} generator={GENERATOR_VERSION} kernel={KERNEL_VERSION}",
+        wall.as_secs_f64()
+    );
+}
