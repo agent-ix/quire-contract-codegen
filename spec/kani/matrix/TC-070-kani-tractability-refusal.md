@@ -21,7 +21,8 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
    the signature (FR-056-AC-1).
 2. Admit `a * b + c` at three widths and compare the exposed per-operation widths with those the
    oracle rendering computes. Mutate to the declared width; the multiply-then-add case must fail
-   (FR-056-AC-2).
+   (FR-056-AC-2). Assert the exposed route is `general` for an `IntegerRoute::General` negotiation
+   and `native` for `IntegerRoute::Native` on the same clause; a decider fed a fixed route fails.
 3. Load a valid table, an empty table and tables with an unknown verdict, a missing field and a
    fractional width, a missing `route` and an unknown `route`; assert the load results and the failing row index. Add a row for a fresh
    operation id and assert the decision changes with no source change (FR-056-AC-3).
@@ -38,7 +39,8 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
    runs. Change only the Kani, CBMC or solver version: still refused (FR-056-AC-7).
 7a. With a `not_tractable` general-route row for `quire.op.integer.mul` at 21 bits, request the
    same multiply at 21 bits on `IntegerRoute::General` (refused) and on `IntegerRoute::Native`
-   (runs); swap the row to `native` and assert the reverse; add a `tractable` row on either route and
+   (the decider returns `Run`; the item is not refused as `V2ClauseNotTractable`, though the multiply
+   fixtures end `RenderFailed` on native, which has no two-parameter precondition); swap the row to `native` and assert the reverse; add a `tractable` row on either route and
    assert no refusal. Mutant: matching without the route refuses the native clause (FR-056-AC-14).
 8. Add two qualifying rows in both file orders and assert the reported one is unchanged
    (FR-056-AC-8).
@@ -66,5 +68,4 @@ unchanged.
 
 ## Status
 
-Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526) except the route additions (steps 2 to 4, 7a and 10), which are specified and not yet implemented; step 10 is partial (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
-needs an installed Kani run.
+Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526) except the route additions (steps 2 to 4, 7a and 10), which are specified and not yet implemented; step 10 is partial (see FR-056 Status). Step 13 is coded as a kani-lane test and was executed under installed Kani 0.68.0 (Verified, 235.5 s); the multiply refusal half runs as a host test until an installed-Kani run covers it.
