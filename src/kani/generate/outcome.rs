@@ -174,6 +174,8 @@ pub enum KaniObligationError {
         /// The requested bound.
         unwind: u32,
     },
+    /// The tractability table the request names does not load; nothing is generated.
+    TractabilityTable(crate::kani::tractability::TractabilityLoadError),
 }
 
 /// The IR item a record is about.
@@ -304,6 +306,18 @@ pub enum UnsupportedObligation {
         node_id: CheckedNodeId,
         /// Exact checked operator identity found in the clause body.
         operation_identity: String,
+    },
+    /// An admitted V2 clause holds an operation that a current measured row records as not
+    /// finishing under Kani at or above the operation's width (FR-056-AC-4).
+    V2ClauseNotTractable {
+        /// Selected clause node.
+        node_id: CheckedNodeId,
+        /// The refused operation's catalog id.
+        operation_identity: String,
+        /// The operation's width in bits after range propagation.
+        width_bits: u32,
+        /// The measured row, with its Kani, CBMC, solver, generator and kernel versions.
+        row: Box<crate::kani::tractability::TractabilityRow>,
     },
     /// A surviving renderer could not assemble or serialize a harness after admitting its item.
     /// Distinct from the resource and syntax grounds below.

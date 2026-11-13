@@ -114,6 +114,7 @@ use crate::{
         ObligationKind, ProofDependencySnapshot, StateFrameHarness, V2ClauseClaimField,
         V2ClauseObligationClaim,
     },
+    kani::tractability::{GenerationOptions, TractabilityDecider, TractabilityTable},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -326,7 +327,31 @@ impl<'a> ScalarFormLookups<'a> {
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, false)
+    negotiate_integer_policy(request, false, &TractabilityTable::empty())
+}
+
+/// Which integer encoding a negotiation selects.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntegerRoute {
+    /// [`negotiate_kani_obligations`]: the general encoding.
+    General,
+    /// [`negotiate_kani_native_obligations`]: the kernel-admitted native encoding.
+    Native,
+}
+
+/// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
+/// named by `tractability_table` decides which V2 clauses are refused as not tractable
+/// (FR-056). A named table that does not load fails the request and generates nothing.
+// Implements: FR-056
+pub fn negotiate_kani_obligations_with_options(
+    request: &KaniObligationRequest<'_>,
+    options: &GenerationOptions,
+    route: IntegerRoute,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
+    let table = options
+        .load_table()
+        .map_err(KaniObligationError::TractabilityTable)?;
+    negotiate_integer_policy(request, route == IntegerRoute::Native, &table)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.
@@ -336,12 +361,13 @@ pub fn negotiate_kani_obligations(
 pub fn negotiate_kani_native_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, true)
+    negotiate_integer_policy(request, true, &TractabilityTable::empty())
 }
 
 fn negotiate_integer_policy(
     request: &KaniObligationRequest<'_>,
     native: bool,
+    decider: &dyn TractabilityDecider,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
     let mut scalar_lookups = BTreeMap::new();
@@ -357,6 +383,7 @@ fn negotiate_integer_policy(
                 &mut scalar_lookups,
                 &mut checked_lookups,
                 native,
+                decider,
             )
         })
         .collect::<Vec<_>>();
@@ -796,6 +823,7 @@ fn classify<'a>(
     >,
     checked_lookups: &mut CheckedLookups<'a>,
     native: bool,
+    decider: &dyn TractabilityDecider,
 ) -> ItemState {
     match *item {
         ObligationItem::ConstrainedMethod { request: method } => {
@@ -858,6 +886,7 @@ fn classify<'a>(
             claim,
             dependencies,
             native,
+            decider,
         ),
         ObligationItem::ScalarClaim {
             source,
@@ -923,6 +952,7 @@ fn classify_v2_clause<'a>(
     claim: &V2ClauseObligationClaim,
     dependencies: Option<&[ProofDependencyRequest<'_>]>,
     native: bool,
+    decider: &dyn TractabilityDecider,
 ) -> ItemState {
     let package = lookup.package;
     let view = lookup.clause();
@@ -967,7 +997,7 @@ fn classify_v2_clause<'a>(
                     node_id: clause.clone(),
                 })
             }
-            Some(kind) => match lower_v2_clause(view, clause, kind, claim) {
+            Some(kind) => match lower_v2_clause(view, clause, kind, claim, decider) {
                 Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
                 Err(reason) if !native => {
                     match lower_collection_operation(lookup.collection(), clause, claim) {
