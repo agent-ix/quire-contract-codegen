@@ -48,8 +48,11 @@ The symbolic run of the `amount + 2` subject (playback exactly 999) is FR-015-AC
 Rerun on the review-fix head (same command, 24 GiB scope): both installed playbacks passed again (healthy 4.0 s,
 scope peak 724,164,608 B; mutant two-phase `Falsified` 132.3 s then 999 playback `should panic ... ok` 2.5 s, scope
 peak 11,747,831,808 B). Owned teardown (FR-017-AC-60) is asserted after every installed playback by
-`assert_no_process_of`: `pgrep -f` for the scratch crate directory finds no process (exit status 1) once the entry
-has returned.
+`assert_no_process_of_playback`: `pgrep -f` finds no live process whose command line contains the run's target
+directory (cargo, rustc and the playback test binary carry it in their paths) or the exact playback test name (the test
+binary's arguments). The scratch crate directory is only a working directory and is deliberately not the needle.
+`the_teardown_check_sees_a_live_process` runs the check against a live process carrying both needles and requires it to
+fail, then to pass after the process is stopped.
 
 ## Impossible-precondition control (FR-015-AC-126)
 
@@ -66,7 +69,7 @@ whose subject `check() -> i64` draws nothing. Installed Kani 0.68.0, 24 GiB scop
 | Test | Subject returns | Outcome | Wall |
 | --- | --- | --- | --- |
 | `tc_036_real_kani_runner_verifies_an_in_domain_produced_result` | 1000 | `Verified`, 1544 of 1566 checks successful, no failure | 6.0 s |
-| `tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result` | 1001 (satisfies the clause) | `Falsified`, exactly one failed check (the domain assertion), 1528 successful of 1566 | 1.7 s |
+| `tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result` | 1001 (satisfies the clause) | `Falsified`, exactly one failed check, whose counterexample names "the produced V2 result lies in its admitted domain" and not the clause assertion, 1528 successful of 1566 | 1.7 s |
 
 ## Not established
 

@@ -1111,20 +1111,61 @@ impl PeakMemorySource for ScopePeak {
     }
 }
 
-/// Owned teardown: once a playback has concluded, no process of the run (the launcher, cargo,
-/// rustc or the playback test binary, all of which name the scratch crate) is left alive.
-fn assert_no_process_of(directory: &Path) {
-    let needle = directory.to_string_lossy().into_owned();
+/// The command lines of every live process whose command line contains `needle` (`pgrep -f`).
+fn live_processes_naming(needle: &str) -> Vec<String> {
     let output = Command::new("pgrep")
-        .args(["-f", "--", &needle])
+        .args(["-a", "-f", "--", &escape_pattern(needle)])
         .output()
         .expect("pgrep");
-    assert_eq!(
-        output.status.code(),
-        Some(1),
-        "a process of the concluded playback is still alive: {}",
-        String::from_utf8_lossy(&output.stdout)
-    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn escape_pattern(text: &str) -> String {
+    text.chars()
+        .flat_map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '/' | '_' | '-' | ':') {
+                vec![character]
+            } else {
+                vec!['\\', character]
+            }
+        })
+        .collect()
+}
+
+/// Owned teardown: once a playback has concluded, no process of the run is left alive. The cargo
+/// and rustc children carry the target directory in their paths and the playback test binary
+/// carries it in its executable path and the exact test name in its arguments; the scratch
+/// crate directory is only a working directory and is not on any command line.
+fn assert_no_process_of_playback(target: &Path, test_name: &str) {
+    for needle in [target.to_string_lossy().into_owned(), test_name.to_owned()] {
+        let alive = live_processes_naming(&needle);
+        assert!(
+            alive.is_empty(),
+            "a process naming {needle} survived the concluded playback: {alive:?}"
+        );
+    }
+}
+
+/// The teardown check can see a live process: a process carrying the target directory in its
+/// command line is found while it runs, and the check fails; it passes once the process is gone.
+#[trace("FR-017-AC-60", "TC-027")]
+#[test]
+fn the_teardown_check_sees_a_live_process() {
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ir917-teardown-control");
+    let test_name = "ir917_teardown_control::playback_999";
+    let mut live = Command::new("sh")
+        .args(["-c", "sleep 60; true", test_name])
+        .arg(&target)
+        .spawn()
+        .expect("spawn the live process");
+    let survived = std::panic::catch_unwind(|| assert_no_process_of_playback(&target, test_name));
+    live.kill().expect("stop the live process");
+    live.wait().expect("reap the live process");
+    assert!(survived.is_err(), "the check missed a live process");
+    assert_no_process_of_playback(&target, test_name);
 }
 
 /// Writes the sealed artifact with `appended` inside its module, beside the subject, into the
@@ -1171,7 +1212,7 @@ fn run_installed_playback(
     );
     let wall = started.elapsed();
     let outcome = outcome.unwrap_or_else(|refusal| panic!("{test_name}: {refusal}"));
-    assert_no_process_of(&scratch.directory.path);
+    assert_no_process_of_playback(&target, &test_name);
     let KaniConcretePlaybackOutcome::Completed {
         succeeded,
         exit_code,
@@ -1316,10 +1357,16 @@ fn tc_036_real_kani_runner_verifies_an_in_domain_produced_result() {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_036_real_kani_runner_falsifies_an_out_of_domain_produced_result() {
     let run = run_result_domain("ir948-result-domain-out", 1001);
+    let KaniRunOutcome::Falsified { counterexample } = &run.evidence.outcome else {
+        panic!("expected Falsified, got {:?}", run.evidence.outcome);
+    };
     assert!(
-        matches!(run.evidence.outcome, KaniRunOutcome::Falsified { .. }),
-        "{:?}",
-        run.evidence.outcome
+        counterexample.contains("the produced V2 result lies in its admitted domain"),
+        "the failing check is the domain assertion:\n{counterexample}"
+    );
+    assert!(
+        !counterexample.contains("the V2 postcondition holds for the produced result"),
+        "the clause assertion is not the failing one:\n{counterexample}"
     );
     let failed = run
         .evidence
