@@ -1441,6 +1441,7 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
         &table,
         serde_json::to_vec(&[serde_json::json!({
             "operation_ids": ["quire.op.integer.mul"],
+            "route": "general",
             "max_operand_bits": 21,
             "collection_bound": null,
             "verdict": "not_tractable",
@@ -1502,8 +1503,8 @@ fn tc_070_real_kani_runs_the_clause_the_table_lets_through_and_refuses_the_measu
     };
     assert!(v2_clause_harnesses.is_empty(), "no harness, so no launch");
     // A multiply narrower than the row's bound is not refused. The native route renders no
-    // two-parameter precondition, so the clause is negotiated on the general route; the
-    // decision is the same on both and no Kani is launched for it.
+    // two-parameter precondition, so the clause is negotiated on the general route, the route of
+    // the row; no Kani is launched for it.
     let (narrow, narrow_clause) = Twin::with_two_parameter_precondition(
         (0, 1 << 9),
         (0, 1 << 9),

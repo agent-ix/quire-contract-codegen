@@ -114,7 +114,7 @@ use crate::{
         ObligationKind, ProofDependencySnapshot, StateFrameHarness, V2ClauseClaimField,
         V2ClauseObligationClaim,
     },
-    kani::tractability::{GenerationOptions, TractabilityDecider, TractabilityTable},
+    kani::tractability::{GenerationOptions, IntegerRoute, TractabilityDecider, TractabilityTable},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -327,18 +327,7 @@ impl<'a> ScalarFormLookups<'a> {
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, false, &TractabilityTable::empty())
-}
-
-use crate::kani::tractability::IntegerRoute;
-
-/// The route a `native` flag selects.
-const fn native_route(native: bool) -> IntegerRoute {
-    if native {
-        IntegerRoute::Native
-    } else {
-        IntegerRoute::General
-    }
+    negotiate_integer_policy(request, IntegerRoute::General, &TractabilityTable::empty())
 }
 
 /// [`negotiate_kani_obligations`] or [`negotiate_kani_native_obligations`] (per `route`) with the generation request's options: the measured table
@@ -365,7 +354,7 @@ pub fn negotiate_kani_obligations_with_decider(
     decider: &dyn TractabilityDecider,
     route: IntegerRoute,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, route == IntegerRoute::Native, decider)
+    negotiate_integer_policy(request, route, decider)
 }
 
 /// Negotiate checked integer claims through the exact kernel's admitted native route.
@@ -375,15 +364,16 @@ pub fn negotiate_kani_obligations_with_decider(
 pub fn negotiate_kani_native_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
-    negotiate_integer_policy(request, true, &TractabilityTable::empty())
+    negotiate_integer_policy(request, IntegerRoute::Native, &TractabilityTable::empty())
 }
 
 fn negotiate_integer_policy(
     request: &KaniObligationRequest<'_>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
+    let native = route == IntegerRoute::Native;
     let mut scalar_lookups = BTreeMap::new();
     let mut checked_lookups = BTreeMap::new();
     let mut states = request
@@ -396,7 +386,7 @@ fn negotiate_integer_policy(
                 request.ceilings,
                 &mut scalar_lookups,
                 &mut checked_lookups,
-                native,
+                route,
                 decider,
             )
         })
@@ -836,9 +826,10 @@ fn classify<'a>(
         ContractLookup<'a>,
     >,
     checked_lookups: &mut CheckedLookups<'a>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> ItemState {
+    let native = route == IntegerRoute::Native;
     match *item {
         ObligationItem::ConstrainedMethod { request: method } => {
             let lookup = checked_lookup(checked_lookups, method.safety.package);
@@ -899,7 +890,7 @@ fn classify<'a>(
             clause,
             claim,
             dependencies,
-            native,
+            route,
             decider,
         ),
         ObligationItem::ScalarClaim {
@@ -965,9 +956,10 @@ fn classify_v2_clause<'a>(
     clause: &'a CheckedNodeId,
     claim: &V2ClauseObligationClaim,
     dependencies: Option<&[ProofDependencyRequest<'_>]>,
-    native: bool,
+    route: IntegerRoute,
     decider: &dyn TractabilityDecider,
 ) -> ItemState {
+    let native = route == IntegerRoute::Native;
     let package = lookup.package;
     let view = lookup.clause();
     let graph_node = view.node(clause);
@@ -1011,20 +1003,16 @@ fn classify_v2_clause<'a>(
                     node_id: clause.clone(),
                 })
             }
-            Some(kind) => {
-                match lower_v2_clause(view, clause, kind, claim, native_route(native), decider) {
-                    Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-                    Err(reason) if !native => {
-                        match lower_collection_operation(lookup.collection(), clause, claim) {
-                            Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
-                            Err(refusal) => {
-                                collection_domain_refusal(clause, refusal, Some(reason))
-                            }
-                        }
+            Some(kind) => match lower_v2_clause(view, clause, kind, claim, route, decider) {
+                Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+                Err(reason) if !native => {
+                    match lower_collection_operation(lookup.collection(), clause, claim) {
+                        Ok(lowered) => Outcome::LoweredCollectionOperation(Box::new(lowered)),
+                        Err(refusal) => collection_domain_refusal(clause, refusal, Some(reason)),
                     }
-                    Err(reason) => Outcome::Unsupported(reason),
                 }
-            }
+                Err(reason) => Outcome::Unsupported(reason),
+            },
             // Not a precondition, postcondition or invariant.
             None => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
