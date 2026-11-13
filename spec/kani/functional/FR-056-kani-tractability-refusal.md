@@ -42,8 +42,8 @@ change); with no table passed every harness runs, as for generation. The refusal
 the `V2ClauseNotTractable` arm for that non-V2-clause harness (no second mechanism); it is returned
 wrapped in `DecidedRunRefusal` because `kani::run` may not import generation types. CG embeds the
 measured general-route rows, add from 2 bits and sub from 4 bits (`TractabilityTable::shipped_general_route_scalar`, from
-`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below that row's
-`max_operand_bits` on the general route are unmeasured and left to the wall-clock backstop.
+`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below a row's
+`max_operand_bits` (2 for add, 4 for sub) on the general route are unmeasured and left to the wall-clock backstop.
 
 The generation-time decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
 path accepts today (connectives, the six integer comparisons, integer add, subtract, multiply and

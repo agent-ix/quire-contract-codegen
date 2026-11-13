@@ -8,7 +8,7 @@
     "collection_bound": null,
     "verdict": "not_tractable",
     "wall_seconds": 600,
-    "peak_bytes": null,
+    "peak_bytes": 14602888806,
     "kani_version": "0.68.0",
     "cbmc_version": "6.11.0",
     "solver_version": "cadical-3.0.0",

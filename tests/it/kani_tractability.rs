@@ -1186,6 +1186,16 @@ fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row
             ),
             "add at {bits} bits"
         );
+        assert!(
+            matches!(
+                table.decide(&features_on(
+                    IntegerRoute::Native,
+                    vec![op_width(ADD, bits)]
+                )),
+                Decision::Run
+            ),
+            "native add at {bits} bits"
+        );
     }
     assert!(matches!(
         table.decide(&features(vec![op_width(ADD, 1)])),

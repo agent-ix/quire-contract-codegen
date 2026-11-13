@@ -19,7 +19,7 @@ smallest width at which each was observed to time out:
 | collection_bound | none | none |
 | verdict | `not_tractable` | `not_tractable` |
 | wall_seconds | 600 (the lane budget; `Inconclusive { TimedOut }`) | 600 (same) |
-| peak_bytes | `null` (not captured at 2 bits; about 14.5e9 at 8 min at 4 bits) | about 15.0e9 at 600 s |
+| peak_bytes | 14602888806 (13.6 GiB, the systemd scope peak of the 2-bit probe, build included; not the runner's) | about 15.0e9 at 600 s |
 | Kani / CBMC / solver | 0.68.0 / 6.11.0 / cadical-3.0.0, `--unwind 3` | same |
 | generator version | quire-contract-codegen 0.1.0 | same |
 | kernel version | quire-exact `KERNEL_VERSION` 1 | same |
@@ -33,7 +33,10 @@ under this ticket (follow-up to #821) ran the general-route `x + 1` over `Int[2,
 `left` = `Int[2, 2]`, 2 bits, and `right` = `Int[1, 1]`, so the largest width is 2 bits) through
 `execute_kani_obligation` and the lane budget: foreground, `flock /tmp/cargo-slot.lock`,
 `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, Kani 0.68.0, CBMC 6.11.0. It ended
-`Inconclusive { reason: TimedOut }` at 600.04 s (peak memory not captured). The add row is therefore at
+`Inconclusive { reason: TimedOut }` at 600.04 s; the user journal reported the scope's `13.6G memory peak`
+(systemd's G is GiB, so about 1.46e10 bytes, build included; the runner reports no peak). The driver's
+3-bit scope reported 13.8G. The probe is the ignored test `ir1530_probe_general_route_two_bit_add`
+(`tests/it/kani_obligations.rs`; fixture `left` `Int[2, 2]`, `right` `Int[1, 1]`). The add row is therefore at
 2 bits. Subtraction was measured only at 4 bits and keeps its 4-bit row. One bit (`Int[1, 1]` operands)
 and anything else narrower is unmeasured: it is not refused and is left to the wall-clock backstop.
 

@@ -3530,8 +3530,13 @@ pub const BOUNDED_BINARY_SUBTRACTION: u32 = 2037;
 /// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
 /// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
 pub fn bounded_increment_package() -> PackageBuilder {
+    increment_package_over(Bound::Integer(0, 9))
+}
+
+/// A package holding only `x + 1` with `x` (and the expression) typed by `bound`; the one place
+/// [`bounded_increment_package`] and the IR-1530 narrow-width probe share.
+pub fn increment_package_over(bound: Bound) -> PackageBuilder {
     let mut builder = corpus_package_for_codes(&[T_INTEGER, T_TEXT]);
-    let bound = Bound::Integer(0, 9);
     let bound_key = builder.bound(&bound);
     builder.code(
         V_PARAM_X,
