@@ -2592,7 +2592,12 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         scalar_limits: constrained_limits,
         target_directory: &target,
     })
-    .expect("verified proof and typed native incomplete receipt at zero result budget");
+    .unwrap_or_else(|error| {
+        verified_or_print_verdict(
+            &error,
+            "verified proof and typed native incomplete receipt at zero result budget",
+        )
+    });
 
     assert_eq!(
         constrained_receipt.proof_evidence().outcome,
@@ -3125,7 +3130,38 @@ fn verified_or_print_verdict<T>(
     what: &str,
 ) -> T {
     if let Some(verdict) = error.falsified_verdict() {
+        // libtest prints `test <name> ... ` without a newline before the test's own output; the
+        // gate matches the verdict as a whole line, so start one.
+        println!();
         println!("{verdict}");
     }
     panic!("{what}: {error:?}");
+}
+
+#[trace("FR-055-AC-1", "TC-069")]
+#[test]
+fn the_declared_native_route_mutant_lines_are_on_their_owning_proofs_path() {
+    // `scripts/kani-mutants.json` mutates the operator spelling in `src/oracle/scalar/native.rs`.
+    // The owning tc_027 proofs run the native-integer route, so the text those lines emit must be
+    // in the oracle the proof is built from, and the other operator's text must not be.
+    let source = |artifacts: &[Artifact]| {
+        artifacts
+            .iter()
+            .map(|artifact| artifact.contents.as_str())
+            .collect::<String>()
+    };
+    let (_, increment) = native_scalar_increment_with_artifacts();
+    let increment = source(&increment);
+    assert!(
+        increment.contains("nx::NativeIntegerOperation::Add {"),
+        "{increment}"
+    );
+    assert!(!increment.contains("nx::NativeIntegerOperation::Subtract {"));
+    let (_, subtraction) = native_scalar_binary_subtraction_with_artifacts();
+    let subtraction = source(&subtraction);
+    assert!(
+        subtraction.contains("nx::NativeIntegerOperation::Subtract {"),
+        "{subtraction}"
+    );
+    assert!(!subtraction.contains("nx::NativeIntegerOperation::Add {"));
 }

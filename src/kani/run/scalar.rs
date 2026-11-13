@@ -23,7 +23,7 @@ use crate::{
     kani::{
         classify::{KaniInconclusiveReason, KaniRunOutcome},
         identity::{KaniScalarObligationHarness, ScalarIntegerRepresentation},
-        output::report::KaniFailureCause,
+        output::report::{KaniCheckClass, KaniCheckStatus, KaniFailureCause},
         run::{
             execute::{
                 execute_kani_obligation_library, KaniExecutionEvidence, KaniExecutionRefusal,
@@ -296,18 +296,34 @@ pub enum KaniScalarNativeErrorClass {
 pub const SCALAR_NATIVE_FALSIFIED_VERDICT: &str = "VERIFICATION:- FAILED";
 
 impl KaniScalarNativeError {
-    /// The verdict line to print when the proof was falsified: `Some` exactly when Kani ran and
-    /// classified the harness [`KaniRunOutcome::Falsified`].
+    /// The verdict line to print when Kani rejected the proof: `Some` exactly when Kani ran and
+    /// a property check failed. That is a [`KaniRunOutcome::Falsified`] outcome, or, when Kani
+    /// printed no concrete playback for the failed property (the usual case for a scalar harness),
+    /// a `FailedWithoutCounterexample` outcome whose failure cause is `PropertiesFailed`. A CBMC
+    /// failure, a timeout, a vacuous proof or a refusal is not a rejection.
     #[must_use]
     pub fn falsified_verdict(&self) -> Option<&'static str> {
-        match self {
-            Self::ProofNotVerified(evidence)
-                if matches!(evidence.outcome, KaniRunOutcome::Falsified { .. }) =>
-            {
-                Some(SCALAR_NATIVE_FALSIFIED_VERDICT)
+        let Self::ProofNotVerified(evidence) = self else {
+            return None;
+        };
+        let rejected = match &evidence.outcome {
+            KaniRunOutcome::Falsified { .. } => true,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample,
+            } => {
+                // The exit-status string alone is not enough: the report must also list a failed
+                // property (a non-cover check with status Failure), the rule `classify_report` uses.
+                matches!(
+                    evidence.failure_cause,
+                    Some(KaniFailureCause::PropertiesFailed)
+                ) && evidence.checks.iter().any(|check| {
+                    matches!(check.class, KaniCheckClass::Other(_))
+                        && check.status == KaniCheckStatus::Failure
+                })
             }
-            _ => None,
-        }
+            _ => false,
+        };
+        rejected.then_some(SCALAR_NATIVE_FALSIFIED_VERDICT)
     }
 
     /// Stable machine discriminant, independent of human diagnostics.
@@ -2244,6 +2260,54 @@ mod tests {
             None,
         )));
         assert_eq!(falsified.falsified_verdict(), Some("VERIFICATION:- FAILED"));
+        let check = |class: &str, status| crate::kani::output::report::KaniCheckResult {
+            id: 1,
+            class: KaniCheckClass::from(class.to_owned()),
+            location: crate::kani::output::report::KaniCheckLocation {
+                file: "f.rs".into(),
+                line: Some(1),
+            },
+            status,
+        };
+        let failed_with = |cause, checks| {
+            let mut evidence = classification_evidence(
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::FailedWithoutCounterexample,
+                },
+                cause,
+            );
+            evidence.checks = checks;
+            E::ProofNotVerified(Box::new(evidence))
+        };
+        let failed = |cause| failed_with(cause, vec![check("assertion", KaniCheckStatus::Failure)]);
+        // The exit-status string alone is not a rejection: the report must list a failed
+        // non-cover check, and an undetermined check, a failed cover or no check is not one.
+        for checks in [
+            vec![check("assertion", KaniCheckStatus::Undetermined)],
+            vec![check("cover", KaniCheckStatus::Failure)],
+            vec![check("assertion", KaniCheckStatus::Success)],
+            Vec::new(),
+        ] {
+            assert_eq!(
+                failed_with(Some(KaniFailureCause::PropertiesFailed), checks).falsified_verdict(),
+                None
+            );
+        }
+        // A failed property with no playback is the scalar harness's rejection; a CBMC failure,
+        // a missing cause and a timeout are not.
+        assert_eq!(
+            failed(Some(KaniFailureCause::PropertiesFailed)).falsified_verdict(),
+            Some("VERIFICATION:- FAILED")
+        );
+        assert_eq!(failed(None).falsified_verdict(), None);
+        assert_eq!(
+            failed(Some(KaniFailureCause::Timeout)).falsified_verdict(),
+            None
+        );
+        assert_eq!(
+            failed(Some(KaniFailureCause::OutOfMemory)).falsified_verdict(),
+            None
+        );
         let timed_out = E::ProofNotVerified(Box::new(classification_evidence(
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::TimedOut,

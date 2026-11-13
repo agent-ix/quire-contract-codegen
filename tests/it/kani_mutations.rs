@@ -26,6 +26,11 @@ case "$proof" in
   *ok*) echo 'VERIFICATION:- FAILED'; exit 101 ;;
   *survive*) echo 'VERIFICATION:- SUCCESSFUL'; exit 0 ;;
   *silent*) echo 'error[E0425]: cannot find value'; exit 101 ;;
+  *zero*) echo 'running 0 tests'; echo 'test result: ok. 0 passed'; exit 0 ;;
+  *embed*) echo 'running 1 test'; echo "panicked: ProofNotVerified { tail: \"CBMC failed\nVERIFICATION:- FAILED\" } VERIFICATION:- FAILED"; echo 'test result: FAILED. 0 passed; 1 failed'; exit 101 ;;
+  *ranbuild*) echo 'running 1 test'; echo "panicked at x: error[E0308] could not compile"; exit 101 ;;
+  *huge*) echo 'running 1 test'; head -c 100000 /dev/zero | tr '\0' 'x'; echo; exit 101 ;;
+  *panic*) echo 'running 1 test'; for i in $(seq 1 100); do echo "line $i"; done; echo "thread 'x' panicked at tests/it/k.rs:1:1:"; echo 'test result: FAILED. 0 passed; 1 failed'; exit 101 ;;
   *hang*) sleep 60 ;;
   *weak*) if grep -q TRIVIAL src/harness.txt; then echo 'VERIFICATION:- SUCCESSFUL'; exit 0; fi; echo 'VERIFICATION:- FAILED'; exit 101 ;;
 esac
@@ -472,4 +477,142 @@ fn no_shipped_anchor_lies_in_cfg_test_code() {
             "{file}:{line} is inside cfg(test) code, which a production build never compiles"
         );
     }
+}
+
+fn stderr_of_fail(sandbox: &Sandbox, proof: &str) -> String {
+    sandbox.declare(&[
+        ("ORIGINAL", proof),
+        ("OTHER", "m::ok_2"),
+        ("fn a", "m::ok_3"),
+    ]);
+    let output = sandbox.run(30, 120, true);
+    assert!(!output.status.success());
+    err(&output)
+}
+
+#[trace("FR-055-AC-5", "TC-069")]
+#[test]
+fn a_fail_row_names_its_cause_exit_status_and_the_tail_of_the_output() {
+    let sandbox = Sandbox::new();
+    let survive = stderr_of_fail(&sandbox, "m::survive_1");
+    assert!(
+        survive.contains("surviving mutant") && survive.contains("exited exit status: 0"),
+        "{survive}"
+    );
+
+    let compile = stderr_of_fail(&sandbox, "m::silent_1");
+    assert!(
+        compile.contains("did not compile") && compile.contains("error[E0425]"),
+        "{compile}"
+    );
+    assert!(compile.contains("exited exit status: 101"), "{compile}");
+
+    let zero = stderr_of_fail(&sandbox, "m::zero_1");
+    assert!(zero.contains("matched no test"), "{zero}");
+
+    let panic = stderr_of_fail(&sandbox, "m::panic_1");
+    assert!(
+        panic.contains("test ran and failed without Kani's rejection verdict"),
+        "{panic}"
+    );
+    assert!(
+        panic.contains("line 100") && panic.contains("panicked at"),
+        "the tail is shown: {panic}"
+    );
+    assert!(
+        !panic.contains("line 1\n") && !panic.contains("line 50\n"),
+        "only the last 40 lines: {panic}"
+    );
+}
+
+fn declared() -> Vec<serde_json::Value> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let text = fs::read_to_string(root.join("scripts/kani-mutants.json")).expect("declaration");
+    serde_json::from_str(&text).expect("declaration JSON")
+}
+
+#[trace("FR-055-AC-9", "TC-069")]
+#[test]
+fn every_shipped_mutant_still_parses_as_rust_once_injected() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for entry in declared() {
+        let source =
+            fs::read_to_string(root.join(entry["file"].as_str().expect("file"))).expect("source");
+        let mutated = source.replacen(
+            entry["anchor"].as_str().expect("anchor"),
+            entry["replacement"].as_str().expect("replacement"),
+            1,
+        );
+        syn::parse_file(&mutated).unwrap_or_else(|error| panic!("{entry} does not parse: {error}"));
+    }
+}
+
+#[trace("FR-055-AC-1", "TC-069")]
+#[test]
+fn every_owning_proof_is_an_ignored_lane_test_that_prints_the_verdict_on_failure() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for entry in declared() {
+        let proof = entry["proof"].as_str().expect("proof");
+        let (module, name) = proof.split_once("::").expect("module::test");
+        let source =
+            fs::read_to_string(root.join(format!("tests/it/{module}.rs"))).expect("test module");
+        let start = source
+            .find(&format!("fn {name}()"))
+            .unwrap_or_else(|| panic!("{proof} exists"));
+        let head = &source[..start];
+        assert!(
+            head[head.len().saturating_sub(300)..].contains("#[ignore"),
+            "{proof} is a lane test"
+        );
+        let body = &source[start..start + source[start..].find("\n}\n").expect("end of the test")];
+        assert!(
+            body.contains("verified_or_print_verdict"),
+            "{proof} prints Kani's verdict when the proof fails"
+        );
+        assert!(
+            !body.contains(".expect(\"verified proof"),
+            "{proof} has no bare expect on the proof"
+        );
+    }
+}
+
+#[trace("FR-055-AC-5", "TC-069")]
+#[test]
+fn only_a_line_that_is_exactly_the_verdict_rejects_a_mutant() {
+    let sandbox = Sandbox::new();
+    // A panic line quoting Kani's console, which ends with the same words, is not a rejection.
+    let embedded = stderr_of_fail(&sandbox, "m::embed_1");
+    assert!(
+        embedded.contains("test ran and failed without Kani's rejection verdict"),
+        "{embedded}"
+    );
+    let text = out(&sandbox.run(30, 120, true));
+    assert!(
+        text.lines()
+            .any(|l| l.contains("harness=m::embed_1 ") && l.ends_with("outcome=fail")),
+        "{text}"
+    );
+    // libtest prints `test name ... ` unterminated before the test's output, so the test starts a line.
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/it/kani_obligations.rs"),
+    )
+    .expect("source");
+    assert!(source.contains("println!();\n        println!(\"{verdict}\");"));
+}
+
+#[trace("FR-055-AC-5", "TC-069")]
+#[test]
+fn a_test_that_ran_is_not_reported_as_a_compile_failure_and_the_tail_is_bounded() {
+    let sandbox = Sandbox::new();
+    let ran = stderr_of_fail(&sandbox, "m::ranbuild_1");
+    assert!(
+        ran.contains("the test ran and failed") && !ran.contains("did not compile"),
+        "{ran}"
+    );
+    let huge = stderr_of_fail(&sandbox, "m::huge_1");
+    assert!(
+        huge.len() < 12_000,
+        "the tail is bounded by bytes: {}",
+        huge.len()
+    );
 }
