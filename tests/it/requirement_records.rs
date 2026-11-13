@@ -1846,7 +1846,10 @@ fn an_unlowered_second_guard_precedes_unsatisfiability() {
 pub(crate) fn ac35_native_harness(
     comparison: &str,
     identity: &'static str,
-) -> quire_contract_codegen::KaniScalarObligationHarness {
+) -> (
+    quire_contract_codegen::KaniScalarObligationHarness,
+    quire_contract_codegen::Artifact,
+) {
     let scenario = guard_scenario(
         "ac35",
         &guard_fn(
@@ -1872,10 +1875,21 @@ pub(crate) fn ac35_native_harness(
         },
     )
     .expect("the guarded item routes");
+    let manifest = generation
+        .oracle_artifacts
+        .as_ref()
+        .and_then(|artifacts| {
+            artifacts
+                .iter()
+                .find(|artifact| artifact.path == "Cargo.toml")
+        })
+        .expect("the oracle crate returns its manifest")
+        .clone();
     let (record, harness) = kani_record(&generation, 0);
-    harness
+    let harness = harness
         .unwrap_or_else(|| panic!("a harness, got {:?}", record.disposition))
-        .clone()
+        .clone();
+    (harness, manifest)
 }
 
 /// The routed scalar harness computes on native integers, never drops the meter or the outcome
@@ -1884,7 +1898,7 @@ pub(crate) fn ac35_native_harness(
 #[test]
 fn the_guarded_native_harness_is_thin_and_ends_with_its_cover() {
     for (comparison, identity) in [("<", "quire.op.integer.lt"), (">", "quire.op.integer.gt")] {
-        let harness = ac35_native_harness(comparison, identity);
+        let (harness, _manifest) = ac35_native_harness(comparison, identity);
         let source = &harness.rust.contents;
         let proof = &source[source.find("#[kani::proof]").expect("the proof attribute")..];
         assert_eq!(

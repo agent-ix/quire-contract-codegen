@@ -64,3 +64,28 @@ unrelated to the diff. The installed-Kani lane was not run by the reviewer (brie
 
 Not mergeable at 3c7845ca until FND-001 is resolved and the gap-analysis/spec-review findings on
 FR-022-AC-35's evidence are fixed. The code change itself is correct and minimal.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-002 | low | `run_ac35_native` runs the AC-35 harness in a crate whose `Cargo.toml` comes from a different fixture: `native_scalar_increment()` builds it from the unguarded `bounded_increment_package`, not from the AC-35 routed generation. TC-027 says to assemble the crate from the returned `Cargo.toml`. This works today only because the native harness is self-contained and the two manifests carry the same dependencies, so a manifest difference specific to the guarded package would go unseen. Take the manifest from the same `generate_routed_native` call (return it from `ac35_native_harness`) | tests/it/kani_obligations.rs:2978-2991 |
+
+## Dispositions
+
+Round 1, reviewed head 1380afbe (one commit on 3c7845ca; base merge-base 3cf04231, PR is BEHIND
+`origin/main` e90309b7 but mergeable). The only `src/` change against main is now the
+`if lowered.native_integer_selection.is_some()` block around the two forgets, and
+`render.rs` is unchanged. On the general route `native_integer_selection` is `None`, so its
+harness text is byte-identical to main by construction. `render_scalar_reference` and the pinned
+`kani::cover!(completed,` text are restored to the base text. Reviewer runs at this head (own
+worktree, `flock /tmp/cargo-slot.lock`, 24G scope):
+`tc_033_native_guarded_harness_reports_cover_unsatisfied_and_verified` and
+`tc_033_native_guarded_harness_mutants_are_detected` 2 passed in 75.14 s. The general-route
+control `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified` failed with
+`got Inconclusive { reason: TimedOut }` at 600.24 s, which confirms the coder's report. Its
+harness text is the same as main's, so the timeout is not introduced by this PR.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | Forgets are restricted to the native route, so the general-route tail is byte-identical to main. The coder's lane run found the regression this finding warned of: the first version, which forgot on both routes, OOM-killed `kani_generation_real_v2_scalar_verifies` at 24 GiB within about a minute, against `TimedOut` at 600 s on base. Native-route lane tests pass (reviewer: the two AC-35 tests; coder: `native_original_tc027_increment_verifies`). The pre-existing general-route timeouts are out of this PR's scope |

@@ -2981,8 +2981,8 @@ fn run_ac35_native(
     identity: &'static str,
     mutation: Option<(&str, &str)>,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
-    let mut harness = crate::requirement_records::ac35_native_harness(comparison, identity);
-    let (_, manifest) = native_scalar_increment();
+    let (mut harness, manifest) =
+        crate::requirement_records::ac35_native_harness(comparison, identity);
     if let Some((site, with)) = mutation {
         assert_eq!(harness.rust.contents.matches(site).count(), 1, "{site}");
         harness.rust.contents = harness.rust.contents.replace(site, with);

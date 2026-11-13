@@ -58,3 +58,15 @@ because the helper and pattern already exist. Coverage of the text clause that A
 (native integers, forgets, cover last) is real and mutation-sensitive. The executed raw-Kani
 results are genuine and match the generated text. They count as Demonstration evidence, not as
 the FR-017 Test evidence the AC and TC-033 require.
+
+## Dispositions
+
+Round 1, reviewed head 1380afbe. `quire matrix` now binds FR-022-AC-35 to
+`tests/it/kani_obligations.rs:2998` and `:3017` (ignored, kani lane) and to
+`tests/it/requirement_records.rs:1885`. The reviewer ran both kani-lane tests through CG's
+`execute_kani_obligation`: 2 passed, 75.14 s.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `tc_033_native_guarded_harness_reports_cover_unsatisfied_and_verified` asserts `CoverUnsatisfied { satisfied: 0, total: 1 }` (`x < y`) and `Verified` (`x > y`) through CG's runner, and `tc_033_native_guarded_harness_mutants_are_detected` asserts mutants A and B `Falsified` and C `Verified`. Both are tagged FR-022-AC-35 / TC-033, inside the `kani_obligations` filter of `KANI_FILTERS`, and passed in the reviewer's run |
+| FND-002 | fixed | The record now has a Reproduction section naming the two committed tests and the command, and states that the raw table is the harness text of head 3c7845ca. The throwaway-test sentence is gone |

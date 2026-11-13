@@ -59,3 +59,14 @@ Not mergeable at 3c7845ca until FND-001 and FND-002 are fixed in this PR; FND-00
 are small wording fixes for the same edit. The qualification record itself is accurate and
 appropriately qualified. The defect is that the AC, TC-033 and the matrix drop those
 qualifications.
+
+## Dispositions
+
+Round 1, reviewed head 1380afbe. `quire validate` passes on the three spec files.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The FR-017 execution clause is now backed by the kani-lane runner tests (reviewer-run, passed). FR-022 "Scoped evidence status", TC-033 step 28 and its status paragraph, and the `tests.md` row cite those tests, with the measurements only in the record |
+| FND-002 | fixed | AC-35 names `generate_routed_native` (the native integer policy). It states that ordinary `generate_routed` keeps the general route and its unchanged tail and has no verdict for this scenario, and the `tests.md` row says ordinary `generate_routed` is not covered |
+| FND-003 | fixed | The measured steps, times and memory are removed from the AC text and kept in the record. The verdict and text-shape clauses still share one row, but both now carry the same Covered status and evidence, so the split is no longer needed for status |
+| FND-004 | fixed | The `tests.md` row reads `✅ Covered (IR-304)`. The cover-attempt record ends "The same scenario on the native harness is recorded in `ir304-kani-guard-native-harness.md`" |
