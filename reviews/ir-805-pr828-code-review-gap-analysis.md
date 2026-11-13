@@ -36,3 +36,11 @@ IR-939) and the non-tautological `{0,3}` healthy claim. AC-106 correctly stays P
 Not mergeable as is. The evidence is real and it re-ran green. However, one AC-106 mutant clause (another
 role) is credited to a test that does not exercise it (FND-001), and the slice B evidence sits outside every
 gate after the gate-lane `Falsified` control was deleted (FND-002). AC-106 is correctly kept PARTIAL.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | fixed at 6b3940be: the mislabelled test is removed and FR-015-AC-106, TC-025 and tests.md all state the 'another field or role' clause is NOT evidenced (constant-false traversal does not qualify); the gap is now honest rather than credited. |
+| FND-002 | fixed | fixed at 6b3940be: the AC-106 row, module doc and tests.md name `cargo test --lib kani_graph_private -- --ignored --test-threads=1` and state `make kani-gate` does NOT run it because the crate-private seal is unreachable from the `it` binary. The gate still lacks a graph Falsified control; that is now stated, not hidden. |
+| FND-003 | fixed | fixed at 6b3940be: `real_kani_healthy_controls_verify_on_the_slice_b_fixture` runs the unmutated harness for `not reaches(self, self, empty)` (N=3) and `reaches(self, self, loop)` (N=1) on the slice B fixture and requires `Verified`. |

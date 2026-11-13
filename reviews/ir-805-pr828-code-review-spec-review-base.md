@@ -35,3 +35,19 @@ Not mergeable as is. The fix is text only. The AC-106 row is honest and AC-106 c
 but the FR-015 graph paragraph and tests.md misstate the evidence as "agreement" (FND-001). The criterion
 never says that disagreement is the required outcome for a harness mutant (FND-002). The wrong-role mutant
 is counted as delivered in one sentence and as missing in another (FND-003).
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-005 | low | The AC-106 row added in this PR names QSL-1905 as the owner of the non-tautological `{0,3}` healthy claim ("a non-tautological `{0,3}` healthy claim (multi-reachability, QSL-1905)"). QSL-1905 is cancelled; the multi-reachability/multi-clause work is now CG work inside IR-805 (a later slice E). The text should cite IR-805 slice E, and the same row's "which slice A refuses as `UnsupportedClaimShape` and which stays PLANNED" should name that slice. | spec/kani/functional/FR-015-bounded-kani-obligations.md:951 |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | fixed at 6b3940be: FR-015:164 now reads "the negated-claim, zero-length-path and rejected-self-loop mutants are Falsified under installed Kani and replayed through `qsl_replay` over the authored clause: the claim mutant reproduces the violation, and each harness mutant is a spurious counterexample that the unchanged authored clause does not reproduce"; tests.md:50 matches. |
+| FND-002 | fixed | fixed at 6b3940be: "Required replay outcome per mutant kind: a claim mutant ... reproduces the violation; a harness mutant (the generated reachability edited, the authored clause unchanged) is Falsified on an original-domain playback and QSL's replay of the unchanged authored clause holds on that graph, which settles Inconclusive with a verdict disagreement, so the spurious counterexample is the detection; each pairs with a healthy Verified control on the same claim." FR-015:1144 and TC-025:308 now say the same. |
+| FND-003 | fixed | fixed at 6b3940be: the wrong-role mutant is listed only as not delivered ("the 'another field or role' clause is NOT evidenced") in FR-015:164, AC-106, TC-025:210 and tests.md:50, and the row states the lib tests are not run by `make kani-gate`. |
+| FND-004 | fixed | fixed at 6b3940be: TC-025:247-254 now lists only the unbacked steps and records what slice B delivered; tests.md:50 opens "Partial (IR-805 slices A and B)"; tests.md:136 says AC-100's graph clause "is covered by `graph_run_evidence_preserves_every_ordered_identity_option` for the relationship-end form". |
+| FND-005 | still-open | New this round: QSL-1905 (cancelled) is still cited at FR-015:951; text-only fix to cite IR-805 slice E. |

@@ -63,3 +63,13 @@ installed Kani at 123b2daf. The blockers are FND-001, a "wrong-role" mutant that
 traversal adding no detection power, credited as the AC-106 wrong-role mutant; FND-002, a refusal surface
 with no tests behind a doc comment that claims refusal coverage; and FND-003, a public bypass of the decode
 domain checks. FND-004 and FND-005 are low.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | fixed at 6b3940be: the wrong-role test is deleted and the module doc reads "There is NO wrong-role mutant. ... AC-106's \"another field or role\" clause is NOT evidenced." |
+| FND-002 | fixed | fixed at 6b3940be: `decode_falsification_refuses_every_playback_the_harness_could_not_draw` drives hand-authored playbacks through every refusal (PlaybackAlreadySupplied, empty/over-N/negative count, start out of range, degree above upper and below lower, target out of range, repeated unique target, GraphStartIsNotTarget, AssertionMismatch, provenance Decode, HarnessMismatch); the false refusal claim in the non-Kani doc is removed. |
+| FND-003 | fixed | fixed at 6b3940be: `witness: Option<GraphWitness>,` is private, set only by `decode_falsification` or the `#[cfg(test)] pub(crate) fn with_witness` seam; `GraphReplayInputs::new` and `fn witness(&self)` replace the public field. |
+| FND-004 | fixed | fixed at 6b3940be: `the_reverse_direction_and_a_non_unique_end_reach_the_snapshot` asserts swapped source/target for `forward: false`, the same violation both ways, and two repeated `litter` instances admitted by QSL with the clause holding. |
+| FND-005 | fixed | fixed at 6b3940be: doc now says the domain "is read from the harness identity ... this check does not re-derive it from the package, so it is a consistency check of the playback against the harness, not an independent domain oracle." |
