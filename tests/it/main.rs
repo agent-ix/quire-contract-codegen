@@ -88,6 +88,7 @@ mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
 mod kani_obligations_symbolic_domains;
 mod kani_obligations_v2_clause_controls;
+mod kani_obligations_v2_profiles;
 mod kani_run_scan;
 mod kani_stdout_capture;
 mod layout;
