@@ -50,3 +50,14 @@ with no second mechanism, the serde extension is backward compatible, and the ro
 correct in both directions the tests check. FND-001 is the substantive gap: the refusal is real but
 opt-in and has no production caller; it should be dispositioned as deferred to a quire-driver
 ticket rather than fixed here. FND-002 to FND-004 are small and fixable in the same PR.
+
+## Dispositions
+
+Round 1, checked against 5443b94b (fix commit over c3a58c73).
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | deferred | Planner ruling: production wiring is a quire-driver PR under IR-1530 (`src/provider.rs` and `src/upstream.rs` to call the decided wrapper with the table). CG now ships the row in-crate as `TractabilityTable::shipped_general_route_scalar()` (`include_bytes!` of the docs JSON), and FR-056 Description and the qualification doc state the refusal is opt-in and name that caller. |
+| FND-002 | fixed | The scan needle is restored to any `tractab` mention and also names `.decide(`, `obligation_decided`, `obligations_decided` and `refuse_if_not_tractable` (tests/it/kani_tractability.rs:653-658). |
+| FND-003 | fixed | Row `solver_version` is `cadical-3.0.0`. Checked by the reviewer: the installed `~/.kani/kani-0.68.0/bin/cbmc` reports `6.11.0 (cbmc-6.11.0)` and embeds the string `cadical-3.0.0`. FR-015-AC-99 records a real run on Kani 0.68.0, CBMC 6.11.0, CaDiCaL 3.0.0. The doc's TC-043 citation is stand-in fixture text, not a run log, but the value is correct. |
+| FND-004 | fixed | `impl Display for DecidedRunRefusal` (operation id and width for the refusal; the runner's message for `Execution`) and `impl std::error::Error` with `source()` returning the wrapped `KaniExecutionRefusal`; the test asserts the message holds the operation id and `4 bits`. |

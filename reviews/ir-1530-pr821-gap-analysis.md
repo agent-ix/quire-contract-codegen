@@ -40,3 +40,15 @@ FND-002), FR-017-AC-27 (text-only edit, no new binder needed), TC-070 step 14 (m
 AC-14 is substantively covered and the assertions would fail on the main mutants the AC names
 (route-blind matching, refusing the native harness). The three findings are hardening of edges
 the AC text claims; none blocks merge.
+
+## Dispositions
+
+Round 1, checked against 5443b94b.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | A mixed batch `[native_request, request]` (general second) is asserted `NotTractable` with the general harness path (tests/it/kani_tractability.rs:1021-1031). |
+| FND-002 | fixed | A route-less `not_tractable` row for `quire.op.integer.add` at 4 bits leaves general-route features at 4 bits `Run` and refuses the V2 features (tests/it/kani_tractability.rs:1068-1077). |
+| FND-003 | fixed | The qualification doc now says widths below the row's 4 bits are unmeasured, are not refused and are left to the wall-clock backstop; FR-056 Description says the same. |
+
+The new test `tc_070_the_embedded_general_route_table_is_the_docs_file` compares the embedded table with the docs file loaded at run time. Both come from the same file, so they are equal by construction. What the test does pin is that the `include_bytes!` path points at the docs file, not at a copy, and that the file parses to exactly one row. The real coverage is that both refusal tests now get their table from `shipped_general_route_scalar()`, so the shipped path itself is exercised. That is enough for its purpose, and it is not a defect.

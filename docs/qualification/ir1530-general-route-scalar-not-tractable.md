@@ -72,8 +72,8 @@ unmeasured: nothing narrower was probed, so such a harness is not refused and is
 wall-clock backstop.
 
 The `solver_version` of the row, `cadical-3.0.0`, was not captured in the #816 probe logs. It is the
-CaDiCaL that the same Kani 0.68.0 / CBMC 6.11.0 installation reports ("Solving with CaDiCaL 3.0.0",
-TC-043 and the FR-015-AC-99 close-out run).
+CaDiCaL that the same Kani 0.68.0 / CBMC 6.11.0 installation reports ("Solving with CaDiCaL 3.0.0"
+the FR-015-AC-99 close-out run is the real run record; the TC-043 mention is fixture text, not a run log).
 
 Blast-radius evidence for the rejected generation-level alternative. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
 stable serde code, carrying the node, the operation identity and `use_instead:

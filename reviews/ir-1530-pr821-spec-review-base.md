@@ -39,3 +39,13 @@ blast-radius evidence as the rejected alternative.
 
 The spec edits are accurate to the code. FND-001 is a statement/AC scope mismatch worth fixing in
 this PR (text only); FND-002 and FND-003 are wording nits. None changes behaviour.
+
+## Dispositions
+
+Round 1, checked against 5443b94b.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | FR-056 title, Description (run-level general-scalar route, opt-in, deliberate `V2ClauseNotTractable` reuse, shipped table, unmeasured narrower widths), Inputs (run-level table) and Behavior currency rule (route equality) now cover AC-14. |
+| FND-002 | fixed | TC-070 Status: "Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 14 is implemented and tagged (IR-1530)". |
+| FND-003 | fixed | FR-017-AC-27 now carries only a cross-reference: "see FR-056-AC-14 for its refusal". |
