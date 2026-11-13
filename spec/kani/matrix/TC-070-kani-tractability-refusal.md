@@ -25,11 +25,12 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
 3. Load a valid table, an empty table and tables with an unknown verdict, a missing field and a
    fractional width; assert the load results and the failing row index. Add a row for a fresh
    operation id and assert the decision changes with no source change (FR-056-AC-3).
-4. With a `not_tractable` row for `quire.op.integer.mul` at 64 bits, request a clause multiplying
-   at width 64 and assert `V2ClauseNotTractable` with operation id, width, the row, the versions and
+4. With a `not_tractable` row for `quire.op.integer.mul` at 21 bits, request a clause multiplying
+   at width 21 and assert `V2ClauseNotTractable` with operation id, width, the row, the versions and
    no harness, beside a supported sibling that keeps its harness (FR-056-AC-4).
-5. Probe `Int[0, 2^32]` (33 bits), `Int[0, 2^64 - 1]` (64 bits) and `Int[0, 2^64]` (65 bits) against that row, a clause holding only another operation, and a
-   clause holding both (FR-056-AC-5).
+5. Probe `Int[0, 2^32]` (33 bits), `Int[0, 2^64 - 1]` (64 bits) and `Int[0, 2^64]` (65 bits) against a
+   row at 64 bits (the 33-bit operation runs, the 64- and 65-bit operations are refused), a clause
+   holding only another operation, and a clause holding both (FR-056-AC-5).
 6. Request a clause no row qualifies and diff its harness and identity record against the
    empty-table output; byte-identical required. Add a `tractable` row at the same width and repeat
    (FR-056-AC-6).
@@ -48,7 +49,8 @@ installed Kani through CG's runner. This case is planned. Every mutant fails at 
     always-`Run` decider from step 1 against the same file (FR-056-AC-12).
 13. Execute one clause the table lets through via CG's runner under installed Kani, one at a time,
     and record verdict, wall time, Kani version and generator/kernel version. Request integer
-    multiply at the measured-bad wide width and assert it is refused before any Kani launch; the
+    multiply at or above the measured-bad row's bound and assert it is refused before any Kani
+    launch, and a narrower multiply is not; the
     Decimal multiply row is used only once IR-1444 lets it reach the decider (FR-056-AC-13).
 
 ## Expected Results
@@ -59,5 +61,5 @@ unchanged.
 
 ## Status
 
-PLANNED (IR-1526): nothing is implemented or tagged. Steps 1 to 12 are host tests; only step 13
+Steps 1 to 9, 11 and 12 are implemented and tagged (IR-1526); step 10 is partial (see FR-056 Status). Step 13 is coded as an ignored kani-lane test and
 needs an installed Kani run.

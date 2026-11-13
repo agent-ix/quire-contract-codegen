@@ -1,0 +1,372 @@
+[
+  {
+    "id": "ir1022-healthy-subject",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 44.6,
+    "measurement_source": "docs/qualification/ir1022-kani-clause-measurements.md, Results table, row 'healthy subject' (Kani 0.68.0, whole cargo kani wall)"
+  },
+  {
+    "id": "ir1022-helper-control",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 43.7,
+    "measurement_source": "docs/qualification/ir1022-kani-clause-measurements.md, Results table, row 'helper control'"
+  },
+  {
+    "id": "ir1022-mutant-1-subject-plus-two",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 100.2,
+    "measurement_source": "docs/qualification/ir1022-kani-clause-measurements.md, Results table, row 'mutant 1 subject amount + 2'"
+  },
+  {
+    "id": "ir1022-mutant-2-oracle-less-than",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 95.4,
+    "measurement_source": "docs/qualification/ir1022-kani-clause-measurements.md, Results table, row 'mutant 2 oracle <= to <'"
+  },
+  {
+    "id": "ir1022-helper-mutant-returns-false",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 83.0,
+    "measurement_source": "docs/qualification/ir1022-kani-clause-measurements.md, Results table, row 'helper mutant returns false'"
+  },
+  {
+    "id": "ir1509-healthy-through-cg-runner",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "verified",
+    "wall_seconds": 43.5,
+    "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, 'Installed Kani runs through CG's runner', row 'healthy'"
+  },
+  {
+    "id": "ir1509-exact-999-subject-mutant",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 129.8,
+    "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row 'exact-999 subject mutant'"
+  },
+  {
+    "id": "ir1509-kernel-mutant-checked-add-plus-one",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 131.1,
+    "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row kernel left.0.checked_add(right.0)?.checked_add(1)"
+  },
+  {
+    "id": "ir1509-kernel-mutant-some-left",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 125.1,
+    "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row kernel Some(left.0)"
+  },
+  {
+    "id": "ir1509-helper-body-returns-false",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.lt",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.integer.le",
+          "bits": 10
+        },
+        {
+          "operation_id": "quire.op.boolean.implies",
+          "bits": null
+        },
+        {
+          "operation_id": "quire.op.boolean.eq",
+          "bits": null
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 1000
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "falsified",
+    "wall_seconds": 119.6,
+    "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row 'helper body returns false'"
+  }
+]

@@ -40,6 +40,9 @@ pub(crate) mod run;
 // The terminal-value map of a run.
 // Implements: FR-029
 pub(crate) mod terminal;
+// The measured-table tractability decider.
+// Implements: FR-056
+pub(crate) mod tractability;
 // Test helpers shared by the tests of more than one `kani/` file.
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -243,10 +243,10 @@ pub use crate::core::native_integer::{
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
-    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
-    generate_v2_clause_oracle, ClauseOracleInput, ClauseOracleStateField,
-    NativeClauseCapabilityReason, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor,
-    V2ClauseOracle, V2ClauseRefusal,
+    derive_v2_clause_descriptor, derive_v2_clause_operation_widths, generate_v2_clause_claim_map,
+    generate_v2_clause_native_oracle, generate_v2_clause_oracle, interval_bits, ClauseOracleInput,
+    ClauseOracleStateField, NativeClauseCapabilityReason, V2ClauseClaim, V2ClauseCoverageRegion,
+    V2ClauseDescriptor, V2ClauseOracle, V2ClauseRefusal,
 };
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
@@ -255,6 +255,7 @@ pub use kani::generate::frame::{
 };
 pub use kani::generate::negotiate::{
     negotiate_kani_native_obligations, negotiate_kani_obligations,
+    negotiate_kani_obligations_with_options, IntegerRoute,
 };
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
@@ -281,6 +282,11 @@ pub use kani::identity::{
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,
     PlaybackRefusal, PlaybackRefusalCode, WitnessDecodeLimits,
+};
+pub use kani::tractability::{
+    ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable, OperationWidth,
+    RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow, TractabilityTable,
+    WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{
