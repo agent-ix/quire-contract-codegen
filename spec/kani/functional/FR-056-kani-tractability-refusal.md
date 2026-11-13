@@ -56,7 +56,7 @@ Terms:
 
 - An admitted V2 clause claim as FR-015-AC-40 and FR-015-AC-41 admit it.
 - The measured table: a data file whose path the caller gives CG in the generation request's
-  options (a `tractability_table` path). When the option is absent, no table is loaded and every
+  options (a `tractability_table` path). A table row may carry a `route` (`v2_clause`, the default when absent, or `general_scalar`); it applies only to features of its own route. When the option is absent, no table is loaded and every
   clause runs (an empty table). When the path is given but the file is missing or unreadable, or
   any row is malformed, the request fails with a typed load error naming the path (and the row
   index) and generates nothing; it never falls back to an empty table.
@@ -115,6 +115,7 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 | FR-056-AC-11 | A scoring test runs the current decider over every corpus row, prints the false-refuse count (decider `Refuse`, ground truth `verified` or `falsified`) and the false-accept count (decider `Run`, ground truth `timed_out`), and passes when neither count exceeds its value in the baseline file, a data file in this repository beside the corpus; it fails when either count exceeds it and does not require zero. A count below the baseline passes. Mutants: a decider that refuses everything fails on false-refuse; a decider that runs everything fails on false-accept. | Test |
 | FR-056-AC-12 | Adding a corpus row changes the scored counts with no source change, and a second decider implementing the FR-056-AC-1 interface (for example, one that always returns `Run`) is scored against the same file with no change to the corpus or the scoring test. | Test |
 | FR-056-AC-13 | Through CG's runner under installed Kani, one clause the table lets through ends with an executed verdict (`Verified` or `Falsified`), recorded with its wall time, the Kani version and CG's generator and kernel versions; and a clause holding a measured-bad row for an integer operation the V2 path accepts (integer multiply at a width at or above the row's bound) is refused as `V2ClauseNotTractable` with no Kani launch, and a narrower multiply is not refused. The Decimal multiply at full width row is exercised the same way only once IR-1444 lets it reach the decider. A probe record does not substitute. | Test (installed Kani) |
+| FR-056-AC-14 | A routed exact-scalar harness on the general `rt::Integer` integer route (`integer_representation` general; the harness generation still emits) submitted to `execute_kani_obligation_decided` or `execute_kani_obligations_decided` is decided through the same decider seam with features on the `general_scalar` route (its operation identity, the largest bit width of its argument bounds, the argument bounds). When a current `not_tractable` row of that route (the row of `docs/qualification/ir1530-general-route-scalar-table.json`) qualifies, the call returns `DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node id, operation id, width, the full row with its Kani, CBMC, solver, generator and kernel versions) before any Kani process starts, so a missing launcher or crate is never reached; a batch is refused whole. A row without a `route` key applies to V2 clauses only and a `general_scalar` row never refuses a V2 clause or a native-route scalar harness; a width below the row's `max_operand_bits` runs. Mutants: matching rows across routes, or refusing the native-route harness, fails. The wall-clock ceiling stays the backstop for every harness the decider runs. | Test |
 
 ## Dependencies
 
@@ -129,7 +130,7 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 
 ## Status
 
-PARTIAL (IR-1526). FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
+PARTIAL (IR-1526, IR-1530). FR-056-AC-14 (IR-1530) is implemented and host-tested: the general-route scalar refusal at run level, `src/kani/terminal/tractable.rs`. FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
 FR-056-AC-10 is partial: the shipped corpus holds ten measured rows, all `verified` or `falsified`
 and all of the one IR-1022 clause and its mutants. It has no `timed_out` row (CG's own evidence has

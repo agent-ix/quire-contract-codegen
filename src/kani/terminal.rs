@@ -395,3 +395,5 @@ impl KaniExecutionEvidence {
 
 // Method-qualified state search shares the existing subsystem boundary.
 pub(crate) mod constrained;
+// The pre-launch tractability refusal of the general integer scalar route (FR-056-AC-14).
+pub(crate) mod tractable;

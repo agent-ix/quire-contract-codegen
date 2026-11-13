@@ -206,6 +206,10 @@ pub use kani::run::scalar::{
     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED, SCALAR_NATIVE_CODE_SNAPSHOT_IO,
 };
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
+pub use kani::terminal::tractable::{
+    execute_kani_obligation_decided, execute_kani_obligations_decided, refuse_if_not_tractable,
+    DecidedRunRefusal,
+};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, scalar_ir_outcome_terminal_value,
     scalar_run_terminal_value, ReplaySettlement, ScalarSettlement, TerminalPairError,
@@ -285,8 +289,8 @@ pub use kani::output::playback::{
 };
 pub use kani::tractability::{
     ClauseFeatures, Decision, GenerationOptions, InputBound, NotTractable, OperationWidth,
-    RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRow, TractabilityTable,
-    WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
+    RowVerdict, TractabilityDecider, TractabilityLoadError, TractabilityRoute, TractabilityRow,
+    TractabilityTable, WallSeconds, GENERATOR_VERSION, KERNEL_VERSION,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{

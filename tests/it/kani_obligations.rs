@@ -2200,7 +2200,7 @@ fn native_scalar_increment_with_artifacts() -> (KaniScalarObligationHarness, Vec
     )
 }
 
-fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
+pub(crate) fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
     let (harness, artifacts) = native_scalar_increment_with_artifacts();
     let manifest = artifacts
         .iter()

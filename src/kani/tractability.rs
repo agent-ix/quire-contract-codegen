@@ -25,6 +25,25 @@ const fn kernel_version() -> u32 {
     KERNEL_VERSION
 }
 
+/// The route a clause's features and a table row describe. A row applies only to features of its
+/// own route, so a measurement of the general `rt::Integer` scalar harness never refuses the
+/// same operation on the V2 clause or native-integer route, where it finishes (IR-1530).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TractabilityRoute {
+    /// A V2 clause, decided at generation (the default; rows without a `route` key).
+    #[default]
+    V2Clause,
+    /// A routed exact-scalar harness on the general `rt::Integer` route, decided at run.
+    GeneralScalar,
+}
+
+impl TractabilityRoute {
+    fn is_default(&self) -> bool {
+        *self == Self::V2Clause
+    }
+}
+
 /// One operation of a clause and its width after range propagation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +81,9 @@ pub struct ClauseFeatures {
     /// The collection bound, absent when the clause has none.
     #[serde(default)]
     pub collection_bound: Option<u64>,
+    /// The route the features describe; absent means a V2 clause.
+    #[serde(default, skip_serializing_if = "TractabilityRoute::is_default")]
+    pub route: TractabilityRoute,
     /// CG's generator version.
     #[serde(default = "generator_version")]
     pub generator_version: String,
@@ -82,9 +104,17 @@ impl ClauseFeatures {
             operations,
             inputs,
             collection_bound,
+            route: TractabilityRoute::V2Clause,
             generator_version: generator_version(),
             kernel_version: kernel_version(),
         }
+    }
+
+    /// The same features on `route`.
+    #[must_use]
+    pub fn on_route(mut self, route: TractabilityRoute) -> Self {
+        self.route = route;
+        self
     }
 }
 
@@ -147,6 +177,9 @@ impl Serialize for WallSeconds {
 pub struct TractabilityRow {
     /// The catalog operation ids the probe exercised.
     pub operation_ids: Vec<String>,
+    /// The route the probe measured; absent means a V2 clause.
+    #[serde(default, skip_serializing_if = "TractabilityRoute::is_default")]
+    pub route: TractabilityRoute,
     /// The operand bit width from which the probe did not finish: an operation at this width or
     /// wider is intractable.
     pub max_operand_bits: u32,
@@ -173,7 +206,8 @@ pub struct TractabilityRow {
 
 impl TractabilityRow {
     fn is_current(&self, features: &ClauseFeatures) -> bool {
-        self.generator_version == features.generator_version
+        self.route == features.route
+            && self.generator_version == features.generator_version
             && self.kernel_version == features.kernel_version
     }
 }

@@ -49,14 +49,20 @@ Evidence for the row:
 The cost is the `rt::Integer` bignum heap shape, which no forget placement removes, so the general
 integer scalar route is not tractable at unwind 3, 600 s and 24 GiB.
 
-## Refusal of the general route: not built here
+## Refusal of the general route: built at the run level
 
-Refusal of the general integer scalar route is NOT built in this change. IR-1526 (FR-056) covers V2
-clauses only. A generation-level refusal breaks 84 host tests that exercise this route, so the
-refusal, if wanted, belongs at the Kani run/verdict level (a run-time refusal to attempt the
-real-Kani lane on this shape). That is a proposed follow-up awaiting a planner ruling.
+The row above is shipped as data in `ir1530-general-route-scalar-table.json` (the FR-056 table
+shape, with `"route": "general_scalar"` so it never applies to V2 clauses or the native route). The
+refusal is FR-056-AC-14: `execute_kani_obligation_decided` and `execute_kani_obligations_decided`
+(`src/kani/terminal/tractable.rs`) ask the one `TractabilityDecider` seam, with features on the
+`general_scalar` route, before any Kani process starts, and return
+`DecidedRunRefusal::NotTractable` carrying `UnsupportedObligation::V2ClauseNotTractable` (node,
+operation id, width, the row with its Kani, CBMC, solver, generator and kernel versions). It is
+decided at the run, not at generation: a generation-level refusal broke the host tests that
+exercise this route (below), so generation still emits the harness and the wall-clock ceiling
+stays the backstop. The native-route harness is not refused.
 
-Blast-radius evidence. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
+Blast-radius evidence for the rejected generation-level alternative. A new `UnsupportedObligation` variant (`GeneralIntegerScalarNotTractable`, a
 stable serde code, carrying the node, the operation identity and `use_instead:
 "generate_routed_native"`) replaced the Add, Subtract, Multiply and Negate scalars in
 `negotiate_integer_policy` whenever the integer policy was not native (Implies untouched). It
@@ -81,7 +87,7 @@ shared-fixture cascade is possible):
 About 50 test call sites use `generate_routed`; the crate has no other production caller of it
 outside its own routing code.
 
-What this change delivers: the real-Kani scalar lane tests below run on the native route with
+What IR-1530 delivers: the typed run-level refusal above; the real-Kani scalar lane tests below run on the native route with
 executed verdicts, and the general route is recorded not tractable in the table-shaped row above.
 
 ## Tests moved to the native route

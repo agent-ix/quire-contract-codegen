@@ -636,7 +636,9 @@ fn tc_070_the_reported_row_is_deterministic() {
 /// FR-056-AC-9: the runner never consults the decider, so a clause the decider lets through that
 /// exceeds the wall-clock ceiling ends `Inconclusive` with the timed-out reason, which the
 /// unchanged two-phase runner test `a_witness_phase_is_stopped_at_the_unchanged_wall_clock_ceiling`
-/// asserts. Here: no non-test source under `src/kani/run/` mentions the decider.
+/// asserts. Here: no non-test source under `src/kani/run/` consults the decider; the
+/// pre-launch wrapper of IR-1530 lives in `src/kani/terminal/tractable.rs`, decides before any
+/// process starts and is never reached from the launch, classification or timeout code.
 #[trace("FR-056-AC-9", "TC-070")]
 #[test]
 fn tc_070_the_runner_does_not_consult_the_decider() {
@@ -648,7 +650,9 @@ fn tc_070_the_runner_does_not_consult_the_decider() {
             } else if path.extension().is_some_and(|extension| extension == "rs") {
                 let name = path.file_name().unwrap().to_string_lossy().into_owned();
                 let source = fs::read_to_string(&path).unwrap();
-                if !name.contains("test") && source.to_lowercase().contains("tractab") {
+                if !name.contains("test")
+                    && (source.contains("TractabilityDecider") || source.contains(".decide("))
+                {
                     found.push(path);
                 }
             }
@@ -923,4 +927,111 @@ fn tc_070_the_ac13_multiply_fixtures_split_on_the_row_bound() {
         "{:?}",
         disposition(&narrow, 0)
     );
+}
+
+// IR-1530: the run-level refusal of the general `rt::Integer` scalar route, through the same
+// decider seam, table and `V2ClauseNotTractable` arm.
+
+const GENERAL_SCALAR_TABLE: &str = "docs/qualification/ir1530-general-route-scalar-table.json";
+
+fn general_scalar_table() -> TractabilityTable {
+    TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
+        .expect("the shipped general-route row loads")
+}
+
+/// A request whose launcher and crate do not exist: any attempt to run it would be a different
+/// refusal (`Tool` or `HarnessNotInCrate`), so a `NotTractable` refusal proves no launch.
+fn unlaunchable<'a>(
+    cancel: &'a quire_exact::Cancel,
+    installation: &'a quire_contract_codegen::KaniInstallation,
+    harness: quire_contract_codegen::KaniExecutableHarness<'a>,
+    missing: &'a Path,
+) -> quire_contract_codegen::KaniExecutionRequest<'a> {
+    quire_contract_codegen::KaniExecutionRequest {
+        cancel,
+        installation,
+        harness,
+        crate_directory: missing,
+        target_directory: missing,
+        home_directory: None,
+    }
+}
+
+#[trace("TC-070", "FR-056-AC-14")]
+#[test]
+fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
+    use quire_contract_codegen::{
+        execute_kani_obligation_decided, execute_kani_obligations_decided, DecidedRunRefusal,
+    };
+    let table = general_scalar_table();
+    let (harness, _) = super::kani_obligations::routed_scalar_increment();
+    let cancel = quire_exact::Cancel::new();
+    let installation = quire_contract_codegen::KaniInstallation::new("/nonexistent/cargo-kani");
+    let missing = Path::new("/nonexistent/crate");
+    let request = unlaunchable(&cancel, &installation, (&harness).into(), missing);
+
+    let refusal = execute_kani_obligation_decided(&request, &table)
+        .expect_err("the general route is a measured not-tractable row");
+    let DecidedRunRefusal::NotTractable {
+        harness_path,
+        refusal,
+    } = refusal
+    else {
+        panic!("expected NotTractable, got {refusal:?}");
+    };
+    assert_eq!(harness_path, harness.rust.path);
+    let UnsupportedObligation::V2ClauseNotTractable {
+        node_id,
+        operation_identity,
+        width_bits,
+        row,
+    } = *refusal
+    else {
+        panic!("the one refusal arm is V2ClauseNotTractable");
+    };
+    assert_eq!(node_id, harness.identity.node_id);
+    assert_eq!(operation_identity, ADD);
+    assert_eq!(operation_identity, harness.identity.operation_identity);
+    assert_eq!(width_bits, 4, "Int[0, 9] is 4 bits");
+    assert_eq!(&*row, &general_scalar_table().rows()[0]);
+    assert_eq!(row.max_operand_bits, 4);
+    assert_eq!(row.kani_version, "0.68.0");
+    assert_eq!(row.cbmc_version, "6.11.0");
+    assert_eq!(row.solver_version, "cadical");
+    assert_eq!(row.generator_version, GENERATOR_VERSION);
+    assert_eq!(row.kernel_version, KERNEL_VERSION);
+
+    // A batch is refused whole, before any process starts.
+    let batch = execute_kani_obligations_decided(std::slice::from_ref(&request), &table);
+    assert!(matches!(batch, Err(DecidedRunRefusal::NotTractable { .. })));
+}
+
+#[trace("TC-070", "FR-056-AC-14")]
+#[test]
+fn tc_070_native_route_and_v2_clause_features_are_not_refused_by_the_general_row() {
+    use quire_contract_codegen::{
+        execute_kani_obligation_decided, DecidedRunRefusal, KaniExecutionRefusal, TractabilityRoute,
+    };
+    let table = general_scalar_table();
+    let (native, _) = super::kani_obligations::native_scalar_increment();
+    let cancel = quire_exact::Cancel::new();
+    let installation = quire_contract_codegen::KaniInstallation::new("/nonexistent/cargo-kani");
+    let missing = Path::new("/nonexistent/crate");
+    let request = unlaunchable(&cancel, &installation, (&native).into(), missing);
+    // The decider lets the native harness through: the run proceeds to its own refusals.
+    assert!(matches!(
+        execute_kani_obligation_decided(&request, &table),
+        Err(DecidedRunRefusal::Execution(
+            KaniExecutionRefusal::HarnessNotInCrate { .. } | KaniExecutionRefusal::Tool(_)
+        ))
+    ));
+
+    // The same operation at the same width on the V2 clause route matches no general row.
+    let v2 = features(vec![op_width(ADD, 4)]);
+    assert!(matches!(table.decide(&v2), Decision::Run));
+    let general = v2.on_route(TractabilityRoute::GeneralScalar);
+    assert!(matches!(table.decide(&general), Decision::Refuse { .. }));
+    // Narrower than the measured width is not refused.
+    let narrow = features(vec![op_width(ADD, 3)]).on_route(TractabilityRoute::GeneralScalar);
+    assert!(matches!(table.decide(&narrow), Decision::Run));
 }
