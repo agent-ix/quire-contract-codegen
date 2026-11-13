@@ -7,21 +7,38 @@ earlier statement of these timeouts).
 
 ## Measured row: general integer scalar route
 
-Row in the shape of the measured tractability table (FR-056 "Measured table"):
+Rows in the shape of the measured tractability table (FR-056 "Measured table"). The shipped table
+holds two rows, `quire.op.integer.add` from 2 bits and `quire.op.integer.sub` from 4 bits, the
+smallest width at which each was observed to time out:
 
-| Field | Value |
-| --- | --- |
-| operation_ids | `quire.op.integer.add`, `quire.op.integer.sub` |
-| scalar form | routed exact-scalar harness from `generate_routed` (operands and oracle result as `rt::Integer`), `x + 1` over `Int[0, 9]` and `x - y` over two `Int[0, 9]` |
-| max_operand_bits | 4 (every operand bound is at most 9) |
-| collection_bound | none |
-| verdict | `not_tractable` |
-| wall_seconds | 600 (the lane budget; `Inconclusive { TimedOut }`) |
-| peak_bytes | about 14.5e9 at 8 min (add); about 15.0e9 at 600 s (sub) |
-| Kani / CBMC / solver | 0.68.0 / 6.11.0 / cadical, `--unwind 3` |
-| generator version | quire-contract-codegen 0.1.0 at main bb3e6176 |
-| kernel version | quire-exact e82db487 (Cargo.lock) |
-| host, date | titan, 2026-11-12 |
+| Field | add row | sub row |
+| --- | --- | --- |
+| operation_ids | `quire.op.integer.add` | `quire.op.integer.sub` |
+| scalar form | routed exact-scalar harness from `generate_routed` (operands and oracle result as `rt::Integer`), `x + 1` | `x - y` over two `Int[0, 9]` |
+| max_operand_bits | 2 (smallest observed, below) | 4 (every operand bound is at most 9) |
+| collection_bound | none | none |
+| verdict | `not_tractable` | `not_tractable` |
+| wall_seconds | 600 (the lane budget; `Inconclusive { TimedOut }`) | 600 (same) |
+| peak_bytes | 14602888806 (13.6 GiB, the systemd scope peak of the 2-bit probe, build included; not the runner's) | about 15.0e9 at 600 s |
+| Kani / CBMC / solver | 0.68.0 / 6.11.0 / cadical-3.0.0, `--unwind 3` | same |
+| generator version | quire-contract-codegen 0.1.0 | same |
+| kernel version | quire-exact `KERNEL_VERSION` 1 | same |
+| host, date | titan, 2026-11-12 (4 bits); 2026-11-13 (2 bits) | titan, 2026-11-12 |
+
+The add row's width was first 4 bits (`Int[0, 9]`). The driver's Kani-lane test
+`successful_native_receipt_is_authenticated_against_retained_limits` (quire-driver `drive.rs`) on the
+general route with `quire.op.integer.add` over `Int[4, 4]` (`interval_bits(4, 4)` = 3 bits) ended
+`ProofNotVerified` at 600 s in its coder's measured run, while the table let it run. One further probe
+under this ticket (follow-up to #821) ran the general-route `x + 1` over `Int[2, 2]` (operands
+`left` = `Int[2, 2]`, 2 bits, and `right` = `Int[1, 1]`, so the largest width is 2 bits) through
+`execute_kani_obligation` and the lane budget: foreground, `flock /tmp/cargo-slot.lock`,
+`systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, Kani 0.68.0, CBMC 6.11.0. It ended
+`Inconclusive { reason: TimedOut }` at 600.04 s; the user journal reported the scope's `13.6G memory peak`
+(systemd's G is GiB, so about 1.46e10 bytes, build included; the runner reports no peak). The driver's
+3-bit scope reported 13.8G. The probe is the ignored test `ir1530_probe_general_route_two_bit_add`
+(`tests/it/kani_obligations.rs`; fixture `left` `Int[2, 2]`, `right` `Int[1, 1]`). The add row is therefore at
+2 bits. Subtraction was measured only at 4 bits and keeps its 4-bit row. One bit (`Int[1, 1]` operands)
+and anything else narrower is unmeasured: it is not refused and is left to the wall-clock backstop.
 
 Evidence for the row:
 
@@ -75,9 +92,9 @@ the harness runs. CG ships the table in-crate (`TractabilityTable::shipped_gener
 embedded from the JSON file, which is the single source; a test pins the equality). The production
 caller is quire-driver (`src/provider.rs` ~308, `src/upstream.rs` ~191, which call
 `execute_kani_obligation` on `generate_routed` harnesses); it will be wired to the decided wrapper
-in a quire-driver PR under IR-1530. Operand widths below the row's 4 bits on this route are
-unmeasured: nothing narrower was probed, so such a harness is not refused and is left to the
-wall-clock backstop.
+in a quire-driver PR under IR-1530. Operand widths below a row's bits on this route (below 2 bits for
+add, below 4 for sub) are unmeasured: nothing narrower was probed, so such a harness is not refused
+and is left to the wall-clock backstop.
 
 The `solver_version` of the row, `cadical-3.0.0`, was not captured in the #816 probe logs. It is the
 CaDiCaL that the same Kani 0.68.0 / CBMC 6.11.0 installation reports ("Solving with CaDiCaL 3.0.0"

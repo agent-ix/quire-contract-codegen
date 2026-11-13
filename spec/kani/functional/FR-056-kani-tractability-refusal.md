@@ -41,9 +41,9 @@ caller is quire-driver, `src/provider.rs` and `src/upstream.rs`, wired under IR-
 change); with no table passed every harness runs, as for generation. The refusal deliberately reuses
 the `V2ClauseNotTractable` arm for that non-V2-clause harness (no second mechanism); it is returned
 wrapped in `DecidedRunRefusal` because `kani::run` may not import generation types. CG embeds the
-measured general-route row (`TractabilityTable::shipped_general_route_scalar`, from
-`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below that row's
-`max_operand_bits` on the general route are unmeasured and left to the wall-clock backstop.
+measured general-route rows, add from 2 bits and sub from 4 bits (`TractabilityTable::shipped_general_route_scalar`, from
+`docs/qualification/ir1530-general-route-scalar-table.json`). Widths below a row's
+`max_operand_bits` (2 for add, 4 for sub) on the general route are unmeasured and left to the wall-clock backstop.
 
 The generation-time decider runs AFTER the operator check of FR-015-AC-42: it sees only operations the V2 clause
 path accepts today (connectives, the six integer comparisons, integer add, subtract, multiply and
@@ -173,7 +173,7 @@ cap after 542.5 s (`anon-rss` 25055932 kB), so it is `memory_exhausted`, not a t
 `ir1526_probe_wide_integer_multiply_under_installed_kani`. Because the add-only clause fails too,
 the measurements do not show that the multiply is the cause. All ran on the general-route
 `rt::Integer` carrier, which `docs/qualification/ir1530-general-route-scalar-not-tractable.md`
-measured not tractable for an add at 4 bits.
+measured not tractable for an add from 2 bits (IR-1530).
 CG's measured table (`tests/fixtures/tractability/table.json`) holds `not_tractable` rows for integer
 multiply and integer add from 15 bits, the smallest measured-bad width, both from this evidence. Those rows are general-route rows and do not refuse native-route clauses; the corpus holds no native-route clause of 15 bits or more, so whether they over-refuse the native route is
 unmeasured. Still missing for AC-10: native-route integer add at 15 bits or more, native-route multiply and native-route two-operation chain

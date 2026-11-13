@@ -3165,3 +3165,50 @@ fn the_declared_native_route_mutant_lines_are_on_their_owning_proofs_path() {
     );
     assert!(!subtraction.contains("nx::NativeIntegerOperation::Add {"));
 }
+
+/// IR-1530 probe (follow-up to #821, FR-056-AC-15): the general-route routed `x + 1` with `left`
+/// over `Int[2, 2]` and `right` over `Int[1, 1]` (largest operand width 2 bits) through
+/// `execute_kani_obligation` under installed Kani. Measured 2026-11-13 on titan, Kani 0.68.0, CBMC
+/// 6.11.0, unwind 3, `flock` plus `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`:
+/// `Inconclusive { reason: TimedOut }` at 600.04 s; the user journal reported the scope's
+/// `13.6G memory peak` (GiB, build included). That outcome is the add row of
+/// `docs/qualification/ir1530-general-route-scalar-table.json` at 2 bits.
+#[test]
+#[ignore = "kani lane: one run, serially, under the 24 GiB scope; expects TimedOut at 600 s"]
+fn ir1530_probe_general_route_two_bit_add() {
+    let (harness, artifacts) = routed_scalar_with_artifacts(
+        package::increment_package_over(Bound::Integer(2, 2)),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(3, 3),
+        REAL_KANI_TIMEOUT,
+    );
+    let manifest = artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("the oracle crate returns its manifest");
+    let arguments: Vec<_> = harness
+        .identity
+        .arguments
+        .iter()
+        .map(|argument| (argument.minimum, argument.maximum))
+        .collect();
+    assert_eq!(arguments, [(2, 2), (1, 1)]);
+    let started = std::time::Instant::now();
+    let evidence = run_scalar_under_real_kani("probe-2bit", &harness, &manifest);
+    println!(
+        "IR1530 probe outcome={:?} wall={:.2}s",
+        evidence.outcome,
+        started.elapsed().as_secs_f64()
+    );
+    assert!(
+        matches!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: quire_contract_codegen::KaniInconclusiveReason::TimedOut
+            }
+        ),
+        "{:?}",
+        evidence.outcome
+    );
+}
