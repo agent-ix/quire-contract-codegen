@@ -140,7 +140,7 @@ fn fixture_of(twin: Twin, clause_name: &str) -> KaniV2ClauseObligationHarness {
     v2_clause_harnesses.remove(0)
 }
 
-fn subject_module(body: &str) -> String {
+pub(crate) fn subject_module(body: &str) -> String {
     format!("\npub mod subject {{\n    pub fn check(amount: i64) -> bool {{ {body} }}\n}}\n")
 }
 
@@ -171,7 +171,7 @@ fn host_source(sealed: &str) -> String {
 }
 
 /// A mutation of an owner crate's source file, made in an isolated copy.
-struct OwnerMutation {
+pub(crate) struct OwnerMutation {
     package: &'static str,
     file: &'static str,
     original: &'static str,
@@ -239,12 +239,12 @@ fn copy_directory(from: &Path, to: &Path) {
 
 /// One scratch crate: the generated source with a subject, optionally resolved against an
 /// isolated, mutated owner checkout.
-struct ScratchCrate {
-    directory: TemporaryDirectory,
+pub(crate) struct ScratchCrate {
+    pub(crate) directory: TemporaryDirectory,
 }
 
 impl ScratchCrate {
-    fn new(label: &str, lib: &str, owner: Option<&OwnerMutation>) -> Self {
+    pub(crate) fn new(label: &str, lib: &str, owner: Option<&OwnerMutation>) -> Self {
         let directory = TemporaryDirectory::new(label);
         let mut patch = String::new();
         if let Some(mutation) = owner {
@@ -1091,7 +1091,7 @@ fn kani_playback_test(name: &str, expect_arithmetic_panic: bool, subject_preambl
 /// `systemd-run` scope that caps the run). It is cumulative over the scope, so it bounds the
 /// playback's own peak from above.
 #[derive(Debug)]
-struct ScopePeak;
+pub(crate) struct ScopePeak;
 
 impl PeakMemorySource for ScopePeak {
     fn name(&self) -> &str {
