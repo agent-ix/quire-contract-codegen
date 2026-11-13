@@ -66,7 +66,12 @@ P3, which is delivered.
   the supplier of the native add, sub, mul, div, sqrt and fma and of the comparisons
   (quire-exact FR-405). These native operations are host-callable ordinary code, one source
   for the host and Kani builds and not a `cfg(kani)`-only body, which AC-13 needs. Until
-  IR-1446 lands them, AC-13 cannot run.
+  IR-1446 lands them, AC-13 cannot run. Support is per operation and width, as quire-exact
+  FR-405 Behavior 15 gates it: only a combination with an executed Verified verdict is a
+  supported row. A combination whose quire-exact record is a measured table row (timeout,
+  memory exhaustion or unreliable) is in the table-row state and is refused by IR-1526's
+  tractability seam (FR-056, quire-exact FR-405 Behavior 16), not generated, not run and not
+  an assumption of this requirement; FR-053 builds no refusal of its own for it.
 - P2 (ticket IR-69) is the Contract IR ruling that a `float32` or `float64` is
   unbounded unless a `float_rounding` domain applies (planner ruling, Option A). It adds
   both forms to the `requires_bound` unbounded set in
@@ -169,16 +174,24 @@ provenance (width and rounding mode), ordered charges, the denied next charge an
 consumed counters. The expected side of a comparison decides `bit_identical` by bit
 equality, `numeric_equal` by "neither operand is NaN and either both are zero or the bits
 are equal", and `total_order` by the totalOrder predicate (`a` precedes or equals `b`).
-The expected side of an arithmetic operation is a second implementation in the carrier crate
-(P1) under the node's rounding mode. It SHALL share no function with the native
-operations (quire-exact FR-405), apart from the decode of a bit pattern into
-sign, exponent and fraction, and it neither calls nor reproduces the owner's `BigInt`
-path. The generated harness evaluates the carrier's native operations, so the proof ties
-them to the second implementation and nothing else: it covers the native operations, not
-the shipped oracle (`evaluate_ieee`, `compare_ieee`). A defect in the decode changes both
-sides and is invisible to the proof. The shipped oracle is tied to the replacement only by
-AC-13's host differential, and AC-13 is the only criterion that can catch such a
-decode defect. AC-14 inspects that nothing but the decode is shared.
+The expected side of an arithmetic operation is the host language's own float operation
+(`+`, `-`, `*`, `/`, `sqrt` and `mul_add` on `f32` and `f64`), the same independent reference
+quire-exact FR-405 Behavior 19 uses for its own harnesses; there is no second implementation
+in the carrier crate. A result that is a NaN (a NaN operand, infinity minus infinity, zero
+times infinity, zero over zero, infinity over infinity, the square root of a negative nonzero)
+is decided first by a predicate over the bit patterns, so the host operation never produces
+a NaN under Kani's NaN check. The host reference fixes the `nearest-even` result bits of a
+non-NaN outcome; for every other rounding spelling a harness claims only what that reference
+and the NaN rule fix, as FR-405 Behavior 19 permits for a property harness, and the remaining
+outputs (the directed-rounding bits, the flags other than `invalid`, the ordered charges at
+a limit) are left to AC-13's host differential. The expected side SHALL share no function with
+the native operations (quire-exact FR-405), not even the decode of a bit pattern (FR-405
+Behavior 6 keeps its decode private to the native body), and it neither calls nor reproduces
+the owner's `BigInt` path. The generated harness evaluates the carrier's native operations,
+so the proof ties them to the host reference and nothing else: it covers the native
+operations, not the shipped oracle (`evaluate_ieee`, `compare_ieee`). The shipped oracle is
+tied to the native operations by AC-13's host differential. AC-14 inspects that nothing is
+shared.
 
 ### Control points
 
@@ -357,8 +370,8 @@ parts of AC-1, AC-4, AC-5, AC-9, AC-10, AC-13 and AC-14 were conditional on P3 (
 | FR-053-AC-10 | Each charge and outcome mutant fails with actual solver playback of an in-domain input. (a) A dropped or reordered charge: every operator, with `ieee.exact-intermediate` and `ieee.round` dropped over a finite input. (b) `ieee.exact-intermediate` or `ieee.round` charged on a classification-decided input: every arithmetic operator, over a NaN, infinity or division-by-zero input. (c) A wrong charge amount: the width taken as 64 at `float32` or 32 at `float64`, every operator; the arity taken as two for `sqrt` or `fma`, over those operators. (d) `ieee.result-retain` charged on an `exact` refusal: every arithmetic operator, over its inexact point named in AC-9 (d). (e) A stopped outcome reported completed: every operator. | Test |
 | FR-053-AC-11 | Counterexample decoding validates the one physical I64 entry of a float parameter (width, little-endian bytes, comment, order, schema role, byte and value-count limits) before grouping, then, for `float32`, the range `0..=0xFFFF_FFFF`. Grouping yields one `WitnessValue::Float32(u32)` or `WitnessValue::Float64(u64)` per parameter through the public replay route for that exact declaration, retaining the bits exactly. Round-trip controls cover `Z-`, `SN1`, `NQN0` and `0x8000000000000000`; a decode through a host float value, or through a checked `i64` to `u64` conversion, fails the control. Missing, duplicate, foreign, role-swapped, width-conflicting and malformed schemas or entries, and a `float32` value above `u32::MAX` or negative, are refused with typed causes and no replay. An unavailable replay capability is reported without claiming acceptance. | Test |
 | FR-053-AC-12 | Run evidence records the operation and source association, operand forms and width, the `float_rounding` result bound and rounding mode (arithmetic only), correspondence, ordered physical bindings and their logical grouping, subject and full ordered backend arguments, the unwind bound and the carrier's loop bounds, Kani/Rust/CBMC/solver versions, target, dependency cohort including the carrier, limits, the observed peak memory per width, operation and rounding mode, raw checks, cover and playback, exit and typed terminal outcome. No-run, refusal, cover failure, resource exhaustion and semantic falsification remain distinguishable; preparation alone earns no proof result. | Test |
-| FR-053-AC-13 | On the host, the carrier's host-callable native operations (quire-exact FR-405) and the owner's `evaluate_ieee` and `compare_ieee` and the shipped owner functions agree for every supported operation, width and rounding mode on the typed outcome, the result bits, flags and provenance, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets. The inputs are the AC-2 class-boundary set and a stated boundary family: every control point of the Behavior list (whose expected results are first asserted against the shipped owner), the largest and smallest subnormal and normal magnitudes, the exact overflow and underflow thresholds and one unit either side, the rounding ties at the subnormal-to-normal boundary, operand pairs with the largest exponent difference for add and sub, an `fma` whose product overflows and whose addend brings it back in range, an `fma` that cancels exactly, and perfect and imperfect squares including the subnormal range. A replacement that differs from the owner on any of these inputs fails, and the check covers these inputs and not every operand pair. For `nearest-even`, the `float32` and `float64` results for non-NaN outcomes of `add`, `sub`, `mul`, `div`, `sqrt` and `fma` are also compared with Rust's `f32` and `f64` operators, `sqrt` and `mul_add` on the same inputs, as an independent reference that shares no code with the owner or the carrier; NaN payloads are excluded from that comparison because the host does not fix them. The only code the native operations and the expected side share is the bit-pattern decode (AC-14). A defect injected into the decode changes both sides, so the Kani proof cannot catch it, and it must fail this differential against the unmodified shipped owner. A defect injected into the replacement's rounding step, sticky shift or operand classification is not shared with the expected side, so the proof against the expected side catches it, and this differential catches it too. Until IR-1446 supplies the host-callable native operations this criterion cannot run. | Test |
-| FR-053-AC-14 | The expected side of every supported operation reaches no function of the carrier's native operations other than the bit-pattern decode (inspected: its call graph from the harness shows the decode as the only shared function, and the rounding step, sticky shift, operand classification, flag computation and charge sequence as separate implementations). A mutant that makes the expected side call the replacement's rounding step, or its classification, fails the inspection even though it still passes FR-053-AC-1's "not a second call of the oracle". A defect injected into the decode is recorded as detectable by FR-053-AC-13 only. | Inspection |
+| FR-053-AC-13 | On the host, the carrier's host-callable native operations (quire-exact FR-405) and the owner's `evaluate_ieee` and `compare_ieee` agree for every supported operation, width and rounding mode on the typed outcome, the result bits, flags and provenance, ordered charges, the denied next charge and consumed counters at zero, exact and short budgets. The inputs are the AC-2 class-boundary set and a stated boundary family: every control point of the Behavior list (whose expected results are first asserted against the shipped owner), the largest and smallest subnormal and normal magnitudes, the exact overflow and underflow thresholds and one unit either side, the rounding ties at the subnormal-to-normal boundary, operand pairs with the largest exponent difference for add and sub, an `fma` whose product overflows and whose addend brings it back in range, an `fma` that cancels exactly, and perfect and imperfect squares including the subnormal range. A native operation that differs from the owner on any of these inputs fails, and the check covers these inputs and not every operand pair. For `nearest-even`, the `float32` and `float64` results for non-NaN outcomes of `add`, `sub`, `mul`, `div`, `sqrt` and `fma` are also compared with Rust's `f32` and `f64` operators, `sqrt` and `mul_add` on the same inputs, as an independent reference that shares no code with the owner or the carrier; NaN payloads are excluded from that comparison because the host does not fix them. The native operations and the expected side share no code (AC-14). A defect injected into the native bit-pattern decode, rounding step, sticky shift or operand classification is not shared with the expected side, so the proof against the expected side catches it for the outputs the harness covers, and this differential catches it against the unmodified shipped owner too. Until IR-1446 supplies the host-callable native operations this criterion cannot run. | Test |
+| FR-053-AC-14 | The expected side of every supported operation reaches no function of the carrier's native operations (inspected: its call graph from the harness shows no shared function, the decode included, and the host float operation as the arithmetic reference). A mutant that makes the expected side call the native operations' rounding step, decode or classification fails the inspection even though it still passes FR-053-AC-1's "not a second call of the oracle". | Inspection |
 
 ## Dependencies
 
