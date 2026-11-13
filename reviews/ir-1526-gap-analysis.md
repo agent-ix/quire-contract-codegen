@@ -51,3 +51,15 @@ FR-056.
 - Stubs: none.
 - Semantic review: skipped as a fan-out pass; the per-AC mutant checks above were done inline.
 - Plan completion: not assessed
+
+## Dispositions
+
+Round 1, checked against `git diff e02f9053..3d070958`.
+
+| FND | outcome | reason |
+| --- | ------- | ------ |
+| FND-001 | fixed | The operator-refused clause is now `other * offset > 0 and other mod offset > 0` at `Int[0, 2^20]`, and the row covers the 21-bit multiply. A decider placed before the operator check would report `V2ClauseNotTractable` and fail the assertion. |
+| FND-002 | deferred | once the mislabelled ir304 row is gone, CG's own evidence holds no measured wall-clock timeout of a V2 clause. Inventing a `timed_out` row would break AC-10 ("timed_out only if a run was measured"). The synthetic-corpus checks still show that the scoring fails both trivial deciders, and the FR-056 Status now says the shipped file does not exercise false-accept. The residue closes only with a measured timed-out V2 clause. The AC-13 run records a Verified/Falsified row, not a timeout, so it does not close this. |
+| FND-003 | deferred | the mislabelled non-V2 `timed_out` row is removed, and FR-056/TC-070 Status now say PARTIAL for AC-10 and name the missing families (probe, Meter, decimal, other multi-operation). Those rows need new installed-Kani measurements, which a host-only PR cannot supply. |
+| FND-004 | fixed | The spec Lookup is amended to "max_operand_bits <= width" (a row at B bits is intractable at B and wider), and AC-4, AC-5, AC-13 and TC-070 steps 4, 5 and 13 are updated to match. `decide` uses `bits >= row.max_operand_bits`, and the tests assert that 33 bits runs while 64 and 65 bits are refused. |
+| FND-005 | deferred | quire tooling behaviour that predates the PR (`quire matrix` against `quire trace`, also on main for FR-040..FR-055). It is not a defect of this PR and goes to quoin/quire triage. |

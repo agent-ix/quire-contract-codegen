@@ -39,3 +39,15 @@ motivating case, a wide integer multiply, can never reach the decider.
 | FND-003 | low      | `TractabilityRow.wall_seconds` is `u64`. A fractional value (CG's qualification records and its own corpus use values like 44.6) makes the row malformed and fails the whole generation request. The corpus types the same field as `f64`. | src/kani/tractability.rs:483, tests/it/kani_tractability.rs:612 |
 | FND-004 | low      | `negotiate_kani_obligations_with_options(request, options, native: bool)` has a bool parameter whose call site (`..., true)`) does not show the choice. The existing API spells native as a separately named entry point (rust-style api-design: enum or named fn over an opaque bool). | src/kani/generate/negotiate.rs:337-347 |
 | FND-005 | low      | An operation step with no native selection decision silently gets width 0 (`map_or(Some(0), ...)`). Width 0 is the most refusable width, because any row for that id qualifies. The doc says only Boolean operations take this path, but nothing checks that the operation is Boolean. | src/oracle/clause.rs:804-815 |
+
+## Dispositions
+
+Round 1, checked against `git diff e02f9053..3d070958`. Focused `tc_070` tests at 3d070958 gave 16 passed, 1 ignored (AC-13), and `cargo fmt --check` is clean.
+
+| FND | outcome | reason |
+| --- | ------- | ------ |
+| FND-001 | fixed | `clause_operation_widths` now propagates intervals in i128 with the native image and semantic-domain clip (it mirrors `completed_interval`). An operand beyond i128 gets an unknown width. A 33-bit multiply over `Int[0, 2^32]` is refused through generation, and the 64- and 65-bit add cases run end to end. The "Known limit" Status note is removed. |
+| FND-002 | deferred | the parts that could break the build are fixed: an absent or unmatched lock gives `unknown` plus a build warning instead of a panic, and the parse is per `[[package]]` block, independent of field order. What remains is that a dependency build reads CG's own lock, and quire-exact's static 0.1.0 means kernel staleness never trips. That needs a `VERSION` const from quire-exact (another lane). It has no effect today: CG is `publish = false` and nothing outside the repo calls it. |
+| FND-003 | fixed | `WallSeconds` accepts integer or fractional seconds (finite, non-negative, at most 1e12), stores whole milliseconds and stays `Eq`. A load test covers 44.625 s. |
+| FND-004 | fixed | The bool is replaced by the public `IntegerRoute::{General, Native}` enum. |
+| FND-005 | fixed | Widths are now `Option<u32>`. An operation with no integer operand, or an operand beyond i128, is `None` and never matches a row; `tc_070_an_unknown_width_runs` covers it. |
