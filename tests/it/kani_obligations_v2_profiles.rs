@@ -1,7 +1,9 @@
 //! FR-015-AC-126 and FR-015-AC-129 (IR-948): the V2 pre/post/invariant profiles over the QSL-source
 //! `test/bank` package, `Account.balance: Int[0, 100]` and `withdraw(amount: Int[0, 100])`.
 //!
-//! The default lane checks what generation yields for the profile package. The `kani` lane
+//! The default lane checks what generation yields for the profile package: a harness for the
+//! precondition and the invariant, and the two refusals that keep the postcondition member
+//! planned. The `kani` lane
 //! (`#[ignore]`, run one at a time by `make kani`) runs the installed Kani through CG's runner at
 //! unwind 8, the two-phase run of FR-017-AC-63, and replays each invariant counterexample through
 //! QSL. Peak memory is the `memory.peak` of the cgroup scope the test runs in.
@@ -12,16 +14,29 @@ use ix_trace_rs::trace;
 use qsl_replay::{ReplayResult, WitnessSettlement, WitnessValue};
 use quire_contract_codegen::{
     decode_v2_clause_falsification, execute_kani_obligation, negotiate_kani_native_obligations,
-    parse_assertion_playback, KaniExecutionEvidence, KaniExecutionRequest, KaniInstallation,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniV2ClauseObligationHarness,
-    ObligationItem, ObligationKind, StateClauseHarness, StateClauseReplay,
+    parse_assertion_playback, KaniCheckClass, KaniCheckStatus, KaniExecutionEvidence,
+    KaniExecutionRequest, KaniInstallation, KaniObligationOutcome, KaniObligationRequest,
+    KaniRunOutcome, KaniV2ClauseObligationHarness, ObligationDisposition, ObligationItem,
+    ObligationKind, ProofCeilings, StateClauseHarness, StateClauseReplay, UnsupportedObligation,
 };
+use quire_contract_model::CheckedNodeId;
 use quire_semantic_value::catalog::Category;
 
 use super::kani_obligations_state_frame::native_twin::Twin;
 use super::kani_obligations_v2_clause_controls::{subject_module, ScopePeak, ScratchCrate};
 
 const UNWIND: u32 = 8;
+const CAP_BYTES: u64 = 24 * 1024 * 1024 * 1024;
+const INVARIANT_COVER: &str = "the V2 invariant's admitted state domain is reachable";
+const POSTCONDITION_COVER: &str =
+    "the V2 postcondition is evaluated on an admitted state and parameters";
+const PRECONDITION_COVER: &str = "the V2 precondition is satisfiable within admitted input bounds";
+
+/// The ceilings of the installed runs: the 24 GiB cgroup of the record and 30 minutes.
+const CEILINGS: ProofCeilings = ProofCeilings {
+    memory_bytes: std::num::NonZeroU64::new(CAP_BYTES).unwrap(),
+    wall_clock: std::time::Duration::from_secs(30 * 60),
+};
 const PRECONDITION: &str = "amount <= self.balance";
 const POSTCONDITION: &str =
     "self.balance <= pre(self.balance) - amount and self.balance >= pre(self.balance) - amount";
@@ -39,7 +54,7 @@ fn harness_of(twin: &Twin, clause: &str) -> KaniV2ClauseObligationHarness {
     let (package, node) = twin.emitted_package(clause);
     let claims = crate::common::v2_claim::claims_for(&package, std::slice::from_ref(&node));
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        ceilings: CEILINGS,
         items: &[ObligationItem::V2Clause {
             package: &package,
             clause: &node,
@@ -63,21 +78,44 @@ fn harness_of(twin: &Twin, clause: &str) -> KaniV2ClauseObligationHarness {
 
 const BANK_SUBJECT_PATH: &str = "crate::subject::check";
 
-/// The customer subject of `withdraw`: it receives the state field by `&mut` and then the
-/// operation parameter (FR-025-AC-8).
-fn bank_subject(body: &str) -> String {
-    format!(
-        "\npub mod subject {{\n    pub fn check(balance: &mut i64, amount: i64) {{ {body} }}\n}}\n"
-    )
+/// A customer subject of `withdraw` that is both compiled into the test (`$name`) and handed to
+/// Kani as source (`$text`): it receives the state field by `&mut` and then the operation
+/// parameter. The native evaluation of a witness runs the very subject Kani falsified.
+macro_rules! bank_subject {
+    ($name:ident, $text:ident, |$balance:ident, $amount:ident| $($body:tt)*) => {
+        fn $name($balance: &mut i64, $amount: i64) {
+            $($body)*
+        }
+        const $text: &str = concat!(
+            "\npub mod subject {\n    pub fn check(",
+            stringify!($balance),
+            ": &mut i64, ",
+            stringify!($amount),
+            ": i64) { ",
+            stringify!($($body)*),
+            " }\n}\n"
+        );
+    };
 }
 
-const HEALTHY_WITHDRAW: &str = "*balance -= amount;";
-/// Debits one less than asked once anything is asked: the produced balance stays in
-/// `[0, 100]` and the postcondition fails whenever `amount >= 1`.
-const UNDER_DEBITING_WITHDRAW: &str = "*balance -= if amount > 0 { amount - 1 } else { 0 };";
+bank_subject!(healthy_withdraw, HEALTHY_WITHDRAW, |balance, amount| *balance -= amount;);
+// Debits one less than asked once anything is asked: the produced balance stays in `[0, 100]`
+// and the postcondition fails whenever `amount >= 1`.
+bank_subject!(
+    under_debiting_withdraw,
+    UNDER_DEBITING_WITHDRAW,
+    |balance, amount| *balance -= if amount > 0 { amount - 1 } else { 0 };
+);
 
-/// The postcondition `Debited` requested with its same-anchor precondition `CanAfford`.
-fn postcondition_harness(twin: &Twin) -> KaniV2ClauseObligationHarness {
+/// The profile postcondition `Debited` read natively over the pre-state, the produced state and
+/// the parameter: the conjunction of its two comparisons.
+fn debited(pre: i64, post: i64, amount: i64) -> bool {
+    post <= pre - amount && post >= pre - amount
+}
+
+/// The profile negotiated with `CanAfford` and `Debited` requested together; the postcondition
+/// is the second item.
+fn negotiate_postcondition(twin: &Twin) -> (KaniObligationOutcome, CheckedNodeId) {
     let (package, post) = twin.emitted_package("Debited");
     let (_, pre) = twin.emitted_package("CanAfford");
     let nodes = [pre, post.clone()];
@@ -93,21 +131,25 @@ fn postcondition_harness(twin: &Twin) -> KaniV2ClauseObligationHarness {
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        ceilings: CEILINGS,
         items: &items,
         subject_path: BANK_SUBJECT_PATH,
         unwind: UNWIND,
     })
     .expect("the clauses negotiate");
+    (outcome, post)
+}
+
+/// The postcondition `Debited` requested with its same-anchor precondition `CanAfford`.
+fn postcondition_harness(twin: &Twin) -> KaniV2ClauseObligationHarness {
+    let (outcome, post) = negotiate_postcondition(twin);
     let KaniObligationOutcome::Emitted {
         mut v2_clause_harnesses,
-        records,
         ..
     } = outcome
     else {
         panic!("the postcondition emits a harness");
     };
-    assert!(!records.is_empty());
     let index = v2_clause_harnesses
         .iter()
         .position(|harness| harness.identity.clause == post)
@@ -115,11 +157,13 @@ fn postcondition_harness(twin: &Twin) -> KaniV2ClauseObligationHarness {
     v2_clause_harnesses.remove(index)
 }
 
-/// FR-015-AC-43, FR-015-AC-39, FR-025-AC-8: the state-reading postcondition yields a harness that
-/// draws the pre-state and the parameter, assumes the sibling precondition, calls the subject with
-/// `&mut` to a harness-owned copy and then the parameter, asserts the produced field's domain
-/// before the clause, and records the sibling as its `requires`.
-#[trace("FR-015-AC-43", "FR-015-AC-39", "FR-025-AC-8", "TC-025")]
+/// FR-015-AC-43, FR-015-AC-39: the state-reading postcondition yields a harness that draws the
+/// pre-state and the parameter, assumes the sibling precondition through that precondition's own
+/// oracle, copies the pre-state into a harness-owned value, calls the subject with `&mut` to the
+/// copy and then the parameter, asserts the produced field's domain before the clause, feeds the
+/// oracle the pre-state copy for `pre(...)` reads and the produced value for bare reads, and
+/// records the sibling as its `requires`.
+#[trace("FR-015-AC-43", "FR-015-AC-39", "TC-025")]
 #[test]
 fn the_state_reading_postcondition_yields_a_harness_with_requires_and_a_mut_subject() {
     let twin = healthy();
@@ -142,27 +186,176 @@ fn the_state_reading_postcondition_yields_a_harness_with_requires_and_a_mut_subj
     };
     let draw = position("let pre_balance_current: i64 = kani::any();");
     let parameter = position("let parameter_amount_current: i64 = kani::any();");
-    let requires = position(
-        "kani::assume((i128::from(parameter_amount_current) <= i128::from(pre_balance_current)));",
+    let sibling_input = position(
+        "let requires_0_current_balance = nx::NativeInteger::new(i128::from(pre_balance_current));",
     );
+    let sibling_amount = position("let requires_0_parameter_amount = nx::NativeInteger::new(i128::from(parameter_amount_current));");
+    let sibling_call = position("let requires_0_outcome = requires_0::oracle_clause(");
+    let requires = position("kani::assume(matches!(&requires_0_outcome, Ok(true)));");
     let copy = position("let mut post_balance_current: i64 = pre_balance_current;");
     let call =
         position("crate::subject::check(&mut post_balance_current, parameter_amount_current);");
     let domain = position("the produced V2 state field lies in its admitted domain");
     let expected = position("let expected = ");
+    let pre_input =
+        position("let pre_balance = nx::NativeInteger::new(i128::from(pre_balance_current));");
+    let post_input =
+        position("let current_balance = nx::NativeInteger::new(i128::from(post_balance_current));");
     let oracle = call
         + source[call..]
             .find("oracle_clause(")
             .expect("the harness calls the oracle");
     let holds = position("the V2 postcondition holds for the produced state");
-    assert!(draw < parameter && parameter < requires && requires < copy);
+    assert!(parameter < sibling_input.min(sibling_amount) && draw < parameter);
     assert!(
-        copy < call && call < domain && domain < expected && expected < oracle && oracle < holds
+        sibling_input.max(sibling_amount) < sibling_call
+            && sibling_call < requires
+            && requires < copy
+    );
+    assert!(copy < call && call < domain && domain < expected && expected < oracle);
+    assert!(domain < pre_input.min(post_input) && pre_input.max(post_input) < oracle);
+    assert!(oracle < holds);
+    // The independent expectation reads the produced value for bare reads and the copy for pre().
+    let expectation = &source[expected
+        ..source[expected..]
+            .find(';')
+            .map(|end| expected + end)
+            .unwrap()];
+    assert!(
+        expectation.contains("from (post_balance_current)")
+            && expectation.contains("from (pre_balance_current)"),
+        "{expectation}"
+    );
+    assert!(
+        source.contains("mod requires_0 {"),
+        "the sibling oracle is embedded in its own module"
     );
     assert_eq!(
         source.matches("kani::assume(post_balance_current").count(),
         0,
         "the produced state is asserted, never assumed"
+    );
+}
+
+/// FR-025-AC-8: the subject receives each state value by `&mut` to a harness-owned value and the
+/// harness copies the pre-state before the call.
+#[trace("FR-025-AC-8", "TC-036")]
+#[test]
+fn the_postcondition_subject_receives_a_mut_copy_and_the_pre_state_survives() {
+    let harness = postcondition_harness(&healthy());
+    let source = harness.rust.contents.as_str();
+    let copy = source
+        .find("let mut post_balance_current: i64 = pre_balance_current;")
+        .expect("the copy");
+    let call = source
+        .find("crate::subject::check(&mut post_balance_current, parameter_amount_current);")
+        .expect("the call");
+    assert!(copy < call);
+    assert!(
+        !source.contains("check(&mut pre_balance_current"),
+        "the pre-state is never handed to the subject"
+    );
+}
+
+/// FR-015-AC-43: a sibling precondition the state-reading postcondition cannot assume refuses the
+/// postcondition naming that precondition, with no harness for it.
+fn assert_sibling_refused(twin: &Twin) {
+    let (outcome, post) = negotiate_postcondition(twin);
+    let record = &outcome.records()[1];
+    assert_eq!(record.kind, Some(ObligationKind::Postcondition));
+    assert!(
+        matches!(
+            &record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::V2ClauseSiblingRequiresNotRendered { .. }
+            }
+        ),
+        "{:?}",
+        record.disposition
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the request is emitted");
+    };
+    assert!(v2_clause_harnesses
+        .iter()
+        .all(|harness| harness.identity.clause != post));
+}
+
+#[trace("FR-015-AC-43", "TC-025")]
+#[test]
+fn an_arithmetic_sibling_precondition_refuses_the_state_postcondition() {
+    assert_sibling_refused(&profile((0, 100), "amount + 1 <= self.balance", INVARIANT));
+}
+
+/// QSL refuses a `pre(...)` read in a precondition, so no sibling reaches the renderer's
+/// `pre(...)` sibling arm; this pins that refusal and fails if QSL starts to admit one.
+#[trace("FR-015-AC-43", "TC-025")]
+#[test]
+fn qsl_refuses_a_pre_read_in_a_sibling_precondition() {
+    let twin = profile((0, 100), "amount <= pre(self.balance)", INVARIANT);
+    let Err(refusal) = twin.clause_site("CanAfford") else {
+        panic!("QSL refuses a pre read in a precondition");
+    };
+    assert!(format!("{refusal:?}").contains("forbidden-pre-read"));
+}
+
+/// FR-015-AC-39, FR-016 decode: a harness draws its state fields before its parameters, whatever
+/// order its oracle takes its inputs in. The precondition `amount <= self.balance` is a mixed
+/// clause whose oracle takes `parameter_amount` before `current_balance`; its draws are the
+/// state field first, and a playback decodes onto the matching names.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn a_mixed_precondition_draws_its_state_field_first_and_decodes_by_name() {
+    let harness = harness_of(&healthy(), "CanAfford");
+    let source = harness.rust.contents.as_str();
+    let oracle_signature = source
+        .find("pub fn oracle_clause(")
+        .map(|start| &source[start..source[start..].find('{').map(|end| start + end).unwrap()])
+        .expect("the oracle");
+    assert!(
+        oracle_signature.find("parameter_amount").unwrap()
+            < oracle_signature.find("current_balance").unwrap(),
+        "the oracle takes the parameter first: {oracle_signature}"
+    );
+    let state = source.find("let current_balance: i64 = kani::any();");
+    let amount = source.find("let parameter_amount: i64 = kani::any();");
+    assert!(
+        state.is_some() && amount.is_some() && state < amount,
+        "the state field is drawn first:\n{source}"
+    );
+    let state_identifier = harness.identity.state_fields[0].identifier.clone();
+    let argument_identifier = harness.identity.arguments[0].identifier.clone();
+    // Kani's concrete playback lists the draws in source order: the balance 90, then the amount 7.
+    let entry =
+        |value: u8| format!("        // {value}\n        vec![{value}, 0, 0, 0, 0, 0, 0, 0],\n");
+    let counterexample = format!(
+        "/// Test generated for harness `{}::{}` \n///\n/// Check for `assertion`: \"\"x\"\"\n\n#[test]\nfn kani_concrete_playback_x_1() {{\n    let concrete_vals: Vec<Vec<u8>> = vec![\n{}{}    ];\n    kani::concrete_playback_run(concrete_vals, x);\n}}",
+        harness.identity.module_symbol.as_str(),
+        harness.identity.harness_symbol.as_str(),
+        entry(90),
+        entry(7),
+    );
+    let parsed = parse_assertion_playback(
+        &counterexample,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the playback parses");
+    let values =
+        decode_v2_clause_falsification(&harness, &parsed, crate::unbounded_decode_limits())
+            .expect("the playback decodes");
+    assert_eq!(
+        values,
+        [
+            (state_identifier, WitnessValue::Integer(90)),
+            (argument_identifier, WitnessValue::Integer(7)),
+        ]
     );
 }
 
@@ -182,6 +375,76 @@ fn the_profile_package_yields_a_harness_per_kind_with_distinct_identities() {
         invariant.identity.harness_symbol
     );
     assert_eq!(precondition.identity.ceilings, invariant.identity.ceilings);
+}
+
+/// The postcondition member of FR-015-AC-129 is blocked once now: the CG generator renders the
+/// state-reading postcondition (IR-948 slice 2b), and QSL still refuses the specified equality
+/// text (QSL-1901). This test fails when QSL lifts so that the PARTIAL status is revisited.
+#[trace("FR-015-AC-129", "FR-015-AC-43", "TC-025")]
+#[test]
+fn the_postcondition_renders_and_the_specified_equality_text_is_blocked_by_qsl() {
+    let twin = healthy();
+    let located = ["CanAfford", "Debited", "NonNegative"].map(|name| twin.emitted_package(name));
+    let package = &located[0].0;
+    let nodes = located.iter().map(|l| l.1.clone()).collect::<Vec<_>>();
+    let claims = crate::common::v2_claim::claims_for(package, &nodes);
+    let items = nodes
+        .iter()
+        .zip(&claims)
+        .map(|(clause, claim)| ObligationItem::V2Clause {
+            package,
+            clause,
+            claim,
+            dependencies: None,
+        })
+        .collect::<Vec<_>>();
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: CEILINGS,
+        items: &items,
+        subject_path: "crate::subject::check",
+        unwind: UNWIND,
+    })
+    .expect("the request negotiates");
+    let dispositions = outcome
+        .records()
+        .iter()
+        .map(|record| (record.kind, &record.disposition))
+        .collect::<Vec<_>>();
+    assert!(
+        matches!(
+            dispositions[..],
+            [
+                (
+                    Some(ObligationKind::Precondition),
+                    ObligationDisposition::Supported { .. }
+                ),
+                (
+                    Some(ObligationKind::Postcondition),
+                    ObligationDisposition::Supported { .. }
+                ),
+                (
+                    Some(ObligationKind::Invariant),
+                    ObligationDisposition::Supported { .. }
+                ),
+            ]
+        ),
+        "{dispositions:?}"
+    );
+
+    let equality = Twin::with_withdraw_profile(
+        (0, 100),
+        PRECONDITION,
+        "self.balance = pre(self.balance) - amount",
+        INVARIANT,
+    );
+    let Err(refusal) = equality.clause_site("Debited") else {
+        panic!("QSL refuses the specified equality text");
+    };
+    let refusal = format!("{refusal:?}");
+    assert!(
+        refusal.contains("UndefinedExpression") && refusal.contains("unproved-range"),
+        "{refusal}"
+    );
 }
 
 fn run(label: &str, harness: &KaniV2ClauseObligationHarness) -> KaniExecutionEvidence {
@@ -225,21 +488,56 @@ fn run_with_subject(
     evidence
 }
 
-fn cover_satisfied(evidence: &KaniExecutionEvidence) -> bool {
-    evidence
+/// The one `kani::cover!` of the harness, which Kani attributes to the line of `message` in the
+/// compiled source, is `Satisfied`.
+fn named_cover_satisfied(
+    evidence: &KaniExecutionEvidence,
+    harness: &KaniV2ClauseObligationHarness,
+    message: &str,
+) -> bool {
+    let line = harness
+        .rust
+        .contents
+        .lines()
+        .position(|line| line.contains("kani::cover!") && line.contains(message))
+        .map(|index| u32::try_from(index + 1).expect("line number"));
+    assert!(line.is_some(), "the harness covers `{message}`");
+    let covers = evidence
         .checks
         .iter()
-        .any(|check| format!("{:?}", check.status) == "Satisfied")
+        .filter(|check| check.class == KaniCheckClass::Cover)
+        .collect::<Vec<_>>();
+    assert_eq!(covers.len(), 1, "exactly one cover: {covers:?}");
+    assert_eq!(covers[0].location.line, line, "the cover is the named one");
+    covers[0].status == KaniCheckStatus::Satisfied
+}
+
+/// The run held the 24 GiB cap's budget: the identity ceiling is the cap and the environment
+/// supplied a peak below it. `make kani` runs the lane without a scope; the cap itself is the
+/// caller's (see the record).
+fn assert_within_cap(evidence: &KaniExecutionEvidence) {
+    assert_eq!(evidence.ceilings.memory_bytes.get(), CAP_BYTES);
+    let peak = evidence
+        .memory
+        .peak_resident_bytes
+        .expect("the cgroup source supplied a peak");
+    assert!(peak < CAP_BYTES, "peak {peak} B is under the cap");
 }
 
 #[trace("FR-015-AC-126", "FR-015-AC-129", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_verifies_the_profile_precondition_with_its_cover_satisfied() {
-    let evidence = run("ir948-pre-healthy", &harness_of(&healthy(), "CanAfford"));
+    let harness = harness_of(&healthy(), "CanAfford");
+    let evidence = run("ir948-pre-healthy", &harness);
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert!(evidence.proof_phase.is_none());
-    assert!(cover_satisfied(&evidence), "the final cover is satisfied");
+    assert!(named_cover_satisfied(
+        &evidence,
+        &harness,
+        PRECONDITION_COVER
+    ));
+    assert_within_cap(&evidence);
 }
 
 #[trace("FR-015-AC-126", "FR-015-AC-129", "TC-025")]
@@ -247,22 +545,37 @@ fn tc_025_real_kani_verifies_the_profile_precondition_with_its_cover_satisfied()
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_reports_the_impossible_profile_precondition_as_cover_unsatisfied() {
     let twin = profile((0, 100), "amount > 100", INVARIANT);
-    let evidence = run("ir948-pre-impossible", &harness_of(&twin, "CanAfford"));
-    assert!(
-        matches!(evidence.outcome, KaniRunOutcome::CoverUnsatisfied { .. }),
-        "{:?}",
-        evidence.outcome
+    let harness = harness_of(&twin, "CanAfford");
+    let evidence = run("ir948-pre-impossible", &harness);
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
     );
+    assert!(
+        evidence.proof_phase.is_none(),
+        "the verdict is the proof phase's"
+    );
+    assert!(!named_cover_satisfied(
+        &evidence,
+        &harness,
+        PRECONDITION_COVER
+    ));
+    assert_within_cap(&evidence);
 }
 
 #[trace("FR-015-AC-126", "FR-015-AC-129", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_verifies_the_profile_invariant_with_its_cover_satisfied() {
-    let evidence = run("ir948-inv-healthy", &harness_of(&healthy(), "NonNegative"));
+    let harness = harness_of(&healthy(), "NonNegative");
+    let evidence = run("ir948-inv-healthy", &harness);
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert!(evidence.proof_phase.is_none());
-    assert!(cover_satisfied(&evidence), "the final cover is satisfied");
+    assert!(named_cover_satisfied(&evidence, &harness, INVARIANT_COVER));
+    assert_within_cap(&evidence);
 }
 
 /// Runs the mutant's invariant harness, requires a two-phase `Falsified` verdict whose in-domain
@@ -270,6 +583,7 @@ fn tc_025_real_kani_verifies_the_profile_invariant_with_its_cover_satisfied() {
 fn falsified_and_replayed(label: &str, twin: &Twin, expected: i64) {
     let harness = harness_of(twin, "NonNegative");
     let evidence = run(label, &harness);
+    assert_within_cap(&evidence);
     let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
         panic!("expected Falsified, got {:?}", evidence.outcome);
     };
@@ -308,6 +622,14 @@ fn falsified_and_replayed(label: &str, twin: &Twin, expected: i64) {
         expected.to_string(),
         "the replayed state is the counterexample"
     );
+    let qsl_replay::ReplaySource::Witness(witness) = &replay.wire.source else {
+        panic!("the invariant envelope rides the witness arm");
+    };
+    assert_eq!(
+        witness.transcript(),
+        format!("<<<assertion|withdraw|NonNegative|balance={expected}>>>"),
+        "the transcript's operation is the selected anchor's"
+    );
     let result = replay.replay().expect("the counterexample replays");
     let ReplayResult::Witness(arm) = result.result() else {
         panic!("the invariant envelope is on the witness arm");
@@ -324,6 +646,7 @@ fn falsified_and_replayed(label: &str, twin: &Twin, expected: i64) {
     "FR-015-AC-129",
     "FR-017-AC-63",
     "FR-024-AC-63",
+    "FR-024-AC-64",
     "TC-025",
     "TC-035"
 )]
@@ -341,6 +664,7 @@ fn tc_025_real_kani_falsifies_the_strengthened_invariant_mutant_at_balance_0() {
     "FR-015-AC-126",
     "FR-015-AC-129",
     "FR-017-AC-63",
+    "FR-024-AC-63",
     "FR-024-AC-64",
     "TC-025",
     "TC-035"
@@ -365,19 +689,22 @@ fn tc_025_real_kani_falsifies_the_widened_invariant_mutant_at_balance_minus_1() 
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_verifies_the_profile_postcondition_with_its_cover_satisfied() {
-    let evidence = run_with_subject(
-        "ir948-post-healthy",
-        &postcondition_harness(&healthy()),
-        &bank_subject(HEALTHY_WITHDRAW),
-    );
+    let harness = postcondition_harness(&healthy());
+    let evidence = run_with_subject("ir948-post-healthy", &harness, HEALTHY_WITHDRAW);
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert!(evidence.proof_phase.is_none());
-    assert!(cover_satisfied(&evidence), "the final cover is satisfied");
+    assert!(named_cover_satisfied(
+        &evidence,
+        &harness,
+        POSTCONDITION_COVER
+    ));
+    assert_within_cap(&evidence);
 }
 
 /// The under-debiting subject keeps the balance in its domain and breaks the postcondition for
-/// every `amount >= 1`; the witness phase's playback is decoded in the drawn domains and the
-/// postcondition is evaluated natively over it.
+/// every `amount >= 1`. The witness phase's playback is decoded by name inside the drawn domains,
+/// and the same compiled subject then runs natively over the decoded pre-state and amount; the
+/// postcondition, read natively over the pre-state, the produced state and the amount, is false.
 #[trace(
     "FR-015-AC-126",
     "FR-015-AC-129",
@@ -390,11 +717,8 @@ fn tc_025_real_kani_verifies_the_profile_postcondition_with_its_cover_satisfied(
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_falsifies_the_under_debiting_subject_with_in_domain_native_playback() {
     let harness = postcondition_harness(&healthy());
-    let evidence = run_with_subject(
-        "ir948-post-mutant",
-        &harness,
-        &bank_subject(UNDER_DEBITING_WITHDRAW),
-    );
+    let evidence = run_with_subject("ir948-post-mutant", &harness, UNDER_DEBITING_WITHDRAW);
+    assert_within_cap(&evidence);
     let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
         panic!("expected Falsified, got {:?}", evidence.outcome);
     };
@@ -417,17 +741,39 @@ fn tc_025_real_kani_falsifies_the_under_debiting_subject_with_in_domain_native_p
     let values =
         decode_v2_clause_falsification(&harness, &parsed, crate::unbounded_decode_limits())
             .expect("the playback decodes inside the drawn domains");
-    let [(_, WitnessValue::Integer(balance)), (_, WitnessValue::Integer(amount))] =
+    let [(balance_name, WitnessValue::Integer(balance)), (amount_name, WitnessValue::Integer(amount))] =
         values.as_slice()
     else {
         panic!("one pre-state balance then one amount: {values:?}");
     };
-    let (balance, amount) = (*balance, *amount);
-    assert!((0..=100).contains(&balance) && (0..=100).contains(&amount));
-    assert!(amount <= balance, "the precondition holds on the witness");
-    let produced = balance - (amount - 1).max(0);
+    assert_eq!(balance_name, "pre_balance_current");
+    assert_eq!(amount_name, "parameter_amount_current");
+    let (pre, amount) = (
+        i64::try_from(*balance).expect("in i64"),
+        i64::try_from(*amount).expect("in i64"),
+    );
+    assert!((0..=100).contains(&pre) && (0..=100).contains(&amount));
+    assert!(amount <= pre, "the precondition holds on the witness");
+    let mut produced = pre;
+    under_debiting_withdraw(&mut produced, amount);
     assert!(
-        produced != balance - amount,
-        "the postcondition is false on the witness: balance {balance}, amount {amount}, produced {produced}"
+        (0..=100).contains(&produced),
+        "the produced state is in its domain"
+    );
+    assert!(
+        !debited(pre, produced, amount),
+        "the postcondition is false on the witness: balance {pre}, amount {amount}, produced {produced}"
+    );
+    assert!(
+        debited(
+            pre,
+            {
+                let mut healthy = pre;
+                healthy_withdraw(&mut healthy, amount);
+                healthy
+            },
+            amount
+        ),
+        "the healthy subject satisfies it on the same witness"
     );
 }

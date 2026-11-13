@@ -615,7 +615,7 @@ impl Twin {
             },
             anchor: SelectedAnchor {
                 kind: AnchorKind::Handler,
-                name: self.handler().to_owned(),
+                name: self.handler(),
             },
             snapshot_label: DocumentLabel {
                 authority: "test".to_owned(),
@@ -627,13 +627,19 @@ impl Twin {
         }
     }
 
-    /// The operation the invariant snapshot is anchored at: the one the domain package declares.
-    fn handler(&self) -> &'static str {
-        if String::from_utf8_lossy(&self.domain).contains("/withdraw\"") {
-            "withdraw"
-        } else {
-            "deposit"
-        }
+    /// The operation the invariant snapshot is anchored at: the first operation `Account`
+    /// declares in the domain package.
+    fn handler(&self) -> String {
+        let document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        document["types"]
+            .as_array()
+            .expect("types")
+            .iter()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type")["operations"][0]["name"]
+            .as_str()
+            .expect("operation name")
+            .to_owned()
     }
 
     /// The `contract` identity QSL's selected clause site mints for `clause`: the identity a
