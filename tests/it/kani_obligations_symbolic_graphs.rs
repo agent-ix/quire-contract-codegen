@@ -45,10 +45,15 @@ fn relation(name: &str, lower: u64, upper: Option<u64>, unique: bool) -> Value {
 }
 
 fn document() -> Value {
+    document_with(Some(3))
+}
+
+/// The model document, with the upper bound of the `kids` end replaced (`None` is unbounded).
+fn document_with(kids_upper: Option<u64>) -> Value {
     let mut document = super::kani_obligations_symbolic_domains::model_document();
     document["types"][1]["relationships"] = json!([
         relation("step", 0, Some(1), true),
-        relation("kids", 0, Some(3), true),
+        relation("kids", 0, kids_upper, true),
         relation("litter", 0, Some(3), false),
         relation("two", 2, Some(3), false),
         relation("empty", 0, Some(0), true),
@@ -75,25 +80,40 @@ fn document() -> Value {
     document
 }
 
-fn authored(form: &str, condition: &str, maximum: Option<u64>) -> Authored {
-    let document = document();
-    let limits = quire_canonical::Limits::new(1 << 20);
-    let bytes = quire_canonical::to_vec(&document, limits).unwrap();
-    let bound = maximum.map_or_else(String::new, |maximum| {
-        format!("bound Nodes on M::CollectionNodes [{maximum}]\n")
-    });
-    let declaration = if form == "invariant" {
-        format!("invariant Graph using v on M::Node at current {{ {condition} }}")
+fn declaration(form: &str, name: &str, condition: &str) -> String {
+    if form == "invariant" {
+        format!("invariant {name} using v on M::Node at current {{ {condition} }}")
     } else {
         let keyword = if form == "precondition" {
             "pre"
         } else {
             "post"
         };
-        format!("{keyword} Graph using v on M::Node::visit {{ {condition} }}")
-    };
+        format!("{keyword} {name} using v on M::Node::visit {{ {condition} }}")
+    }
+}
+
+/// Emit through QSL and admit through Contract IR, or return the refusal text of either stage.
+fn try_authored_with(
+    document: &Value,
+    declarations: &[String],
+    bound: &str,
+) -> Result<Authored, String> {
+    try_authored_clause(document, declarations, bound, "Graph")
+}
+
+/// As `try_authored_with`, selecting which declared clause the QSL call site emits.
+fn try_authored_clause(
+    document: &Value,
+    declarations: &[String],
+    bound: &str,
+    clause_name: &str,
+) -> Result<Authored, String> {
+    let limits = quire_canonical::Limits::new(1 << 20);
+    let bytes = quire_canonical::to_vec(document, limits).unwrap();
     let source = format!(
-        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"ir268.test/domain\";\n{bound}predicate inspect using v (input: M::Node): Boolean {{ true }}\n{declaration}\n"
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"ir268.test/domain\";\n{bound}predicate inspect using v (input: M::Node): Boolean {{ true }}\n{}\n",
+        declarations.join("\n")
     );
     let site = call_site(
         SourceIdentity::new("agent-ix", "graph.native"),
@@ -102,23 +122,37 @@ fn authored(form: &str, condition: &str, maximum: Option<u64>) -> Authored {
         source.as_bytes(),
         [bytes.as_slice()],
         &DependencyInput::default(),
-        &ClauseName(Identifier::new("Graph").unwrap()),
+        &ClauseName(Identifier::new(clause_name).unwrap()),
     )
-    .unwrap_or_else(|error| panic!("QSL emits the authored graph clause: {error:?}"));
+    .map_err(|error| format!("{error:?}"))?;
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
         .insert_domain_package_document("ir268.test/domain", bytes)
         .unwrap();
-    let package = match CheckedPackageV2::read(
+    match CheckedPackageV2::read(
         &site.package,
         CheckedPackageReadLimits::bounded(),
         &evidence,
     ) {
-        CheckedPackageV2ReadResult::Admitted(package) => *package,
-        other => panic!("strict IR admission: {other:?}"),
-    };
-    Authored { package }
+        CheckedPackageV2ReadResult::Admitted(package) => Ok(Authored { package: *package }),
+        other => Err(format!("strict IR admission: {other:?}")),
+    }
+}
+
+fn bound_line(maximum: Option<u64>) -> String {
+    maximum.map_or_else(String::new, |maximum| {
+        format!("bound Nodes on M::CollectionNodes [{maximum}]\n")
+    })
+}
+
+fn authored_declarations(declarations: &[String], maximum: Option<u64>) -> Authored {
+    try_authored_with(&document(), declarations, &bound_line(maximum))
+        .unwrap_or_else(|error| panic!("QSL emits and IR admits the authored clause: {error}"))
+}
+
+fn authored(form: &str, condition: &str, maximum: Option<u64>) -> Authored {
+    authored_declarations(&[declaration(form, "Graph", condition)], maximum)
 }
 
 /// `invariant` over `self` with a three-object population, the default for most controls.
@@ -417,32 +451,56 @@ fn a_refused_sibling_leaves_a_supported_harness_unchanged() {
     assert_eq!(graph_harnesses[0].identity, alone.identity);
 }
 
+/// A precondition or postcondition graph claim has no defined harness (the body never calls the
+/// subject and assumes no sibling preconditions), so it settles `unsupported` and renders nothing.
 #[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-108")]
 #[test]
-fn operation_clauses_draw_the_same_symbolic_graph_for_two_reference_operands() {
+fn operation_clause_graph_claims_settle_unsupported_with_no_harness() {
     for form in ["precondition", "postcondition"] {
         let authored = authored(
             form,
             "reaches(self, target, kids) implies reaches(self, target, kids)",
             Some(3),
         );
-        let harness = emitted(&authored.package, &[0]);
-        assert_eq!(
-            harness.identity.kind,
-            if form == "precondition" {
-                quire_contract_codegen::ObligationKind::Precondition
-            } else {
-                quire_contract_codegen::ObligationKind::Postcondition
-            }
+        assert!(
+            refused_with(
+                &disposition(&authored.package, &[0], 8),
+                &GraphUnsupportedReason::OperationClauseNotSupported
+            ),
+            "{form}"
         );
-        // `self` and `target` are distinct operands: nothing forces them equal.
-        assert!(!harness.rust.contents.contains("start == target"), "{form}");
     }
+    // The location check still comes first: a path naming no reachability is `MissingClaim`.
+    let authored = authored(
+        "precondition",
+        "reaches(self, target, kids) implies reaches(self, target, kids)",
+        Some(3),
+    );
+    assert!(refused_with(
+        &disposition(&authored.package, &[7], 8),
+        &GraphUnsupportedReason::MissingClaim
+    ));
+    // A claim over `self` for both operands forces start and target equal.
     let same = fixture("not reaches(self, self, kids)");
     assert!(emitted(&same.package, &[0])
         .rust
         .contents
         .contains("start == target"));
+}
+
+/// The recorded components of an identity other than the package lock, so a variant that also
+/// changes the package cannot hide a component that failed to change.
+fn components(
+    harness: &KaniGraphObligationHarness,
+) -> (u64, &quire_contract_codegen::GraphEdgeIdentity, &str, u32) {
+    let identity = &harness.identity;
+    (
+        identity.maximum_population,
+        &identity.edge,
+        identity.subject_path.as_str(),
+        identity.unwind,
+    )
 }
 
 #[trace("TC-025", "FR-015-AC-100")]
@@ -451,12 +509,28 @@ fn every_identity_component_changes_the_harness_and_equal_inputs_regenerate_it()
     let base = fixture("not reaches(self, self, kids)");
     let first = emitted(&base.package, &[0]);
     assert_eq!(first, emitted(&base.package, &[0]), "byte-identical");
-    let renamed = |harness: &KaniGraphObligationHarness| harness.identity.harness_symbol.clone();
+    assert_eq!(first.identity.maximum_population, 3);
+    assert_eq!(
+        (first.identity.edge.lower, first.identity.edge.upper),
+        (0, 3)
+    );
     let other_edge = emitted(&fixture("not reaches(self, self, litter)").package, &[0]);
     let other_extent = emitted(
         &authored("invariant", "not reaches(self, self, kids)", Some(4)).package,
         &[0],
     );
+    // Only the authored multiplicity of the end changes; the extent, relationship and claim stay.
+    let narrowed = try_authored_with(
+        &document_with(Some(2)),
+        &[declaration(
+            "invariant",
+            "Graph",
+            "not reaches(self, self, kids)",
+        )],
+        &bound_line(Some(3)),
+    )
+    .unwrap();
+    let other_multiplicity = emitted(&narrowed.package, &[0]);
     let other_condition = emitted(
         &fixture("reaches(self, self, kids) or not reaches(self, self, kids)").package,
         &[0],
@@ -475,19 +549,113 @@ fn every_identity_component_changes_the_harness_and_equal_inputs_regenerate_it()
     else {
         panic!("valid")
     };
+    let KaniObligationOutcome::Emitted {
+        graph_harnesses: other_path,
+        ..
+    } = outcome_with(
+        &fixture("reaches(self, self, kids) or not reaches(self, self, kids)").package,
+        &[&[1, 0]],
+        8,
+        "crate::graph_subject",
+    )
+    else {
+        panic!("valid")
+    };
     for other in [
         &other_edge,
         &other_extent,
+        &other_multiplicity,
         &other_condition,
         &other_subject[0],
         &other_unwind[0],
+        &other_path[0],
     ] {
-        assert_ne!(renamed(&first), renamed(other));
+        assert_ne!(
+            first.identity.harness_symbol, other.identity.harness_symbol,
+            "{:?}",
+            other.identity
+        );
         assert_ne!(first.identity, other.identity);
     }
+    // Each component is recorded in its own right: the variant differs in that component.
+    assert_ne!(components(&first).0, components(&other_extent).0, "extent");
+    assert_eq!(components(&other_extent).1, components(&first).1);
+    assert_eq!(components(&other_multiplicity).0, components(&first).0);
+    assert_eq!(components(&other_multiplicity).1.upper, 2);
+    assert_eq!(
+        components(&other_multiplicity).1.declaration,
+        first.identity.edge.declaration
+    );
+    assert_ne!(
+        components(&other_edge).1.declaration,
+        first.identity.edge.declaration
+    );
+    assert_ne!(components(&other_edge).1.unique, first.identity.edge.unique);
+    assert_ne!(components(&other_subject[0]).2, components(&first).2);
+    assert_ne!(components(&other_unwind[0]).3, components(&first).3);
+    assert_ne!(
+        other_path[0].identity.argument_path,
+        first.identity.argument_path
+    );
 }
 
-#[trace("TC-025", "FR-015-AC-98")]
+/// The identity records the solver and both ordered option vectors, and a run launches exactly
+/// the recorded vector (run evidence preserves it).
+#[trace("TC-025", "FR-015-AC-100")]
+#[test]
+fn graph_run_evidence_preserves_every_ordered_identity_option() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = fixture("not reaches(self, self, kids)");
+    let harness = emitted(&fixture.package, &[0]);
+    let scratch = TemporaryDirectory::new("quire-kani-symbolic-graph-options");
+    fs::write(scratch.path.join("src/lib.rs"), &harness.rust.contents).unwrap();
+    write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-kani-graph\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
+        ),
+    );
+    let launcher = scratch.path.join("cargo-kani");
+    fs::write(
+        &launcher,
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments.txt\nexit 1\n",
+    )
+    .unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    let target_directory = scratch.path.join("target");
+    fs::create_dir(&target_directory).unwrap();
+    let installation = KaniInstallation::new(&launcher);
+    let cancel = quire_exact::Cancel::new();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: KaniExecutableHarness::from(&harness),
+        crate_directory: &scratch.path,
+        target_directory: &target_directory,
+        home_directory: None,
+    })
+    .expect("a bounded launcher returns run evidence even without a proof report");
+    let received: Vec<String> = fs::read_to_string(scratch.path.join("arguments.txt"))
+        .expect("the launcher received arguments")
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(evidence.arguments, received);
+    assert_eq!(received[0], "kani");
+    let options = &harness.identity.options;
+    assert_eq!(&received[1..=options.len()], options.as_slice());
+    assert!(options.windows(2).any(|pair| pair == ["--unwind", "8"]));
+    assert!(options
+        .windows(2)
+        .any(|pair| pair == ["--solver", "cadical"]));
+    assert!(!harness.identity.witness_options.is_empty());
+    assert_eq!(evidence.unwind, harness.identity.unwind);
+    assert_eq!(evidence.solver, harness.identity.solver);
+}
+
+#[trace("TC-025", "FR-015-AC-101")]
 #[test]
 fn a_domain_beyond_the_unwind_or_the_memory_ceiling_refuses_without_reducing_it() {
     let authored = authored("invariant", "not reaches(self, self, kids)", Some(40));
@@ -534,8 +702,156 @@ fn a_domain_beyond_the_unwind_or_the_memory_ceiling_refuses_without_reducing_it(
     ));
 }
 
+fn dispositions_at(
+    package: &CheckedPackageV2,
+    items: &[(&CheckedNodeId, &[usize])],
+) -> (Vec<ObligationDisposition>, Vec<KaniGraphObligationHarness>) {
+    let items: Vec<ObligationItem<'_>> = items
+        .iter()
+        .map(|(clause, path)| ObligationItem::GraphClaim {
+            package,
+            clause_id: clause,
+            argument_path: path,
+        })
+        .collect();
+    let KaniObligationOutcome::Emitted {
+        records,
+        graph_harnesses,
+        ..
+    } = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: ceilings(),
+        items: &items,
+        subject_path: "crate::graph_subject",
+        unwind: 8,
+    })
+    .unwrap()
+    else {
+        panic!("per-item refusals are not request rejections")
+    };
+    (
+        records
+            .into_iter()
+            .map(|record| record.disposition)
+            .collect(),
+        graph_harnesses,
+    )
+}
+
+/// A field-edge and a relationship-end reachability in one condition are two items. The
+/// relationship-end item at position 0 is refused because the condition names a second
+/// application (`UnsupportedClaimShape`), and the field-edge item at position 1 settles by its own
+/// accessor refusal: neither disposition follows from the other.
+#[trace("TC-025", "FR-015-AC-107")]
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn a_field_edge_and_a_relationship_end_reachability_are_separate_items() {
+    let authored = fixture("reaches(self, self, kids) and reaches(self, self, next)");
+    let clause = clause(&authored.package);
+    let (dispositions, harnesses) = dispositions_at(
+        &authored.package,
+        &[(&clause, &[0]), (&clause, &[1]), (&clause, &[2])],
+    );
+    assert!(harnesses.is_empty());
+    assert!(refused_with(
+        &dispositions[0],
+        &GraphUnsupportedReason::UnsupportedClaimShape
+    ));
+    assert!(refused_with(
+        &dispositions[1],
+        &GraphUnsupportedReason::PopulationAccessorRefused {
+            refusal: GraphAccessorRefusal::NotReachesApplication
+        }
+    ));
+    assert!(refused_with(
+        &dispositions[2],
+        &GraphUnsupportedReason::MissingClaim
+    ));
+}
+
+#[trace("TC-025", "FR-015-AC-107")]
+#[test]
+fn a_collection_claim_and_a_clause_without_reachability_settle_missing_claim() {
+    for condition in [
+        "forall(item in self.items: item >= 0)",
+        "inspect(self)",
+        "true",
+    ] {
+        let authored = fixture(condition);
+        for path in [&[][..], &[0][..], &[0, 0][..]] {
+            assert!(
+                refused_with(
+                    &disposition(&authored.package, path, 8),
+                    &GraphUnsupportedReason::MissingClaim
+                ),
+                "{condition} at {path:?}"
+            );
+        }
+    }
+}
+
+/// Two distinct reachability applications, or a node that is not a Boolean combinator of the one
+/// selected application, are claim forms the encoding cannot express.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn a_claim_the_encoding_cannot_express_settles_unsupported_claim_shape() {
+    for condition in [
+        "reaches(self, self, kids) and reaches(self, self, litter)",
+        "reaches(self, self, kids) or inspect(self)",
+    ] {
+        let authored = fixture(condition);
+        assert!(
+            refused_with(
+                &disposition(&authored.package, &[0], 8),
+                &GraphUnsupportedReason::UnsupportedClaimShape
+            ),
+            "{condition}"
+        );
+    }
+}
+
+/// A population maximum beyond `u64` is refused by QSL before a package exists, so the
+/// generator's `DomainNotRepresentable` for the authored maximum is reachable only through a
+/// package QSL does not emit.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn qsl_refuses_a_population_maximum_beyond_u64_before_a_package_exists() {
+    let error = match try_authored_with(
+        &document(),
+        &[declaration(
+            "invariant",
+            "Graph",
+            "not reaches(self, self, kids)",
+        )],
+        "bound Nodes on M::CollectionNodes [18446744073709551616]\n",
+    ) {
+        Ok(_) => panic!("a bound beyond u64 admits no package"),
+        Err(error) => error,
+    };
+    assert!(error.contains("IllTyped"), "{error}");
+}
+
+/// An unbounded relationship end is refused before a package exists, so `requires_bound` for an
+/// edge cannot be reached through a real package.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn qsl_or_ir_refuses_an_unbounded_end_before_a_package_exists() {
+    let error = match try_authored_with(
+        &document_with(None),
+        &[declaration(
+            "invariant",
+            "Graph",
+            "not reaches(self, self, kids)",
+        )],
+        &bound_line(Some(3)),
+    ) {
+        Ok(_) => panic!("an end with no authored upper bound admits no package"),
+        Err(error) => error,
+    };
+    assert!(error.contains("UnsupportedConstruct"), "{error}");
+}
+
 // ---------------------------------------------------------------------------------------------
-// Installed-Kani lane (FR-015-AC-106 healthy half). Run serially through the kani lane.
+// Installed-Kani lane (FR-015-AC-106; the `{0,3}` runs are smoke runs, see their docs). Run serially through the kani lane.
 // ---------------------------------------------------------------------------------------------
 
 fn run_graph_kani(
@@ -599,7 +915,9 @@ fn verified(label: &str, condition: &str, maximum: u64, path: &[usize]) {
     assert_eq!(evidence.unwind, 8);
 }
 
-/// A healthy claim over a unique `{0,3}` end: every graph the domain admits satisfies it.
+/// Smoke run over a unique `{0,3}` end: the claim is a tautology, so `Verified` shows only that
+/// the harness compiles, draws and covers a non-empty maximum population. It earns no
+/// healthy-case credit (FR-015-AC-106).
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
@@ -612,7 +930,7 @@ fn real_kani_unique_end_claim_verifies_with_its_cover() {
     );
 }
 
-/// The same claim over a non-unique `{0,3}` end, where repeated targets are admitted.
+/// The same tautology smoke run over a non-unique `{0,3}` end; no healthy-case credit.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
@@ -657,8 +975,8 @@ fn real_kani_unsatisfied_claim_is_falsified_with_an_in_domain_playback() {
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
     assert!(counterexample.contains(harness.identity.harness_symbol.as_str()));
-    // Decode the playback in the generated draw order and check, natively and independently of
-    // the generated closure, that it is an in-domain graph in which the object reaches itself.
+    // Decode the playback in the generated draw order and check, with a separately authored
+    // native search (NOT `qsl_replay` over the authored clause, so not AC-106's oracle), that it is an in-domain graph in which the object reaches itself.
     let slots: Vec<i64> = counterexample
         .split("vec![")
         .skip(2)

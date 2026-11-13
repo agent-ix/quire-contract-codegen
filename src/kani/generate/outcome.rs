@@ -654,10 +654,13 @@ pub enum GraphUnsupportedReason {
     UnsupportedClaimShape,
     /// The population's object type is not the selected end's destination type.
     PopulationTypeMismatch,
+    /// A precondition or postcondition graph claim: no operation-clause harness is defined for
+    /// graph claims, so it settles `unsupported` rather than render invariant semantics.
+    OperationClauseNotSupported,
     /// The inclusive domain does not fit the harness representation.
     DomainNotRepresentable {
-        /// The authored population maximum.
-        population_maximum: u64,
+        /// The authored population maximum, as authored decimal text.
+        population_maximum: String,
         /// The authored edge upper bound.
         edge_upper: u64,
     },

@@ -170,6 +170,12 @@ pub(super) fn lower_graph(
         return Err(missing());
     };
     let kind = graph_kind(package, clause).ok_or(Reason::UnsupportedClaimShape)?;
+    // A precondition or postcondition graph claim has no defined harness: the generated body
+    // never calls the subject, assumes no sibling preconditions and has no totality or
+    // satisfiability split, so a verdict over it would mean nothing for the operation.
+    if kind != ObligationKind::Invariant {
+        return Err(Reason::OperationClauseNotSupported.into());
+    }
 
     // 1. The population selection. A `reaches_field` application is a reachability application
     // but names no population the owner accessor can read: it refuses as
@@ -191,16 +197,6 @@ pub(super) fn lower_graph(
         CheckedSelectedPopulationSource::Admitted { package, selector }
     });
     let population = finite_population(select_population(source))?;
-    let maximum =
-        population
-            .maximum
-            .as_str()
-            .parse::<u64>()
-            .map_err(|_| Reason::DomainNotRepresentable {
-                population_maximum: u64::MAX,
-                edge_upper: 0,
-            })?;
-
     // 2. The destination end's finite multiplicity.
     let end =
         package
@@ -220,6 +216,15 @@ pub(super) fn lower_graph(
     let upper = end
         .upper
         .ok_or_else(|| GraphRefusal::RequiresBound(end.relationship.clone()))?;
+    let maximum =
+        population
+            .maximum
+            .as_str()
+            .parse::<u64>()
+            .map_err(|_| Reason::DomainNotRepresentable {
+                population_maximum: population.maximum.as_str().to_owned(),
+                edge_upper: upper,
+            })?;
 
     // 3. The claim's shape: both operands are reference parameters of the clause, and the
     // condition is a Boolean combination of this one application.
@@ -368,7 +373,7 @@ pub(super) fn render_graph(
     let upper = lowered.edge.upper;
     let not_representable = || {
         refuse(Reason::DomainNotRepresentable {
-            population_maximum: n,
+            population_maximum: n.to_string(),
             edge_upper: upper,
         })
     };
@@ -559,8 +564,8 @@ pub(super) fn render_graph(
         ProofKind::Proof,
         body,
         vec![Cover {
-            condition: expression(format!("object_count == 0 || object_count == {n}"))?,
-            message: "an inclusive population endpoint is reachable".into(),
+            condition: expression(format!("object_count == {n}"))?,
+            message: "the maximum-size population is drawn".into(),
         }],
         request.unwind,
         KaniSolver::Cadical,
