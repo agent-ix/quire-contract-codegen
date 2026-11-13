@@ -247,7 +247,7 @@ fn evaluate(
         Ok(Run::Exited { status, output }) => {
             if status.success() {
                 (Outcome::Fail, explain_failure(&status, &output))
-            } else if output.contains(REJECTION_MARKER) {
+            } else if has_marker_line(&output) {
                 (Outcome::Pass, String::new())
             } else {
                 (Outcome::Fail, explain_failure(&status, &output))
@@ -267,28 +267,48 @@ enum Run {
 
 /// Lines of the owning test's captured output a `fail` row reports.
 const TAIL_LINES: usize = 40;
+/// The most bytes of those lines a `fail` row reports.
+const TAIL_BYTES: usize = 8192;
 
 /// Why a mutant run that exited was not a rejection: which of the four causes it was, the exit
 /// status and the last lines of the captured output.
 fn explain_failure(status: &ExitStatus, output: &str) -> String {
+    // Whether libtest started the owning test decides first; text heuristics only name why it did not.
+    let started = output.lines().any(|line| line.trim() == "running 1 test");
     let cause = if status.success() {
         if output.contains("running 0 tests") {
             "the test filter matched no test, so nothing ran"
         } else {
             "the proof verified the injected defect (a surviving mutant)"
         }
+    } else if started {
+        "the test ran and failed without Kani's rejection verdict"
     } else if output.contains("could not compile") || output.contains("error[E") {
         "the mutant did not compile"
-    } else if output.contains("panicked at") || output.contains("test result: FAILED") {
-        "the test ran and failed without Kani's rejection verdict"
     } else {
         "the run failed before the owning test ran, or without any test output"
     };
     let lines: Vec<&str> = output.lines().collect();
-    let tail = lines[lines.len().saturating_sub(TAIL_LINES)..].join("\n");
+    let mut tail = lines[lines.len().saturating_sub(TAIL_LINES)..].join("\n");
+    if tail.len() > TAIL_BYTES {
+        let mut cut = tail.len() - TAIL_BYTES;
+        while !tail.is_char_boundary(cut) {
+            cut += 1;
+        }
+        tail = format!("...{}", &tail[cut..]);
+    }
     format!(
-        "{cause}; the run exited {status} without {REJECTION_MARKER}; last {TAIL_LINES} lines of its output:\n{tail}"
+        "{cause}; the run exited {status} without {REJECTION_MARKER}; last {TAIL_LINES} lines (at most {TAIL_BYTES} bytes) of its output:\n{tail}"
     )
+}
+
+/// Whether a line of the output is exactly Kani's verdict. Only the owning test's own print of it
+/// is one; a panic message that quotes Kani's console (a CBMC out-of-memory ends with the same
+/// words) is a longer line, and so is not a rejection.
+fn has_marker_line(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.trim_end() == REJECTION_MARKER)
 }
 
 fn has_symlink_component(path: &Path) -> bool {

@@ -27,7 +27,10 @@ case "$proof" in
   *survive*) echo 'VERIFICATION:- SUCCESSFUL'; exit 0 ;;
   *silent*) echo 'error[E0425]: cannot find value'; exit 101 ;;
   *zero*) echo 'running 0 tests'; echo 'test result: ok. 0 passed'; exit 0 ;;
-  *panic*) for i in $(seq 1 100); do echo "line $i"; done; echo "thread 'x' panicked at tests/it/k.rs:1:1:"; echo 'test result: FAILED. 0 passed; 1 failed'; exit 101 ;;
+  *embed*) echo 'running 1 test'; echo "panicked: ProofNotVerified { tail: \"CBMC failed\nVERIFICATION:- FAILED\" } VERIFICATION:- FAILED"; echo 'test result: FAILED. 0 passed; 1 failed'; exit 101 ;;
+  *ranbuild*) echo 'running 1 test'; echo "panicked at x: error[E0308] could not compile"; exit 101 ;;
+  *huge*) echo 'running 1 test'; head -c 100000 /dev/zero | tr '\0' 'x'; echo; exit 101 ;;
+  *panic*) echo 'running 1 test'; for i in $(seq 1 100); do echo "line $i"; done; echo "thread 'x' panicked at tests/it/k.rs:1:1:"; echo 'test result: FAILED. 0 passed; 1 failed'; exit 101 ;;
   *hang*) sleep 60 ;;
   *weak*) if grep -q TRIVIAL src/harness.txt; then echo 'VERIFICATION:- SUCCESSFUL'; exit 0; fi; echo 'VERIFICATION:- FAILED'; exit 101 ;;
 esac
@@ -528,7 +531,7 @@ fn declared() -> Vec<serde_json::Value> {
     serde_json::from_str(&text).expect("declaration JSON")
 }
 
-#[trace("FR-055-AC-5", "TC-069")]
+#[trace("FR-055-AC-9", "TC-069")]
 #[test]
 fn every_shipped_mutant_still_parses_as_rust_once_injected() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -571,4 +574,45 @@ fn every_owning_proof_is_an_ignored_lane_test_that_prints_the_verdict_on_failure
             "{proof} has no bare expect on the proof"
         );
     }
+}
+
+#[trace("FR-055-AC-5", "TC-069")]
+#[test]
+fn only_a_line_that_is_exactly_the_verdict_rejects_a_mutant() {
+    let sandbox = Sandbox::new();
+    // A panic line quoting Kani's console, which ends with the same words, is not a rejection.
+    let embedded = stderr_of_fail(&sandbox, "m::embed_1");
+    assert!(
+        embedded.contains("test ran and failed without Kani's rejection verdict"),
+        "{embedded}"
+    );
+    let text = out(&sandbox.run(30, 120, true));
+    assert!(
+        text.lines()
+            .any(|l| l.contains("harness=m::embed_1 ") && l.ends_with("outcome=fail")),
+        "{text}"
+    );
+    // libtest prints `test name ... ` unterminated before the test's output, so the test starts a line.
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/it/kani_obligations.rs"),
+    )
+    .expect("source");
+    assert!(source.contains("println!();\n        println!(\"{verdict}\");"));
+}
+
+#[trace("FR-055-AC-5", "TC-069")]
+#[test]
+fn a_test_that_ran_is_not_reported_as_a_compile_failure_and_the_tail_is_bounded() {
+    let sandbox = Sandbox::new();
+    let ran = stderr_of_fail(&sandbox, "m::ranbuild_1");
+    assert!(
+        ran.contains("the test ran and failed") && !ran.contains("did not compile"),
+        "{ran}"
+    );
+    let huge = stderr_of_fail(&sandbox, "m::huge_1");
+    assert!(
+        huge.len() < 12_000,
+        "the tail is bounded by bytes: {}",
+        huge.len()
+    );
 }

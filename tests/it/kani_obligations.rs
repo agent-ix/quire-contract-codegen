@@ -3130,6 +3130,9 @@ fn verified_or_print_verdict<T>(
     what: &str,
 ) -> T {
     if let Some(verdict) = error.falsified_verdict() {
+        // libtest prints `test <name> ... ` without a newline before the test's own output; the
+        // gate matches the verdict as a whole line, so start one.
+        println!();
         println!("{verdict}");
     }
     panic!("{what}: {error:?}");
