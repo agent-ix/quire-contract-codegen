@@ -82,6 +82,7 @@ mod kani_batching;
 mod kani_function_harness;
 mod kani_gate;
 mod kani_generation;
+mod kani_mutations;
 mod kani_obligations;
 mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
