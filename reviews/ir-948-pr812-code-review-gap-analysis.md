@@ -48,3 +48,11 @@ four-kind run over one package) are stated as not established. The healthy `with
 named by AC-129 is not exercised, which is correct for this slice: the precondition and invariant
 harnesses do not call a subject (`render_clause`), so it only matters for the postcondition and
 frame members still planned. Spec wording issues are in SR-17940486709564847047903.
+
+## Dispositions
+
+Round 1, checked against 4630b054.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | new default-lane test `the_postcondition_member_is_blocked_by_the_generator_and_by_qsl` asserts `Debited` negotiates to `Unsupported(V2ClauseConditionNotRendered)` between two `Supported` records, and that QSL's `clause_site` refuses the `=` text with `UndefinedExpression` / `unproved-range`; it passes at 4630b054 |

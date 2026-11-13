@@ -43,3 +43,24 @@ and every member called executed has an executed, reproduced verdict. FND-001 to
 medium because a reader of AC-129 cannot tell whether the impossible control is met, who owns
 the QSL half of the postcondition gap, which postcondition text closes the AC, or how the frame
 member would ever close. All four are spec-text fixes in this PR.
+
+## Dispositions
+
+Round 1, checked against 4630b054. "Owner IR-624" for the frame member was checked: FR-015-AC-80's
+own status reads "PLANNED (IR-624)", AC-129 already depended "on FR-015-AC-80 (IR-624) for the frame
+member" at e1e3ec92, and IR-624 is an In Progress CG ticket about state/frame harnesses from the
+QSL-emitted package. The owner is not invented.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | AC-129 limits the IR-1436 dependency to "the postcondition member's arithmetic only, since the impossible-precondition control is executed and does not depend on it", states the executed `CoverUnsatisfied { satisfied: 0, total: 1 }` result, and moves the 17.2 GB run to "History, on a different parameter-only package" |
+| FND-002 | fixed | AC-129 and AC-126 name QSL-1901 and IR-948 slice 2b as the two owners; the record's Not established section names both |
+| FND-003 | fixed | AC-129: "that text earns no credit toward the postcondition member, which closes only on the `=` text below" and "this row stays PARTIAL until it runs on the specified `=` text" |
+| FND-004 | fixed | frame dropped from AC-126; AC-129 says the frame member "is not run here and is covered by FR-015-AC-31 and FR-015-AC-80 (owner IR-624)" (see FND-006 for a residual wording nit) |
+| FND-005 | fixed | AC-126 lists "the precondition, impossible-precondition, healthy invariant and invariant-mutant members" |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-006 | low | AC-129 says the frame member "is covered by FR-015-AC-31 and FR-015-AC-80 (owner IR-624)", but FR-015-AC-80 is itself "PLANNED (IR-624)". "Covered" reads as met; the frame member is met only when IR-624 lands AC-80. Say "is delegated to FR-015-AC-31 and FR-015-AC-80 (PLANNED, owner IR-624)" or similar | spec/kani/functional/FR-015-bounded-kani-obligations.md:967 |

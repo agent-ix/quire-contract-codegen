@@ -59,3 +59,21 @@ control shows the cover can fail) and both invariant mutants falsify from the wi
 in-domain counterexamples that replay as reproduced violations. The `pub(crate)` changes and the
 new fixture/anchor are sound. No code finding blocks merge; FND-001 to FND-005 are cheap to fix in
 the same PR.
+
+## Dispositions
+
+Round 1, checked against 4630b054 (fix commit 4630b054 on e1e3ec92). The five Kani-lane tests
+were rerun one at a time under `flock /tmp/cargo-slot.lock` in a 24G `systemd-run` scope: all pass
+(pre Verified 6.0 s 617,893,888 B; impossible `CoverUnsatisfied { 0, 1 }` 2.5 s; inv Verified
+2.5 s; both mutants Falsified two-phase 10.2 s / 10.3 s, ~1.26 GB). Default lane
+`kani_obligations_v2_profiles`, `kani_obligations_state_clause_replay`,
+`kani_obligations_state_frame` 128 passed; `state_clause_invariant_replay` 11 passed; fmt and
+clippy `-D warnings` clean.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `named_cover_satisfied` requires exactly one `KaniCheckClass::Cover`, at the line of the named cover message, with `KaniCheckStatus::Satisfied` |
+| FND-002 | fixed | impossible test asserts `CoverUnsatisfied { satisfied: 0, total: 1 }`, `proof_phase.is_none()` and the named cover not satisfied |
+| FND-003 | fixed | `Twin::handler` reads `operations[0].name` of the `Account` type from the parsed domain document |
+| FND-004 | fixed | every Kani test calls `assert_within_cap` (identity ceiling 24 GiB, supplied peak below it); the record's new Run conditions section states the scope is the caller's under `make kani` |
+| FND-005 | fixed | both mutant tests carry FR-024-AC-63 and FR-024-AC-64, and `falsified_and_replayed` asserts the transcript `<<<assertion\|withdraw\|NonNegative\|balance={expected}>>>` |

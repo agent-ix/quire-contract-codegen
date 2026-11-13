@@ -49,6 +49,6 @@ command shown.
   renderer is IR-948 slice 2b, a second PR under the same ticket. The default-lane test
   `the_postcondition_member_is_blocked_by_the_generator_and_by_qsl` pins both refusals so a fix flags the stale PARTIAL.
   FR-015-AC-129 requires the `=` text; the conjunction is the interim fixture text and earns no credit.
-- Frame: the profile package grants its only field, so a frame harness has nothing to forbid; the frame member is covered
-  by FR-015-AC-31 and FR-015-AC-80 over the two-field twin and is not part of FR-015-AC-126.
+- Frame: the profile package grants its only field, so a frame harness has nothing to forbid; the frame member is delegated
+  to FR-015-AC-31 and FR-015-AC-80 (PLANNED, owner IR-624) over the two-field twin and is not part of FR-015-AC-126.
 - The four-kind run over one package has therefore not been executed.
