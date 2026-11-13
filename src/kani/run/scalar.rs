@@ -326,6 +326,9 @@ impl KaniScalarNativeError {
                 KaniExecutionRefusal::WrongMethodExecutionRoute
                 | KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
+                | KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. }
+                | KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. }
+                | KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. }
                 | KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. }
                 | KaniExecutionRefusal::OutputOverLimit { .. }
                 | KaniExecutionRefusal::PlaybackForNonMember { .. } => CompletionRefusal,
@@ -2195,6 +2198,9 @@ mod tests {
             KaniExecutionRefusal::Tool(_) => (F, None),
             KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. } => (R, None),
             KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
             // The class is the spec's (FR-017-AC-63): a refused witness phase is a fault, even
@@ -2348,6 +2354,15 @@ mod tests {
             },
             KaniExecutionRefusal::HarnessProvenanceMismatch {
                 harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackSourceMismatch {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackTestNotObserved {
+                test_name: "table".into(),
             },
             KaniExecutionRefusal::OutputOverLimit {
                 stream: CaptureStream::Stdout,

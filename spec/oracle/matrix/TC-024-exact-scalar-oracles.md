@@ -355,7 +355,7 @@ by quire-integration IR-842.
    claim remains refused, and a condition containing an operand outside FR-014-AC-10's
    supported forms is refused without an oracle (FR-014-AC-38, FR-014-AC-7 and AC-10).
 
-## Checked literal narrowing in a V2 clause (IR-917, planned)
+## Checked literal narrowing in a V2 clause (IR-917)
 
 1. Author QSL source with a bounded `amount` parameter and a clause comparison
    against literal `0` that the checker lowers as a literal reference wrapped by
