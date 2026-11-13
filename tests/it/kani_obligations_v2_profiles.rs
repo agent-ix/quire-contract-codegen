@@ -155,7 +155,9 @@ fn the_state_reading_postcondition_yields_a_harness_with_requires_and_a_mut_subj
             .expect("the harness calls the oracle");
     let holds = position("the V2 postcondition holds for the produced state");
     assert!(draw < parameter && parameter < requires && requires < copy);
-    assert!(copy < call && call < domain && domain < oracle && oracle < holds);
+    assert!(
+        copy < call && call < domain && domain < expected && expected < oracle && oracle < holds
+    );
     assert_eq!(
         source.matches("kani::assume(post_balance_current").count(),
         0,

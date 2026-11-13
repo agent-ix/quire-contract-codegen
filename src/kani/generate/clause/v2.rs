@@ -1539,11 +1539,6 @@ fn render_state_postcondition(
             init: Init::Expression(expression(&read.pre)?),
         }));
     }
-    body.push(binding(
-        "expected",
-        Init::Expression(expression(native_expected_expression(expectation)?)?),
-        false,
-    ));
     let subject_arguments = state
         .reads
         .iter()
@@ -1576,6 +1571,12 @@ fn render_state_postcondition(
             message: "the produced V2 state field lies in its admitted domain".to_owned(),
         });
     }
+    // The expectation reads the produced state, so it follows the call.
+    body.push(binding(
+        "expected",
+        Init::Expression(expression(native_expected_expression(expectation)?)?),
+        false,
+    ));
     for (name, source) in &state.oracle_inputs {
         body.push(binding(
             name,
