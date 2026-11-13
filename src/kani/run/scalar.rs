@@ -1377,6 +1377,34 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
     seal(root)
 }
 
+/// Stage the request's package, build its native observer and invoke the staged oracle once,
+/// without a Kani proof (IR-631: the observation of a falsified artifact). Returns the actual
+/// typed result and the exact package paths and bytes that were staged and executed.
+#[cfg(test)]
+pub(crate) fn observe_staged_native_for_test(
+    request: &KaniScalarNativeRequest<'_>,
+) -> Result<(Outcome<Integer>, Vec<(String, Vec<u8>)>), KaniScalarNativeError> {
+    validate_request(request)?;
+    let snapshot = PrivateSnapshot::create()?;
+    let package = stage_package(request, snapshot.path())?;
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.harness.identity.arguments.len(),
+        request.harness.identity.integer_representation,
+        snapshot.path(),
+    )?;
+    generate_lockfile(request, snapshot.path())?;
+    generate_lockfile(request, &snapshot.path().join("observer"))?;
+    verify_staged_locks(snapshot.path())?;
+    let entries = capture_entries(&package, snapshot.path())?;
+    seal_snapshot(snapshot.path())?;
+    ensure_snapshot_matches(snapshot.path(), &entries)?;
+    let (native, _meter) = execute_native(request, snapshot.path())?;
+    ensure_snapshot_matches(snapshot.path(), &entries)?;
+    let _ = snapshot.cleanup_with(|path| fs::remove_dir_all(path));
+    Ok((native, package))
+}
+
 // This control never constructs proof evidence or a paired receipt.
 #[cfg(test)]
 pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'_>) {

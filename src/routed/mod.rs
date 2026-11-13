@@ -18,5 +18,9 @@ pub(crate) mod generate;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../../tests/it/kani_scalar_native_private.rs"]
 mod scalar_native_private;
+// IR-631: the falsified-run replay join needs the same private re-sealing seam.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "../../tests/it/scalar_replay_real_kani_private.rs"]
+mod scalar_replay_real_kani_private;
 // Solver run records and evidence mapping for QSL-authored queries.
 pub mod smt;

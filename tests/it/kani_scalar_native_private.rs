@@ -98,7 +98,7 @@ fn native_tc025_arithmetic_mutant_falsifies() {
         mutant.identity.harness_symbol.as_str(),
         mutant.identity.module_symbol.as_str(),
         crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
-        usize::MAX,
+        mutant.identity.arguments.len() + mutant.identity.guard_inputs.len(),
     )
     .expect("actual backend playback is valid");
     let witness = crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &playback)
@@ -142,7 +142,7 @@ fn native_original_tc027_false_bound_falsifies() {
         mutant.identity.harness_symbol.as_str(),
         mutant.identity.module_symbol.as_str(),
         crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
-        usize::MAX,
+        mutant.identity.arguments.len() + mutant.identity.guard_inputs.len(),
     )
     .expect("actual backend playback is valid");
     let witness = crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &playback)
@@ -156,6 +156,19 @@ fn native_original_tc027_false_bound_falsifies() {
 }
 
 fn run_mutant(mutant: &KaniScalarObligationHarness, manifest: &Artifact) -> String {
+    let KaniRunOutcome::Falsified { counterexample } =
+        run_mutant_evidence(mutant, manifest).outcome
+    else {
+        unreachable!("run_mutant_evidence asserts a falsified outcome")
+    };
+    counterexample
+}
+
+/// The real execution evidence of a sealed native mutant that Kani falsifies.
+pub(super) fn run_mutant_evidence(
+    mutant: &KaniScalarObligationHarness,
+    manifest: &Artifact,
+) -> crate::kani::run::execute::KaniExecutionEvidence {
     let scratch = NativeMutationScratch::create();
     fs::write(scratch.0.join("Cargo.toml"), &manifest.contents).unwrap();
     fs::copy(
@@ -195,7 +208,7 @@ fn run_mutant(mutant: &KaniScalarObligationHarness, manifest: &Artifact) -> Stri
         home_directory: None,
     })
     .expect("the private mutation preserves the execution module's bounded launch");
-    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
         panic!("the original-domain native mutant must falsify: {evidence:?}");
     };
     assert!(
@@ -203,7 +216,7 @@ fn run_mutant(mutant: &KaniScalarObligationHarness, manifest: &Artifact) -> Stri
             && counterexample.contains("the oracle must complete with exactly the native quire.op.integer.add result when it lies in the checked domain, and refuse otherwise"),
         "the generated sound assertion must fail: {counterexample}"
     );
-    counterexample
+    evidence
 }
 
 pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {

@@ -1,36 +1,56 @@
-# IR-631 routed scalar replay: real-Kani evidence and the remaining IR-610 half
+# IR-631 routed scalar replay: real falsified Kani run joined to the settlement
 
-This records the real falsified Kani run behind FR-032-AC-7 and FR-032-AC-8 (TC-047) and says which
-half of the check has no CG lane.
+Record behind FR-032-AC-3, AC-4, AC-5, AC-7 and AC-8 (TC-047, real-Kani half). The ignored Kani-lane test
+`routed::scalar_replay_real_kani_private::a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed`
+(`tests/it/scalar_replay_real_kani_private.rs`, tagged AC-3, AC-4, AC-5, AC-7, AC-8) runs the whole join.
 
-## Real run (2026-11-13)
+## What the test does
 
-Native-integer routed scalar route (`generate_routed_native`; the general route is refused as not
-tractable, FR-056-AC-15, `ir1530-general-route-scalar-not-tractable.md`). Kani 0.68.0, cadical, one job in
-`flock /tmp/cargo-slot.lock` inside `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`,
-foreground, `timeout 600`.
+1. Generates the QSL-emitted `x + 1` (`x: Int[0, 9]`, result `Int[0, 10]`) through the native routed route
+   (`generate_routed_native`; the general route is refused as not tractable, FR-056-AC-15,
+   `ir1530-general-route-scalar-not-tractable.md`).
+2. Builds the mutant crate-privately. The generator never emits a falsifiable harness, and `generated(...)` alone
+   binds no replay body or original package, so `plan` would refuse it with `Authority(Unavailable)`. The test
+   therefore re-seals with `generated_with_scalar_limits`, then binds the original replay body
+   (`bind_scalar_replay_body`) and the mutated artifact package (`bind_artifact_package`). `nx::NativeIntegerOperation::Add {`
+   becomes `Subtract {` in both the harness and the emitted oracle `src/lib.rs`, so `validate_request`'s
+   oracle-equality check holds. Production callers cannot do this.
+3. Real Kani falsifies the mutant (`execute_kani_obligation`, the `sound` assertion).
+4. `OriginalScalarContext::plan` decodes that real playback (entry limit `arguments.len() + guard_inputs.len()`)
+   against the original identity and body; the vector is `[x, 1]` with `x` in `[0, 9]`.
+5. The driver step observes the same staged bytes natively: `observe_staged_native_for_test` stages the plan's
+   package, builds the observer and runs the staged oracle once at the decoded vector, with no proof. The
+   observation (`x - 1`, differing from exact `x + 1`) completes the plan.
+6. The genuine `qsl_replay::replay_operator_parity` returns `Diverged`; `CompletedScalarReplay::settlement` gives
+   `ScalarSettlement::Parity(Diverged)`; `scalar_run_terminal_value` over the real falsified evidence gives
+   `TerminalValue::Failed`.
 
-| Test | Verdict | Wall | Peak (scope `memory.peak`) |
-| --- | --- | --- | --- |
-| `routed::scalar_native_private::native_tc025_arithmetic_mutant_falsifies` (`--ignored`) | `Falsified` on the generated `sound` assertion; playback parsed by `parse_assertion_playback` and decoded by `decode_scalar_falsification` against the original intervals: two draws, `left` in `[0, 9]`, `right == 1` | 29 s (test 29.17 s) | 2.49 GB (2,494,185,472 B) |
+Scalar replay proves lowering parity only: `Failed` here is a lowering fault, never a source `Refuted`.
 
-The mutant edits `nx::NativeIntegerOperation::Add {` to `Subtract {` in the sealed `x + 1` native harness
-(`x: Int[0, 9]`, result `Int[0, 10]`). The playback decoder is the one `OriginalScalarContext::plan` uses.
+## Reproduction
 
-## What has no CG lane
+Commit: the head of PR #826 (the commit carrying this file). Toolchain: rustc 1.99.1, Kani 0.68.0 (cargo
+plugin, backend CBMC 6.11.0, `kani-0.68.0` install), cadical. One job at a time, foreground:
 
-`plan` to `Diverged` to `Failed` from that same falsified run cannot be produced inside CG:
+    export CARGO_TARGET_DIR=$PWD/target
+    flock /tmp/cargo-slot.lock systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 \
+      timeout 600 cargo test --lib -- --ignored --exact \
+      routed::scalar_replay_real_kani_private::a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed \
+      --nocapture --test-threads=1
 
-- A harness that Kani falsifies is not a CG-generated harness. `has_valid_provenance`, `scalar_replay_body`
-  and `execute_kani_scalar_native::validate_request` all refuse a harness whose bytes differ from the
-  generator's seal (an oracle that differs from the emitted package, `GeneratedArtifactChanged`), and
-  `ScalarReplayPlan::complete` refuses any observation of a changed staged byte (FR-032-AC-4, tagged
-  `scalar_replay_binding.rs`, which observes a compiled arithmetic mutant and asserts `Observation`).
-- The native receipt exists only for a `Verified` proof (`ProofNotVerified` otherwise), so CG has no native
-  observation of a falsified artifact.
-- CG's generator emits no falsifiable scalar harness; `Diverged` therefore arises only if the driver's
-  same-proved-artifact execution (IR-610 E9) observes a real lowering defect.
+## Runs (2026-11-13)
 
-The QSL half is already asserted over genuine reports (`tests/it/scalar_settlement.rs`, FR-032-AC-7, AC-20 to
-AC-24): `Diverged` and `GeneratedFault` give `Failed`, `Agrees` gives `Inconclusive(ScalarAgrees)`. The
-falsified-run to `Diverged` join is IR-610 driver evidence.
+Peak is the scope's cgroup `memory.peak` (includes the build when the scope compiles). Output retained in
+`ir631-scalar-replay-real-kani-run.txt`.
+
+| Test | Verdict | Test time | Scope wall | Peak |
+| --- | --- | --- | --- | --- |
+| `a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed` | `Falsified`, plan, native observation, `Diverged`, `Failed` | 25.12 s | 25 s | 2.36 GB (2,360,565,760 B) |
+| `native_tc025_arithmetic_mutant_falsifies` (decode only, FR-015-AC-126) | `Falsified`, witness decodes against original intervals | 25.24 s | 31 s | 3.59 GB (3,586,723,840 B) |
+
+Earlier identical-source runs: 32.59 s and 2.50 GB for the join test; 29.17 s and 2.49 GB for the decode test.
+
+## Remaining
+
+The driver's own E9 run (IR-610) executes the artifact it proved and calls QSL between the builder and
+converter. CG's contract and this test do not depend on it.
