@@ -786,6 +786,12 @@ pub(super) fn render_scalar(
             "matches!(outcome, Ok(rt::Outcome::Completed(_)))".to_owned(),
         )?),
     )));
+    if lowered.native_integer_selection.is_some() {
+        // The meter and the outcome hold symbolic-discriminant sum types, one with a heap arm. The
+        // native proof never drops them; the cover reads the plain `bool` above and stays last.
+        body.push(Statement::Forget("meter".to_owned()));
+        body.push(Statement::Forget("outcome".to_owned()));
+    }
     let spec = HarnessSpec::new(
         format!("exact-scalar {} `{}`", super::clause::v2::message_safe_node_label(&lowered.node_id), lowered.operation_identity),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
