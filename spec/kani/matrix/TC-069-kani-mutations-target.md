@@ -44,4 +44,5 @@ broken anchor, timeout or compile error never reads as success; every run mutant
 
 ## Status
 
-PLANNED (IR-1437): no FR-055 criterion is implemented or tagged.
+Steps 1 to 6 are implemented in `tests/it/kani_mutations.rs` (IR-1437); step 7 needs installed Kani and
+has not been run.

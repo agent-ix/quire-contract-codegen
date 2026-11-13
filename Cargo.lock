@@ -1433,6 +1433,7 @@ version = "0.1.0"
 dependencies = [
  "ix-trace-rs",
  "jsonschema 0.17.1",
+ "libc",
  "num-bigint",
  "proc-macro2",
  "proptest",

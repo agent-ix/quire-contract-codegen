@@ -291,7 +291,25 @@ pub enum KaniScalarNativeErrorClass {
     EnvironmentFault,
 }
 
+/// Kani's own verdict line for a falsified proof. A mutant gate (`make kani-mutations`, FR-055) reads
+/// it from the owning test's output; the launcher pipes Kani's report, so it is not otherwise shown.
+pub const SCALAR_NATIVE_FALSIFIED_VERDICT: &str = "VERIFICATION:- FAILED";
+
 impl KaniScalarNativeError {
+    /// The verdict line to print when the proof was falsified: `Some` exactly when Kani ran and
+    /// classified the harness [`KaniRunOutcome::Falsified`].
+    #[must_use]
+    pub fn falsified_verdict(&self) -> Option<&'static str> {
+        match self {
+            Self::ProofNotVerified(evidence)
+                if matches!(evidence.outcome, KaniRunOutcome::Falsified { .. }) =>
+            {
+                Some(SCALAR_NATIVE_FALSIFIED_VERDICT)
+            }
+            _ => None,
+        }
+    }
+
     /// Stable machine discriminant, independent of human diagnostics.
     #[must_use]
     pub const fn code(&self) -> &'static str {
@@ -2213,6 +2231,27 @@ mod tests {
             KaniExecutionRefusal::BatchTimedOut { .. } => (F, None),
             KaniExecutionRefusal::PlaybackForNonMember { .. } => (R, None),
         }
+    }
+
+    #[trace("FR-055-AC-5", "TC-069")]
+    #[test]
+    fn only_a_falsified_proof_emits_the_kani_rejection_verdict() {
+        use KaniScalarNativeError as E;
+        let falsified = E::ProofNotVerified(Box::new(classification_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "x".into(),
+            },
+            None,
+        )));
+        assert_eq!(falsified.falsified_verdict(), Some("VERIFICATION:- FAILED"));
+        let timed_out = E::ProofNotVerified(Box::new(classification_evidence(
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::TimedOut,
+            },
+            None,
+        )));
+        assert_eq!(timed_out.falsified_verdict(), None);
+        assert_eq!(E::InvalidRequest("x").falsified_verdict(), None);
     }
 
     #[trace("FR-017-AC-41", "FR-017-AC-42", "FR-017-AC-44")]
