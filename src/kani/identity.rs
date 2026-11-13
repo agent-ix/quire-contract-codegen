@@ -237,6 +237,9 @@ pub struct V2ClauseObligationIdentity {
     pub collection_operation: Option<CollectionOperationIdentity>,
     /// Contract role read from the checked node.
     pub kind: ObligationKind,
+    /// Same-anchor preconditions the harness assumes as its `requires`, in checked order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<CheckedNodeId>,
     /// Embedded oracle symbol.
     pub oracle_symbol: String,
     /// Caller-selected subject path recorded for harness identity even when this role has no call.

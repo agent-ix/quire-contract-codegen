@@ -206,11 +206,22 @@ pub fn decode_v2_clause_falsification(
     if identity.collection_operation.is_some() {
         return collection_operation::decode(identity, playback, limits);
     }
-    let bindings = identity
-        .arguments
+    // A harness draws its state fields, then its parameters.
+    let drawn = identity
+        .state_fields
         .iter()
-        .map(|argument| ObligationBinding {
-            identifier: argument.identifier.clone(),
+        .map(|field| (&field.identifier, field.minimum, field.maximum))
+        .chain(
+            identity
+                .arguments
+                .iter()
+                .map(|argument| (&argument.identifier, argument.minimum, argument.maximum)),
+        )
+        .collect::<Vec<_>>();
+    let bindings = drawn
+        .iter()
+        .map(|(identifier, _, _)| ObligationBinding {
+            identifier: (*identifier).clone(),
             role: KaniBindingRole::Argument,
             primitive_type: KaniPrimitiveType::I64,
             integer_bounds: None,
@@ -224,7 +235,7 @@ pub fn decode_v2_clause_falsification(
         playback,
         limits,
     )?;
-    for ((name, value), argument) in decoded.iter().zip(&identity.arguments) {
+    for ((name, value), (_, minimum, maximum)) in decoded.iter().zip(&drawn) {
         let WitnessValue::Integer(value) = value else {
             return Err(DecodeFailure::new(
                 "cg_witness_type_mismatch",
@@ -232,7 +243,7 @@ pub fn decode_v2_clause_falsification(
                 identity.module_symbol.as_str(),
             ));
         };
-        if !(i128::from(argument.minimum)..=i128::from(argument.maximum)).contains(value) {
+        if !(i128::from(*minimum)..=i128::from(*maximum)).contains(value) {
             return Err(DecodeFailure::new(
                 "cg_witness_out_of_domain",
                 name,

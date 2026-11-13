@@ -218,8 +218,6 @@ pub(super) enum Statement {
         domain: (i128, i128),
         then: Vec<LetBinding>,
     },
-    // Only the non-vacuity backend control needs an extra assumption at this stage.
-    #[cfg_attr(not(test), allow(dead_code))]
     Assume {
         condition: ExprText,
     },
@@ -235,7 +233,8 @@ pub(super) enum Statement {
         condition: ExprText,
         message: String,
     },
-    /// The produced result's admitted domain, checked before invoking its clause oracle.
+    /// The produced result's or state field's admitted domain, checked after the subject call and
+    /// before invoking its clause oracle.
     ProducedResultDomainAssert {
         condition: ExprText,
         message: String,
@@ -556,7 +555,7 @@ impl HarnessSpec {
                     message(text)?;
                 }
                 Statement::ProducedResultDomainAssert { message: text, .. } => {
-                    if called || !names.contains("subject_result") {
+                    if called || !(names.contains("subject_result") || names.contains("subject")) {
                         return Err(HarnessSpecError::AssertBeforeCall);
                     }
                     message(text)?;
