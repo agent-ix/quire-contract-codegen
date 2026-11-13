@@ -31,6 +31,7 @@ use crate::{
         },
         identity::{
             GraphEdgeIdentity, GraphObligationIdentity, KaniGraphObligationHarness, ObligationKind,
+            GRAPH_ASSERTION_MESSAGE,
         },
     },
 };
@@ -542,7 +543,7 @@ pub(super) fn render_graph(
     });
     body.push(Statement::Assert {
         condition: expression("object_count == 0 || claim")?,
-        message: "the symbolic graph satisfies the admitted clause condition".into(),
+        message: GRAPH_ASSERTION_MESSAGE.into(),
     });
     // Reachability follows only the selected edge, by positive-length search: the closure starts
     // at the selected edges rather than at an identity relation, so an isolated object does not
