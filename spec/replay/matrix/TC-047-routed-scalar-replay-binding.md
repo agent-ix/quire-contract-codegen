@@ -21,9 +21,14 @@ failure from source-property refutation. Partial native evidence exists (IR-1184
 `scalar_replay_residuals.rs` drive the real routed generation, the real QSL operator facade and
 a compiled generated artifact, without a Kani run. `scalar_settlement.rs` implements the
 settlement steps 10 to 14 (IR-631), and `kani_obligations.rs` implements the descriptor-level
-bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence (step 3, with the absent capability last), single-member binding (step 6), stale-dependency and invented-membership (the membership half of step 8, FR-032-AC-12) checks. Step 9 (FR-032-AC-19) is implemented by IR-304 slice (b) in `scalar_playback.rs` and `requirement_records.rs`. Steps 1 and 7, the rest of step 8 (the canonical preimage members, the unencodable-preimage `IdentityEncodeError` path and a changed range or kind under a retained digest) and the real-Kani run of step 2 remain
-Planned, as does any real falsified Kani run through the route. No
-passing proof-driven replay is claimed.
+bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the setup-precedence (step 3, with the absent capability last), single-member binding (step 6), stale-dependency and invented-membership (the membership half of step 8, FR-032-AC-12) checks. Step 9 (FR-032-AC-19) is implemented by IR-304 slice (b) in `scalar_playback.rs` and `requirement_records.rs`. Steps 1 and 7, the rest of step 8 (the canonical preimage members, the unencodable-preimage `IdentityEncodeError` path and a changed range or kind under a retained digest) remain
+Planned. The real-Kani run of step 2 is implemented (IR-631) by the ignored Kani-lane test
+`a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed` in
+`scalar_replay_real_kani_private.rs`: real Kani falsifies the re-sealed native arithmetic mutant,
+`plan` decodes its playback, the cfg(test) CG helper (not the driver) observes the same staged bytes natively, and the genuine
+QSL facade and converter reach `Parity(Diverged)` and `Failed`
+(`docs/qualification/ir631-scalar-replay-real-kani-evidence.md`). No driver-run proof-driven replay
+is claimed.
 
 ## Test Procedure
 
@@ -31,8 +36,9 @@ passing proof-driven replay is claimed.
    `Int[0,10]`; check those emitted ranges, then call public
    `generate_routed` for its scalar node and retain the returned identity and generated harness.
    Compile a public scalar builder call using those types directly, without a function identity.
-2. In the named real-Kani lane, run the generated harness and an arithmetic mutation control.
-   Retain its actual selected assertion playback and proved generated content. This increment
+2. In the real-Kani lane, falsify an arithmetic mutation control of the generated native harness
+   and oracle. Retain its actual selected assertion playback, plan it, and observe the same staged
+   bytes natively (the mutant is a crate-private re-sealed construction and the observer is the cfg(test) CG helper `observe_staged_native_for_test`, not the driver); the unmutated generated harness is not falsifiable. This increment
    has no admitted out-of-result-range exact value; do not invent one. Separately, on the
    descriptor `kani_obligations::scalar_package` accepts, with both operands and result in
    `[-1000,1000]`, assert the operand bounds and the harness's checked result domain, decode a
@@ -236,7 +242,7 @@ passing proof-driven replay is claimed.
 | FR-032-AC-24 | Step 13: CG-raised causes on a supported family yield `CgDefect`; unavailable capabilities and binding mismatches yield `None` | Return `None` for `Playback` (fails the four-byte operand input, whose pair result becomes `MissingSettlement`); return `Some(CgDefect)` for `Observation` or for `GeneratedArtifactChanged` (fails the mutated-observation and changed-`harness.rust` inputs); return `Some(CgDefect)` for `Unavailable` (fails the routed `Implies` input, which would write `Failed` for a family with no operator-parity route); read `Authority(Operation)` as `None` (fails the local exhaustive match, the only input that reaches it, and leaves a supported-family run with no terminal record) |
 | FR-032-AC-25 | Step 14: the flow compiles and the scan finds nothing | Add a `KaniObligationIdentity` parameter to `plan` (fails the compile of the step 1 call); reintroduce `settle` (fails the scan) |
 
-Checks other than the Partial criteria listed in the replay matrix are planned; completed-route observations have the remaining whole-route gates (the driver's E9 run, IR-610, and a real falsified Kani run, the IR-631 code slice) stated in
+Checks other than the criteria the replay matrix lists as implemented are planned; completed-route observations have the remaining whole-route gate (the driver's E9 run, IR-610) stated in
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
 produces a source-property `Refuted` or `Verified` terminal. The scalar absent-settlement check is FR-032-AC-23; ordinary
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15 is unchanged and
