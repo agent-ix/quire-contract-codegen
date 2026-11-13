@@ -522,6 +522,73 @@ impl Twin {
         twin
     }
 
+    /// The `test/bank` domain package of the V2 pre/post/invariant profile: `Account` declares
+    /// `balance: Int[balance]`, its operation `withdraw` takes `amount: Int[0, 100]` and its
+    /// frame modifies `balance`. The unit authors a precondition, a postcondition and an
+    /// invariant from the given conditions (`CanAfford`, `Debited`, `NonNegative`).
+    pub fn with_withdraw_profile(
+        balance: (i64, i64),
+        precondition: &str,
+        postcondition: &str,
+        invariant: &str,
+    ) -> Self {
+        let mut twin = Self::with_bank_invariants(&[], balance);
+        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let types = document["types"].as_array_mut().expect("types");
+        let amount_range = format!("ix://{PACKAGE}/amount_range");
+        let mut range = types
+            .iter()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("balance value type")
+            .clone();
+        range["identity"] = json!(amount_range);
+        range["displayName"] = json!(amount_range);
+        range["origin"] = generated(&amount_range);
+        for constraint in range["constraints"].as_array_mut().expect("constraints") {
+            let keyword = constraint["keyword"].as_str().expect("keyword").to_owned();
+            constraint["identity"] = json!(format!("{amount_range}/constraints/{keyword}"));
+            constraint["origin"] = generated(&amount_range);
+            constraint["operands"]["value"] = json!(if keyword == "min" { "0" } else { "100" });
+        }
+        types.push(range);
+        let account = types
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let withdraw = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("operation");
+        withdraw["name"] = json!("withdraw");
+        withdraw["identity"] = json!(format!("{}/withdraw", account_type()));
+        let identity = format!("{}/withdraw/amount", account_type());
+        withdraw["params"] = json!([{
+            "identity": identity,
+            "name": "amount",
+            "typeRef": amount_range,
+            "presence": "required",
+            "nullable": false,
+            "defaultKind": "none",
+            "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+            "origin": generated(&identity),
+        }]);
+        twin.domain = document.to_string().into_bytes();
+        let mut unit = unit_source(&[], 0);
+        for (kind, name, location, condition) in [
+            ("pre", "CanAfford", "::withdraw", precondition),
+            ("post", "Debited", "::withdraw", postcondition),
+            ("invariant", "NonNegative", " at current", invariant),
+        ] {
+            unit.push_str(&format!(
+                "{kind} {name} using v on Bank::Account{location} {{ {condition} }}\n"
+            ));
+        }
+        twin.unit = unit.into_bytes();
+        twin
+    }
+
     /// The invariant replay inputs for the clause `clause` over the drawn `state_fields` of the
     /// object declaration `object_node`, the snapshot anchored at the handler `deposit`. The
     /// playback is empty: the test decodes it from a harness.
@@ -548,7 +615,7 @@ impl Twin {
             },
             anchor: SelectedAnchor {
                 kind: AnchorKind::Handler,
-                name: "deposit".to_owned(),
+                name: self.handler(),
             },
             snapshot_label: DocumentLabel {
                 authority: "test".to_owned(),
@@ -558,6 +625,21 @@ impl Twin {
             unread_values: Vec::new(),
             obligation_identity: self.clause_identity(clause),
         }
+    }
+
+    /// The operation the invariant snapshot is anchored at: the first operation `Account`
+    /// declares in the domain package.
+    fn handler(&self) -> String {
+        let document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        document["types"]
+            .as_array()
+            .expect("types")
+            .iter()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type")["operations"][0]["name"]
+            .as_str()
+            .expect("operation name")
+            .to_owned()
     }
 
     /// The `contract` identity QSL's selected clause site mints for `clause`: the identity a
