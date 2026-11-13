@@ -30,3 +30,18 @@ statement changed, so the EARS sub-analysis does not apply.
 
 Not mergeable as written. The status text is honest that AC-7 and AC-8 stay PARTIAL, but it gives the
 remainder to an owner that will not execute it, and it leaves AC-3/AC-4/AC-5 and TC-047 saying the opposite.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-003 | low | The re-seal caveat is stated only in the AC-7 row and the evidence doc. The AC-3, AC-4, AC-5 and AC-8 rows cite the same test as IMPLEMENTED evidence without saying that its artifact is a crate-private re-sealed mutant. TC-047 and the doc's step 5 say "the driver observes the same staged bytes", but the observer is the `#[cfg(test)]` CG helper `observe_staged_native_for_test`, not the driver. The claims are true; the provenance of the evidence should read the same everywhere. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:397-399,402, spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:24-30, docs/qualification/ir631-scalar-replay-real-kani-evidence.md:24 |
+
+## Dispositions
+
+Round 1, checked against 40124b5f. `quire validate` on FR-032 exits 0.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The join is built in CG. The FR-032 status paragraph now reads: "AC-1 to AC-8, AC-12, AC-14 to AC-17 and AC-20 to AC-25 are **Implemented** (IR-631; AC-3 to AC-5, AC-7 and AC-8 including the real-Kani half) ... the remaining gate for the whole route is the driver's same-proved-artifact execution (the driver's E9 run, IR-610)". No half is handed to IR-610 any more. |
+| FND-002 | fixed | AC-5 now reads "a QSL `Diverged` result from a changed generated artifact is asserted by `a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed`"; AC-3 and AC-4 cite the same test. TC-047 line 239 now names only "the driver's E9 run, IR-610", and step 2 is reworded to the real-Kani lane that exists. |

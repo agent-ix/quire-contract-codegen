@@ -25,7 +25,7 @@ bounded-addition check of step 2. `scalar_replay_acceptance.rs` implements the s
 Planned. The real-Kani run of step 2 is implemented (IR-631) by the ignored Kani-lane test
 `a_real_falsified_native_mutant_plans_observes_and_settles_diverged_failed` in
 `scalar_replay_real_kani_private.rs`: real Kani falsifies the re-sealed native arithmetic mutant,
-`plan` decodes its playback, the driver observes the same staged bytes natively, and the genuine
+`plan` decodes its playback, the cfg(test) CG helper (not the driver) observes the same staged bytes natively, and the genuine
 QSL facade and converter reach `Parity(Diverged)` and `Failed`
 (`docs/qualification/ir631-scalar-replay-real-kani-evidence.md`). No driver-run proof-driven replay
 is claimed.
@@ -38,7 +38,7 @@ is claimed.
    Compile a public scalar builder call using those types directly, without a function identity.
 2. In the real-Kani lane, falsify an arithmetic mutation control of the generated native harness
    and oracle. Retain its actual selected assertion playback, plan it, and observe the same staged
-   bytes natively; the unmutated generated harness is not falsifiable. This increment
+   bytes natively (the mutant is a crate-private re-sealed construction and the observer is the cfg(test) CG helper `observe_staged_native_for_test`, not the driver); the unmutated generated harness is not falsifiable. This increment
    has no admitted out-of-result-range exact value; do not invent one. Separately, on the
    descriptor `kani_obligations::scalar_package` accepts, with both operands and result in
    `[-1000,1000]`, assert the operand bounds and the harness's checked result domain, decode a

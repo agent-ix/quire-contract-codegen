@@ -38,3 +38,16 @@ directory; a Kani rerun is not needed to judge this PR).
 Not mergeable as written. The measurements look sound, but the doc's explanation of why the join
 cannot be built cites refusals that do not apply to the re-sealed mutant. That explanation is what the
 IR-610 handoff in FR-032 rests on (see the spec-review artifact SR-17940486709564847047966, FND-001).
+
+## Dispositions
+
+Round 1, checked against 40124b5f (25030e08..40124b5f, verified with `git ls-remote`). The new
+`#[cfg(test)]` helper `observe_staged_native_for_test` (`src/kani/run/scalar.rs:1380-1406`) reuses
+`validate_request`, staging, lock verification and snapshot sealing, then runs only the native observer;
+it is test-only and changes no production path. The Kani-lane test was not re-run (cold target directory);
+the retained output `docs/qualification/ir631-scalar-replay-real-kani-run.txt` shows it passing in 25.12 s.
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The evidence doc step 2 now reads: "`generated(...)` alone binds no replay body or original package, so `plan` would refuse it with `Authority(Unavailable)`. The test therefore re-seals with `generated_with_scalar_limits`, then binds the original replay body (`bind_scalar_replay_body`) and the mutated artifact package (`bind_artifact_package`) ... Production callers cannot do this." |
+| FND-002 | fixed | The doc now has a Reproduction section (rustc 1.99.1, Kani 0.68.0, CBMC 6.11.0, cadical, the exact flock/systemd-run/cargo command) and retained output in `ir631-scalar-replay-real-kani-run.txt`. Both mutant tests parse with `mutant.identity.arguments.len() + mutant.identity.guard_inputs.len()`. |
