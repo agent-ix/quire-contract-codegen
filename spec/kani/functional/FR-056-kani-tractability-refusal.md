@@ -131,11 +131,20 @@ ignored. When several rows qualify, the decider SHALL report the one with the sm
 
 PARTIAL (IR-1526). FR-056-AC-1 to AC-9 and AC-11 to AC-12 are implemented and test-backed on the host
 (`tests/it/kani_tractability.rs`; corpus and baseline in `tests/fixtures/tractability/`).
-FR-056-AC-10 is partial: the shipped corpus holds ten measured rows, all `verified` or `falsified`
-and all of the one IR-1022 clause and its mutants. It has no `timed_out` row (CG's own evidence has
-no measured wall-clock timeout of a V2 clause), no Meter, decimal or pure-relational case and no other
-multi-operation clause, so the false-accept count is not exercised by the shipped file. Those rows
-need new installed-Kani measurements. FR-056-AC-13 is coded as an ignored kani-lane test and has not
+FR-056-AC-10 is partial: the shipped corpus holds twelve measured rows. Ten are `verified` or
+`falsified` and are the one IR-1022 clause and its mutants. Two are `timed_out`, from IR-1530's own
+measurement (`docs/qualification/ir1530-general-route-scalar-not-tractable.md`): the general-route
+(`rt::Integer`) scalar harnesses `x + 1` over `Int[0, 9]` and `x - y` over two `Int[0, 9]`, each ending
+`Inconclusive { TimedOut }` at 600 s. They are not V2 clause measurements: the general scalar route is
+not the V2 clause route, and the clause features carry no route, so the same features (add or subtract at 4 bits)
+also describe native-route harnesses that verify in seconds. The decider cannot tell them apart, and the
+empty table runs them: the shipped baseline is false-refuse 0 and false-accept 2. A table row refusing
+these operations at 4 bits would refuse tractable native-route clauses, a false refuse the corpus does not
+yet carry. Still missing: Meter, decimal and pure-relational cases, other multi-operation clauses and a `timed_out` V2 clause
+(for example integer multiply at a wide width); these need new installed-Kani measurements. Because
+the baseline equals the empty-table decider, which already runs everything, the always-`Run` decider
+scores equal to the baseline on the shipped corpus and does not regress it; only always-`Refuse` does (the
+synthetic corpus in the scoring test still exercises both mutants). FR-056-AC-13 is coded as an ignored kani-lane test and has not
 been run under installed Kani. FR-056-AC-1 to AC-12 need no Kani run and are host tests. FR-056-AC-13
 needs an installed Kani run and is the only criterion that does; FR-056-AC-10 is an inspection of the
 corpus.

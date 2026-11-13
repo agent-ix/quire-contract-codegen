@@ -368,5 +368,51 @@
     "ground_truth": "falsified",
     "wall_seconds": 119.6,
     "measurement_source": "docs/qualification/ir1509-kani-clause-controls.md, same table, row 'helper body returns false'"
+  },
+  {
+    "id": "ir1530-general-route-scalar-increment",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.add",
+          "bits": 4
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 9
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "timed_out",
+    "wall_seconds": 600.0,
+    "measurement_source": "docs/qualification/ir1530-general-route-scalar-not-tractable.md, 'Measured row: general integer scalar route' (Kani 0.68.0, CBMC 6.11.0, --unwind 3, 600 s lane budget, Inconclusive TimedOut); general rt::Integer scalar harness, not the V2 clause route; form x + 1 over Int[0, 9]"
+  },
+  {
+    "id": "ir1530-general-route-scalar-subtract",
+    "features": {
+      "operations": [
+        {
+          "operation_id": "quire.op.integer.sub",
+          "bits": 4
+        }
+      ],
+      "inputs": [
+        {
+          "lower": 0,
+          "upper": 9
+        },
+        {
+          "lower": 0,
+          "upper": 9
+        }
+      ],
+      "collection_bound": null
+    },
+    "ground_truth": "timed_out",
+    "wall_seconds": 600.0,
+    "measurement_source": "docs/qualification/ir1530-general-route-scalar-not-tractable.md, 'Measured row: general integer scalar route' (Kani 0.68.0, CBMC 6.11.0, --unwind 3, 600 s lane budget, Inconclusive TimedOut); general rt::Integer scalar harness, not the V2 clause route; form x - y over two Int[0, 9]; ended at 600.33 s"
   }
 ]
