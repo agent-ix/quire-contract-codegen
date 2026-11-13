@@ -15,7 +15,7 @@ use quire_contract_model::{
     CompositeTypeForm, ContractSourceV1, LiteralKind, ScalarTypeForm,
 };
 use quote::ToTokens;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use qsl_replay::ObligationIdentity;
@@ -23,7 +23,10 @@ use qsl_replay::ObligationIdentity;
 use crate::{
     core::ir::{
         checked_term::{application, bound_members, literal, reference},
-        clause::{read_clause, ClauseGraphView, ClauseInputSide, ClauseTerm, MAX_CONDITION_TERMS},
+        clause::{
+            read_clause, ClauseCondition, ClauseGraphView, ClauseInput, ClauseInputSide,
+            ClauseTerm, MAX_CONDITION_TERMS,
+        },
     },
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
@@ -44,7 +47,8 @@ use crate::{
         },
     },
     oracle::clause::{
-        generate_v2_clause_native_oracle, generate_v2_clause_oracle_with_view, V2ClauseOracle,
+        generate_v2_clause_native_oracle, generate_v2_clause_native_oracle_with_view,
+        generate_v2_clause_oracle_with_view, V2ClauseOracle,
     },
 };
 
@@ -59,6 +63,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     arithmetic: Vec<ArithmeticProbe>,
     symbolic_name: Option<String>,
     result_postcondition: Option<ResultPostcondition>,
+    state_postcondition: Option<StatePostcondition>,
     obligation: ObligationIdentity,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
@@ -78,6 +83,42 @@ struct ResultParameter {
 struct ResultPostcondition {
     result: Option<MachineScalar>,
     parameters: Vec<ResultParameter>,
+}
+
+/// A postcondition that reads state: the state fields the subject receives by `&mut`, the operation
+/// parameters it receives by value, and the sibling preconditions assumed as its `requires`.
+struct StatePostcondition {
+    reads: Vec<StateRead>,
+    parameters: Vec<StateParameter>,
+    requires: Vec<StateRequire>,
+    /// Each oracle input name and the variable that supplies it.
+    oracle_inputs: Vec<(String, String)>,
+}
+
+struct StateRead {
+    declaring_node_id: CheckedNodeId,
+    field_name: String,
+    minimum: i64,
+    maximum: i64,
+    /// The drawn pre-state.
+    pre: String,
+    /// The state the subject produced.
+    post: String,
+}
+
+struct StateParameter {
+    name: String,
+    minimum: i64,
+    maximum: i64,
+    drawn: String,
+}
+
+/// A same-anchor precondition assumed through its own native oracle, embedded in a nested module.
+struct StateRequire {
+    precondition: CheckedNodeId,
+    oracle: V2ClauseOracle,
+    /// Each oracle input name and the drawn pre-state or parameter variable that supplies it.
+    inputs: Vec<(String, String)>,
 }
 
 /// Encode the complete structural key for a generated message. Escaping `%` keeps
@@ -143,6 +184,22 @@ fn lower_with_census<'a>(
         None
     };
     let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
+    let (state_postcondition, state_expectation, state_arithmetic) = match &result_postcondition {
+        Some(signature)
+            if kind == ObligationKind::Postcondition
+                && signature.result.is_none()
+                && oracle
+                    .descriptor
+                    .inputs
+                    .iter()
+                    .any(|input| input.state_field.is_some()) =>
+        {
+            let (state, expectation, arithmetic) =
+                read_state_postcondition(view, clause, &condition, &oracle, signature)?;
+            (Some(state), Some(expectation), arithmetic)
+        }
+        _ => (None, None, Vec::new()),
+    };
     let input_count_supported = match kind {
         ObligationKind::Precondition => true,
         ObligationKind::Postcondition => {
@@ -154,35 +211,36 @@ fn lower_with_census<'a>(
         ObligationKind::Invariant => true,
         ObligationKind::Frame => false,
     };
-    if !input_count_supported
-        || oracle.descriptor.inputs.iter().any(|input| {
-            let supported = match kind {
-                ObligationKind::Precondition => {
-                    input.name.starts_with("parameter_") && input.state_field.is_none()
-                        || input.name.starts_with("current_") && input.state_field.is_some()
-                }
-                ObligationKind::Postcondition => {
-                    input.state_field.is_none()
-                        && (input.name.starts_with("parameter_")
-                            || result_postcondition
-                                .as_ref()
-                                .is_some_and(|signature| signature.result.is_some())
-                                && input.name == "result_result")
-                }
-                ObligationKind::Invariant => {
-                    input.name.starts_with("current_") && input.state_field.is_some()
-                }
-                ObligationKind::Frame => false,
-            };
-            !supported
-                || (input.boolean
-                    && result_postcondition
-                        .as_ref()
-                        .is_some_and(|signature| signature.result.is_none()))
-                || input.lower > input.upper
-                || i64::try_from(input.lower).is_err()
-                || i64::try_from(input.upper).is_err()
-        })
+    if state_postcondition.is_none()
+        && (!input_count_supported
+            || oracle.descriptor.inputs.iter().any(|input| {
+                let supported = match kind {
+                    ObligationKind::Precondition => {
+                        input.name.starts_with("parameter_") && input.state_field.is_none()
+                            || input.name.starts_with("current_") && input.state_field.is_some()
+                    }
+                    ObligationKind::Postcondition => {
+                        input.state_field.is_none()
+                            && (input.name.starts_with("parameter_")
+                                || result_postcondition
+                                    .as_ref()
+                                    .is_some_and(|signature| signature.result.is_some())
+                                    && input.name == "result_result")
+                    }
+                    ObligationKind::Invariant => {
+                        input.name.starts_with("current_") && input.state_field.is_some()
+                    }
+                    ObligationKind::Frame => false,
+                };
+                !supported
+                    || (input.boolean
+                        && result_postcondition
+                            .as_ref()
+                            .is_some_and(|signature| signature.result.is_none()))
+                    || input.lower > input.upper
+                    || i64::try_from(input.lower).is_err()
+                    || i64::try_from(input.upper).is_err()
+            }))
     {
         return Err(refusal());
     }
@@ -204,7 +262,9 @@ fn lower_with_census<'a>(
     {
         return Err(refusal());
     }
-    let (native_expectation, arithmetic, symbolic_name) = if kind == ObligationKind::Postcondition
+    let (native_expectation, arithmetic, symbolic_name) = if state_postcondition.is_some() {
+        (state_expectation, state_arithmetic, None)
+    } else if kind == ObligationKind::Postcondition
         && result_postcondition
             .as_ref()
             .is_some_and(|signature| signature.result.is_none())
@@ -226,9 +286,13 @@ fn lower_with_census<'a>(
         }
         let symbolic_name = format!("{input_name}_current");
         let mut arithmetic = Vec::new();
-        let expectation = native_term(&condition.term, input_name, &symbolic_name, &mut arithmetic)
-            .and_then(NativeTerm::boolean)
-            .ok_or_else(refusal)?;
+        let expectation = native_term(
+            &condition.term,
+            &[NativeBinding::parameter(input_name, &symbolic_name)],
+            &mut arithmetic,
+        )
+        .and_then(NativeTerm::boolean)
+        .ok_or_else(refusal)?;
         (Some(expectation), arithmetic, Some(symbolic_name))
     } else if kind == ObligationKind::Postcondition
         && result_postcondition
@@ -240,10 +304,12 @@ fn lower_with_census<'a>(
             let symbolic_name = format!("parameter_{}_current", parameter.name);
             let mut arithmetic = Vec::new();
             let expectation = match (&parameter.scalar, result_expectation_term(&condition.term)) {
-                (MachineScalar::Integer { .. }, Some(term)) => {
-                    native_term(term, &parameter.name, &symbolic_name, &mut arithmetic)
-                        .and_then(NativeTerm::boolean)
-                }
+                (MachineScalar::Integer { .. }, Some(term)) => native_term(
+                    term,
+                    &[NativeBinding::parameter(&parameter.name, &symbolic_name)],
+                    &mut arithmetic,
+                )
+                .and_then(NativeTerm::boolean),
                 _ => None,
             };
             (expectation, arithmetic, Some(symbolic_name))
@@ -289,6 +355,7 @@ fn lower_with_census<'a>(
         arithmetic,
         symbolic_name,
         result_postcondition,
+        state_postcondition,
         obligation: claim.obligation.clone(),
         module_symbol,
         harness_symbol: if kind == ObligationKind::Postcondition {
@@ -300,6 +367,240 @@ fn lower_with_census<'a>(
         }
         .to_owned(),
     })
+}
+
+/// The declared operation parameters of a state-reading postcondition, each an integer.
+fn state_parameters(signature: &ResultPostcondition) -> Option<Vec<StateParameter>> {
+    signature
+        .parameters
+        .iter()
+        .map(|parameter| {
+            let MachineScalar::Integer { minimum, maximum } = parameter.scalar else {
+                return None;
+            };
+            let drawn = format!("parameter_{}_current", parameter.name);
+            syn::parse_str::<syn::Ident>(&drawn).ok()?;
+            Some(StateParameter {
+                name: parameter.name.clone(),
+                minimum,
+                maximum,
+                drawn,
+            })
+        })
+        .collect()
+}
+
+type StateFieldDomains = BTreeMap<(String, CheckedNodeId), (i64, i64)>;
+
+/// Admit one clause input: a state field read on the pre or current side with one `i64` integer
+/// domain per field, or a declared integer parameter read over its declared domain.
+fn record_state_input(
+    fields: &mut StateFieldDomains,
+    parameters: &[StateParameter],
+    input: &ClauseInput,
+) -> Option<()> {
+    if input.boolean {
+        return None;
+    }
+    match (input.side, &input.declaring_node_id) {
+        (ClauseInputSide::Pre | ClauseInputSide::Current, Some(declaring)) => {
+            let bounds = (
+                i64::try_from(input.lower).ok()?,
+                i64::try_from(input.upper).ok()?,
+            );
+            if bounds.0 > bounds.1 {
+                return None;
+            }
+            let previous = fields
+                .entry((input.name.clone(), declaring.clone()))
+                .or_insert(bounds);
+            (*previous == bounds).then_some(())
+        }
+        (ClauseInputSide::Parameter, None) => {
+            let declared = parameters
+                .iter()
+                .find(|parameter| parameter.name == input.name)?;
+            ((input.lower, input.upper) == (declared.minimum.into(), declared.maximum.into()))
+                .then_some(())
+        }
+        _ => None,
+    }
+}
+
+/// The drawn state fields in field-name order. Two fields of one name would share their draws.
+fn state_reads(fields: StateFieldDomains) -> Option<Vec<StateRead>> {
+    let mut reads: Vec<StateRead> = Vec::new();
+    for ((field_name, declaring_node_id), (minimum, maximum)) in fields {
+        let (pre, post) = (
+            format!("pre_{field_name}_current"),
+            format!("post_{field_name}_current"),
+        );
+        syn::parse_str::<syn::Ident>(&pre).ok()?;
+        if reads
+            .last()
+            .is_some_and(|last| last.field_name == field_name)
+        {
+            return None;
+        }
+        reads.push(StateRead {
+            declaring_node_id,
+            field_name,
+            minimum,
+            maximum,
+            pre,
+            post,
+        });
+    }
+    Some(reads)
+}
+
+/// The state-reading scalar postcondition shape: its draws, its `requires` and its independent
+/// native expectation. A shape this renderer cannot represent refuses as a not-rendered condition,
+/// and a sibling precondition it cannot assume refuses naming that precondition.
+fn read_state_postcondition(
+    view: &ClauseGraphView<'_>,
+    clause: &CheckedNodeId,
+    condition: &ClauseCondition,
+    oracle: &V2ClauseOracle,
+    signature: &ResultPostcondition,
+) -> Result<(StatePostcondition, String, Vec<ArithmeticProbe>), UnsupportedObligation> {
+    let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
+        node_id: clause.clone(),
+    };
+    let parameters = state_parameters(signature).ok_or_else(refusal)?;
+    let mut fields = StateFieldDomains::new();
+    for input in &condition.inputs {
+        record_state_input(&mut fields, &parameters, input).ok_or_else(refusal)?;
+    }
+    let siblings = super::super::negotiate::same_anchor_preconditions(view.package(), clause);
+    for precondition in &siblings {
+        let not_rendered = || UnsupportedObligation::V2ClauseSiblingRequiresNotRendered {
+            node_id: clause.clone(),
+            precondition: precondition.clone(),
+        };
+        let read = read_clause(precondition, view).ok_or_else(not_rendered)?;
+        for input in &read.inputs {
+            if input.side == ClauseInputSide::Pre {
+                return Err(not_rendered());
+            }
+            record_state_input(&mut fields, &parameters, input).ok_or_else(not_rendered)?;
+        }
+    }
+    let reads = state_reads(fields).ok_or_else(refusal)?;
+    let mut bindings = Vec::new();
+    for read in &reads {
+        bindings.push(NativeBinding {
+            side: ClauseInputSide::Pre,
+            name: &read.field_name,
+            symbolic: &read.pre,
+        });
+        bindings.push(NativeBinding {
+            side: ClauseInputSide::Current,
+            name: &read.field_name,
+            symbolic: &read.post,
+        });
+    }
+    for parameter in &parameters {
+        bindings.push(NativeBinding::parameter(&parameter.name, &parameter.drawn));
+    }
+    let mut arithmetic = Vec::new();
+    let expectation = native_term(&condition.term, &bindings, &mut arithmetic)
+        .and_then(NativeTerm::boolean)
+        .ok_or_else(refusal)?;
+    // A sibling is assumed through its own native oracle on the state the subject receives. An
+    // arithmetic sibling has no independent probes here, so it refuses.
+    let mut requires = Vec::new();
+    for precondition in siblings {
+        let not_rendered = || UnsupportedObligation::V2ClauseSiblingRequiresNotRendered {
+            node_id: clause.clone(),
+            precondition: precondition.clone(),
+        };
+        let sibling = generate_v2_clause_native_oracle_with_view(&precondition, view)
+            .map_err(|_| not_rendered())?;
+        if sibling
+            .descriptor
+            .operation_identities
+            .iter()
+            .any(|identity| {
+                matches!(
+                    identity.as_str(),
+                    "quire.op.integer.add"
+                        | "quire.op.integer.sub"
+                        | "quire.op.integer.mul"
+                        | "quire.op.integer.negate"
+                )
+            })
+        {
+            return Err(not_rendered());
+        }
+        let mut inputs = Vec::new();
+        for input in &sibling.descriptor.inputs {
+            let source = if let Some(field) = input.state_field.as_ref().and_then(|field| {
+                reads.iter().find(|read| {
+                    read.field_name == field.field_name
+                        && read.declaring_node_id == field.declaring_node_id
+                })
+            }) {
+                input
+                    .name
+                    .starts_with("current_")
+                    .then(|| field.pre.clone())
+            } else {
+                input.name.strip_prefix("parameter_").and_then(|_| {
+                    parameters
+                        .iter()
+                        .find(|parameter| parameter.name == input.declared_name)
+                        .map(|parameter| parameter.drawn.clone())
+                })
+            };
+            if input.boolean {
+                return Err(not_rendered());
+            }
+            inputs.push((input.name.clone(), source.ok_or_else(not_rendered)?));
+        }
+        requires.push(StateRequire {
+            precondition,
+            oracle: sibling,
+            inputs,
+        });
+    }
+    let mut oracle_inputs = Vec::new();
+    for input in &oracle.descriptor.inputs {
+        let declared = input.declared_name.as_str();
+        let source = if let Some(parameter) = input.name.strip_prefix("parameter_").and_then(|_| {
+            parameters
+                .iter()
+                .find(|parameter| parameter.name == declared)
+        }) {
+            parameter.drawn.clone()
+        } else if let Some(field) = input.state_field.as_ref().and_then(|field| {
+            reads.iter().find(|read| {
+                read.field_name == field.field_name
+                    && read.declaring_node_id == field.declaring_node_id
+            })
+        }) {
+            if input.name.starts_with("pre_") {
+                field.pre.clone()
+            } else if input.name.starts_with("current_") {
+                field.post.clone()
+            } else {
+                return Err(refusal());
+            }
+        } else {
+            return Err(refusal());
+        };
+        oracle_inputs.push((input.name.clone(), source));
+    }
+    Ok((
+        StatePostcondition {
+            reads,
+            parameters,
+            requires,
+            oracle_inputs,
+        },
+        expectation,
+        arithmetic,
+    ))
 }
 
 fn machine_scalar(member: &CheckedMemberType) -> Option<MachineScalar> {
@@ -630,6 +931,25 @@ impl LoweredV2Clause {
             ))
         };
         let mut selection = V2ClauseSelection::default();
+        if let Some(state) = &self.state_postcondition {
+            for read in &state.reads {
+                selection.state_reads.push(V2ClauseRead {
+                    declaring_node_id: read.declaring_node_id.clone(),
+                    field_name: read.field_name.clone(),
+                    minimum: read.minimum,
+                    maximum: read.maximum,
+                    element: None,
+                });
+            }
+            for parameter in &state.parameters {
+                selection.parameters.push(V2ClauseParameter {
+                    name: parameter.name.clone(),
+                    minimum: parameter.minimum,
+                    maximum: parameter.maximum,
+                });
+            }
+            return Ok(selection);
+        }
         if let Some(signature) = &self.result_postcondition {
             if signature.result.is_some() {
                 for parameter in &signature.parameters {
@@ -665,6 +985,11 @@ impl LoweredV2Clause {
             }
         }
         Ok(selection)
+    }
+
+    /// Whether the harness assumes every sibling precondition as its `requires`.
+    pub(in crate::kani::generate) fn renders_requires(&self) -> bool {
+        self.state_postcondition.is_some()
     }
 
     pub(in crate::kani::generate) fn set_dependencies(
@@ -718,6 +1043,9 @@ pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    if let Some(state) = &lowered.state_postcondition {
+        return render_state_postcondition(request, lowered, state);
+    }
     if let Some(signature) = &lowered.result_postcondition {
         if signature.result.is_some() {
             return render_result_postcondition(request, lowered, signature);
@@ -733,7 +1061,11 @@ pub(in crate::kani::generate) fn render_clause(
     let mut arguments = Vec::new();
     let mut state_fields = Vec::new();
     let mut reachable = Vec::new();
-    for (index, input) in inputs.iter().enumerate() {
+    // A harness draws its state fields, then its parameters: the order the playback decoder
+    // reads `state_fields` and `arguments` in. The oracle takes its inputs in its own order.
+    let mut drawn = inputs.iter().enumerate().collect::<Vec<_>>();
+    drawn.sort_by_key(|(_, input)| input.state_field.is_none());
+    for (index, input) in drawn {
         let minimum =
             i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
         let maximum =
@@ -883,6 +1215,7 @@ pub(in crate::kani::generate) fn render_clause(
         collection_precondition: None,
         collection_operation: None,
         kind: lowered.kind,
+        requires: Vec::new(),
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments,
@@ -1170,10 +1503,269 @@ fn render_result_postcondition(
         collection_precondition: None,
         collection_operation: None,
         kind: ObligationKind::Postcondition,
+        requires: Vec::new(),
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments,
         state_fields: Vec::new(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
+        witness_options: spec.witness_options().to_vec(),
+    };
+    let record = record(&lowered.module_symbol, &identity, &rust)?;
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity,
+        lowered.obligation.clone(),
+        rust,
+        record,
+    ))
+}
+
+/// A postcondition over state: the harness draws the pre-state of each state field and each
+/// parameter within their declared domains, assumes every sibling precondition, copies each field
+/// into a harness-owned value, calls the subject with `&mut` to that value and then the
+/// parameters, asserts that each produced field lies in its domain, and asserts the clause over
+/// the pre-state copy and the produced state. The subject returns `()`.
+fn render_state_postcondition(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredV2Clause,
+    state: &StatePostcondition,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
+        node_id: lowered.node_id.clone(),
+    };
+    let expectation = lowered.native_expectation.as_deref().ok_or_else(refusal)?;
+    if !lowered.native_integer {
+        return Err(refusal());
+    }
+    let mut body = Vec::new();
+    let mut arguments = Vec::new();
+    let mut state_fields = Vec::new();
+    for read in &state.reads {
+        body.push(Statement::Input {
+            name: read.pre.clone(),
+            ty: KaniPrimitiveType::I64,
+            domain: (i128::from(read.minimum), i128::from(read.maximum)),
+            then: Vec::new(),
+        });
+        state_fields.push(V2ClauseStateField {
+            declaring_node_id: read.declaring_node_id.clone(),
+            field_name: read.field_name.clone(),
+            identifier: read.pre.clone(),
+            minimum: read.minimum,
+            maximum: read.maximum,
+        });
+    }
+    for parameter in &state.parameters {
+        body.push(Statement::Input {
+            name: parameter.drawn.clone(),
+            ty: KaniPrimitiveType::I64,
+            domain: (i128::from(parameter.minimum), i128::from(parameter.maximum)),
+            then: Vec::new(),
+        });
+        arguments.push(ScalarObligationArgument {
+            identifier: parameter.drawn.clone(),
+            minimum: parameter.minimum,
+            maximum: parameter.maximum,
+        });
+    }
+    let mut sibling_meters = Vec::new();
+    for (index, require) in state.requires.iter().enumerate() {
+        let direct = require.oracle.descriptor.operation_identities.is_empty();
+        let mut call_arguments = Vec::new();
+        for (name, source) in &require.inputs {
+            let local = format!("requires_{index}_{name}");
+            body.push(binding(
+                &local,
+                Init::Expression(expression(format!(
+                    "nx::NativeInteger::new(i128::from({source}))"
+                ))?),
+                false,
+            ));
+            call_arguments.push(format!("&{local}"));
+        }
+        if !direct {
+            let meter = format!("requires_{index}_meter");
+            body.push(binding(
+                &meter,
+                Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+                true,
+            ));
+            call_arguments.push(format!("&mut {meter}"));
+            sibling_meters.push(meter);
+        }
+        let outcome = format!("requires_{index}_outcome");
+        body.push(binding(
+            &outcome,
+            Init::Expression(expression(format!(
+                "requires_{index}::oracle_clause({})",
+                call_arguments.join(", ")
+            ))?),
+            false,
+        ));
+        body.push(Statement::Assume {
+            condition: expression(if direct {
+                outcome
+            } else {
+                format!(
+                    "matches!(&{outcome}, {})",
+                    outcome_pattern(true, OutcomeKind::CompletedTrue)
+                )
+            })?,
+        });
+    }
+    for read in &state.reads {
+        body.push(Statement::Let(LetBinding {
+            name: read.post.clone(),
+            ty: Some(LetType::I64),
+            mutable: true,
+            init: Init::Expression(expression(&read.pre)?),
+        }));
+    }
+    let subject_arguments = state
+        .reads
+        .iter()
+        .map(|read| format!("&mut {}", read.post))
+        .chain(
+            state
+                .parameters
+                .iter()
+                .map(|parameter| parameter.drawn.clone()),
+        )
+        .collect::<Vec<_>>();
+    body.push(Statement::Let(LetBinding {
+        name: "subject".to_owned(),
+        ty: Some(LetType::Unit),
+        mutable: false,
+        init: Init::Expression(expression(format!(
+            "{}({})",
+            request.subject_path,
+            subject_arguments.join(", ")
+        ))?),
+    }));
+    for read in &state.reads {
+        body.push(Statement::ProducedResultDomainAssert {
+            condition: expression(format!(
+                "{post} >= {} && {post} <= {}",
+                crate::kani::abi::i64_literal(read.minimum),
+                crate::kani::abi::i64_literal(read.maximum),
+                post = read.post
+            ))?,
+            message: "the produced V2 state field lies in its admitted domain".to_owned(),
+        });
+    }
+    // The expectation reads the produced state, so it follows the call.
+    body.push(binding(
+        "expected",
+        Init::Expression(expression(native_expected_expression(expectation)?)?),
+        false,
+    ));
+    for (name, source) in &state.oracle_inputs {
+        body.push(binding(
+            name,
+            Init::Expression(expression(format!(
+                "nx::NativeInteger::new(i128::from({source}))"
+            ))?),
+            false,
+        ));
+    }
+    body.push(binding(
+        "meter",
+        Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+        true,
+    ));
+    let mut oracle_arguments = state
+        .oracle_inputs
+        .iter()
+        .map(|(name, _)| Argument::Borrow(name.clone()))
+        .collect::<Vec<_>>();
+    oracle_arguments.push(Argument::BorrowMut("meter".to_owned()));
+    body.push(Statement::Call {
+        result: "outcome".to_owned(),
+        callee: "oracle_clause".to_owned(),
+        args: oracle_arguments,
+    });
+    let completed_prefix = append_arithmetic_probes(&mut body, &lowered.arithmetic)?;
+    body.extend([
+        Statement::Assert {
+            condition: expression(format!(
+                "(({completed_prefix}) && matches!(&outcome, {completed})) || (!({completed_prefix}) && matches!(&outcome, {refused}))",
+                completed = outcome_pattern(true, OutcomeKind::Completed),
+                refused = outcome_pattern(true, OutcomeKind::OutOfDomain),
+            ))?,
+            message: "the clause oracle preserves completed and refused semantic domains".to_owned(),
+        },
+        Statement::Assert {
+            condition: expression(format!(
+                "!({completed_prefix}) || (matches!(&outcome, {completed_true}) == expected)",
+                completed_true = outcome_pattern(true, OutcomeKind::CompletedTrue),
+            ))?,
+            message: "the clause oracle agrees with the independent checked condition".to_owned(),
+        },
+        Statement::Assert {
+            condition: expression(format!(
+                "matches!(&outcome, {})",
+                outcome_pattern(true, OutcomeKind::CompletedTrue)
+            ))?,
+            message: "the V2 postcondition holds for the produced state".to_owned(),
+        },
+    ]);
+    body.extend(forget_fat_values(true));
+    body.extend(sibling_meters.into_iter().map(Statement::Forget));
+    // Each sibling oracle sits in its own module: the oracles share item names.
+    let mut oracle_source = lowered.oracle.source.clone();
+    for (index, require) in state.requires.iter().enumerate() {
+        let _ = write!(
+            &mut oracle_source,
+            "\nmod requires_{index} {{\n{}\n}}\n",
+            require.oracle.source
+        );
+    }
+    let spec = HarnessSpec::new(
+        format!(
+            "V2 postcondition {}",
+            message_safe_node_label(&lowered.node_id)
+        ),
+        harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
+        oracle_source,
+        ProofKind::Proof,
+        body,
+        vec![Cover {
+            condition: expression(format!(
+                "({completed_prefix}) && matches!(&outcome, {completed})",
+                completed = outcome_pattern(true, OutcomeKind::Completed),
+            ))?,
+            message: "the V2 postcondition is evaluated on an admitted state and parameters"
+                .to_owned(),
+        }],
+        request.unwind,
+        KaniSolver::Cadical,
+    )?;
+    let rust = render::render(&spec)?;
+    let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
+        integer_representation: crate::kani::identity::ScalarIntegerRepresentation::Native,
+        native_integer_selection: lowered.oracle.native_integer_selection.clone(),
+        ceilings: request.ceilings,
+        package: lowered.package.clone(),
+        clause: lowered.node_id.clone(),
+        collection_precondition: None,
+        collection_operation: None,
+        kind: ObligationKind::Postcondition,
+        requires: state
+            .requires
+            .iter()
+            .map(|require| require.precondition.clone())
+            .collect(),
+        oracle_symbol: "oracle_clause".to_owned(),
+        subject_path: request.subject_path.to_owned(),
+        arguments,
+        state_fields,
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),
@@ -1432,6 +2024,7 @@ fn render_postcondition(
         collection_precondition: None,
         collection_operation: None,
         kind: ObligationKind::Postcondition,
+        requires: Vec::new(),
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: vec![ScalarObligationArgument {
@@ -1536,10 +2129,26 @@ impl NativeTerm {
     }
 }
 
+/// One clause input the independent native expectation reads, and the variable holding its value.
+struct NativeBinding<'a> {
+    side: ClauseInputSide,
+    name: &'a str,
+    symbolic: &'a str,
+}
+
+impl<'a> NativeBinding<'a> {
+    fn parameter(name: &'a str, symbolic: &'a str) -> Self {
+        Self {
+            side: ClauseInputSide::Parameter,
+            name,
+            symbolic,
+        }
+    }
+}
+
 fn native_term(
     term: &ClauseTerm,
-    input_name: &str,
-    symbolic_name: &str,
+    bindings: &[NativeBinding<'_>],
     arithmetic: &mut Vec<ArithmeticProbe>,
 ) -> Option<NativeTerm> {
     match term {
@@ -1555,21 +2164,24 @@ fn native_term(
                     .map(|value| format!("{value}i64")),
             })
         }
-        ClauseTerm::Input(input)
-            if input.name == input_name
-                && !input.boolean
-                && input.lower <= input.upper
-                && i64::try_from(input.lower).is_ok()
-                && i64::try_from(input.upper).is_ok() =>
-        {
+        ClauseTerm::Input(input) => {
+            let binding = bindings
+                .iter()
+                .find(|binding| binding.side == input.side && binding.name == input.name)?;
+            if input.boolean
+                || input.lower > input.upper
+                || i64::try_from(input.lower).is_err()
+                || i64::try_from(input.upper).is_err()
+            {
+                return None;
+            }
             Some(NativeTerm::Integer {
-                expression: format!("i128::from({symbolic_name})"),
+                expression: format!("i128::from({})", binding.symbolic),
                 lower: input.lower,
                 upper: input.upper,
-                small_expression: Some(symbolic_name.to_owned()),
+                small_expression: Some(binding.symbolic.to_owned()),
             })
         }
-        ClauseTerm::Input(_) => None,
         ClauseTerm::Operation {
             identity,
             arguments,
@@ -1577,7 +2189,7 @@ fn native_term(
         } => {
             if identity == "quire.op.numeric.narrow" {
                 let literal = crate::oracle::clause::admitted_literal_narrow(term)?;
-                return native_term(literal, input_name, symbolic_name, arithmetic);
+                return native_term(literal, bindings, arithmetic);
             }
             if let [left, right] = arguments.as_slice() {
                 let gate = match identity.as_str() {
@@ -1586,11 +2198,9 @@ fn native_term(
                     _ => None,
                 };
                 if let Some(invert) = gate {
-                    let left = native_term(left, input_name, symbolic_name, arithmetic)?
-                        .clone_boolean()?;
+                    let left = native_term(left, bindings, arithmetic)?.clone_boolean()?;
                     let first_right = arithmetic.len();
-                    let right = native_term(right, input_name, symbolic_name, arithmetic)?
-                        .clone_boolean()?;
+                    let right = native_term(right, bindings, arithmetic)?.clone_boolean()?;
                     let condition = if invert {
                         format!("!({left})")
                     } else {
@@ -1610,7 +2220,7 @@ fn native_term(
             }
             let values = arguments
                 .iter()
-                .map(|argument| native_term(argument, input_name, symbolic_name, arithmetic))
+                .map(|argument| native_term(argument, bindings, arithmetic))
                 .collect::<Option<Vec<_>>>()?;
             match (identity.as_str(), values.as_slice()) {
                 ("quire.op.boolean.not", [value]) => Some(NativeTerm::Boolean(format!(
@@ -1972,7 +2582,7 @@ mod postcondition_signature_tests {
 mod native_probe_tests {
     use super::{
         bind_native_arithmetic_probes, escape_message_label, native_term, ArithmeticProbe,
-        NativeTerm,
+        NativeBinding, NativeTerm,
     };
     use crate::core::ir::clause::ClauseTerm;
     use crate::core::native_integer::{
@@ -1991,8 +2601,13 @@ mod native_probe_tests {
             arguments: vec![ClauseTerm::Integer(value.to_owned())],
             result_bound: Some((0, 1000)),
         };
-        let expectation =
-            |value: &str| native_term(&narrow(value), "amount", "amount_current", &mut Vec::new());
+        let expectation = |value: &str| {
+            native_term(
+                &narrow(value),
+                &[NativeBinding::parameter("amount", "amount_current")],
+                &mut Vec::new(),
+            )
+        };
         for (value, expected) in [("0", 0_i128), ("1000", 1000)] {
             assert!(
                 matches!(
@@ -2012,8 +2627,7 @@ mod native_probe_tests {
                     arguments: vec![ClauseTerm::Integer(value.to_owned())],
                     result_bound: Some((lower, upper)),
                 },
-                "amount",
-                "amount_current",
+                &[NativeBinding::parameter("amount", "amount_current")],
                 &mut Vec::new(),
             )
         };
@@ -2101,5 +2715,94 @@ mod native_probe_tests {
         bind_native_arithmetic_probes(&mut probes, &selection).expect("admitted typed plan");
         assert_eq!(probes[0].semantic_domain, Some((0, 1000)));
         assert_eq!(probes[1].operand_bounds, [(1, 1000), (2, 2)]);
+    }
+}
+
+#[cfg(test)]
+mod state_postcondition_shape_tests {
+    use super::{
+        record_state_input, state_parameters, state_reads, MachineScalar, ResultParameter,
+        ResultPostcondition, StateFieldDomains, StateParameter,
+    };
+    use crate::core::ir::clause::{ClauseInput, ClauseInputSide};
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedNodeId;
+
+    fn node(name: &str) -> CheckedNodeId {
+        serde_json::from_value(serde_json::json!({
+            "package": "state-shape-test",
+            "path": [name],
+            "ordinal": 0,
+        }))
+        .expect("checked node key")
+    }
+
+    fn input(
+        side: ClauseInputSide,
+        declaring: Option<CheckedNodeId>,
+        bounds: (i128, i128),
+    ) -> ClauseInput {
+        ClauseInput {
+            name: "balance".to_owned(),
+            side,
+            declaring_node_id: declaring,
+            boolean: false,
+            lower: bounds.0,
+            upper: bounds.1,
+        }
+    }
+
+    fn amount() -> Vec<StateParameter> {
+        vec![StateParameter {
+            name: "balance".to_owned(),
+            minimum: 0,
+            maximum: 100,
+            drawn: "parameter_balance_current".to_owned(),
+        }]
+    }
+
+    /// A non-integer parameter, a Boolean field, a field without a declaring node, a result
+    /// read, a parameter read over another domain, a field read over two domains and two fields
+    /// of one name each leave the shape unrendered.
+    #[trace("FR-015-AC-43", "TC-025")]
+    #[test]
+    fn every_unrepresentable_state_shape_is_refused() {
+        let boolean_parameter = ResultPostcondition {
+            result: None,
+            parameters: vec![ResultParameter {
+                name: "flag".to_owned(),
+                scalar: MachineScalar::Boolean,
+            }],
+        };
+        assert!(state_parameters(&boolean_parameter).is_none());
+
+        let mut fields = StateFieldDomains::new();
+        let declaring = node("account");
+        let mut boolean = input(ClauseInputSide::Current, Some(declaring.clone()), (0, 1));
+        boolean.boolean = true;
+        assert!(record_state_input(&mut fields, &[], &boolean).is_none());
+        let undeclared = input(ClauseInputSide::Current, None, (0, 100));
+        assert!(record_state_input(&mut fields, &[], &undeclared).is_none());
+        let result = input(ClauseInputSide::Result, None, (0, 100));
+        assert!(record_state_input(&mut fields, &[], &result).is_none());
+        let narrowed = input(ClauseInputSide::Parameter, None, (0, 50));
+        assert!(record_state_input(&mut fields, &amount(), &narrowed).is_none());
+        let declared = input(ClauseInputSide::Parameter, None, (0, 100));
+        assert!(record_state_input(&mut fields, &amount(), &declared).is_some());
+
+        let first = input(ClauseInputSide::Current, Some(declaring.clone()), (0, 100));
+        let second = input(ClauseInputSide::Pre, Some(declaring.clone()), (0, 99));
+        assert!(record_state_input(&mut fields, &[], &first).is_some());
+        assert!(record_state_input(&mut fields, &[], &second).is_none());
+
+        let mut twice = StateFieldDomains::new();
+        for owner in ["account", "vault"] {
+            let read = input(ClauseInputSide::Current, Some(node(owner)), (0, 100));
+            assert!(record_state_input(&mut twice, &[], &read).is_some());
+        }
+        assert!(state_reads(twice).is_none(), "two fields named balance");
+        let mut once = StateFieldDomains::new();
+        assert!(record_state_input(&mut once, &[], &first).is_some());
+        assert_eq!(state_reads(once).expect("one field").len(), 1);
     }
 }

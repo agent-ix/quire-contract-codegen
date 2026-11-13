@@ -530,7 +530,7 @@ fn negotiate_integer_policy(
     })
 }
 
-fn same_anchor_preconditions(
+pub(in crate::kani::generate) fn same_anchor_preconditions(
     package: &CheckedPackageV2,
     postcondition: &CheckedNodeId,
 ) -> Vec<CheckedNodeId> {
@@ -563,9 +563,9 @@ fn refuse_unrendered_postcondition_siblings(
         if state.kind != Some(ObligationKind::Postcondition) {
             continue;
         }
-        let scalar = match state.outcome {
-            Outcome::LoweredV2Clause(_) => true,
-            Outcome::LoweredCollectionOperation(_) => false,
+        let (scalar, renders_requires) = match &state.outcome {
+            Outcome::LoweredV2Clause(lowered) => (true, lowered.renders_requires()),
+            Outcome::LoweredCollectionOperation(_) => (false, false),
             _ => continue,
         };
         let mut missing = None;
@@ -592,7 +592,7 @@ fn refuse_unrendered_postcondition_siblings(
                     };
                     if !supported {
                         unsupported.get_or_insert(sibling);
-                    } else if scalar {
+                    } else if scalar && !renders_requires {
                         requires_not_rendered.get_or_insert(sibling);
                     }
                 }
