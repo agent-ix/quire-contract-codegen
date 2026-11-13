@@ -71,7 +71,7 @@ test` and holds no host-wide lock.
     `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`,
     `tests/state_frame_support/subject.rs` and the three Kani
     schemas must be found.
-12. `make ci` (NFR-006-AC-12): run `make -n ci` and assert no line contains `kani-gate` and no line contains `kani` other than `kani-mutations` (FR-055-AC-8).
+12. `make ci` (NFR-006-AC-12): assert that the prerequisite and recipe list of `ci` includes the target `kani-mutations`, and that neither the `kani-gate` recipe nor the `kani` lane command (the `make kani` recipe's `cargo test` invocation with `--ignored` and the lane filters) occurs in `ci`, directly or through its prerequisites (FR-055-AC-3).
 13. Inspection (NFR-006-AC-13, AC-15 to AC-17): for a Kani-touching pull request, observe the
     author run the actual full gate on the clean, stable candidate before opening it. Before merge,
     check that the current candidate contains the pull request's changes. Observe a fresh full gate on
@@ -87,7 +87,7 @@ The scope target is a pure function of the changed paths, renames included. The 
 only for a run in which every listed test ran and passed on a clean tree, serially,
 under the lock, with the `make kani` command line, and prints a `not run` or `failed` line otherwise,
 with a non-zero exit. The lane selects exactly the tests that carry its tag. `make ci` does not run
-the lane (it runs only `kani-mutations`). Before a Kani-touching pull request opens or merges, and before a tag is pushed, the actual
+the lane (it runs only the `kani-mutations` mutant runs, FR-055). Before a Kani-touching pull request opens or merges, and before a tag is pushed, the actual
 gate passes on its current clean candidate; a copied status line is insufficient.
 
 ## Implementation

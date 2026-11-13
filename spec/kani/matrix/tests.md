@@ -10,7 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-055 | FR-055-AC-1 through FR-055-AC-8 | TC-069 | 🚧 PLANNED (IR-1437): no `kani-mutations` target in CG; TC-069 has not run. |
+| FR-055 | FR-055-AC-1 through FR-055-AC-10 | TC-069 | 🚧 PLANNED (IR-1437): no `kani-mutations` target in CG; TC-069 has not run. |
 | FR-054 | FR-054-AC-1 through FR-054-AC-23 | TC-068 | 🚧 PLANNED (IR-1448): no option clause Kani harness; the scratch probe of the encoding is `docs/qualification/ir1448-kani-option-probe.md` and is not CG evidence; TC-068 controls have not run. |
 | FR-015 | FR-015-AC-152 through FR-015-AC-173 | TC-025 | 🚧 PLANNED (IR-1447): no control-construct lowering yet; the scratch probe of the forms is `docs/qualification/ir1447-kani-control-probe.md` and is not CG evidence; TC-025 step 57 controls have not run. |
 | FR-053 | FR-053-AC-1 through FR-053-AC-14 | TC-067 | 🚧 PLANNED (IR-1442): no float scalar Kani harness; needs the quire-exact float carrier (IR-1446) and the Contract IR float `requires_bound` ruling (IR-69); the FR-014 `sqrt`/`fma` derivation (IR-1502) is delivered; TC-067 controls have not run. |

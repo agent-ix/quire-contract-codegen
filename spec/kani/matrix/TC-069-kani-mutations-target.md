@@ -21,14 +21,18 @@ installed Kani (0.68.0 on terra) and runs through the Kani lane, one run at a ti
    exit zero, every mutant `pass`, and an unchanged working tree (FR-055-AC-1).
 2. Assert one output line per mutant run with harness, mutant and outcome, and a total; mutate the
    target to omit a line and require failure (FR-055-AC-2).
-3. Run `make -n ci` and assert it holds `kani-mutations` (FR-055-AC-3).
+3. Assert the prerequisite and recipe list of `ci` includes `kani-mutations` and holds neither the `kani-gate` recipe nor the `kani` lane command (FR-055-AC-3).
 4. With a stand-in that verifies one mutant, assert that mutant is `fail` and the exit is non-zero
    (FR-055-AC-4).
 5. Remove an anchor from a copy of the declaration, duplicate one, supply an uncompilable mutant,
-   and a stand-in that times out; assert a non-`pass` outcome and a non-zero exit each
-   (FR-055-AC-5). With no `cargo-kani` on `PATH`, assert all `unavailable` and non-zero
+   and a stand-in that times out or is inconclusive, and a stand-in that exits non-zero without
+   `VERIFICATION:- FAILED`; assert `malformed` for the anchor cases, `fail` for the others, and a
+   non-zero exit each (FR-055-AC-5, FR-055-AC-10). With no `cargo-kani` on `PATH`, assert all `unavailable` and non-zero
    (FR-055-AC-6).
-6. Inspect NFR-006-AC-12 and TC-045 step 12 for the amendment (FR-055-AC-8).
+6. Inspect NFR-006 (statement, Rationale, AC-12, AC-16, AC-19) and TC-045 step 12 for a consistent
+   narrow exception (FR-055-AC-8).
+   Run the target with a declaration of zero, then of two, mutants; assert exit 2, nothing run
+   (FR-055-AC-9).
 7. In the Kani lane with installed Kani, weaken one generated harness's proposition to trivially
    true, run the target, and require that harness's mutant `fail` and a non-zero exit; restore it
    and require zero (FR-055-AC-7).
