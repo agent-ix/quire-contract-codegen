@@ -22,13 +22,13 @@ use super::kani_graph_private::{
     DOMAIN, NODE, POPULATION, SOURCE,
 };
 use crate::{
-    kani::generate::graph::{field_edge, GraphRefusal},
+    kani::generate::graph::{field_edge, field_of, GraphRefusal},
     kani::generate::outcome::GraphUnsupportedReason as Reason,
     GraphWitness, StateClauseReplay,
 };
 use ix_trace_rs::trace;
 use qsl_replay::{DisagreementCause, WitnessSettlement};
-use quire_contract_model::{CheckedNodeId, CheckedTerm};
+use quire_contract_model::{CheckedNodeId, CheckedOperationMember, CheckedTerm};
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 
@@ -358,6 +358,7 @@ fn edge_domain() -> Vec<u8> {
         field("bag", 0, 2, false, false, "required"),
         unbounded,
         across,
+        field("next2", 1, 1, false, true, "required"),
         scalar("count", 1, 1, false, "required"),
         scalar("optscalar", 1, 1, false, "optional"),
         scalar("flags", 0, 2, true, "required"),
@@ -449,4 +450,83 @@ fn field_edge_refusals_are_typed_and_name_their_input() {
         field_edge(&authored.package, &clause, &node, "next").map(|_| ()),
         Err(GraphRefusal::Unsupported(Reason::PopulationTypeMismatch))
     );
+}
+
+/// The field an operation names is read only from a `reaches_field` operation's field member: a
+/// `reaches_field` whose member is another shape or absent is refused, and is never read as a
+/// relationship end; any other operation names no field.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn a_reaches_field_without_a_field_member_is_refused_not_read_as_another_form() {
+    let authored = authored("not reaches(self, self, next)", 1);
+    let node = authored.clause.clone();
+    let end = CheckedOperationMember::RelationshipEnd {
+        declaration: node.clone(),
+        name: "next".into(),
+        destination_type: node.clone(),
+        population: None,
+    };
+    let field = CheckedOperationMember::Field {
+        declaration: node.clone(),
+        name: "next".into(),
+        read_form: None,
+    };
+    let refused = Err(GraphRefusal::Unsupported(Reason::FieldNotAdmitted));
+    assert_eq!(
+        field_of(Some("quire.op.model.reaches_field"), Some(&end)),
+        refused
+    );
+    assert_eq!(
+        field_of(Some("quire.op.model.reaches_field"), None),
+        refused
+    );
+    assert_eq!(
+        field_of(Some("quire.op.model.reaches_field"), Some(&field)),
+        Ok(Some((&node, "next")))
+    );
+    assert_eq!(
+        field_of(Some("quire.op.model.reaches"), Some(&end)),
+        Ok(None)
+    );
+    assert_eq!(
+        field_of(Some("quire.op.model.reaches"), Some(&field)),
+        Ok(None)
+    );
+}
+
+/// The followed field is part of the edge identity: two fields of one declaring type and one
+/// shape (`next` and `next2`, each a `Reference`) differ only by name and still yield different
+/// identities, a field of another shape differs too, and equal inputs yield equal identities.
+#[trace("TC-025", "FR-015-AC-100")]
+#[test]
+fn the_followed_field_is_part_of_the_edge_identity() {
+    let authored = authored_over(
+        edge_domain(),
+        "not reaches(self, self, next)",
+        3,
+        &["Graph"],
+    );
+    let node = declaring_type(&authored);
+    let identity = |name: &str| {
+        field_edge(&authored.package, &node, &node, name)
+            .map(|edge| edge.identity(edge_upper(name)))
+            .unwrap_or_else(|refusal| panic!("{name}: {refusal:?}"))
+    };
+    let (next, next2, maybe) = (identity("next"), identity("next2"), identity("maybe"));
+    assert_eq!(
+        (next.lower, next.upper, next.ordered, next.unique),
+        (next2.lower, next2.upper, next2.ordered, next2.unique)
+    );
+    assert_ne!(next, next2);
+    assert_ne!(next, maybe);
+    assert_eq!(next, identity("next"));
+    assert_eq!(next.field.as_deref(), Some("next"));
+}
+
+fn edge_upper(name: &str) -> u64 {
+    if name == "many" {
+        2
+    } else {
+        1
+    }
 }

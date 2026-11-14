@@ -60,3 +60,19 @@ But on the committed lock they cannot pass, only fail.
 | FR-015-AC-107 | examined | field-edge located like any other; two-field condition `UnsupportedClaimShape` when linked |
 | FR-015-AC-108 | examined | typed refusals; `PopulationUnavailable`; `NotReachesApplication` on older IR |
 | TC-025 | context_only | slice D delivers field-edge healthy and mutant controls against QSL-1904 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | Leftover from FND-001. `the_followed_field_changes_the_harness_identity_and_equal_inputs_regenerate_it` is still bound to FR-015-AC-100, and on the committed lock it still asserts the refusal for `next` and returns. The new seam tests check `Edge.field` but not `GraphEdgeIdentity`, so the field-edge part of AC-100 (the followed field changes the identity) has no executed evidence here. Scenario: dropping `field: end.field` from the identity in `lower_graph` merges green. Fix: state AC-100's field-edge part as PARTIAL on QSL-1904 in the spec; or drop the AC-100 tag until the link lands. | tests/it/kani_obligations_symbolic_graphs.rs:431-440; src/kani/generate/graph.rs:289-292 |
+
+## Dispositions
+
+Round 1 (head 91b274b2).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-98 and AC-105 are now bound to `the_member_type_decides_the_field_edge_domain`, which runs the member-type mapping on the committed lock (M1 and M4 die). The AC-100 leftover is tracked as FND-004. |
+| FND-002 | fixed | `field_edge_refusals_are_typed_and_name_their_input` asserts `RequiresBound(declaration)`, `FieldNotAdmitted`, `FieldEdgeNotReference` (Boolean, Option of Boolean, Collection of Boolean) and `PopulationTypeMismatch` (a target of another type, and a population of another type). |
+| FND-003 | fixed | The local `harness()` asserts the population link with the message "this control needs QSL to link reaches_field to its population (QSL-1904)", and AC-106 says the controls stop at generation without the link. |

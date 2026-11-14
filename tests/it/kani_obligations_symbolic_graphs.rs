@@ -382,6 +382,7 @@ fn emitted_field(authored: &Authored, path: &[usize]) -> Option<KaniGraphObligat
 
 #[trace("TC-025", "FR-015-AC-98")]
 #[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-108")]
 #[test]
 fn field_edge_domains_use_the_population_and_the_member_type_multiplicity() {
     // `next` is a `Reference` (exactly one target), `maybe` an `Option` (none or one) and

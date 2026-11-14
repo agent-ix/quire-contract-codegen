@@ -66,6 +66,21 @@ pub(crate) struct Edge {
     pub(crate) unique: bool,
 }
 
+impl Edge {
+    /// The edge as the harness identity records it, with its finite upper bound.
+    pub(crate) fn identity(self, upper: u64) -> GraphEdgeIdentity {
+        GraphEdgeIdentity {
+            declaration: self.declaration,
+            field: self.field,
+            forward: self.forward,
+            lower: self.lower,
+            upper,
+            ordered: self.ordered,
+            unique: self.unique,
+        }
+    }
+}
+
 /// A claim whose population and edge domains are both finite and admitted.
 pub(super) struct LoweredGraph {
     package: ContractSourceV1,
@@ -288,15 +303,7 @@ pub(super) fn lower_graph(
         population: population.binding,
         object_type: population.object_type,
         maximum,
-        edge: GraphEdgeIdentity {
-            declaration: end.declaration,
-            field: end.field,
-            forward: end.forward,
-            lower: end.lower,
-            upper,
-            ordered: end.ordered,
-            unique: end.unique,
-        },
+        edge: end.identity(upper),
         condition,
     })
 }
@@ -344,10 +351,22 @@ fn field_member<'a>(
     let Some(CheckedTerm::Application { operation, .. }) = package.term(application) else {
         return Ok(None);
     };
-    if operation.identity() != Some("quire.op.model.reaches_field") {
+    field_of(
+        operation.identity(),
+        operation.read().ok().and_then(|read| read.member),
+    )
+}
+
+/// The field a `reaches_field` operation names: `None` for any other operation, and a refusal
+/// for a `reaches_field` whose member is absent or not a field.
+pub(crate) fn field_of<'a>(
+    identity: Option<&str>,
+    member: Option<&'a CheckedOperationMember>,
+) -> Result<Option<(&'a CheckedNodeId, &'a str)>, GraphRefusal> {
+    if identity != Some("quire.op.model.reaches_field") {
         return Ok(None);
     }
-    match operation.read().ok().and_then(|read| read.member) {
+    match member {
         Some(CheckedOperationMember::Field {
             declaration, name, ..
         }) => Ok(Some((declaration, name))),

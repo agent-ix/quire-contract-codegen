@@ -90,3 +90,42 @@ untested, and the relationship-end identity non-change is untested.
 | tests/it/kani_graph_field_private.rs | examined | 1 native replay test (runs) + 6 `#[ignore]` installed-Kani controls (panic at `harness()` on the committed lock) |
 | tests/it/kani_obligations_symbolic_graphs.rs field-edge tests | examined | `emitted_field` / `links_population` dual-branch gate |
 | IR c8dca8c6 reaches_application | context_only | `(operation.identity() == Some("quire.op.model.reaches")).then_some(operation)` |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The new `field_member` refusal is untested. A `reaches_field` member that cannot be read as a field now returns `Err(FieldNotAdmitted)` instead of falling through to `relationship_edge`, but no test reaches that branch: `field_member` is private, and on the committed lock `domain_of` exits earlier. In round 1, mutant M5 (that arm reverted to `Ok(None)`, the old fall-through) survives both the focused lib and `it` suites. Scenario: a regression back to the fall-through, which gives a relationship-end accessor reason for a field-edge claim, merges green. Fix: make `field_member` reachable through the same seam and assert `FieldNotAdmitted` on an application whose member is not a `Field`; or accept it as covered by inspection. | src/kani/generate/graph.rs:340-356 |
+
+## Dispositions
+
+Round 1 (head 91b274b2, `git diff ec0646b1..91b274b2`). The mutants were run in a scratch copy of
+the head with my own target dir under flock, against `--lib kani_graph` and
+`--test it kani_obligations_symbolic_graphs`.
+
+- **Baseline:** 14 + 23 tests pass.
+- **Killed:**
+  - M1 (Option lower bound 0→1), by `the_member_type_decides_the_field_edge_domain`;
+  - M4 (OrderedSet not unique), by `the_member_type_decides_the_field_edge_domain`;
+  - M3 (`field` always serialized), by `relationship_domains_use_the_population_and_the_typed_destination_multiplicity`;
+  - M2 (empty Option replayed as present), by `qsl_replay_judges_a_concrete_field_graph_by_the_authored_clause`.
+- **Survived:** M5 (FND-007).
+
+I checked by reading that the generated harness text is unchanged. Rendering code is untouched, and
+every successful `field_edge` returns the same `Edge` values as at ec0646b1. The changes only move
+or add refusals: an unbounded Collection still yields `RequiresBound(declaration)`, now raised in
+`field_edge` instead of `lower_graph`. So the earlier local-composition Kani verdicts are not
+invalidated by this round. I could not confirm it empirically, because the committed lock cannot
+generate a field-edge harness.
+
+Relationship-end identity bytes are unchanged: `relationship_edge` is untouched, and the new
+no-`field`-key assertion kills M3.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `field_edge` is `pub(crate)` and takes the object type. `the_member_type_decides_the_field_edge_domain` runs the mapping on the committed lock for Reference, Option, Sequence, Set, OrderedSet and Bag. M1 and M4 die. |
+| FND-002 | fixed | `emitted_field` and the separate-items test now pin exactly `NotReachesApplication`, so a change of reason fails. |
+| FND-003 | fixed | `relationship_domains_use_the_population_and_the_typed_destination_multiplicity` asserts that a relationship-end identity has no `field` key. M3 dies. |
+| FND-004 | fixed | The test asserts `IllTyped` and `operator-ineligible`. |
+| FND-005 | fixed | `field_member` returns `Err(FieldNotAdmitted)` for an unreadable or non-field `reaches_field` member. The new branch is untested; see FND-007. |
+| FND-006 | fixed | The doc is updated. The snapshot identity and model encode failures map to `Document(Encode)` via `preimage_value`. |

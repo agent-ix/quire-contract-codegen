@@ -62,3 +62,14 @@ one evidence citation points at a test that is not tagged to the AC it supports.
 | FR-015 prose (lines 116, 128, 149, 164, 213) | examined | graph clauses are PARTIAL: the relationship-end form ... and the field-edge form ... are both implemented |
 | TC-025 | examined | Slice D delivers the field-edge healthy and mutant controls (... they run only against a QSL that links `reaches_field` to its population, QSL-1904). |
 | tests.md | examined | the field-edge installed-Kani and replay controls ... ran against QSL's `reaches_field` population link (QSL-1904) before it reached QSL main, so they are PARTIAL until re-run |
+
+## Dispositions
+
+Round 1 (head 91b274b2). `quire validate` of FR-015: no new warnings. The spec diff adds no revision
+pins or hashes.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-98 and AC-108 now say that with the Contract IR in the lock the claim is refused `NotReachesApplication`. With an IR that accepts the form and a QSL without the link, the reason is `PopulationUnavailable`, "which those tests do not yet pin". No revision pins. |
+| FND-002 | fixed | AC-106 now says: "On a package without QSL's population link these controls stop at generation with a message naming the missing link (QSL-1904), not a run result." |
+| FND-003 | still-open | The AC-108 row still lists `field_edge_domains_use_the_population_and_the_member_type_multiplicity` "and its siblings" under "Test (... AC-108-tagged)". The test still carries `#[trace]` only for AC-98 and AC-105 (tests/it/kani_obligations_symbolic_graphs.rs:383-386), so the matrix does not bind it to AC-108. Fix: one `#[trace("TC-025", "FR-015-AC-108")]` line, or move the citation out of the AC-108-tagged list. |
