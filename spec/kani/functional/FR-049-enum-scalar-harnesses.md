@@ -17,6 +17,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-039
     type: depends_on
+  - target: ix://agent-ix/quire-exact/FR-407
+    type: references
 ---
 # FR-049: Generate enum scalar comparison harnesses
 
@@ -26,8 +28,9 @@ When an admitted request selects an `enum` scalar comparison node
 (`quire.op.enum.eq`, `.ne`, `.lt`, `.le`, `.gt` or `.ge`) over an admitted enum
 declaration (eq and ne over any admitted declaration; lt, le, gt and ge over an
 `ordered enum` declaration only), CG SHALL generate a bounded Kani row proving that the
-generated enum oracle of
-[FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) agrees with a
+native enum comparison of quire-exact
+([FR-407](ix://agent-ix/quire-exact/FR-407), `compare_native_enum` over two
+`NativeEnum` carriers) agrees with a
 native expression of the same comparison over every pair of declared members.
 Today such a node settles as `unsupported` / `OperationNotRendered`
 (negotiate.rs, scalar lowering `NoRenderer`); this row replaces that
@@ -37,18 +40,20 @@ existing disposition, and the `ShadowFamilyNotBuilt` leaf row of
 composites.
 
 Ordering operators (`lt`, `le`, `gt`, `ge`) are meaningful only for an
-`ordered enum` declaration. The owner's `compare_enum` returns the ill-typed
+`ordered enum` declaration. `compare_native_enum` returns the ill-typed
 cause `UnorderedEnumOrdering` for an ordering operator over an unordered
 declaration, and `DistinctEnumDeclarations` for operands of different
-declarations. Both are `Err(IllTyped)` (surfaced as `OracleStop::IllTyped`),
+declarations. Both are `Err(IllTyped)` from `compare_native_enum`,
 not a Boolean outcome.
 
 The input authority and per-item accounting remain
 [FR-039](../../core/functional/FR-039-contract-package-consumption.md)'s one
 admitted ContractPackage. This requirement defines required meaning, not a new
-IR schema or a currently available Rust API. Enum semantics (member identity,
-declared order, `compare_enum`) belong to the QSV owner through FR-014; CG does
-not reimplement them.
+IR schema or a currently available Rust API. The enum carrier, its construction and its comparison
+(`NativeEnum`, `from_member`, `from_index`, `compare_native_enum`) belong to
+quire-exact (FR-407); the checked member list and ordered flag come from the
+owner route ([FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md)).
+CG does not reimplement them.
 
 ## Inputs
 
@@ -62,7 +67,7 @@ not reimplement them.
 
 ## Outputs
 
-A supported item has its generated enum oracle, native expression, harness,
+A supported item has its native enum comparison, native expression, harness,
 symbolic input encoding correspondence and source-associated proof record. A
 refused item has its named disposition and no Rust harness. Execution results
 and counterexample replay remain governed by
@@ -79,18 +84,26 @@ The index to member mapping is the declared member order of the admitted
 declaration. Operand indices are drawn independently, covering equal, unequal
 and every ordered pair.
 
-The harness SHALL build each operand through the owner's checked member
-identity for its index.
+At generation time CG SHALL run `from_member` over the `EnumShape` the owner
+route admitted, and over each checked member of it, and SHALL use that shape
+as supplied: a shape CG derived, renamed or rebuilt is not the owner-admitted
+shape. `from_member` refuses a member the shape does not admit at its position
+with `MemberNotInShape` ([FR-407-AC-3](ix://agent-ix/quire-exact/FR-407)), so a
+minted identity (same position, different key) yields no operand. Inside the
+proof the harness builds each operand with `from_index(tag, ordered, index,
+count)`, so the proof holds no variant list and no heap value. The carrier
+holds the member's rank, the member count, the ordered flag and an opaque
+declaration tag, so the `eq` and `ne` proofs are over rank only.
 
 The harness SHALL NOT mint, rename or reorder members.
 
-When asserting, the harness SHALL compare the oracle's `Outcome<bool>` against
+When asserting, the harness SHALL compare the native comparison's `Outcome<bool>` against
 a native expression of the operator over the two indices: `==`, `!=`, `<`,
-`<=`, `>`, `>=` respectively. Equality and inequality follow member identity;
+`<=`, `>`, `>=` respectively. Equality and inequality are over rank;
 ordering follows declared position and applies to an `ordered enum` only.
 
 The harness SHALL require `Completed` with the native Boolean. `Incomplete` is
-the only non-Completed outcome `compare_enum` returns for admitted operands; it
+the only non-Completed outcome `compare_native_enum` returns for admitted operands; it
 is never an assumed-away input or a successful result.
 
 If an ordering operator is requested over an unordered declaration, or the
@@ -98,7 +111,7 @@ operands belong to different declarations, then CG SHALL refuse the item with
 the typed ill-typed cause (`UnorderedEnumOrdering` or
 `DistinctEnumDeclarations`), source association and no harness.
 
-If the oracle's `Err(OracleStop::IllTyped)` path is reached at run time, then
+If the comparison's `Err(IllTyped)` path is reached at run time, then
 CG SHALL report a non-`Verified` outcome retaining the ill-typed cause.
 
 If the owner route does not supply the declaration's complete checked member
@@ -134,12 +147,12 @@ unavailable the item is `unsupported` with no harness.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-049-AC-1 | For `eq` and `ne` over an admitted enum declaration of at least three members, and for each of `lt`, `le`, `gt` and `ge` over an `ordered enum` of at least three members, CG generates one harness whose oracle is FR-014's generated enum comparison and whose expected value is the native operator over indices. Oracle and native sides come from the same admitted node and retain its source association. | Test |
+| FR-049-AC-1 | For `eq` and `ne` over an admitted enum declaration of at least three members, and for each of `lt`, `le`, `gt` and `ge` over an `ordered enum` of at least three members, CG generates one harness whose generated side is quire-exact's `compare_native_enum` over carriers and whose expected value is the native operator over indices. The comparison and native sides come from the same admitted node and retain its source association. | Test |
 | FR-049-AC-2 | The symbolic domain is exactly the declared members: each operand index is an `i64` constrained to `0..member_count`, every ordered pair is reachable and no out-of-range index is reachable. Admitting one extra index, dropping the last member or fixing one operand to a constant fails the correspondence check. | Test |
-| FR-049-AC-3 | Operand values are built from the owner's checked member identities in declared order. A minted member identity (same position, different key) makes the `eq` or `ne` proof fail; a member list reordered relative to the declaration makes the ordering proofs over an `ordered enum` fail. Ordering operators are not claimed to detect a minted identity, since they compare position. | Test |
-| FR-049-AC-4 | The assertion requires `Completed` with the native Boolean and no assumption depends on the oracle outcome. A control producing `Incomplete` keeps that typed outcome and cannot become `Verified`. A path reaching `OracleStop::IllTyped` is non-`Verified` and retains its cause. | Test |
+| FR-049-AC-3 | At generation time `from_member` is run over the owner-admitted `EnumShape` and the owner's checked members, in declared order; the shape is the owner route's own, not one CG derived. A minted member identity (same position, different key) is refused with `MemberNotInShape` (FR-407-AC-3) and no harness is built from it. A generator-mint mutant that emits a renamed key in both the shape it passes and the members it passes fails the comparison of that shape with the owner-admitted shape. Inside the proof operands are built with `from_index`, and the `eq` and `ne` proofs are over rank only and make no claim about minted identity. A member list reordered relative to the declaration makes the ordering proofs over an `ordered enum` fail. Ordering operators are not claimed to detect a minted identity. | Test |
+| FR-049-AC-4 | The assertion requires `Completed` with the native Boolean and no assumption depends on the comparison outcome. A control producing `Incomplete` keeps that typed outcome and cannot become `Verified`. A path reaching the comparison's `Err(IllTyped)` is non-`Verified` and retains its cause. | Test |
 | FR-049-AC-5 | The healthy comparison receives `Verified` only from a successful proof with every check and the completion cover satisfied. Each mutant of AC-6 produces a failed assertion with solver playback of in-domain indices, and replay through the owner route reproduces the disagreement. | Test |
-| FR-049-AC-6 | Mutants fail the operator that can detect them: `lt` rendered as `le` (and the converse) fails `lt` and `le`; `gt` as `ge` (and the converse) fails `gt` and `ge`; `eq` as `ne` (and the converse) fails `eq` and `ne`; reversed ordering fails `lt`, `le`, `gt` and `ge`; a minted identity fails `eq` and `ne`. | Test |
+| FR-049-AC-6 | Mutants fail the operator that can detect them: `lt` rendered as `le` (and the converse) fails `lt` and `le`; `gt` as `ge` (and the converse) fails `gt` and `ge`; `eq` as `ne` (and the converse) fails `eq` and `ne`; reversed ordering fails `lt`, `le`, `gt` and `ge`. | Test |
 | FR-049-AC-7 | Each emitted enum harness has exactly one completion cover after all assertions. An unsatisfied or unreported cover, failed unwind, timeout, memory exhaustion or missing verdict cannot yield `Verified`; classifications retain FR-017 and FR-029 distinctions. | Test |
 | FR-049-AC-8 | An ordering operator over an unordered declaration and operands of different declarations are each refused with the typed ill-typed cause, source association and no harness. An incomplete member list or ordered flag is `unsupported` naming the enum. Every requested item has exactly one disposition under FR-039 and a refused item does not alter a supported sibling. | Test |
 | FR-049-AC-9 | A leaf or member of any other family (text, rational, decimal, quantity, float, sequence, set, bag, ordered set) keeps its existing disposition, and an enum leaf inside a composite keeps the composite's `ShadowFamilyNotBuilt` disposition. | Test |
@@ -148,9 +161,10 @@ unavailable the item is `unsupported` with no harness.
 
 ## Dependencies
 
-- [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) owns enum
-  comparison semantics and the generated oracle; this requirement adds only the
-  bounded proof row over it.
+- quire-exact [FR-407](ix://agent-ix/quire-exact/FR-407) owns the carrier, its
+  construction and `compare_native_enum`; this requirement adds only the
+  bounded proof row over them. [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md)
+  supplies only the checked member list and ordered flag.
 - [FR-025](./FR-025-generated-subject-abi.md) owns the symbolic argument
   schema; the enum index row is planned there as a single `i64` binding.
 - [TC-063](../matrix/TC-063-enum-scalar-harnesses.md) defines the planned
