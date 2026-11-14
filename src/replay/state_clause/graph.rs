@@ -32,7 +32,7 @@ use super::{
     StateClauseHarnessMember, StateClauseReplay, StateClauseReplayError,
 };
 use crate::{
-    core::ir::node_key::checked_node_key,
+    core::{canonical::preimage_value, ir::node_key::checked_node_key},
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{KaniGraphObligationHarness, ObligationBinding, GRAPH_ASSERTION_MESSAGE},
@@ -335,6 +335,10 @@ fn names_occurrence(origin: &Origin, occurrence: &CheckedOccurrence) -> bool {
     origin.role().as_str() == role && origin.ordinal() == occurrence.ordinal
 }
 
+fn document_encode(cause: crate::core::canonical::DigestError) -> StateClauseReplayError {
+    StateClauseReplayError::Document(DocumentError::Encode(cause))
+}
+
 fn key(index: usize) -> String {
     format!("n{index}")
 }
@@ -503,12 +507,10 @@ impl StateClauseReplay {
                     field_values(package, &declaration, &name, &witness, &address.population)?;
                 let document = serde_json::json!({
                     "format": "quire.state.snapshot/v1",
-                    "identity": serde_json::to_value(IdentityMember::from(&snapshot_label))
-                        .map_err(|_| StateClauseReplayError::GraphWitnessNotInDomain)?,
+                    "identity": preimage_value(&IdentityMember::from(&snapshot_label)).map_err(document_encode)?,
                     "observation": "current",
                     "anchor": {"kind": anchor_member.kind, "name": anchor_member.name},
-                    "model": serde_json::to_value(&model)
-                        .map_err(|_| StateClauseReplayError::GraphWitnessNotInDomain)?,
+                    "model": preimage_value(&model).map_err(document_encode)?,
                     "populations": [{
                         "population": address.population,
                         "complete": true,

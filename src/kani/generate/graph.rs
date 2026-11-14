@@ -39,7 +39,8 @@ use crate::{
 };
 
 /// Why a located claim has no harness.
-pub(super) enum GraphRefusal {
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum GraphRefusal {
     Unsupported(Reason),
     RequiresBound(CheckedNodeId),
 }
@@ -52,16 +53,17 @@ impl From<Reason> for GraphRefusal {
 
 /// The edge a reachability application follows, from either form: a relationship end's typed
 /// multiplicity or a field's `CheckedMemberType`.
-struct Edge {
+#[derive(Debug)]
+pub(crate) struct Edge {
     /// The relationship declaration, or the object type that declares the field.
-    declaration: CheckedNodeId,
+    pub(crate) declaration: CheckedNodeId,
     /// The field's name; `None` for a relationship end.
-    field: Option<Box<str>>,
-    forward: bool,
-    lower: u64,
-    upper: Option<u64>,
-    ordered: bool,
-    unique: bool,
+    pub(crate) field: Option<Box<str>>,
+    pub(crate) forward: bool,
+    pub(crate) lower: u64,
+    pub(crate) upper: Option<u64>,
+    pub(crate) ordered: bool,
+    pub(crate) unique: bool,
 }
 
 /// A claim whose population and edge domains are both finite and admitted.
@@ -323,29 +325,33 @@ fn domain_of(
         CheckedSelectedPopulationSource::Admitted { package, selector }
     });
     let population = finite_population(select_population(source))?;
-    let edge = match field_member(package, application) {
-        Some((declaration, name)) => field_edge(package, &population, declaration, name)?,
+    let edge = match field_member(package, application)? {
+        Some((declaration, name)) => {
+            field_edge(package, &population.object_type, declaration, name)?
+        }
         None => relationship_edge(package, &population, application)?,
     };
     Ok((population, edge))
 }
 
-/// The declaring type and name of a `reaches_field` application's field member.
+/// The declaring type and name of a `reaches_field` application's field member; `None` for any
+/// other application. A `reaches_field` application whose member cannot be read as a field is
+/// refused `FieldNotAdmitted`, never read as a relationship end.
 fn field_member<'a>(
     package: &'a CheckedPackageV2,
     application: &CheckedNodeId,
-) -> Option<(&'a CheckedNodeId, &'a str)> {
-    let CheckedTerm::Application { operation, .. } = package.term(application)? else {
-        return None;
+) -> Result<Option<(&'a CheckedNodeId, &'a str)>, GraphRefusal> {
+    let Some(CheckedTerm::Application { operation, .. }) = package.term(application) else {
+        return Ok(None);
     };
     if operation.identity() != Some("quire.op.model.reaches_field") {
-        return None;
+        return Ok(None);
     }
-    match operation.read().ok()?.member? {
-        CheckedOperationMember::Field {
+    match operation.read().ok().and_then(|read| read.member) {
+        Some(CheckedOperationMember::Field {
             declaration, name, ..
-        } => Some((declaration, name)),
-        _ => None,
+        }) => Ok(Some((declaration, name))),
+        _ => Err(Reason::FieldNotAdmitted.into()),
     }
 }
 
@@ -382,9 +388,9 @@ fn relationship_edge(
 
 /// The edge a `Reference`, `Option<Reference>` or bounded `Collection<Reference>` field follows,
 /// every one drawn from the population of the field's own object type.
-fn field_edge(
+pub(crate) fn field_edge(
     package: &CheckedPackageV2,
-    population: &CheckedSelectedPopulation,
+    object_type: &CheckedNodeId,
     declaration: &CheckedNodeId,
     name: &str,
 ) -> Result<Edge, GraphRefusal> {
@@ -409,7 +415,9 @@ fn field_edge(
             let CheckedMemberType::Reference(target) = &**element else {
                 return Err(Reason::FieldEdgeNotReference.into());
             };
-            let (lower, upper) = bounds.map_or((0, None), |(lower, upper)| (lower, Some(upper)));
+            let (lower, upper) =
+                bounds.ok_or_else(|| GraphRefusal::RequiresBound(declaration.clone()))?;
+            let upper = Some(upper);
             let ordered = matches!(
                 kind,
                 CheckedCollectionKind::Sequence | CheckedCollectionKind::OrderedSet
@@ -422,9 +430,7 @@ fn field_edge(
         }
         _ => return Err(Reason::FieldEdgeNotReference.into()),
     };
-    if !same_node(package, target, &population.object_type)
-        || !same_node(package, declaration, &population.object_type)
-    {
+    if !same_node(package, target, object_type) || !same_node(package, declaration, object_type) {
         return Err(Reason::PopulationTypeMismatch.into());
     }
     Ok(Edge {

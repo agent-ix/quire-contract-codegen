@@ -282,6 +282,10 @@ fn relationship_domains_use_the_population_and_the_typed_destination_multiplicit
             (lower, upper, unique),
             "{edge}"
         );
+        // A relationship end's identity bytes are unchanged by the field-edge form: no `field` key.
+        let serialized = serde_json::to_value(found).unwrap();
+        assert!(serialized.get("field").is_none(), "{edge}: {serialized}");
+        assert_eq!(serialized["upper"], upper, "{edge}");
         let source = &harness.rust.contents;
         assert!(
             source.contains("object_count >= 0_i64 && object_count <= 3_i64"),
@@ -360,14 +364,17 @@ fn emitted_field(authored: &Authored, path: &[usize]) -> Option<KaniGraphObligat
         return Some(emitted(&authored.package, path));
     }
     let refusal = disposition(&authored.package, path, 8);
+    // The IR in the lock predates the field-edge form of `reaches_population`, so it refuses the
+    // application itself. An IR that accepts it refuses an unlinked application as
+    // `PopulationUnavailable`: that change fails this assertion, and the lock bump then states
+    // the new reason here on purpose.
     assert!(
-        refused_with(&refusal, &GraphUnsupportedReason::PopulationUnavailable)
-            || refused_with(
-                &refusal,
-                &GraphUnsupportedReason::PopulationAccessorRefused {
-                    refusal: GraphAccessorRefusal::NotReachesApplication
-                }
-            ),
+        refused_with(
+            &refusal,
+            &GraphUnsupportedReason::PopulationAccessorRefused {
+                refusal: GraphAccessorRefusal::NotReachesApplication
+            }
+        ),
         "{refusal:?}"
     );
     None
@@ -487,7 +494,10 @@ fn qsl_refuses_a_scalar_collection_field_edge_before_a_package_exists() {
         Ok(_) => panic!("a scalar field admits no reachability package"),
         Err(error) => error,
     };
-    assert!(!error.is_empty());
+    assert!(
+        error.contains("IllTyped") && error.contains("operator-ineligible"),
+        "{error}"
+    );
 }
 
 #[trace("TC-025", "FR-015-AC-107")]
@@ -919,9 +929,11 @@ fn a_field_edge_and_a_relationship_end_reachability_are_separate_items() {
             &GraphUnsupportedReason::UnsupportedClaimShape
         ));
     } else {
-        assert!(!matches!(
-            dispositions[1],
-            ObligationDisposition::Supported { .. }
+        assert!(refused_with(
+            &dispositions[1],
+            &GraphUnsupportedReason::PopulationAccessorRefused {
+                refusal: GraphAccessorRefusal::NotReachesApplication
+            }
         ));
     }
     assert!(refused_with(

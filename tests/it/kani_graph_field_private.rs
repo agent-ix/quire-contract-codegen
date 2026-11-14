@@ -17,14 +17,18 @@
 //! same authored claim over a field whose member type admits a missing edge.
 
 use super::kani_graph_private::{
-    assert_clause_holds, assert_reproduced, authored_over, generated, graph_inputs, harness,
-    mutated, replay, run_falsified, run_outcome, settled, transitivity, Authored, CLOSURE_STEP,
-    CONCLUSION, DOMAIN, NODE, POPULATION, SOURCE,
+    assert_clause_holds, assert_reproduced, authored_over, generated, graph_inputs, mutated,
+    replay, run_falsified, run_outcome, settled, transitivity, Authored, CLOSURE_STEP, CONCLUSION,
+    DOMAIN, NODE, POPULATION, SOURCE,
 };
-use crate::{GraphWitness, StateClauseReplay};
+use crate::{
+    kani::generate::graph::{field_edge, GraphRefusal},
+    kani::generate::outcome::GraphUnsupportedReason as Reason,
+    GraphWitness, StateClauseReplay,
+};
 use ix_trace_rs::trace;
 use qsl_replay::{DisagreementCause, WitnessSettlement};
-use quire_contract_model::CheckedTerm;
+use quire_contract_model::{CheckedNodeId, CheckedTerm};
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 
@@ -42,11 +46,20 @@ fn field(name: &str, lower: u64, upper: u64, ordered: bool, unique: bool, presen
 /// operation to anchor on. An object with no other field needs no value this replay path would
 /// have to invent.
 fn domain() -> Vec<u8> {
+    encode(&domain_value())
+}
+
+fn encode(document: &Value) -> Vec<u8> {
+    let limits = quire_canonical::Limits::new(1 << 20);
+    quire_canonical::to_vec(document, limits).expect("canonical domain document")
+}
+
+fn domain_value() -> Value {
     let construct = |name: &str, meaning: &str| {
         json!({"kind": {"module": DOMAIN, "name": name}, "moduleVersion": "1.0.0",
                "construct": {"identity": "none", "shape": "record", "members": {}, "meaning": meaning}})
     };
-    let document = json!({
+    json!({
         "contractVersion": "2.0.0",
         "canonicalization": {"algorithm": "rfc8785-v1"},
         "source": {"identity": SOURCE, "version": "1.0.0", "dialect": "spec-bundle"},
@@ -80,9 +93,52 @@ fn domain() -> Vec<u8> {
             "kind": {"module": DOMAIN, "name": "population"},
             "members": [NODE], "extent": "closed", "origin": generated(POPULATION)
         }]
-    });
-    let limits = quire_canonical::Limits::new(1 << 20);
-    quire_canonical::to_vec(&document, limits).expect("canonical domain document")
+    })
+}
+
+/// The declaring type of the claim's `reaches_field` member.
+fn declaring_type(authored: &Authored) -> CheckedNodeId {
+    authored
+        .package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find_map(|node| match &node.body {
+            CheckedTerm::Application { operation, .. }
+                if operation.identity() == Some("quire.op.model.reaches_field") =>
+            {
+                operation.member_declaration().ok().flatten().cloned()
+            }
+            _ => None,
+        })
+        .expect("the field member's declaring type")
+}
+
+/// The generated harness of a field-edge claim. The generator needs QSL to link the
+/// `reaches_field` application to its population (QSL-1904); on a package without the link it
+/// refuses, so these installed-Kani controls stop here with that reason instead of an opaque
+/// "claim is supported" failure.
+fn harness(authored: &Authored, path: &[usize]) -> crate::KaniGraphObligationHarness {
+    let application = authored
+        .package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            matches!(&node.body, CheckedTerm::Application { operation, .. }
+                if operation.identity() == Some("quire.op.model.reaches_field"))
+        })
+        .expect("a field-edge application")
+        .node_id
+        .clone();
+    assert!(
+        matches!(
+            authored.package.reaches_population(&application),
+            Ok(Some(_))
+        ),
+        "this control needs QSL to link reaches_field to its population (QSL-1904)"
+    );
+    super::kani_graph_private::harness(authored, path)
 }
 
 fn authored(condition: &str, maximum: u64) -> Authored {
@@ -118,23 +174,7 @@ fn assert_verified(authored: &Authored, path: &[usize], label: &str) {
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 fn qsl_replay_judges_a_concrete_field_graph_by_the_authored_clause() {
-    // The declaring type is the one the claim's own field member names.
-    let object = |name: &str, authored: &Authored| {
-        authored
-            .package
-            .resolved_graph()
-            .nodes
-            .iter()
-            .find_map(|node| match &node.body {
-                CheckedTerm::Application { operation, .. }
-                    if operation.identity() == Some("quire.op.model.reaches_field") =>
-                {
-                    operation.member_declaration().ok().flatten().cloned()
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("{name}: the field member's declaring type"))
-    };
+    let object = |_: &str, authored: &Authored| declaring_type(authored);
     for (field, edges, violated) in [
         ("next", vec![vec![0]], true),
         ("maybe", vec![vec![]], false),
@@ -289,4 +329,124 @@ fn real_kani_transitivity_without_closure_mutant_falsifies_a_field_claim_and_qsl
     let counterexample = run_falsified(&mutant, "field-transitivity-no-closure");
     let (_, result) = replay(&authored, &mutant, &counterexample, "unused");
     assert_clause_holds(&result);
+}
+
+fn scalar(name: &str, lower: u64, upper: u64, ordered: bool, presence: &str) -> Value {
+    let mut member = field(name, lower, upper, ordered, false, presence);
+    member["typeRef"] = json!("ix://quire/native/Boolean");
+    member
+}
+
+/// The fixture's `Node` with one field of each shape the member-type mapping reads, and a second
+/// object type to refer to.
+fn edge_domain() -> Vec<u8> {
+    let mut document = domain_value();
+    let other = "ix://ir268.test/domain/Other".to_owned();
+    let mut other_type = document["types"][0].clone();
+    other_type["identity"] = json!(other);
+    other_type["displayName"] = json!("Other");
+    other_type["fields"] = json!([]);
+    other_type["operations"] = json!([]);
+    let mut unbounded = field("loose", 0, 0, true, false, "required");
+    unbounded["multiplicity"] = json!({"lower": 0, "ordered": true, "unique": false});
+    let mut across = field("across", 1, 1, false, true, "required");
+    across["typeRef"] = json!(other);
+    let fields = document["types"][0]["fields"].as_array_mut().unwrap();
+    fields.extend([
+        field("set", 0, 2, false, true, "required"),
+        field("oset", 0, 2, true, true, "required"),
+        field("bag", 0, 2, false, false, "required"),
+        unbounded,
+        across,
+        scalar("count", 1, 1, false, "required"),
+        scalar("optscalar", 1, 1, false, "optional"),
+        scalar("flags", 0, 2, true, "required"),
+    ]);
+    document["types"].as_array_mut().unwrap().push(other_type);
+    encode(&document)
+}
+
+/// A field edge's lower, upper, ordered, unique and field name.
+type Shape = (u64, Option<u64>, bool, bool, Option<String>);
+
+fn edge_of(authored: &Authored, name: &str) -> Result<Shape, GraphRefusal> {
+    let node = declaring_type(authored);
+    field_edge(&authored.package, &node, &node, name).map(|edge| {
+        (
+            edge.lower,
+            edge.upper,
+            edge.ordered,
+            edge.unique,
+            edge.field.map(|name| name.to_string()),
+        )
+    })
+}
+
+/// The pure field-edge mapping over a QSL-emitted, IR-admitted package, with the declaring type
+/// and name read from the claim's own `reaches_field` member: it runs with or without QSL's
+/// population link, which `field_edge` does not read.
+#[trace("TC-025", "FR-015-AC-98")]
+#[trace("TC-025", "FR-015-AC-105")]
+#[test]
+fn the_member_type_decides_the_field_edge_domain() {
+    let authored = authored_over(
+        edge_domain(),
+        "not reaches(self, self, next)",
+        3,
+        &["Graph"],
+    );
+    for (name, lower, upper, ordered, unique) in [
+        ("next", 1, 1, false, true),
+        ("maybe", 0, 1, false, true),
+        ("many", 0, 2, true, false),
+        ("set", 0, 2, false, true),
+        ("oset", 0, 2, true, true),
+        ("bag", 0, 2, false, false),
+    ] {
+        assert_eq!(
+            edge_of(&authored, name),
+            Ok((lower, Some(upper), ordered, unique, Some(name.to_owned()))),
+            "{name}"
+        );
+    }
+}
+
+/// An unbounded `Collection`, an absent field and a field that is not a reference edge each
+/// refuse with their own typed reason and no edge, and a reference to another object type is not
+/// an edge of the population's type.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn field_edge_refusals_are_typed_and_name_their_input() {
+    let authored = authored_over(
+        edge_domain(),
+        "not reaches(self, self, next)",
+        3,
+        &["Graph"],
+    );
+    let node = declaring_type(&authored);
+    assert_eq!(
+        edge_of(&authored, "loose"),
+        Err(GraphRefusal::RequiresBound(node.clone()))
+    );
+    assert_eq!(
+        edge_of(&authored, "absent"),
+        Err(GraphRefusal::Unsupported(Reason::FieldNotAdmitted))
+    );
+    for name in ["count", "optscalar", "flags"] {
+        assert_eq!(
+            edge_of(&authored, name),
+            Err(GraphRefusal::Unsupported(Reason::FieldEdgeNotReference)),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        edge_of(&authored, "across"),
+        Err(GraphRefusal::Unsupported(Reason::PopulationTypeMismatch))
+    );
+    // A population of another object type is not the field's.
+    let clause = authored.clause.clone();
+    assert_eq!(
+        field_edge(&authored.package, &clause, &node, "next").map(|_| ()),
+        Err(GraphRefusal::Unsupported(Reason::PopulationTypeMismatch))
+    );
 }
