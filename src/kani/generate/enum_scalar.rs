@@ -324,7 +324,7 @@ fn render_text(
                 ty: None,
                 mutable: false,
                 init: Init::Expression(expr(format!(
-                    "match rt::NativeEnum::from_index(0_u64, {ordered}, {name} as u32, {count}_u32) {{ Ok(carrier) => carrier, Err(_) => panic!(\"the index is below the member count\") }}"
+                    "rt::NativeEnum::from_index(0_u64, {ordered}, {name} as u32, {count}_u32).expect(\"the index is below the member count\")"
                 ))?),
             }],
         });
@@ -335,11 +335,17 @@ fn render_text(
         mutable: true,
         init: Init::ScalarMeter(SCALAR_HARNESS_LIMITS),
     }));
+    body.push(Statement::Let(LetBinding {
+        name: "operator".to_owned(),
+        ty: None,
+        mutable: false,
+        init: Init::Expression(expr(format!("rt::ComparisonOperator::{operator:?}"))?),
+    }));
     body.push(Statement::Call {
         result: "outcome".to_owned(),
-        callee: "rt::compare_native_enum".to_owned(),
+        callee: "compare_native_enum".to_owned(),
         args: vec![
-            Argument::Value(format!("rt::ComparisonOperator::{operator:?}")),
+            Argument::Value("operator".to_owned()),
             Argument::Borrow("left_carrier".to_owned()),
             Argument::Borrow("right_carrier".to_owned()),
             Argument::BorrowMut("meter".to_owned()),
@@ -376,7 +382,8 @@ fn render_text(
     }));
     body.push(Statement::Forget("meter".to_owned()));
     body.push(Statement::Forget("outcome".to_owned()));
-    let oracle_source = "use quire_exact as rt;\n".to_owned();
+    let oracle_source =
+        "use quire_exact as rt;\nuse quire_exact::compare_native_enum;\n".to_owned();
     let spec = HarnessSpec::new(
         format!(
             "enum-scalar {} `{operation_identity}`",
@@ -442,4 +449,171 @@ fn render_text(
             crate::core::profile::oracle_crate_manifest(crate::EXACT_SCALAR_CRATE_NAME),
         )],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use qsl_replay::{
+        compile_admitted, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+    };
+    use quire_contract_model::{
+        CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
+    };
+    use quire_exact::VariantId;
+
+    const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
+profile v = \"quire.value.complete/v1\";\n\
+ordered enum Level { LOW, MID, HIGH }\n\
+enum Color { RED, GREEN }\n\
+function lt using v(a: Level, b: Level): Boolean pure { a < b }\n\
+function same using v(a: Color, b: Color): Boolean pure { a = b }\n";
+
+    /// The checked package, the owner-admitted `Level`, and the owner-admitted `Color`.
+    fn owners() -> (OwnerEnum, OwnerEnum) {
+        let compiled = compile_admitted(
+            CompileUnit {
+                source: SourceIdentity::new("test", "enum-scalar.native"),
+                package_name: "enum-scalar".to_owned(),
+                path: "enum-scalar.native",
+                bytes: SOURCE.as_bytes(),
+            },
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("the source compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(
+            compiled.package().bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) else {
+            panic!("IR admits the source");
+        };
+        let graph = CheckedGraph::from_checked(&package);
+        let context = compiled.context();
+        let resolve = |name: &str| {
+            let admitted = context
+                .enums()
+                .find(|item| item.qualified_name().iter().map(|p| p.as_str()).eq([name]))
+                .expect("declared enum");
+            let node = package
+                .resolved_graph()
+                .nodes
+                .iter()
+                .find(|node| {
+                    context.wire_graph().key(&node.node_id).ok().as_ref() == Some(admitted.key())
+                })
+                .expect("IR retains the declaration")
+                .node_id
+                .clone();
+            owner_enum(Some(context), &graph, &node).expect("the owner admits the enum")
+        };
+        (resolve("Level"), resolve("Color"))
+    }
+
+    fn renamed(shape: &EnumShape) -> Vec<VariantId> {
+        shape
+            .variants()
+            .map(|variant| {
+                VariantId::new(variant.owner().clone(), format!("{}_X", variant.case()))
+                    .expect("a non-empty variant name")
+            })
+            .collect()
+    }
+
+    #[trace("TC-063", "FR-049-AC-3")]
+    #[test]
+    fn owner_shape_and_members_yield_one_carrier_per_member_in_declared_order() {
+        let (level, _) = owners();
+        let carriers = admit_carriers(&level.shape, &level.members, &level.shape, 0).unwrap();
+        assert_eq!(
+            carriers.iter().map(NativeEnum::index).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert!(carriers
+            .iter()
+            .all(|c| c.is_ordered() && c.member_count() == 3));
+    }
+
+    #[trace("TC-063", "FR-049-AC-3")]
+    #[test]
+    fn a_minted_member_identity_at_the_same_position_yields_no_carrier() {
+        let (level, _) = owners();
+        let minted = renamed(&level.shape)
+            .into_iter()
+            .zip(0..)
+            .map(|(variant, rank)| EnumMember::new(variant, rank))
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            admit_carriers(&level.shape, &minted, &level.shape, 0),
+            Err(EnumScalarRefusal::MemberNotInShape)
+        ));
+    }
+
+    #[trace("TC-063", "FR-049-AC-3")]
+    #[test]
+    fn a_generator_mint_in_both_shape_and_members_is_not_the_owner_admitted_shape() {
+        let (level, _) = owners();
+        let variants = renamed(&level.shape);
+        let shape = EnumShape::new(level.shape.is_ordered(), variants.clone());
+        let members = variants
+            .into_iter()
+            .zip(0..)
+            .map(|(variant, rank)| EnumMember::new(variant, rank))
+            .collect::<Vec<_>>();
+        // The minted pair is self-consistent: `from_member` alone would accept it.
+        assert!(admit_carriers(&shape, &members, &shape, 0).is_ok());
+        assert!(matches!(
+            admit_carriers(&shape, &members, &level.shape, 0),
+            Err(EnumScalarRefusal::ShapeNotOwnerAdmitted)
+        ));
+    }
+
+    #[trace("TC-063", "FR-049-AC-3")]
+    #[test]
+    fn a_member_list_reordered_against_the_declaration_yields_no_carrier() {
+        let (level, _) = owners();
+        let mut variants = level.shape.variants().cloned().collect::<Vec<_>>();
+        variants.swap(0, 2);
+        let reordered = variants
+            .into_iter()
+            .zip(0..)
+            .map(|(variant, rank)| EnumMember::new(variant, rank))
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            admit_carriers(&level.shape, &reordered, &level.shape, 0),
+            Err(EnumScalarRefusal::MemberNotInShape)
+        ));
+    }
+
+    #[trace("TC-063", "FR-049-AC-8")]
+    #[test]
+    fn ordering_an_unordered_declaration_and_distinct_declarations_are_ill_typed() {
+        let (level, color) = owners();
+        let cause = |operator, left: &OwnerEnum, right: Option<&OwnerEnum>| {
+            let count = u32::try_from(left.members.len()).unwrap();
+            match check_typed(operator, left, right, count) {
+                Err(EnumScalarRefusal::IllTyped { cause }) => Some(cause),
+                other => {
+                    assert!(other.is_ok(), "{other:?}");
+                    None
+                }
+            }
+        };
+        assert_eq!(
+            cause(ComparisonOperator::Less, &color, None),
+            Some(IllTypedCause::UnorderedEnumOrdering)
+        );
+        assert_eq!(
+            cause(ComparisonOperator::Equal, &level, Some(&color)),
+            Some(IllTypedCause::DistinctEnumDeclarations)
+        );
+        assert_eq!(cause(ComparisonOperator::Less, &level, None), None);
+        assert_eq!(cause(ComparisonOperator::Equal, &color, None), None);
+    }
 }
