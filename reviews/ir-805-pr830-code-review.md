@@ -76,3 +76,4 @@ ordinal only, a one-sided depth-cap boundary, and one `as` cast.
 | FND-001 | fixed | `names_occurrence` compares role and ordinal (src/replay/state_clause/graph.rs:303-315). A unit test covers the role, and the real-Kani test `real_kani_each_occurrence_replays_only_under_its_own_clause_name` checks both occurrences against both names. |
 | FND-002 | fixed | `four_nested_binders_are_the_deepest_supported_claim` emits a harness at four binders; the five-binder test still refuses. |
 | FND-003 | fixed | `u64::try_from(self.parameters.len() + nesting).map_err(|_| unsupported())?` (graph.rs:446). |
+| FND-004 | fixed | Round 2 (e2ea3c73): the test parses the playback, decodes it against the `two` end and asserts `Err(StateClauseReplayError::GraphWitnessNotInDomain)`. The doc comment now names the asserted guard. |
