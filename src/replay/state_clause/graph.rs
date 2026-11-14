@@ -173,6 +173,18 @@ impl<'a> GraphReplayInputs<'a> {
         self.witness = Some(witness);
     }
 
+    /// Test seam: as [`Self::with_witness`], for a witness of the field `name` of `declaration`.
+    #[cfg(test)]
+    pub(crate) fn with_field_witness(
+        &mut self,
+        witness: GraphWitness,
+        declaration: CheckedNodeId,
+        name: &str,
+    ) {
+        self.witness = Some(witness);
+        self.field = Some((declaration, name.to_owned()));
+    }
+
     /// Decodes a parsed falsified graph harness playback into the graph it drew. The slots are
     /// read in the generated draw order (`object_count`, `start`, `target`, then each row's degree
     /// and `upper` edge slots) and checked against the harness's own domain. That domain (population
@@ -327,48 +339,63 @@ fn key(index: usize) -> String {
     format!("n{index}")
 }
 
-/// The snapshot value of the followed field for every object: the drawn targets spelled as the
-/// field's `CheckedMemberType` states them. A field-edge claim keeps each edge in its source
-/// object's own field, so the snapshot carries no relationship entry and holds exactly that one
-/// field per object; an object type with further fields needs values this path does not invent,
-/// and QSL refuses the snapshot.
+/// The snapshot fields of every object: the followed field holds the drawn targets spelled as its
+/// `CheckedMemberType` states them (a field-edge claim keeps each edge in its source object's own
+/// field, so the snapshot carries no relationship entry), and every other reference field holds a
+/// neutral value the claim cannot read (the first object, no value, an empty collection). A field
+/// of another type needs a value this path does not invent: the replay is refused.
 fn field_values(
     package: &CheckedPackageV2,
     declaration: &CheckedNodeId,
     name: &str,
     witness: &GraphWitness,
     population: &str,
-) -> Result<Vec<serde_json::Value>, StateClauseReplayError> {
+) -> Result<Vec<serde_json::Map<String, serde_json::Value>>, StateClauseReplayError> {
     let reference =
         |to: usize| serde_json::json!({"reference": {"population": population, "key": key(to)}});
-    let member_type = package
+    let collection = |kind: &CheckedCollectionKind, targets: &[usize]| {
+        let kind = match kind {
+            CheckedCollectionKind::Sequence => "sequence",
+            CheckedCollectionKind::Set => "set",
+            CheckedCollectionKind::Bag => "bag",
+            CheckedCollectionKind::OrderedSet => "ordered-set",
+        };
+        serde_json::json!({kind: targets.iter().map(|to| reference(*to)).collect::<Vec<_>>()})
+    };
+    let fields = package
         .model_object_fields(declaration)
-        .ok()
-        .and_then(|fields| {
-            fields
-                .field(name)
-                .and_then(|field| field.member_type().cloned())
-        })
-        .ok_or_else(not_in_domain)?;
+        .map_err(|_| not_in_domain())?;
     witness
         .edges
         .iter()
-        .map(|targets| match (&member_type, targets.as_slice()) {
-            (CheckedMemberType::Reference(_), [to]) => Ok(reference(*to)),
-            (CheckedMemberType::Option(_), []) => Ok(serde_json::json!({"absent": {}})),
-            (CheckedMemberType::Option(_), [to]) => {
-                Ok(serde_json::json!({"present": reference(*to)}))
-            }
-            (CheckedMemberType::Collection { kind, .. }, targets) => {
-                let kind = match kind {
-                    CheckedCollectionKind::Sequence => "sequence",
-                    CheckedCollectionKind::Set => "set",
-                    CheckedCollectionKind::Bag => "bag",
-                    CheckedCollectionKind::OrderedSet => "ordered-set",
-                };
-                Ok(serde_json::json!({kind: targets.iter().map(|to| reference(*to)).collect::<Vec<_>>()}))
-            }
-            _ => Err(not_in_domain()),
+        .map(|targets| {
+            fields
+                .fields()
+                .iter()
+                .map(|field| {
+                    let member_type = field.member_type().ok_or_else(not_in_domain)?;
+                    let followed = field.name() == name;
+                    let value = match (member_type, followed, targets.as_slice()) {
+                        (CheckedMemberType::Reference(_), true, [to]) => reference(*to),
+                        (CheckedMemberType::Reference(_), false, _) => reference(0),
+                        (CheckedMemberType::Option(_), true, [to]) => {
+                            serde_json::json!({"present": reference(*to)})
+                        }
+                        (CheckedMemberType::Option(_), true, [])
+                        | (CheckedMemberType::Option(_), false, _) => {
+                            serde_json::json!({"absent": {}})
+                        }
+                        (CheckedMemberType::Collection { kind, .. }, true, targets) => {
+                            collection(kind, targets)
+                        }
+                        (CheckedMemberType::Collection { kind, .. }, false, _) => {
+                            collection(kind, &[])
+                        }
+                        _ => return Err(not_in_domain()),
+                    };
+                    Ok((field.name().to_owned(), value))
+                })
+                .collect()
         })
         .collect()
 }
@@ -489,7 +516,7 @@ impl StateClauseReplay {
                             serde_json::json!({
                                 "key": key(index),
                                 "type": address.object_type,
-                                "fields": {name.clone(): value},
+                                "fields": value,
                             })
                         }).collect::<Vec<_>>(),
                     }],
