@@ -188,7 +188,10 @@ add/subtract/multiply/divide/remainder admission and range/refusal behavior,
 including requests outside `i64`. Divide/remainder had only ground Rust
 `checked_div`/`checked_rem` checks for exact result, nonzero divisor and range,
 with no mutation control. Their retained QSL text used `/` and `%`; this slice
-claims no QSL division/modulo proof and passes none to IR-854. V2 supports symbolic
+claims no QSL division/modulo proof and passes none to IR-854. FR-015-AC-57's
+arithmetic family therefore excludes division and modulo until
+[FR-057](../functional/FR-057-integer-division-scalar-harnesses.md) (IR-854, verified by
+[TC-071](TC-071-integer-division-scalar-harnesses.md)) lands; `rem` stays excluded. V2 supports symbolic
 `i64` add/subtract/multiply/negate with independent `i128` assertions; it does not
 replace the old finite-request API. IR-858's differential reference renderer,
 authentic QSL-emitted AC-103 inputs, real healthy Add/Add-to-Subtract mutant and
