@@ -27,7 +27,10 @@ the FR-015 generator returns for the same items.
   fixtures serve.
 - The package alone: no claim map is built or supplied.
 - A package with a `quire.op.integer.rem` node, and the bounded-increment
-  package (`x + 1` over a parameter `Int[0, 9]`).
+  package (`x + 1` over a parameter `Int[0, 9]`). Amended by IR-854 (planned):
+  once FR-014-AC-81 makes `rem` derivable, the underivable-sibling node of steps
+  11 and 15 becomes another identity FR-014 still refuses, such as
+  `quire.op.numeric.narrow`, with the same expected results.
 - A `KaniGenerationContext` with a valid subject path and unwind `1`.
 - The routed backend `Candidate { identity: "kani" }`.
 - QSL RR-16's checked package and its occurrence-keyed requirement records:
