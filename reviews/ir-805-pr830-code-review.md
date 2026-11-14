@@ -62,3 +62,17 @@ ordinal only, a one-sided depth-cap boundary, and one `as` cast.
 | real_kani_transitivity_without_closure_mutant_falsifies_and_qsl_replay_disagrees | examined | asserts a 2-chain without a direct edge in the witness and `assert_clause_holds` |
 | real_kani_reversed_transitivity_claim_falsifies_and_qsl_replay_agrees_on_the_verdict | examined | asserts `Inconclusive`, `Violation`, `DisagreementCause::Witness{given: None, derived: Some}` |
 | one_node_under_two_clauses_is_two_items_with_different_identities | examined | two occurrences -> two identities; duplicate -> InvalidRequest; ordinal 99 -> MissingClaim |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The lower-bound-dropped mutant test asserts only `Falsified`. Its doc comment and AC-106 say QSL replay is skipped because the decoder refuses a degree below the end's lower bound, but the test never calls `decode_falsification` to assert that refusal, so the stated reason is unverified by any test. Non-vacuity still holds by construction: the healthy harness differs only in `degree_0 >= 2` and verifies, so the falsifying draw must have `degree_0 < 2`. Scenario: a decoder regression that admits a degree below `lower` goes unnoticed, and the spec's skip rationale silently stops being true. Assert `decode_falsification` returns `GraphWitnessNotInDomain` on this playback. | tests/it/kani_graph_private.rs:936-948 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `names_occurrence` compares role and ordinal (src/replay/state_clause/graph.rs:303-315). A unit test covers the role, and the real-Kani test `real_kani_each_occurrence_replays_only_under_its_own_clause_name` checks both occurrences against both names. |
+| FND-002 | fixed | `four_nested_binders_are_the_deepest_supported_claim` emits a harness at four binders; the five-binder test still refuses. |
+| FND-003 | fixed | `u64::try_from(self.parameters.len() + nesting).map_err(|_| unsupported())?` (graph.rs:446). |

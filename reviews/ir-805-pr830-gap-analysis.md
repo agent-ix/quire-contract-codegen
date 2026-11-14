@@ -49,3 +49,10 @@ earns.
 | FR-015-AC-105 | examined | For a graph claim the harness draws an object count in `[0, N]` of the one covering population ... PARTIAL (IR-805 slice A). |
 | FR-015-AC-108 | examined | A graph claim settles by the disposition sequence ... a claim form the encoding cannot express, each settle `unsupported` naming the input. PARTIAL (IR-805 slice A), evidence by branch. |
 | FR-015-AC-100 | context_only | For the graph family (AC-98), changing the claim's clause id or argument path ... changes the harness identity ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-106 now says the transitivity runs evidence the closure and the claim's lowering, NOT the `{0,3}` degree and target draws, and earn no edge-domain credit. A domain-dependent healthy claim was added over the `{2,3}` `two` end, with a Falsified lower-bound-dropped mutant, and the upper bound and target draws are listed as unevidenced. |
+| FND-002 | fixed | `real_kani_healthy_transitivity_verifies_over_a_zero_to_three_non_unique_end` and `real_kani_non_unique_transitivity_without_closure_mutant_falsifies_and_qsl_replay_disagrees` run on the non-unique `litter` end and are cited in AC-106. |

@@ -42,3 +42,11 @@ status headers were not updated.
 | FR-015-AC-107 | examined | Graph claims are located by `state_clause` node id and argument path ... PARTIAL (IR-805 slice A), evidence by clause ... Slice E: a graph claim is keyed by the clause node id and one of that node's own source occurrences ... Not evidenced: a function-body claim ... and the `reaches_field` form (slice D). |
 | FR-015-AC-98, -105, -108 | examined | Unchanged; PARTIAL (IR-805 slice A) stays accurate. |
 | FR-015-AC-100 | context_only | For the graph family (AC-98), changing the claim's clause id or argument path ... changes the harness identity |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The AC-106 header reads "PARTIAL (IR-805 slices A, B and E)". The not-delivered tail no longer lists slice E; it lists the `{0,3}` degree and target draws, the wrong-role mutant, slice D and slice C. |
+| FND-002 | fixed | The AC-107 header reads "PARTIAL (IR-805 slices A and E)" and its key is "node id, the node's source occurrence and argument path". AC-100's graph identity list names "the clause node's source occurrence". |
+| FND-003 | fixed | Line 164 now reads "...the wrong-role clause is NOT evidenced); slice E adds...". |

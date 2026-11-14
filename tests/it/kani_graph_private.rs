@@ -935,8 +935,8 @@ fn real_kani_every_object_reaches_over_a_two_to_three_end_verifies() {
 }
 
 /// Harness mutant: the draw's lower-bound assumption is dropped, so an object may have no edge
-/// and the claim is falsified. QSL's replay is not run: the decoder refuses a degree below the
-/// end's lower bound, which is the domain guard that rejects this out-of-domain graph.
+/// and the claim is falsified. QSL's replay is not run: the decoder refuses the counterexample's
+/// degree below the end's lower bound as `GraphWitnessNotInDomain`, the domain guard asserted here.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 #[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
@@ -944,7 +944,20 @@ fn real_kani_dropping_the_lower_bound_assumption_falsifies_the_every_object_clai
     let authored = authored(EVERY_OBJECT_REACHES, 3);
     let healthy = harness(&authored, &[1, 1]);
     let mutant = mutated(&healthy, "degree_0 >= 2", "degree_0 >= 0");
-    run_falsified(&mutant, "every-object-lower-dropped");
+    let counterexample = run_falsified(&mutant, "every-object-lower-dropped");
+    let playback = parse_assertion_playback(
+        &counterexample,
+        mutant.identity.harness_symbol.as_str(),
+        mutant.identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the actual backend playback parses");
+    let mut inputs = graph_inputs(&authored, &relationship("two"));
+    assert!(matches!(
+        inputs.decode_falsification(&mutant, &playback, UNBOUNDED),
+        Err(crate::StateClauseReplayError::GraphWitnessNotInDomain)
+    ));
 }
 
 /// One structure declared as `Graph` and `Other` is one clause node with two occurrences. A
