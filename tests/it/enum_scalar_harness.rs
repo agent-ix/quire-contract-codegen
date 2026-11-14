@@ -10,6 +10,7 @@ use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use super::admitted_enum_equality::application;
 use super::admitted_enum_equality::checked;
 use super::admitted_enum_fixture::compile;
+use super::routed_generation::{admitted_routing_input, kani_parts, route};
 
 const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
 profile v = \"quire.value.complete/v1\";\n\
@@ -48,7 +49,130 @@ impl Corpus {
             node_id: &self.node(function),
             ceilings: crate::common::proof_ceilings::proof_ceilings(),
             unwind: 1,
+            requirement_occurrence: None,
+            has_path_condition: false,
+            ordinal: 0,
         })
+    }
+
+    /// The corpus case through the routed path: QSL, Contract IR, `generate_routed_admitted`.
+    fn routed(
+        &self,
+        functions: &[&str],
+        admitted: bool,
+    ) -> quire_contract_codegen::RoutedGeneration {
+        let items = functions
+            .iter()
+            .enumerate()
+            .map(|(index, function)| route(index, &self.node(function)))
+            .collect::<Vec<_>>();
+        let input = admitted_routing_input(&self.package, &items);
+        let mut records = std::collections::BTreeMap::new();
+        let items = items
+            .into_iter()
+            .zip(&input.positions)
+            .map(|(item, position)| {
+                let quire_contract_codegen::ContractRequestPosition::DriverItem {
+                    result_selection,
+                    node_id,
+                } = position
+                else {
+                    panic!("a driver position, got {position:?}");
+                };
+                let ordinal = self
+                    .package
+                    .source_map()
+                    .iter()
+                    .find(|entry| {
+                        &entry.node_id == node_id
+                            && entry.role == quire_contract_model::CheckedOccurrenceRole::Expression
+                    })
+                    .expect("the node has an expression occurrence")
+                    .ordinal;
+                let occurrence = quire_contract_codegen::RequirementOccurrence {
+                    node_id: node_id.clone(),
+                    role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                    ordinal,
+                };
+                let result_bound = self
+                    .package
+                    .resolved_graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == node_id)
+                    .expect("the node")
+                    .semantic_type
+                    .clone();
+                records.insert(
+                    occurrence.clone(),
+                    quire_contract_codegen::RequirementRecordInput {
+                        result_bound: result_bound.clone(),
+                        conversion_context: None,
+                        path_condition: Vec::new(),
+                    },
+                );
+                item.with_scalar_selection(&input.package, result_selection.clone())
+                    .with_requirement(quire_contract_codegen::RoutedRequirement {
+                        occurrence,
+                        result_bound,
+                        conversion_context: None,
+                        path_condition: Vec::new(),
+                    })
+            })
+            .collect::<Vec<_>>();
+        let records = quire_contract_codegen::RequirementRecords::new(records);
+        let contexts = quire_contract_codegen::GenerationContexts {
+            kani: Some(quire_contract_codegen::KaniGenerationContext {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                subject_path: "crate::subject",
+                unwind: 1,
+                requirement_records: &records,
+            }),
+        };
+        if admitted {
+            quire_contract_codegen::generate_routed_admitted(
+                input.source,
+                &input.package,
+                &input.positions,
+                &items,
+                &contexts,
+                self.compiled.context(),
+                false,
+            )
+        } else {
+            quire_contract_codegen::generate_routed(
+                input.source,
+                &input.package,
+                &input.positions,
+                &items,
+                &contexts,
+            )
+        }
+        .expect("the routed call generates")
+    }
+
+    /// The routed harness of one corpus function and the manifest its crate builds under.
+    fn routed_harness(
+        &self,
+        function: &str,
+    ) -> (
+        quire_contract_codegen::KaniScalarObligationHarness,
+        quire_contract_codegen::Artifact,
+    ) {
+        let generation = self.routed(&[function], true);
+        let manifest = generation
+            .oracle_artifacts
+            .as_ref()
+            .and_then(|artifacts| artifacts.iter().find(|a| a.path == "Cargo.toml"))
+            .expect("the oracle crate manifest")
+            .clone();
+        let (record, harness) = kani_parts(&generation.items[0].output);
+        (
+            harness
+                .unwrap_or_else(|| panic!("a harness, got {:?}", record.disposition))
+                .clone(),
+            manifest,
+        )
     }
 
     fn harness(&self, function: &str) -> EnumScalarHarness {
@@ -435,4 +559,63 @@ fn kani_an_incomplete_comparison_is_not_verified() {
         "work_units: u64::MAX,",
         "work_units: 0,",
     );
+}
+
+/// An enum comparison node routed through `generate_routed_admitted` is generated per FR-049, the
+/// same call without the admitted context keeps `OperationNotRendered`, and a node of another
+/// family produces an identical output either way.
+#[trace("TC-063", "FR-049-AC-1")]
+#[trace("TC-063", "FR-049-AC-9")]
+#[test]
+fn the_routed_path_generates_enum_nodes_and_leaves_other_families_byte_identical() {
+    let corpus = corpus();
+    let functions = ["not_enum", "lt", "eq", "color_eq"];
+    let legacy = corpus.routed(&functions, false);
+    let admitted = corpus.routed(&functions, true);
+    let output = |generation: &quire_contract_codegen::RoutedGeneration, index: usize| {
+        generation.items[index].output.clone()
+    };
+    assert_eq!(
+        output(&legacy, 0),
+        output(&admitted, 0),
+        "another family is unchanged"
+    );
+    for index in 1..4 {
+        let (record, harness) = kani_parts(&legacy.items[index].output);
+        assert!(harness.is_none());
+        assert!(
+            matches!(
+                &record.disposition,
+                quire_contract_codegen::ObligationDisposition::Unsupported {
+                    reason: quire_contract_codegen::UnsupportedObligation::OperationNotRendered { .. }
+                }
+            ),
+            "{record:?}"
+        );
+        let (record, harness) = kani_parts(&admitted.items[index].output);
+        let harness = harness.expect("the enum node is generated");
+        assert!(matches!(
+            &record.disposition,
+            quire_contract_codegen::ObligationDisposition::Supported { harness_symbol }
+                if *harness_symbol == harness.identity.harness_symbol
+        ));
+        assert_eq!(harness.identity.node_id, corpus.node(functions[index]));
+    }
+}
+
+/// Two enum nodes of the same operator in one routed request keep distinct harness names.
+#[trace("TC-063", "FR-049-AC-8")]
+#[test]
+fn two_enum_nodes_of_one_operator_in_one_request_do_not_collide() {
+    let corpus = corpus();
+    let generation = corpus.routed(&["eq", "color_eq"], true);
+    let symbols = generation
+        .items
+        .iter()
+        .map(|item| {
+            let (_, harness) = kani_parts(&item.output);
+            harness.expect("supported").identity.harness_symbol.clone()
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(symbols[0], symbols[1]);
 }

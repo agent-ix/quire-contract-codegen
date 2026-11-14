@@ -763,6 +763,33 @@ impl CompositeReplayAuthority for CompositeEqualityOracles {
     }
 }
 
+/// The canonical bytes of the original checked package, as the admitted context must carry them.
+pub(crate) fn encode_original_package(
+    original: &CheckedPackageV2,
+) -> Result<String, OracleGenerationError> {
+    let bytes = encode_checked_package_v2(
+        original.name(),
+        original.lock(),
+        original.graph(),
+        CheckedPackageSourceCorrespondenceRef {
+            source_map: original.source_map(),
+            refinement_step_rows: original.refinement_step_rows(),
+        },
+        CheckedPackageSidecarsRef {
+            checked_term_data: original.checked_term_data(),
+            temporal_bindings: original.temporal_bindings(),
+            temporal_clause_names: original.temporal_clause_names(),
+            schedulability_claims: original.schedulability_claim_rows(),
+            operation_effects: original.operation_effect_rows(),
+        },
+        original.capability_report(),
+        original.diagnostics(),
+        quire_canonical::Limits::new(u64::MAX),
+    )
+    .map_err(|_| OracleGenerationError::CheckedPackageEncoding)?;
+    String::from_utf8(bytes).map_err(|_| OracleGenerationError::CheckedPackageEncoding)
+}
+
 /// Generate composite equality oracles for `items` from one admitted FR-330 package.
 /// `original` is the reader-admitted source package retained before lowering. When an owner
 /// context is supplied, its complete checked bytes must equal that original package before
@@ -796,30 +823,7 @@ pub fn generate_composite_equality_oracles(
             {
                 return Err(OracleGenerationError::ContractSourceMismatch);
             }
-            let bytes = encode_checked_package_v2(
-                original.name(),
-                original.lock(),
-                original.graph(),
-                CheckedPackageSourceCorrespondenceRef {
-                    source_map: original.source_map(),
-                    refinement_step_rows: original.refinement_step_rows(),
-                },
-                CheckedPackageSidecarsRef {
-                    checked_term_data: original.checked_term_data(),
-                    temporal_bindings: original.temporal_bindings(),
-                    temporal_clause_names: original.temporal_clause_names(),
-                    schedulability_claims: original.schedulability_claim_rows(),
-                    operation_effects: original.operation_effect_rows(),
-                },
-                original.capability_report(),
-                original.diagnostics(),
-                quire_canonical::Limits::new(u64::MAX),
-            )
-            .map_err(|_| OracleGenerationError::CheckedPackageEncoding)?;
-            Some(
-                String::from_utf8(bytes)
-                    .map_err(|_| OracleGenerationError::CheckedPackageEncoding)?,
-            )
+            Some(encode_original_package(original)?)
         }
         None => None,
     };

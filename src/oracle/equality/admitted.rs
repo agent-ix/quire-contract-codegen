@@ -293,7 +293,7 @@ mod tests {
 
 /// The owner-admitted enum behind one declaration node: the shape the owner route admitted, each
 /// checked member of it in declared order, and the declaration facts a harness records.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct OwnerEnum {
     pub(crate) node: CheckedNodeId,
     pub(crate) shape: EnumShape,

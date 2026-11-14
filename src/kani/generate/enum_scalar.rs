@@ -45,6 +45,12 @@ pub struct EnumScalarRequest<'a> {
     pub ceilings: ProofCeilings,
     /// The loop unwind bound of the harness.
     pub unwind: u32,
+    /// The routed item's QSL occurrence; `None` for a direct request.
+    pub requirement_occurrence: Option<&'a crate::core::requirement::RequirementOccurrence>,
+    /// Whether the routed item carries a path condition, which this row does not lower.
+    pub has_path_condition: bool,
+    /// This harness's position among the enum harnesses of one request, which keeps names unique.
+    pub ordinal: usize,
 }
 
 /// The settled disposition of one enum comparison.
@@ -90,6 +96,42 @@ pub enum EnumScalarRefusal {
     ShapeNotOwnerAdmitted,
 }
 
+impl EnumScalarRefusal {
+    /// The unsupported disposition of a refused enum comparison, retaining its typed cause.
+    pub(crate) fn into_unsupported(self) -> UnsupportedObligation {
+        let (cause, enum_name, detail) = match self {
+            Self::NotEnumComparison => (
+                "not_enum_comparison".to_owned(),
+                String::new(),
+                String::new(),
+            ),
+            Self::IllTyped { cause } => {
+                (format!("ill_typed.{cause:?}"), String::new(), String::new())
+            }
+            Self::Unsupported {
+                capability,
+                enum_name,
+                detail,
+            } => (capability.name().to_owned(), enum_name, detail),
+            Self::MemberNotInShape => (
+                "member_not_in_shape".to_owned(),
+                String::new(),
+                String::new(),
+            ),
+            Self::ShapeNotOwnerAdmitted => (
+                "shape_not_owner_admitted".to_owned(),
+                String::new(),
+                String::new(),
+            ),
+        };
+        UnsupportedObligation::EnumComparisonNotRendered {
+            cause,
+            enum_name,
+            detail,
+        }
+    }
+}
+
 /// The named capability an unsupported enum item lacks.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EnumCapability {
@@ -99,6 +141,8 @@ pub enum EnumCapability {
     OwnerAdmittedDeclaration,
     /// The member count does not fit the carrier's `u32` rank.
     CarrierMemberCount,
+    /// The routed item has a path condition, which an enum harness does not lower.
+    PathCondition,
 }
 
 impl EnumCapability {
@@ -108,6 +152,7 @@ impl EnumCapability {
             Self::OwnerAdmittedContext => "enum.owner_admitted_context",
             Self::OwnerAdmittedDeclaration => "enum.owner_admitted_declaration",
             Self::CarrierMemberCount => "enum.carrier_member_count",
+            Self::PathCondition => "enum.path_condition",
         }
     }
 }
@@ -132,6 +177,45 @@ pub fn generate_enum_scalar_harness(request: &EnumScalarRequest<'_>) -> EnumScal
 }
 
 fn settle(request: &EnumScalarRequest<'_>) -> Result<EnumScalarHarness, EnumScalarRefusal> {
+    settle_with(request, |owner| {
+        (owner.shape.clone(), owner.members.clone())
+    })
+}
+
+/// The shape and members the generator hands to `from_member` for `owner`'s declaration. Production
+/// passes the owner's own; a test passes a mint to show the comparison with the owner shape catches it.
+#[cfg(test)]
+pub(crate) fn generate_with_mint(
+    request: &EnumScalarRequest<'_>,
+    mint: impl Fn(&OwnerEnum) -> (EnumShape, Vec<EnumMember>),
+) -> EnumScalarOutcome {
+    match settle_with(request, mint) {
+        Ok(harness) => EnumScalarOutcome::Supported(Box::new(harness)),
+        Err(refusal) => EnumScalarOutcome::Refused(refusal),
+    }
+}
+
+/// The carrier member count of a declaration of `members` members.
+fn carrier_count(members: usize, enum_name: &str) -> Result<u32, EnumScalarRefusal> {
+    match u32::try_from(members) {
+        Ok(0) => Err(EnumScalarRefusal::Unsupported {
+            capability: EnumCapability::OwnerAdmittedDeclaration,
+            enum_name: enum_name.to_owned(),
+            detail: "the owner supplied no member".to_owned(),
+        }),
+        Ok(count) => Ok(count),
+        Err(_) => Err(EnumScalarRefusal::Unsupported {
+            capability: EnumCapability::CarrierMemberCount,
+            enum_name: enum_name.to_owned(),
+            detail: "the member count does not fit u32".to_owned(),
+        }),
+    }
+}
+
+fn settle_with(
+    request: &EnumScalarRequest<'_>,
+    mint: impl Fn(&OwnerEnum) -> (EnumShape, Vec<EnumMember>),
+) -> Result<EnumScalarHarness, EnumScalarRefusal> {
     let graph = CheckedGraph::from_checked(request.source);
     let Some(CheckedTerm::Application {
         operation,
@@ -161,7 +245,15 @@ fn settle(request: &EnumScalarRequest<'_>) -> Result<EnumScalarHarness, EnumScal
     let (Some(left_type), Some(right_type)) = (operand_type(left), operand_type(right)) else {
         return Err(EnumScalarRefusal::NotEnumComparison);
     };
-    let declaration = owner_enum(request.context, &graph, &left_type)
+    if request.has_path_condition {
+        return Err(EnumScalarRefusal::Unsupported {
+            capability: EnumCapability::PathCondition,
+            enum_name: format!("{left_type:?}"),
+            detail: "an enum harness does not lower a path condition".to_owned(),
+        });
+    }
+    let context = authenticated(request)?;
+    let declaration = owner_enum(context, &graph, &left_type)
         .map_err(|refusal| unsupported(&left_type, &refusal))?;
     // A second declaration is admitted by the owner route in its own right; operands of different
     // declarations carry different tags, which `compare_native_enum` refuses as ill-typed.
@@ -169,24 +261,39 @@ fn settle(request: &EnumScalarRequest<'_>) -> Result<EnumScalarHarness, EnumScal
         None
     } else {
         Some(
-            owner_enum(request.context, &graph, &right_type)
+            owner_enum(context, &graph, &right_type)
                 .map_err(|refusal| unsupported(&right_type, &refusal))?,
         )
     };
-    let count =
-        u32::try_from(declaration.members.len()).map_err(|_| EnumScalarRefusal::Unsupported {
-            capability: EnumCapability::CarrierMemberCount,
-            enum_name: declaration.qualified.join("."),
-            detail: "the member count does not fit u32".to_owned(),
-        })?;
-    admit_carriers(
-        &declaration.shape,
-        &declaration.members,
-        &declaration.shape,
-        0,
-    )?;
+    let count = carrier_count(declaration.members.len(), &declaration.qualified.join("."))?;
+    let (passed_shape, passed_members) = mint(&declaration);
+    admit_carriers(&passed_shape, &passed_members, &declaration.shape, 0)?;
     check_typed(*operator, &declaration, other.as_ref(), count)?;
     render_harness(request, identity, *operator, native, &declaration, count)
+}
+
+/// The admitted context, once it is the owner's context for this very package.
+fn authenticated<'a>(
+    request: &EnumScalarRequest<'a>,
+) -> Result<Option<&'a AdmittedContext>, EnumScalarRefusal> {
+    let Some(context) = request.context else {
+        return Ok(None);
+    };
+    let mismatch = |detail: &str| EnumScalarRefusal::Unsupported {
+        capability: EnumCapability::OwnerAdmittedContext,
+        enum_name: String::new(),
+        detail: detail.to_owned(),
+    };
+    let bytes = crate::oracle::equality::encode_original_package(request.source)
+        .map_err(|_| mismatch("the original package did not encode"))?;
+    if context.package_name().to_string() != request.source.name()
+        || context.package_bytes() != bytes.as_bytes()
+    {
+        return Err(mismatch(
+            "the admitted context is not the owner's context for this package",
+        ));
+    }
+    Ok(Some(context))
 }
 
 fn unsupported(declaration: &CheckedNodeId, refusal: &OwnerEnumRefusal) -> EnumScalarRefusal {
@@ -312,6 +419,11 @@ fn render_text(
                 .unwrap_or(operation_identity)
         )
     );
+    let stem = if request.ordinal == 0 {
+        stem
+    } else {
+        format!("{stem}_{}", request.ordinal)
+    };
     let module_symbol = format!("{stem}_module");
     let harness_symbol = format!("{stem}_proof");
     let mut body = Vec::new();
@@ -420,7 +532,7 @@ fn render_text(
             })
             .collect(),
         inferred_operands: Vec::new(),
-        requirement_occurrence: None,
+        requirement_occurrence: request.requirement_occurrence.cloned(),
         path_condition: Vec::new(),
         guard_inputs: Vec::new(),
         enum_scalar: Some(EnumScalarIdentity {
@@ -616,5 +728,196 @@ function same using v(a: Color, b: Color): Boolean pure { a = b }\n";
         );
         assert_eq!(cause(ComparisonOperator::Less, &level, None), None);
         assert_eq!(cause(ComparisonOperator::Equal, &color, None), None);
+    }
+
+    /// The compiled corpus: its checked package and the admitted compilation.
+    fn corpus() -> (CheckedPackageV2, qsl_replay::AdmittedCompilation) {
+        compile(SOURCE, "enum-scalar")
+    }
+
+    fn compile(source: &str, name: &str) -> (CheckedPackageV2, qsl_replay::AdmittedCompilation) {
+        let compiled = compile_admitted(
+            CompileUnit {
+                source: SourceIdentity::new("test", "enum-scalar.native"),
+                package_name: name.to_owned(),
+                path: "enum-scalar.native",
+                bytes: source.as_bytes(),
+            },
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("the source compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(
+            compiled.package().bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) else {
+            panic!("IR admits the source");
+        };
+        (*package, compiled)
+    }
+
+    fn comparison(package: &CheckedPackageV2, identity: &str) -> CheckedNodeId {
+        package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                matches!(package.term(&node.node_id),
+                    Some(CheckedTerm::Application { operation, .. })
+                        if operation.identity() == Some(identity))
+            })
+            .expect("the comparison node")
+            .node_id
+            .clone()
+    }
+
+    fn request<'a>(
+        package: &'a CheckedPackageV2,
+        context: Option<&'a AdmittedContext>,
+        node_id: &'a CheckedNodeId,
+    ) -> EnumScalarRequest<'a> {
+        EnumScalarRequest {
+            source: package,
+            context,
+            node_id,
+            ceilings: ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1 << 30).unwrap(),
+                wall_clock: std::time::Duration::from_secs(60),
+            },
+            unwind: 1,
+            requirement_occurrence: None,
+            has_path_condition: false,
+            ordinal: 0,
+        }
+    }
+
+    /// A generator that mints a key in both the shape and the members it hands to `from_member`
+    /// is refused by the comparison with the owner-admitted shape, through the whole generation.
+    #[trace("TC-063", "FR-049-AC-3")]
+    #[test]
+    fn a_generator_that_mints_a_key_in_shape_and_members_is_refused_end_to_end() {
+        let (package, compiled) = corpus();
+        let node = comparison(&package, "quire.op.enum.lt");
+        let request = request(&package, Some(compiled.context()), &node);
+        assert!(matches!(
+            generate_with_mint(&request, |owner| (
+                owner.shape.clone(),
+                owner.members.clone()
+            )),
+            EnumScalarOutcome::Supported(_)
+        ));
+        let mint_both = |owner: &OwnerEnum| {
+            let variants = renamed(&owner.shape);
+            let members = variants
+                .iter()
+                .cloned()
+                .zip(0..)
+                .map(|(variant, rank)| EnumMember::new(variant, rank))
+                .collect();
+            (EnumShape::new(owner.shape.is_ordered(), variants), members)
+        };
+        assert!(matches!(
+            generate_with_mint(&request, mint_both),
+            EnumScalarOutcome::Refused(EnumScalarRefusal::ShapeNotOwnerAdmitted)
+        ));
+        let mint_members = |owner: &OwnerEnum| {
+            let members = renamed(&owner.shape)
+                .into_iter()
+                .zip(0..)
+                .map(|(variant, rank)| EnumMember::new(variant, rank))
+                .collect();
+            (owner.shape.clone(), members)
+        };
+        assert!(matches!(
+            generate_with_mint(&request, mint_members),
+            EnumScalarOutcome::Refused(EnumScalarRefusal::MemberNotInShape)
+        ));
+    }
+
+    #[trace("TC-063", "FR-049-AC-8")]
+    #[test]
+    fn zero_members_and_a_count_beyond_u32_have_named_capabilities() {
+        let capability = |result: Result<u32, EnumScalarRefusal>| match result {
+            Err(EnumScalarRefusal::Unsupported { capability, .. }) => capability,
+            other => panic!("expected unsupported, got {other:?}"),
+        };
+        assert_eq!(
+            capability(carrier_count(0, "E")),
+            EnumCapability::OwnerAdmittedDeclaration
+        );
+        assert_eq!(
+            capability(carrier_count(
+                usize::try_from(u64::from(u32::MAX) + 1).unwrap(),
+                "E"
+            )),
+            EnumCapability::CarrierMemberCount
+        );
+        assert_eq!(carrier_count(3, "E").unwrap(), 3);
+    }
+
+    /// A declaration the owner route does not admit, and a context that is not the owner's for
+    /// this package, are unsupported with their named capabilities and no harness.
+    #[trace("TC-063", "FR-049-AC-8")]
+    #[test]
+    fn a_declaration_the_owner_does_not_admit_is_unsupported_with_a_named_capability() {
+        let (package, compiled) = corpus();
+        let graph = CheckedGraph::from_checked(&package);
+        let integer = package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .find(|node| &*node.semantic_form == "integer")
+            .expect("the integer scalar type")
+            .node_id
+            .clone();
+        let refusal = owner_enum(Some(compiled.context()), &graph, &integer).unwrap_err();
+        assert!(matches!(
+            unsupported(&integer, &refusal),
+            EnumScalarRefusal::Unsupported {
+                capability: EnumCapability::OwnerAdmittedDeclaration,
+                ..
+            }
+        ));
+        let (_, foreign) = compile(SOURCE, "other");
+        let node = comparison(&package, "quire.op.enum.lt");
+        let EnumScalarOutcome::Refused(EnumScalarRefusal::Unsupported { capability, .. }) =
+            generate_enum_scalar_harness(&request(&package, Some(foreign.context()), &node))
+        else {
+            panic!("a foreign context is refused");
+        };
+        assert_eq!(capability, EnumCapability::OwnerAdmittedContext);
+    }
+
+    /// QSL admits neither an ordering over an unordered enum nor operands of different enums, so
+    /// no source reaches CG with those ill-typed causes.
+    #[trace("TC-063", "FR-049-AC-8")]
+    #[test]
+    fn qsl_refuses_the_ill_typed_sources_before_cg() {
+        for body in ["a < b", "a = b"] {
+            let source = format!(
+                "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nenum Color {{ RED, GREEN }}\nordered enum Level {{ LOW, MID }}\nfunction f using v(a: {}, b: {}): Boolean pure {{ {body} }}\n",
+                if body == "a < b" { "Color" } else { "Level" },
+                if body == "a < b" { "Color" } else { "Color" },
+            );
+            let compiled = compile_admitted(
+                CompileUnit {
+                    source: SourceIdentity::new("test", "ill.native"),
+                    package_name: "ill".to_owned(),
+                    path: "ill.native",
+                    bytes: source.as_bytes(),
+                },
+                [],
+                &DependencyInput::default(),
+                StageLimits::default(),
+                ReplayLimits::default(),
+            );
+            eprintln!("QSLILL {body}: ok={}", compiled.is_ok());
+            assert!(compiled.is_err(), "{body}");
+        }
     }
 }
