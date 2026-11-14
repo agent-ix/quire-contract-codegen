@@ -26,6 +26,8 @@ function ne using v(a: Level, b: Level): Boolean pure { a != b }\n\
 function color_eq using v(a: Color, b: Color): Boolean pure { a = b }\n\
 function color_ne using v(a: Color, b: Color): Boolean pure { a != b }\n\
 function guarded_lt using v(flag: Boolean, a: Level, b: Level): Boolean pure { if flag then a < b else false }\n\
+function float_eq using v(a: Float64[nearest-even], b: Float64[nearest-even]): Boolean pure { a = b }\n\
+function float_add using v(a: Float64[nearest-even], b: Float64[nearest-even]): Float64[nearest-even] pure { a + b }\n\
 function not_enum using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a < b }\n\
 function bool_and using v(a: Boolean, b: Boolean): Boolean pure { a and b }\n\
 function text_eq using v(a: Text[0, 16; nfc], b: Text[0, 16; nfc]): Boolean pure { a = b }\n\
@@ -929,17 +931,25 @@ fn kani_an_ill_typed_comparison_is_not_verified_and_keeps_its_cause() {
 fn the_routed_path_generates_enum_nodes_and_leaves_other_families_byte_identical() {
     let corpus = corpus();
     let functions = [
-        "not_enum", "bool_and", "text_eq", "seq_eq", "lt", "eq", "color_eq",
+        "not_enum",
+        "bool_and",
+        "text_eq",
+        "seq_eq",
+        "float_eq",
+        "float_add",
+        "lt",
+        "eq",
+        "color_eq",
     ];
     let legacy = corpus.routed(&functions, false);
     let admitted = corpus.routed(&functions, true);
-    for (index, function) in functions.iter().enumerate().take(4) {
+    for (index, function) in functions.iter().enumerate().take(6) {
         assert_eq!(
             legacy.items[index].output, admitted.items[index].output,
             "{function}: another family is unchanged"
         );
     }
-    for (index, item) in legacy.items.iter().enumerate().skip(4) {
+    for (index, item) in legacy.items.iter().enumerate().skip(6) {
         let (record, harness) = kani_parts(&item.output);
         assert!(harness.is_none());
         assert!(

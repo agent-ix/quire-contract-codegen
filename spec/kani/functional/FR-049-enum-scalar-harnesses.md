@@ -205,10 +205,10 @@ Tagged and passing:
   operator, one carrying a path condition: it is refused with the named capability
   `enum.path_condition` and no harness, and the supported siblings are generated exactly as they
   are alone.
-- AC-9: the routed output of a Boolean, an integer comparison, a text equality and a sequence
-  equality node is byte-identical with and without the admitted context. Decimal, rational,
-  quantity, float, set, bag, ordered-set and enum-in-composite nodes are not exercised by this
-  row's tests.
+- AC-9: the routed output of a Boolean, an integer comparison, a text equality, a sequence
+  equality, a float comparison and a float arithmetic node is byte-identical with and without the
+  admitted context. Decimal, rational, quantity, set, bag, ordered-set and enum-in-composite nodes
+  are not exercised by this row's tests.
 - AC-10: one `i64` index per operand with declaration, member list and bounds in the identity;
   `decode_enum_falsification` decodes a valid pair to its declared members and refuses
   out-of-range, missing, extra, foreign-harness, narrow and bound-mismatched bindings with typed
