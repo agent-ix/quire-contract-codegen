@@ -48,3 +48,28 @@ Mergeable after FND-001 is resolved. The `cfg(kani)` alignment is correct. But t
 | quire-exact FR-404 Behavior 7 | context_only | quire-exact spec/functional/FR-404-kani-tractable-native-text-carrier.md:52 | The replacement and the constructor SHALL be callable from a host build and SHALL NOT have a body selected by `cfg(kani)` ... CG's generated harness calls `compare_native_text` in place of `compare_text` ... |
 | quire-exact FR-405 Behavior 8 | context_only | quire-exact spec/functional/FR-405-kani-tractable-native-float-carrier.md:50 | The native operations SHALL be one source for the host and Kani builds, and no body SHALL be selected by `cfg(kani)`. |
 | quire-exact FR-405 Behavior 15-16 | context_only | quire-exact spec/functional/FR-405-kani-tractable-native-float-carrier.md:60-61 | ... either an executed Kani VERIFIED verdict of its Behavior 19 harness, or a measured row ... The refusal that a combination in the second state of Behavior 15 receives ... are those of IR-1526's refusal seam ... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | high | The fix for FND-001 makes the arithmetic expected side the host `f32`/`f64` operation and states in FR-053 Evaluation that, apart from `nearest-even` result bits and what the NaN rule fixes, 'the directed-rounding bits, the flags other than `invalid`, the ordered charges at a limit' are not claimed by the harness and are 'left to AC-13's host differential'. The criteria were not aligned. FR-053-AC-4 still requires the harness to prove agreement on bits, flags, ordered charges, denied charge and counters at zero, exact and short budgets for every supported operation. FR-053-AC-5 asserts `Incomplete` at each charge point and the `exact` refusal with would-be flags. FR-053-AC-9 (c), (d), (i) and (j) and FR-053-AC-10 require each rounding-mode, `exact`-refusal, overflow/underflow-flag and charge mutant to 'fail with actual solver playback'. With the host reference, a mutant that rounds toward-zero under a toward-positive node, drops `overflow`, or drops `ieee.round` passes the harness, so these criteria cannot be met as written and contradict the Evaluation paragraph. Either narrow AC-4, AC-5, AC-9 and AC-10 to the outputs the harness fixes and move the rest to AC-13 (stated per item), or give the expected side an independent derivation of the remaining outputs (charges are classification-determined; directed bits and flags need a reference). | spec/kani/functional/FR-053-float-scalar-harnesses.md:183-187, spec/kani/functional/FR-053-float-scalar-harnesses.md:364-370 |
+| FND-006 | low | FR-053 Evaluation cites two quire-exact clauses for statements they do not make. 'FR-405 Behavior 6 keeps its decode private to the native body': Behavior 6, on quire-exact main and unchanged on PR #159 head 6986f4fd, says the opposite, allowing the bit-pattern decode as the one shared function and leaving its defects to 'CG FR-053-AC-14'. Only PR #159's FR-405-AC-9 says 'not even the bit-pattern decode'. 'The same independent reference quire-exact FR-405 Behavior 19 uses': Behavior 19 says only 'a separately written reference'; the host `f32`/`f64` choice is in PR #159's `src/native_float/kani_proofs.rs`, not in the requirement. Cite FR-405-AC-9 (and TC-953 or the harness docstrings for the host reference), not Behavior 6 and 19. | spec/kani/functional/FR-053-float-scalar-harnesses.md:178-179, spec/kani/functional/FR-053-float-scalar-harnesses.md:188-189 |
+
+## Dispositions
+
+Round 1, against PR #817 head 444ff8ad (fix commit 444ff8ad over d23ae785, after merge 7a0dbab5).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+
+FND-001 after: the expected side is 'the host language's own float operation (`+`, `-`, `*`, `/`, `sqrt` and `mul_add` on `f32` and `f64`) ... there is no second implementation in the carrier crate', and AC-14 inspects 'no shared function, the decode included'. The owner is named, so the finding as written is fixed; the narrowed claim this choice produces is not carried into the ACs (FND-005). The owner of native sqrt/fma is also settled upstream: quire-exact FR-405 on origin/main (merged #155, adfa515) and on PR #159 states 'IR-1502 is CG's oracle derivation for square root and fused multiply-add and is an oracle, not a native operation; this requirement owns the native square root and fused multiply-add', and #817's P1 names IR-1446 as supplier of native sqrt and fma, consistent with it; P3 keeps IR-1502 as the FR-014 oracle. No ownership finding remains.
+FND-002 after: P1 now reads 'Support is per operation and width, as quire-exact FR-405 Behavior 15 gates it: only a combination with an executed Verified verdict is a supported row. A combination whose quire-exact record is a measured table row ... is refused by IR-1526's tractability seam (FR-056, quire-exact FR-405 Behavior 16)'.
+FND-003 after: AC-13 reads 'the carrier's host-callable native operations (quire-exact FR-405) and the owner's `evaluate_ieee` and `compare_ieee` agree'.
+FND-004 after: 'replacement' no longer occurs in FR-052 or FR-053 (grep); the text uses 'native comparison' and 'native operations'.
+
+Routed outside this PR (not a CG finding): quire-exact PR #159 (same ticket IR-1446) leaves FR-405 Behavior 6 allowing a shared decode while its AC-9 forbids it, and Behavior 8 still glosses CG FR-053's term "the carrier's cfg(kani) replacement", which #817 removes. Both are QE-side wording for the #159 author.
