@@ -140,7 +140,7 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 PARTIAL (IR-260): steps 1 to 5, 7, 8 and 11 to 14 run for the three comparisons, and step 6 for the refusals and the supported sibling, at both widths in
 `tests/it/float_scalar_harness.rs`, with installed-Kani verdicts and owner replay of a decoded
 counterexample (`docs/qualification/ir260-float-scalar-kani-measurements.md`). Step 3 runs the
-operand `requires-bound` and the unreadable-rounding refusal on hand-edited Contract IR. Step 7 runs
+operand `requires-bound` and the unreadable-rounding refusal on hand-edited Contract IR. The hand-edited package cannot be routed (Contract IR lowers it to an empty lowered set, so no admitted routing input exists), so the routed mapping to the `requires-bound` disposition is covered at the `FloatScalarRefusal::into_disposition` seam only. Step 7 runs
 the healthy proof and a forced unsatisfied cover; its other forced failures are the shared runner's
 (`tests/it/terminal_map.rs`). Arithmetic is dispositioned not tractable (typed refusal, no
 harness), so the arithmetic parts of steps 1, 3, 4, 5, 9, 10, 13 and 14 settle as refusals only; steps 9 and

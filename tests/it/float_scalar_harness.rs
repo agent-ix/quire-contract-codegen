@@ -862,6 +862,16 @@ fn an_unpinned_float_operand_requires_a_bound_naming_its_type() {
         unbounded_type, scalar,
         "the operand's own type node is named"
     );
+    // The routed path settles this refusal through `into_disposition`. Contract IR lowers the
+    // hand-edited package to an empty lowered set, so no admitted routing input exists and
+    // `generate_routed` cannot be reached with it; the seam is tested directly.
+    assert_eq!(
+        FloatScalarRefusal::RequiresBound {
+            unbounded_type: unbounded_type.clone()
+        }
+        .into_disposition(),
+        ObligationDisposition::RequiresBound { unbounded_type }
+    );
     let sibling = corpus.outcome("numeq64", "quire.op.ieee.numeric_equal");
     assert!(
         matches!(sibling, FloatScalarOutcome::Supported(_)),

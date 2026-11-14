@@ -452,7 +452,7 @@ Delivered for the comparisons, tagged and passing (`tests/it/float_scalar_harnes
   correspondence mutants (two as source mutations of the generated assumptions, five as models of
   the mutated assumption or decode), each failing at its named point.
 - AC-3: the operand `requires-bound` (CG's own check) and the unreadable-rounding refusal, on
-  hand-edited Contract IR, and the pinned sibling unchanged.
+  hand-edited Contract IR, and the pinned sibling unchanged. The hand-edited package cannot be routed (Contract IR lowers it to an empty lowered set, so no admitted routing input exists), so the routed mapping to the `requires-bound` disposition is covered at the `FloatScalarRefusal::into_disposition` seam only.
 - AC-4 and AC-13 (comparisons): the native comparison equals the shipped owner's `compare_ieee` over
   the class-boundary set and the control points, on the typed outcome, the meter, the denied charge
   point and counter at zero, exact and short budgets of every counter a comparison charges, and the
