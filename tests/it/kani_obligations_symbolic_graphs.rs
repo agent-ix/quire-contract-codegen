@@ -16,8 +16,8 @@ use quire_contract_codegen::{
     KaniRunOutcome, ObligationDisposition, ObligationItem, ProofCeilings, UnsupportedObligation,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedTerm,
+    CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm,
 };
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf, time::Duration};
@@ -162,13 +162,30 @@ fn fixture(condition: &str) -> Authored {
 
 fn clause(package: &CheckedPackageV2) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "state_clause")
         .unwrap()
         .node_id
         .clone()
+}
+
+/// Every source occurrence of one clause node, in package order.
+fn occurrences(package: &CheckedPackageV2, clause: &CheckedNodeId) -> Vec<CheckedOccurrence> {
+    package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id == clause)
+        .unwrap()
+        .occurrences
+        .clone()
+}
+
+/// The first occurrence of the clause node: the one a single-clause package has.
+fn first_occurrence(package: &CheckedPackageV2, clause: &CheckedNodeId) -> CheckedOccurrence {
+    occurrences(package, clause).remove(0)
 }
 
 fn ceilings() -> ProofCeilings {
@@ -182,11 +199,13 @@ fn outcome_with(
     subject_path: &str,
 ) -> KaniObligationOutcome {
     let clause = clause(package);
+    let occurrence = first_occurrence(package, &clause);
     let items: Vec<ObligationItem<'_>> = paths
         .iter()
         .map(|path| ObligationItem::GraphClaim {
             package,
-            clause_id: &clause,
+            node_id: &clause,
+            occurrence: &occurrence,
             argument_path: path,
         })
         .collect();
@@ -317,7 +336,7 @@ fn field_edge_forms_refuse_typed_not_reaches_application_and_location_comes_firs
         let authored = fixture(&format!("not reaches(self, self, {edge})"));
         let field = authored
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -363,16 +382,21 @@ fn locations_refuse_without_a_harness_and_never_cross_clauses() {
     // A node that is not a state clause cannot hold a claim.
     let other = authored
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() != "state_clause")
         .unwrap()
         .node_id
         .clone();
+    let other_occurrence = CheckedOccurrence {
+        role: CheckedOccurrenceRole::Expression,
+        ordinal: 0,
+    };
     let item = ObligationItem::GraphClaim {
         package: &authored.package,
-        clause_id: &other,
+        node_id: &other,
+        occurrence: &other_occurrence,
         argument_path: &[0],
     };
     let KaniObligationOutcome::Emitted { records, .. } =
@@ -672,9 +696,11 @@ fn a_domain_beyond_the_unwind_or_the_memory_ceiling_refuses_without_reducing_it(
         }
     ));
     let clause = clause(&authored.package);
+    let occurrence = first_occurrence(&authored.package, &clause);
     let item = ObligationItem::GraphClaim {
         package: &authored.package,
-        clause_id: &clause,
+        node_id: &clause,
+        occurrence: &occurrence,
         argument_path: &[0],
     };
     let KaniObligationOutcome::Emitted { records, .. } =
@@ -704,13 +730,14 @@ fn a_domain_beyond_the_unwind_or_the_memory_ceiling_refuses_without_reducing_it(
 
 fn dispositions_at(
     package: &CheckedPackageV2,
-    items: &[(&CheckedNodeId, &[usize])],
+    items: &[(&CheckedNodeId, &CheckedOccurrence, &[usize])],
 ) -> (Vec<ObligationDisposition>, Vec<KaniGraphObligationHarness>) {
     let items: Vec<ObligationItem<'_>> = items
         .iter()
-        .map(|(clause, path)| ObligationItem::GraphClaim {
+        .map(|(clause, occurrence, path)| ObligationItem::GraphClaim {
             package,
-            clause_id: clause,
+            node_id: clause,
+            occurrence,
             argument_path: path,
         })
         .collect();
@@ -747,9 +774,14 @@ fn dispositions_at(
 fn a_field_edge_and_a_relationship_end_reachability_are_separate_items() {
     let authored = fixture("reaches(self, self, kids) and reaches(self, self, next)");
     let clause = clause(&authored.package);
+    let occurrence = first_occurrence(&authored.package, &clause);
     let (dispositions, harnesses) = dispositions_at(
         &authored.package,
-        &[(&clause, &[0]), (&clause, &[1]), (&clause, &[2])],
+        &[
+            (&clause, &occurrence, &[0]),
+            (&clause, &occurrence, &[1]),
+            (&clause, &occurrence, &[2]),
+        ],
     );
     assert!(harnesses.is_empty());
     assert!(refused_with(
@@ -959,4 +991,223 @@ fn real_kani_empty_end_is_unreachable_even_for_start_equal_target() {
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn real_kani_forced_edge_makes_the_self_loop_reachable() {
     verified("forced-self-loop", "reaches(self, self, loop)", 1, &[]);
+}
+
+/// Transitivity over the whole population: three quantifier-bound objects and three reachability
+/// applications of the one end.
+const TRANSITIVITY: &str = "forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : (reaches(a, b, kids) and reaches(b, c, kids)) implies reaches(a, c, kids))))";
+
+/// The three reachability applications of `TRANSITIVITY`, by argument path through the three
+/// quantifier binders: `reaches(a, b)`, `reaches(b, c)` and `reaches(a, c)`.
+const TRANSITIVITY_PATHS: [&[usize]; 3] = [&[1, 1, 1, 0, 0], &[1, 1, 1, 0, 1], &[1, 1, 1, 1]];
+
+#[trace("TC-025", "FR-015-AC-98")]
+#[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-107")]
+#[test]
+fn a_transitivity_claim_with_three_quantifier_bound_operands_is_three_items() {
+    let authored = fixture(TRANSITIVITY);
+    let KaniObligationOutcome::Emitted {
+        records,
+        graph_harnesses,
+        ..
+    } = outcome_with(
+        &authored.package,
+        &TRANSITIVITY_PATHS,
+        8,
+        "crate::graph_subject",
+    )
+    else {
+        panic!("a valid request")
+    };
+    assert!(
+        records
+            .iter()
+            .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })),
+        "{records:?}"
+    );
+    assert_eq!(graph_harnesses.len(), 3);
+    for (harness, path) in graph_harnesses.iter().zip(TRANSITIVITY_PATHS) {
+        assert_eq!(harness.identity.argument_path, path);
+        assert_eq!(harness.identity.maximum_population, 3);
+        let source = &harness.rust.contents;
+        // Three nested quantifiers over the live objects and one closure, no caller bound.
+        for depth in 0..3 {
+            assert!(
+                source.contains(&format!("for q{depth} in 0..3")),
+                "{source}"
+            );
+        }
+        assert!(source.contains("paths[q0][q1]") && source.contains("paths[q1][q2]"));
+        assert!(source.contains("paths[q0][q2]"));
+        assert!(!source.contains("rt::Integer") && !source.contains("max_expansions"));
+    }
+    // Each application is its own node, so each item names a distinct claim.
+    let applications: std::collections::BTreeSet<_> = graph_harnesses
+        .iter()
+        .map(|harness| format!("{:?}", harness.identity.application_id))
+        .collect();
+    assert_eq!(applications.len(), 3);
+    let symbols: std::collections::BTreeSet<_> = graph_harnesses
+        .iter()
+        .map(|harness| harness.identity.harness_symbol.clone())
+        .collect();
+    assert_eq!(symbols.len(), 3);
+}
+
+/// The deepest nesting the oracle unrolls is four binders; the claim at that depth is supported
+/// and its harness evaluates four nested quantifiers.
+#[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn four_nested_binders_are_the_deepest_supported_claim() {
+    let condition = "forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : forall(d in M::CollectionNodes : reaches(a, d, kids) or not reaches(a, d, kids)))))";
+    let authored = fixture(condition);
+    let harness = emitted(&authored.package, &[1, 1, 1, 1, 0]);
+    let source = &harness.rust.contents;
+    for depth in 0..4 {
+        assert!(
+            source.contains(&format!("for q{depth} in 0..3")),
+            "{source}"
+        );
+    }
+    assert!(!source.contains("for q4 in"), "{source}");
+}
+
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn quantified_claims_the_encoding_cannot_express_settle_unsupported_claim_shape() {
+    let deep = (0..5).fold("reaches(a0, a0, kids)".to_owned(), |body, depth| {
+        format!("forall(a{} in M::CollectionNodes : {body})", 4 - depth)
+    });
+    for (label, condition, path) in [
+        (
+            "a second relationship under the quantifier",
+            "forall(a in M::CollectionNodes : reaches(a, a, kids) and reaches(a, a, litter))"
+                .to_owned(),
+            vec![1, 0],
+        ),
+        (
+            "more nested binders than the oracle unrolls",
+            deep,
+            vec![1, 1, 1, 1, 1],
+        ),
+    ] {
+        let authored = fixture(&condition);
+        assert!(
+            refused_with(
+                &disposition(&authored.package, &path, 8),
+                &GraphUnsupportedReason::UnsupportedClaimShape
+            ),
+            "{label}"
+        );
+    }
+}
+
+/// One structure declared under two clause names is one package node with two source
+/// occurrences. The claim is keyed by the node and its occurrence, so each occurrence is its own
+/// item with its own identity, and a clause with another structure is another node.
+#[trace("TC-025", "FR-015-AC-107")]
+#[trace("TC-025", "FR-015-AC-100")]
+#[test]
+fn one_node_under_two_clauses_is_two_items_with_different_identities() {
+    let condition = "not reaches(self, self, kids)";
+    let authored = authored_declarations(
+        &[
+            declaration("invariant", "Graph", condition),
+            declaration("invariant", "Other", condition),
+            declaration("invariant", "Third", "not reaches(self, self, litter)"),
+        ],
+        Some(3),
+    );
+    let package = &authored.package;
+    let clauses: Vec<_> = package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .filter(|node| node.semantic_form.as_ref() == "state_clause")
+        .collect();
+    assert_eq!(clauses.len(), 2, "two structures, three declarations");
+    let shared = clauses
+        .iter()
+        .find(|node| node.occurrences.len() == 2)
+        .expect("the shared structure is one node with two occurrences");
+    let (shared_id, ordinals) = (shared.node_id.clone(), shared.occurrences.clone());
+    assert_ne!(ordinals[0], ordinals[1]);
+
+    let items: Vec<ObligationItem<'_>> = ordinals
+        .iter()
+        .map(|occurrence| ObligationItem::GraphClaim {
+            package,
+            node_id: &shared_id,
+            occurrence,
+            argument_path: &[0],
+        })
+        .collect();
+    let KaniObligationOutcome::Emitted {
+        records,
+        graph_harnesses,
+        ..
+    } = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: ceilings(),
+        items: &items,
+        subject_path: "crate::graph_subject",
+        unwind: 8,
+    })
+    .unwrap()
+    else {
+        panic!("a valid request")
+    };
+    assert!(
+        records
+            .iter()
+            .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })),
+        "{:?}",
+        records
+            .iter()
+            .map(|record| &record.disposition)
+            .collect::<Vec<_>>()
+    );
+    let [first, second] = [&graph_harnesses[0].identity, &graph_harnesses[1].identity];
+    assert_eq!(first.clause_id, second.clause_id);
+    assert_eq!(first.occurrence, ordinals[0]);
+    assert_eq!(second.occurrence, ordinals[1]);
+    assert_ne!(first, second);
+    assert_ne!(first.harness_symbol, second.harness_symbol);
+
+    // The same node, occurrence and path twice is a duplicate item, which rejects the request.
+    let repeated: Vec<ObligationItem<'_>> = (0..2)
+        .map(|_| ObligationItem::GraphClaim {
+            package,
+            node_id: &shared_id,
+            occurrence: &ordinals[0],
+            argument_path: &[0],
+        })
+        .collect();
+    let KaniObligationOutcome::Rejected { records } =
+        negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: ceilings(),
+            items: &repeated,
+            subject_path: "crate::graph_subject",
+            unwind: 8,
+        })
+        .unwrap()
+    else {
+        panic!("a repeated claim rejects the request")
+    };
+    assert!(matches!(
+        records[1].disposition,
+        ObligationDisposition::InvalidRequest { .. }
+    ));
+    // An occurrence the node does not carry names no claim.
+    let absent = CheckedOccurrence {
+        role: ordinals[0].role.clone(),
+        ordinal: 99,
+    };
+    let (dispositions, harnesses) = dispositions_at(package, &[(&shared_id, &absent, &[0])]);
+    assert!(harnesses.is_empty());
+    assert!(refused_with(
+        &dispositions[0],
+        &GraphUnsupportedReason::MissingClaim
+    ));
 }

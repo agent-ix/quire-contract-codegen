@@ -10,8 +10,9 @@ use quire_contract_model::selected_population::{
     CheckedSelectedPopulationSource,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageV2, CheckedReachesPopulationError, CheckedRelationshipEndError,
-    CheckedTerm, ContractSourceV1, StateClauseKind,
+    CheckedNodeId, CheckedOccurrence, CheckedPackageV2, CheckedReachesPopulationError,
+    CheckedRelationshipEnd, CheckedRelationshipEndError, CheckedTerm, ContractSourceV1,
+    StateClauseKind,
 };
 
 use crate::{
@@ -52,6 +53,7 @@ impl From<Reason> for GraphRefusal {
 pub(super) struct LoweredGraph {
     package: ContractSourceV1,
     clause: CheckedNodeId,
+    occurrence: CheckedOccurrence,
     kind: ObligationKind,
     path: Vec<usize>,
     application: CheckedNodeId,
@@ -59,9 +61,39 @@ pub(super) struct LoweredGraph {
     object_type: CheckedNodeId,
     maximum: u64,
     edge: GraphEdgeIdentity,
-    condition: String,
-    same_operand: bool,
+    condition: Claim,
 }
+
+/// A reachability operand: the clause's one `self` parameter, or the quantifier binder at a
+/// nesting depth. An invariant has exactly one parameter, so every operand that is not a binder
+/// is the object the harness started from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Operand {
+    Start,
+    Bound(usize),
+}
+
+/// The admitted clause condition over one reachability relation: Boolean combinators,
+/// reachability applications of the selected end, and quantifiers over the covering population.
+#[derive(Debug, Eq, PartialEq)]
+enum Claim {
+    Reaches(Operand, Operand),
+    Not(Box<Claim>),
+    And(Box<Claim>, Box<Claim>),
+    Or(Box<Claim>, Box<Claim>),
+    Implies(Box<Claim>, Box<Claim>),
+    Equal(Box<Claim>, Box<Claim>),
+    /// `forall` (true) or `exists` (false) binder at this nesting depth over every live object.
+    Quantified {
+        forall: bool,
+        depth: usize,
+        body: Box<Claim>,
+    },
+}
+
+/// The deepest quantifier nesting the oracle unrolls; each level multiplies the evaluation by
+/// the population maximum.
+const MAX_QUANTIFIER_DEPTH: usize = 4;
 
 fn operation_identity(term: &CheckedTerm) -> Option<&str> {
     match term {
@@ -112,6 +144,15 @@ fn same_operand_term(package: &CheckedPackageV2, left: &CheckedTerm, right: &Che
     }
 }
 
+/// A quantifier's binder is not an argument position of its own: the path continues at the term
+/// it binds.
+fn unbound(term: &CheckedTerm) -> &CheckedTerm {
+    match term {
+        CheckedTerm::Binding { value, .. } => unbound(value),
+        other => other,
+    }
+}
+
 /// Follow a reference to the node's own term, or stay on an inline term.
 fn resolve<'a>(package: &'a CheckedPackageV2, term: &'a CheckedTerm) -> Option<&'a CheckedTerm> {
     match term {
@@ -125,13 +166,18 @@ fn resolve<'a>(package: &'a CheckedPackageV2, term: &'a CheckedTerm) -> Option<&
 pub(super) fn lower_graph(
     package: &CheckedPackageV2,
     clause: &CheckedNodeId,
+    occurrence: &CheckedOccurrence,
     path: &[usize],
 ) -> Result<LoweredGraph, GraphRefusal> {
     let missing = || GraphRefusal::Unsupported(Reason::MissingClaim);
-    let is_state_clause = package.graph().nodes.iter().any(|node| {
+    // The claim is keyed by the document-held node id (the form the source map and every report
+    // name a node by; the slot form of two clauses can coincide) and one of the node's own
+    // occurrences: an occurrence the node does not carry names no claim.
+    let is_state_clause = package.resolved_graph().nodes.iter().any(|node| {
         &node.node_id == clause
             && &*node.node_tag == "state"
             && &*node.semantic_form == "state_clause"
+            && node.occurrences.contains(occurrence)
     });
     if !is_state_clause {
         return Err(missing());
@@ -146,12 +192,14 @@ pub(super) fn lower_graph(
     let condition = clause_arguments.get(2).ok_or_else(missing)?;
     let mut selected = condition;
     for position in path {
-        selected = resolve(package, selected)
-            .and_then(|term| match term {
-                CheckedTerm::Application { arguments, .. } => arguments.get(*position),
-                _ => None,
-            })
-            .ok_or_else(missing)?;
+        selected = unbound(
+            resolve(package, selected)
+                .and_then(|term| match term {
+                    CheckedTerm::Application { arguments, .. } => arguments.get(*position),
+                    _ => None,
+                })
+                .ok_or_else(missing)?,
+        );
     }
     let CheckedTerm::Reference {
         target: application,
@@ -163,13 +211,9 @@ pub(super) fn lower_graph(
         .term(application)
         .filter(|term| is_reachability(term))
         .ok_or_else(missing)?;
-    let CheckedTerm::Application {
-        arguments: operands,
-        ..
-    } = application_term
-    else {
+    if !matches!(application_term, CheckedTerm::Application { .. }) {
         return Err(missing());
-    };
+    }
     let kind = graph_kind(package, clause).ok_or(Reason::UnsupportedClaimShape)?;
     // A precondition or postcondition graph claim has no defined harness: the generated body
     // never calls the subject, assumes no sibling preconditions and has no totality or
@@ -178,9 +222,74 @@ pub(super) fn lower_graph(
         return Err(Reason::OperationClauseNotSupported.into());
     }
 
-    // 1. The population selection. A `reaches_field` application is a reachability application
-    // but names no population the owner accessor can read: it refuses as
-    // `NotReachesApplication`, never a guessed same-type population.
+    // 1. The population selection and 2. the destination end of the selected application.
+    let (population, end) = domain_of(package, application)?;
+    let upper = end
+        .upper
+        .ok_or_else(|| GraphRefusal::RequiresBound(end.relationship.clone()))?;
+    let maximum =
+        population
+            .maximum
+            .as_str()
+            .parse::<u64>()
+            .map_err(|_| Reason::DomainNotRepresentable {
+                population_maximum: population.maximum.as_str().to_owned(),
+                edge_upper: upper,
+            })?;
+
+    // 3. The claim's shape: the condition is a Boolean combination of reachability applications
+    // of this one end (the selected application and any other over the same population and
+    // end) and quantifiers over that population, whose operands are the clause's `self` or a
+    // quantifier binder.
+    let Some(CheckedTerm::Aggregate {
+        members: parameters,
+    }) = clause_arguments.first()
+    else {
+        return Err(Reason::UnsupportedClaimShape.into());
+    };
+    if parameters.len() != 1 {
+        return Err(Reason::UnsupportedClaimShape.into());
+    }
+    let mut shape = Shape {
+        package,
+        parameters,
+        population: &population,
+        end: &end,
+        binders: Vec::new(),
+    };
+    let condition = shape.claim(condition, 0)?;
+    Ok(LoweredGraph {
+        package: ContractSourceV1 {
+            name: package.name().into(),
+            lock: package.lock().clone(),
+        },
+        clause: clause.clone(),
+        occurrence: occurrence.clone(),
+        kind,
+        path: path.to_vec(),
+        application: application.clone(),
+        population: population.binding,
+        object_type: population.object_type,
+        maximum,
+        edge: GraphEdgeIdentity {
+            declaration: end.relationship,
+            forward: end.forward,
+            lower: end.lower,
+            upper,
+            ordered: end.ordered,
+            unique: end.unique,
+        },
+        condition,
+    })
+}
+
+/// The population and destination end one reachability application names. A `reaches_field`
+/// application is a reachability application but names no population the owner accessor can
+/// read: it refuses as `NotReachesApplication`, never a guessed same-type population.
+fn domain_of(
+    package: &CheckedPackageV2,
+    application: &CheckedNodeId,
+) -> Result<(CheckedSelectedPopulation, CheckedRelationshipEnd), GraphRefusal> {
     let selector = package.reaches_population(application).map_err(|error| {
         Reason::PopulationAccessorRefused {
             refusal: match error {
@@ -198,7 +307,6 @@ pub(super) fn lower_graph(
         CheckedSelectedPopulationSource::Admitted { package, selector }
     });
     let population = finite_population(select_population(source))?;
-    // 2. The destination end's finite multiplicity.
     let end =
         package
             .relationship_end(application)
@@ -214,61 +322,237 @@ pub(super) fn lower_graph(
     if !same_node(package, &end.destination_type, &population.object_type) {
         return Err(Reason::PopulationTypeMismatch.into());
     }
-    let upper = end
-        .upper
-        .ok_or_else(|| GraphRefusal::RequiresBound(end.relationship.clone()))?;
-    let maximum =
-        population
-            .maximum
-            .as_str()
-            .parse::<u64>()
-            .map_err(|_| Reason::DomainNotRepresentable {
-                population_maximum: population.maximum.as_str().to_owned(),
-                edge_upper: upper,
-            })?;
+    Ok((population, end))
+}
 
-    // 3. The claim's shape: both operands are reference parameters of the clause, and the
-    // condition is a Boolean combination of this one application.
-    let [left, right] = operands.as_slice() else {
-        return Err(Reason::UnsupportedClaimShape.into());
+/// The named `name`/`level` literal of a parameter node's aggregate body.
+fn parameter_member<'a>(term: &'a CheckedTerm, member: &str) -> Option<&'a str> {
+    let CheckedTerm::Aggregate { members } = term else {
+        return None;
     };
-    let Some(CheckedTerm::Aggregate {
-        members: parameters,
-    }) = clause_arguments.first()
-    else {
-        return Err(Reason::UnsupportedClaimShape.into());
-    };
-    if ![left, right].iter().all(|operand| {
-        parameters
-            .iter()
-            .any(|parameter| same_operand_term(package, parameter, operand))
-    }) {
-        return Err(Reason::UnsupportedClaimShape.into());
-    }
-    let condition = lower_condition(package, condition, application, 0)?;
-    Ok(LoweredGraph {
-        package: ContractSourceV1 {
-            name: package.name().into(),
-            lock: package.lock().clone(),
+    members.iter().find_map(|candidate| match candidate {
+        CheckedTerm::Binding { name, value } if name.as_ref() == member => match &**value {
+            CheckedTerm::Literal { value, .. } => value.as_str(),
+            _ => None,
         },
-        clause: clause.clone(),
-        kind,
-        path: path.to_vec(),
-        application: application.clone(),
-        population: population.binding,
-        object_type: population.object_type,
-        maximum,
-        edge: GraphEdgeIdentity {
-            declaration: end.relationship,
-            forward: end.forward,
-            lower: end.lower,
-            upper,
-            ordered: end.ordered,
-            unique: end.unique,
-        },
-        condition,
-        same_operand: same_operand_term(package, left, right),
+        _ => None,
     })
+}
+
+/// What the condition may mention: the one population and end of the selected application, the
+/// clause's parameter and the quantifier binders in scope (name and level).
+struct Shape<'a> {
+    package: &'a CheckedPackageV2,
+    parameters: &'a [CheckedTerm],
+    population: &'a CheckedSelectedPopulation,
+    end: &'a CheckedRelationshipEnd,
+    binders: Vec<(String, u64)>,
+}
+
+impl Shape<'_> {
+    fn operand(&self, term: &CheckedTerm) -> Result<Operand, GraphRefusal> {
+        let unsupported = || GraphRefusal::from(Reason::UnsupportedClaimShape);
+        let CheckedTerm::Reference { target } = term else {
+            return Err(unsupported());
+        };
+        if self
+            .parameters
+            .iter()
+            .any(|parameter| same_operand_term(self.package, parameter, term))
+        {
+            return Ok(Operand::Start);
+        }
+        let node = self
+            .package
+            .resolved_graph()
+            .nodes
+            .iter()
+            .find(|node| same_node(self.package, &node.node_id, target))
+            .filter(|node| &*node.semantic_form == "parameter")
+            .filter(|node| self.references_population_type(&node.semantic_type))
+            .ok_or_else(unsupported)?;
+        let body = self.package.term(&node.node_id).ok_or_else(unsupported)?;
+        let name = parameter_member(body, "name").ok_or_else(unsupported)?;
+        let level = parameter_member(body, "level")
+            .and_then(|level| level.parse::<u64>().ok())
+            .ok_or_else(unsupported)?;
+        self.binders
+            .iter()
+            .position(|(bound, at)| bound == name && *at == level)
+            .map(Operand::Bound)
+            .ok_or_else(unsupported)
+    }
+
+    /// Whether a binder's type is a reference to the population's object type.
+    fn references_population_type(&self, reference_type: &CheckedNodeId) -> bool {
+        matches!(
+            self.package.term(reference_type),
+            Some(CheckedTerm::Aggregate { members })
+                if matches!(
+                    members.as_slice(),
+                    [CheckedTerm::Reference { target }]
+                        if same_node(self.package, target, &self.population.object_type)
+                )
+        )
+    }
+
+    /// A reachability application over the selected population and end, or the shape refusal.
+    fn reaches(&self, id: &CheckedNodeId, operands: &[CheckedTerm]) -> Result<Claim, GraphRefusal> {
+        let unsupported = || GraphRefusal::from(Reason::UnsupportedClaimShape);
+        let (population, end) = domain_of(self.package, id).map_err(|_| unsupported())?;
+        if !same_node(self.package, &population.binding, &self.population.binding)
+            || !same_node(self.package, &end.relationship, &self.end.relationship)
+            || end.forward != self.end.forward
+        {
+            return Err(unsupported());
+        }
+        let [left, right] = operands else {
+            return Err(unsupported());
+        };
+        Ok(Claim::Reaches(self.operand(left)?, self.operand(right)?))
+    }
+
+    /// `forall`/`exists` over every instance of the population's object type.
+    fn quantifier(
+        &mut self,
+        forall: bool,
+        arguments: &[CheckedTerm],
+        depth: usize,
+    ) -> Result<Claim, GraphRefusal> {
+        let unsupported = || GraphRefusal::from(Reason::UnsupportedClaimShape);
+        let [CheckedTerm::Reference { target: collection }, CheckedTerm::Binding { name, value }] =
+            arguments
+        else {
+            return Err(unsupported());
+        };
+        let Some(CheckedTerm::Application { operation, .. }) = self.package.term(collection) else {
+            return Err(unsupported());
+        };
+        if operation.identity() != Some("quire.op.model.all_instances")
+            || !operation
+                .member_declaration()
+                .ok()
+                .flatten()
+                .is_some_and(|declaration| {
+                    same_node(self.package, declaration, &self.population.object_type)
+                })
+        {
+            return Err(unsupported());
+        }
+        let nesting = self.binders.len();
+        if nesting >= MAX_QUANTIFIER_DEPTH {
+            return Err(unsupported());
+        }
+        let level = u64::try_from(self.parameters.len() + nesting).map_err(|_| unsupported())?;
+        self.binders.push((name.as_ref().to_owned(), level));
+        let body = self.claim(value, depth + 1);
+        self.binders.pop();
+        Ok(Claim::Quantified {
+            forall,
+            depth: nesting,
+            body: Box::new(body?),
+        })
+    }
+
+    fn claim(&mut self, term: &CheckedTerm, depth: usize) -> Result<Claim, GraphRefusal> {
+        let unsupported = || GraphRefusal::from(Reason::UnsupportedClaimShape);
+        if depth > 256 {
+            return Err(unsupported());
+        }
+        let (id, body) = match term {
+            CheckedTerm::Reference { target } => (
+                Some(target),
+                self.package.term(target).ok_or_else(unsupported)?,
+            ),
+            other => (None, other),
+        };
+        let CheckedTerm::Application {
+            operation,
+            arguments,
+            ..
+        } = body
+        else {
+            return Err(unsupported());
+        };
+        if is_reachability(body) {
+            return self.reaches(id.ok_or_else(unsupported)?, arguments);
+        }
+        match operation.identity() {
+            Some("quire.op.collection.forall") => return self.quantifier(true, arguments, depth),
+            Some("quire.op.collection.exists") => return self.quantifier(false, arguments, depth),
+            _ => {}
+        }
+        let mut rendered = Vec::with_capacity(arguments.len());
+        for argument in arguments {
+            rendered.push(self.claim(argument, depth + 1)?);
+        }
+        let mut operands = rendered.into_iter();
+        match (
+            operation.identity(),
+            operands.next(),
+            operands.next(),
+            operands.next(),
+        ) {
+            (Some("quire.op.boolean.not"), Some(argument), None, None) => {
+                Ok(Claim::Not(Box::new(argument)))
+            }
+            (Some("quire.op.boolean.and"), Some(left), Some(right), None) => {
+                Ok(Claim::And(Box::new(left), Box::new(right)))
+            }
+            (Some("quire.op.boolean.or"), Some(left), Some(right), None) => {
+                Ok(Claim::Or(Box::new(left), Box::new(right)))
+            }
+            (Some("quire.op.boolean.implies"), Some(left), Some(right), None) => {
+                Ok(Claim::Implies(Box::new(left), Box::new(right)))
+            }
+            (Some("quire.op.boolean.eq"), Some(left), Some(right), None) => {
+                Ok(Claim::Equal(Box::new(left), Box::new(right)))
+            }
+            _ => Err(unsupported()),
+        }
+    }
+}
+
+impl Claim {
+    /// The claim as a Rust Boolean expression over `paths`, `count` and `start`. A quantifier
+    /// ranges over the live objects `0..count` of the `maximum`-sized storage.
+    fn rust(&self, maximum: u64) -> String {
+        let operand = |operand: &Operand| match operand {
+            Operand::Start => "(start as usize)".to_owned(),
+            Operand::Bound(depth) => format!("q{depth}"),
+        };
+        match self {
+            Self::Reaches(from, to) => format!("paths[{}][{}]", operand(from), operand(to)),
+            Self::Not(argument) => format!("!({})", argument.rust(maximum)),
+            Self::And(left, right) => {
+                format!("({}) && ({})", left.rust(maximum), right.rust(maximum))
+            }
+            Self::Or(left, right) => {
+                format!("({}) || ({})", left.rust(maximum), right.rust(maximum))
+            }
+            Self::Implies(left, right) => {
+                format!("!({}) || ({})", left.rust(maximum), right.rust(maximum))
+            }
+            Self::Equal(left, right) => {
+                format!("({}) == ({})", left.rust(maximum), right.rust(maximum))
+            }
+            Self::Quantified {
+                forall,
+                depth,
+                body,
+            } => {
+                let (name, start, join) = if *forall {
+                    ("all", "true", "&&")
+                } else {
+                    ("any", "false", "||")
+                };
+                format!(
+                    "{{ let mut {name}{depth} = {start}; for q{depth} in 0..{maximum} {{ if (q{depth} as i64) < count {{ {name}{depth} = {name}{depth} {join} ({}); }} }} {name}{depth} }}",
+                    body.rust(maximum)
+                )
+            }
+        }
+    }
 }
 
 fn finite_population(outcome: Population) -> Result<CheckedSelectedPopulation, GraphRefusal> {
@@ -296,49 +580,15 @@ fn finite_population(outcome: Population) -> Result<CheckedSelectedPopulation, G
     Err(Reason::PopulationSelectionRefused { refusal }.into())
 }
 
-/// Render the clause condition as a Boolean expression over the one `reachable` variable.
-fn lower_condition(
-    package: &CheckedPackageV2,
-    term: &CheckedTerm,
-    selected: &CheckedNodeId,
-    depth: usize,
-) -> Result<String, GraphRefusal> {
-    if depth > 256 {
-        return Err(Reason::UnsupportedClaimShape.into());
-    }
-    if matches!(term, CheckedTerm::Reference { target } if same_node(package, target, selected)) {
-        return Ok("reachable".into());
-    }
-    let body = resolve(package, term).ok_or(Reason::UnsupportedClaimShape)?;
-    let CheckedTerm::Application {
-        operation,
-        arguments,
-        ..
-    } = body
-    else {
-        return Err(Reason::UnsupportedClaimShape.into());
-    };
-    let mut rendered = Vec::with_capacity(arguments.len());
-    for argument in arguments {
-        rendered.push(lower_condition(package, argument, selected, depth + 1)?);
-    }
-    match (operation.identity(), rendered.as_slice()) {
-        (Some("quire.op.boolean.not"), [argument]) => Ok(format!("!({argument})")),
-        (Some("quire.op.boolean.and"), [left, right]) => Ok(format!("({left}) && ({right})")),
-        (Some("quire.op.boolean.or"), [left, right]) => Ok(format!("({left}) || ({right})")),
-        (Some("quire.op.boolean.implies"), [left, right]) => Ok(format!("!({left}) || ({right})")),
-        (Some("quire.op.boolean.eq"), [left, right]) => Ok(format!("({left}) == ({right})")),
-        _ => Err(Reason::UnsupportedClaimShape.into()),
-    }
-}
-
 pub(super) fn refusal(
     clause: &CheckedNodeId,
+    occurrence: &CheckedOccurrence,
     path: &[usize],
     reason: Reason,
 ) -> UnsupportedObligation {
     UnsupportedObligation::GraphClaimNotRendered {
         clause_id: clause.clone(),
+        occurrence: occurrence.clone(),
         argument_path: path.to_vec(),
         reason,
     }
@@ -369,7 +619,7 @@ pub(super) fn render_graph(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredGraph,
 ) -> Result<KaniGraphObligationHarness, UnsupportedObligation> {
-    let refuse = |reason| refusal(&lowered.clause, &lowered.path, reason);
+    let refuse = |reason| refusal(&lowered.clause, &lowered.occurrence, &lowered.path, reason);
     let n = lowered.maximum;
     let upper = lowered.edge.upper;
     let not_representable = || {
@@ -418,6 +668,7 @@ pub(super) fn render_graph(
     let material = crate::core::canonical::preimage_value(&(
         &lowered.package,
         &lowered.clause,
+        &lowered.occurrence,
         lowered.kind,
         &lowered.path,
         &lowered.application,
@@ -446,6 +697,7 @@ pub(super) fn render_graph(
         ceilings: request.ceilings,
         package: lowered.package.clone(),
         clause_id: lowered.clause.clone(),
+        occurrence: lowered.occurrence.clone(),
         kind: lowered.kind,
         argument_path: lowered.path.clone(),
         application_id: lowered.application.clone(),
@@ -480,9 +732,9 @@ pub(super) fn render_graph(
         &mut body,
         "object_count == 0 || (start < object_count && target < object_count)".into(),
     )?;
-    if lowered.same_operand {
-        assume(&mut body, "start == target".into())?;
-    }
+    // An invariant has one parameter, so the harness draws one object for `self`; `target` stays
+    // a drawn slot of the layout (the replay decodes it) and equals `start`.
+    assume(&mut body, "start == target".into())?;
     let mut degrees = Vec::new();
     let mut rows = Vec::new();
     for row in 0..n {
@@ -538,7 +790,6 @@ pub(super) fn render_graph(
             Argument::Borrow("degrees".into()),
             Argument::Borrow("edges".into()),
             Argument::Value("start".into()),
-            Argument::Value("target".into()),
         ],
     });
     body.push(Statement::Assert {
@@ -550,13 +801,14 @@ pub(super) fn render_graph(
     // reach itself and a self-loop does. Storage extents bound unrolling; the live guards keep
     // the full count and degree draws.
     let oracle = format!(
-        "fn {helper}(count: i64, degrees: &[i64; {n}], edges: &[[i64; {upper}]; {n}], start: i64, target: i64) -> bool {{\n\
+        "fn {helper}(count: i64, degrees: &[i64; {n}], edges: &[[i64; {upper}]; {n}], start: i64) -> bool {{\n\
+         let _ = start;\n\
+         if count == 0 {{ return true; }}\n\
          let mut paths = [[false; {n}]; {n}];\n\
          for row in 0..{n} {{ for edge in 0..{upper} {{ if (row as i64) < count && (edge as i64) < degrees[row] {{ paths[row][edges[row][edge] as usize] = true; }} }} }}\n\
          for via in 0..{n} {{ for from in 0..{n} {{ for to in 0..{n} {{ paths[from][to] = paths[from][to] || (paths[from][via] && paths[via][to]); }} }} }}\n\
-         let reachable = if count == 0 {{ false }} else {{ paths[start as usize][target as usize] }};\n\
          {}\n}}",
-        lowered.condition
+        lowered.condition.rust(n)
     );
     let spec = HarnessSpec::new(
         "admitted graph clause".into(),
