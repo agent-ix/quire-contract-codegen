@@ -14,7 +14,7 @@
 //!   the generated source and evaluated on the carrier graph, with the sampler's storage shape
 //!   cross-checked against the draws. A graph the sampler has no storage for is rejected, never
 //!   truncated.
-//! - The candidate is drawn independently of `G` and `D`; only carrier padding is constrained.
+//! - The candidate is drawn independently of `G` and `D`; only the carrier's box and its dormant padding are constrained.
 //!
 //! A pure-bound mutant is the production renderer run with one replaced bound
 //! (`render_with_bounds`); the package, `D`, the carrier and the clause rules stay unchanged.
@@ -249,7 +249,7 @@ fn observe(source: &str) -> Sampler {
         .expect("the generated proof");
     let mut draws = Vec::new();
     let mut conditions = Vec::new();
-    for line in proof.lines().map(str::trim) {
+    for line in proof.lines().map(str::trim).filter(|line| !line.is_empty()) {
         if let Some(name) = line
             .strip_prefix("let ")
             .and_then(|rest| rest.strip_suffix(": i64 = kani::any();"))
@@ -260,6 +260,13 @@ fn observe(source: &str) -> Sampler {
             .and_then(|rest| rest.strip_suffix(");"))
         {
             conditions.push(condition.to_owned());
+        } else if line.starts_with("fn prove_") {
+            continue;
+        } else if line.starts_with("let degrees = ") {
+            // The first statement after the constraints: nothing later restricts a draw.
+            break;
+        } else {
+            panic!("unrecognised statement in the sampler's constraint section: {line}");
         }
     }
     let mut expected: Vec<String> = ["object_count", "start", "target"]
@@ -833,67 +840,85 @@ fn mutant_is_detected(end: End, mutant: Mutant) {
     verified(run_outcome(&probe, &probe_label), &probe_label);
 }
 
-macro_rules! kani_control {
-    ($name:ident, $end:expr, $body:expr) => {
-        #[trace("TC-025", "FR-015-AC-106")]
-        #[test]
-        #[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
-        fn $name() {
-            $body($end);
-        }
-    };
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_domain_oracle_verifies_a_unique_end() {
+    let end = End::Unique;
+    healthy_oracle_verifies(end);
 }
 
-kani_control!(
-    real_kani_domain_oracle_verifies_a_unique_end,
-    End::Unique,
-    healthy_oracle_verifies
-);
-kani_control!(
-    real_kani_domain_oracle_verifies_a_non_unique_end,
-    End::NonUnique,
-    healthy_oracle_verifies
-);
-kani_control!(
-    real_kani_domain_boundary_probes_reach_a_unique_end,
-    End::Unique,
-    healthy_probes_are_reachable
-);
-kani_control!(
-    real_kani_domain_boundary_probes_reach_a_non_unique_end,
-    End::NonUnique,
-    healthy_probes_are_reachable
-);
-kani_control!(
-    real_kani_population_plus_one_violates_conformance_on_a_unique_end,
-    End::Unique,
-    |end| mutant_is_detected(end, Mutant::PopulationAbove)
-);
-kani_control!(
-    real_kani_population_plus_one_violates_conformance_on_a_non_unique_end,
-    End::NonUnique,
-    |end| mutant_is_detected(end, Mutant::PopulationAbove)
-);
-kani_control!(
-    real_kani_population_minus_one_violates_completeness_on_a_unique_end,
-    End::Unique,
-    |end| mutant_is_detected(end, Mutant::PopulationBelow)
-);
-kani_control!(
-    real_kani_population_minus_one_violates_completeness_on_a_non_unique_end,
-    End::NonUnique,
-    |end| mutant_is_detected(end, Mutant::PopulationBelow)
-);
-kani_control!(
-    real_kani_edge_upper_plus_one_violates_conformance_on_a_unique_end,
-    End::Unique,
-    |end| mutant_is_detected(end, Mutant::EdgeUpperAbove)
-);
-kani_control!(
-    real_kani_edge_upper_plus_one_violates_conformance_on_a_non_unique_end,
-    End::NonUnique,
-    |end| mutant_is_detected(end, Mutant::EdgeUpperAbove)
-);
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_domain_oracle_verifies_a_non_unique_end() {
+    let end = End::NonUnique;
+    healthy_oracle_verifies(end);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_domain_boundary_probes_reach_a_unique_end() {
+    let end = End::Unique;
+    healthy_probes_are_reachable(end);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_domain_boundary_probes_reach_a_non_unique_end() {
+    let end = End::NonUnique;
+    healthy_probes_are_reachable(end);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_population_plus_one_violates_conformance_on_a_unique_end() {
+    let end = End::Unique;
+    mutant_is_detected(end, Mutant::PopulationAbove);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_population_plus_one_violates_conformance_on_a_non_unique_end() {
+    let end = End::NonUnique;
+    mutant_is_detected(end, Mutant::PopulationAbove);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_population_minus_one_violates_completeness_on_a_unique_end() {
+    let end = End::Unique;
+    mutant_is_detected(end, Mutant::PopulationBelow);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_population_minus_one_violates_completeness_on_a_non_unique_end() {
+    let end = End::NonUnique;
+    mutant_is_detected(end, Mutant::PopulationBelow);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_edge_upper_plus_one_violates_conformance_on_a_unique_end() {
+    let end = End::Unique;
+    mutant_is_detected(end, Mutant::EdgeUpperAbove);
+}
+
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_edge_upper_plus_one_violates_conformance_on_a_non_unique_end() {
+    let end = End::NonUnique;
+    mutant_is_detected(end, Mutant::EdgeUpperAbove);
+}
 
 /// The expectation `D` is written from is the authored declaration, and the package's own
 /// projections agree with it before any mutation.
@@ -950,11 +975,72 @@ fn native_membership_agrees_with_the_boundary_witnesses_of_every_mutant() {
     }
 }
 
-/// Graphs both domains reject by their own rule: a repeated target on a unique end is outside
-/// both, and a repeated target on a non-unique end is inside both.
+/// The inclusive range the sampler draws `draw` from, read from its range assumption.
+fn drawn_range(sampler: &Sampler, draw: &str) -> (i64, i64) {
+    let prefix = format!("{draw} >= ");
+    let condition = sampler
+        .conditions
+        .iter()
+        .find(|condition| condition.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("no range assumption for {draw}"));
+    let number = |text: &str| text.trim_end_matches("_i64").parse::<i64>().unwrap();
+    let (lower, upper) = condition[prefix.len()..]
+        .split_once(&format!(" && {draw} <= "))
+        .expect("an inclusive range");
+    (number(lower), number(upper))
+}
+
+/// The carrier's box holds every active value of the compared domains: every range the healthy
+/// and mutated samplers draw from, and the authored domain, lies inside the carrier's count,
+/// operand, degree and target extents, so no compared graph is cut off by the box.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
-fn uniqueness_and_lower_bounds_are_part_of_both_membership_predicates() {
+fn the_carrier_box_contains_every_sampler_range_and_the_authored_domain() {
+    for end in End::ALL {
+        let declared = end.declared();
+        assert!(declared.population <= ROWS as i64 && declared.upper <= COLS as i64);
+        let authored = end.authored();
+        let mut samplers = vec![observe(&harness(&authored, &[0]).rust.contents)];
+        samplers.extend(
+            Mutant::ALL.map(|mutant| observe(&mutant_harness(&authored, mutant).rust.contents)),
+        );
+        for sampler in &samplers {
+            for draw in &sampler.draws {
+                let (lower, upper) = drawn_range(sampler, draw);
+                let (box_lower, box_upper) = match draw.as_str() {
+                    "object_count" => (0, ROWS as i64),
+                    "start" | "target" => (0, ROWS as i64 - 1),
+                    name if name.starts_with("degree_") => (0, COLS as i64),
+                    _ => (0, ROWS as i64 - 1),
+                };
+                assert!(
+                    box_lower <= lower && upper <= box_upper,
+                    "{draw} range {lower}..={upper} leaves the carrier box"
+                );
+            }
+        }
+    }
+}
+
+/// `D` enforces a nonzero lower bound (the fixture's ends have lower bound zero, so the sampler's
+/// lower-bound assumption is not exercised here, only the native predicate).
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+fn the_native_domain_predicate_enforces_a_nonzero_lower_bound() {
+    let declared = Declared {
+        lower: 1,
+        ..End::NonUnique.declared()
+    };
+    assert!(!native_domain(declared, &Graph::with_rows(2, &[&[1], &[]])));
+    assert!(native_domain(declared, &Graph::with_rows(2, &[&[1], &[0]])));
+}
+
+/// Graphs both domains judge by their own rule: a repeated target on a unique end is outside
+/// both, a repeated target on a non-unique end is inside both, and a dangling target is outside
+/// both.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+fn uniqueness_and_dangling_targets_are_part_of_both_membership_predicates() {
     let repeated = Graph::with_rows(POPULATION, &[&[0, 0]]);
     let unique_sampler = observe(&harness(&End::Unique.authored(), &[0]).rust.contents);
     let loose_sampler = observe(&harness(&End::NonUnique.authored(), &[0]).rust.contents);
@@ -1018,10 +1104,10 @@ fn zeroed_dormant_padding_preserves_the_samplers_admission() {
 }
 
 /// Each oracle run has exactly one cover, last in the harness, and no `kani::assume` mentions a
-/// sampler draw or a membership predicate: only carrier slots are constrained.
+/// sampler draw or a membership predicate: only carrier slots (box and padding) are constrained.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
-fn every_oracle_run_has_one_final_cover_and_assumes_only_carrier_padding() {
+fn every_oracle_run_has_one_final_cover_and_assumes_only_carrier_slots() {
     let authored = End::Unique.authored();
     let sampler = mutant_harness(&authored, Mutant::EdgeUpperAbove);
     for run in [Run::Oracle, Run::Probe("g && !d")] {
