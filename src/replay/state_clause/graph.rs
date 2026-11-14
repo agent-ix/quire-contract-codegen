@@ -18,7 +18,10 @@ use qsl_replay::{
     SelectedAnchor, SelectedObject, StateClauseCounterexample, WitnessPacket, WitnessValue,
 };
 use quire_canonical::FixedShape;
-use quire_contract_model::{CheckedNodeId, CheckedOccurrence, CheckedPackageV2};
+use quire_contract_model::{
+    CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageV2,
+};
+use quire_exact::Origin;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -297,6 +300,20 @@ fn not_in_domain() -> StateClauseReplayError {
     StateClauseReplayError::GraphWitnessNotInDomain
 }
 
+/// Whether QSL's call-site origin is the clause node occurrence a harness is keyed by: the same
+/// role and the same ordinal within that role.
+fn names_occurrence(origin: &Origin, occurrence: &CheckedOccurrence) -> bool {
+    let role = match occurrence.role {
+        CheckedOccurrenceRole::Declaration => "declaration",
+        CheckedOccurrenceRole::Type => "type",
+        CheckedOccurrenceRole::Expression => "expression",
+        CheckedOccurrenceRole::Anchor => "anchor",
+        CheckedOccurrenceRole::Claim => "claim",
+        CheckedOccurrenceRole::Generated => "generated",
+    };
+    origin.role().as_str() == role && origin.ordinal() == occurrence.ordinal
+}
+
 fn key(index: usize) -> String {
     format!("n{index}")
 }
@@ -353,7 +370,8 @@ impl StateClauseReplay {
         }
         // The harness is keyed by one occurrence of the clause node; the named clause must be it.
         if occurrence
-            .is_some_and(|occurrence| site.occurrence.origin().ordinal() != occurrence.ordinal)
+            .as_ref()
+            .is_some_and(|occurrence| !names_occurrence(site.occurrence.origin(), occurrence))
         {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
@@ -475,5 +493,32 @@ impl StateClauseReplay {
             packet,
             replay_limits: run.replay_limits,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_exact::Role;
+
+    fn claim(ordinal: u64) -> CheckedOccurrence {
+        CheckedOccurrence {
+            role: CheckedOccurrenceRole::Claim,
+            ordinal,
+        }
+    }
+
+    #[trace("TC-025", "FR-015-AC-107")]
+    #[test]
+    fn an_origin_names_an_occurrence_only_by_role_and_ordinal() {
+        let origin = Origin::new(Role::new("claim"), 1);
+        assert!(names_occurrence(&origin, &claim(1)));
+        assert!(!names_occurrence(&origin, &claim(0)));
+        let declaration = CheckedOccurrence {
+            role: CheckedOccurrenceRole::Declaration,
+            ordinal: 1,
+        };
+        assert!(!names_occurrence(&origin, &declaration));
     }
 }

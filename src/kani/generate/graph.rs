@@ -443,10 +443,8 @@ impl Shape<'_> {
         if nesting >= MAX_QUANTIFIER_DEPTH {
             return Err(unsupported());
         }
-        self.binders.push((
-            name.as_ref().to_owned(),
-            (self.parameters.len() + nesting) as u64,
-        ));
+        let level = u64::try_from(self.parameters.len() + nesting).map_err(|_| unsupported())?;
+        self.binders.push((name.as_ref().to_owned(), level));
         let body = self.claim(value, depth + 1);
         self.binders.pop();
         Ok(Claim::Quantified {

@@ -1055,6 +1055,25 @@ fn a_transitivity_claim_with_three_quantifier_bound_operands_is_three_items() {
     assert_eq!(symbols.len(), 3);
 }
 
+/// The deepest nesting the oracle unrolls is four binders; the claim at that depth is supported
+/// and its harness evaluates four nested quantifiers.
+#[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn four_nested_binders_are_the_deepest_supported_claim() {
+    let condition = "forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : forall(d in M::CollectionNodes : reaches(a, d, kids) or not reaches(a, d, kids)))))";
+    let authored = fixture(condition);
+    let harness = emitted(&authored.package, &[1, 1, 1, 1, 0]);
+    let source = &harness.rust.contents;
+    for depth in 0..4 {
+        assert!(
+            source.contains(&format!("for q{depth} in 0..3")),
+            "{source}"
+        );
+    }
+    assert!(!source.contains("for q4 in"), "{source}");
+}
+
 #[trace("TC-025", "FR-015-AC-108")]
 #[test]
 fn quantified_claims_the_encoding_cannot_express_settle_unsupported_claim_shape() {
