@@ -123,16 +123,16 @@ fn domain_document() -> Vec<u8> {
     quire_canonical::to_vec(&document, limits).expect("canonical domain document")
 }
 
-struct Authored {
-    package: CheckedPackageV2,
-    clause: CheckedNodeId,
-    occurrence: CheckedOccurrence,
+pub(crate) struct Authored {
+    pub(crate) package: CheckedPackageV2,
+    pub(crate) clause: CheckedNodeId,
+    pub(crate) occurrence: CheckedOccurrence,
     occurrences: Vec<CheckedOccurrence>,
     source: String,
     domain: Vec<u8>,
 }
 
-fn authored(condition: &str, maximum: u64) -> Authored {
+pub(crate) fn authored(condition: &str, maximum: u64) -> Authored {
     authored_named(condition, maximum, &["Graph"])
 }
 
@@ -186,7 +186,7 @@ fn authored_named(condition: &str, maximum: u64, names: &[&str]) -> Authored {
     }
 }
 
-fn harness(authored: &Authored, path: &[usize]) -> KaniGraphObligationHarness {
+pub(crate) fn harness(authored: &Authored, path: &[usize]) -> KaniGraphObligationHarness {
     harness_at(authored, &authored.occurrence, path)
 }
 
@@ -256,14 +256,14 @@ impl Drop for Scratch {
 }
 
 /// Runs `harness` under the installed backend and returns the Falsified counterexample.
-fn run_falsified(harness: &KaniGraphObligationHarness, label: &str) -> String {
+pub(crate) fn run_falsified(harness: &KaniGraphObligationHarness, label: &str) -> String {
     let KaniRunOutcome::Falsified { counterexample } = run_outcome(harness, label) else {
         panic!("{label}: the run must falsify");
     };
     counterexample
 }
 
-fn run_outcome(harness: &KaniGraphObligationHarness, label: &str) -> KaniRunOutcome {
+pub(crate) fn run_outcome(harness: &KaniGraphObligationHarness, label: &str) -> KaniRunOutcome {
     let scratch = Scratch::create(label);
     fs::write(
         scratch.0.join("Cargo.toml"),

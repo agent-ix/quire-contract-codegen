@@ -614,6 +614,26 @@ fn assume(body: &mut Vec<Statement>, condition: String) -> Result<(), Unsupporte
     Ok(())
 }
 
+/// Test seam for the domain-bound mutants of FR-015-AC-106: the claim lowered from the
+/// original package, rendered by the production renderer with only the population maximum and the
+/// edge upper bound replaced. Storage extents and draw ranges follow the replaced bounds; nothing
+/// else about the claim or its identity input changes.
+#[cfg(test)]
+pub(crate) fn render_with_bounds(
+    request: &KaniObligationRequest<'_>,
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    occurrence: &CheckedOccurrence,
+    path: &[usize],
+    maximum: u64,
+    upper: u64,
+) -> Option<KaniGraphObligationHarness> {
+    let mut lowered = lower_graph(package, clause, occurrence, path).ok()?;
+    lowered.maximum = maximum;
+    lowered.edge.upper = upper;
+    render_graph(request, &lowered).ok()
+}
+
 /// Render every admitted slot. A representation or resource refusal never shrinks a domain.
 pub(super) fn render_graph(
     request: &KaniObligationRequest<'_>,
