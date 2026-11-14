@@ -559,6 +559,7 @@ fn render_text(
         requirement_occurrence: request.requirement_occurrence.cloned(),
         path_condition: Vec::new(),
         guard_inputs: Vec::new(),
+        float_scalar: None,
         enum_scalar: Some(EnumScalarIdentity {
             declaration: declaration.node.clone(),
             qualified_name: declaration.qualified.clone(),

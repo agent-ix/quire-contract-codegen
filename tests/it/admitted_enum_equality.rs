@@ -86,7 +86,9 @@ pub(super) fn application(package: &CheckedPackageV2, function: &str) -> Checked
         .nodes
         .iter()
         .find(|node| {
-            node.semantic_form.as_ref() == "binary"
+            (node.semantic_form.as_ref() == "binary"
+                || matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. }
+                    if operation.identity().is_some_and(|id| id.starts_with("quire.op.ieee."))))
                 && package
                     .source_map()
                     .iter()

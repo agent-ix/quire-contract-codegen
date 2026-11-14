@@ -197,7 +197,11 @@ pub use kani::generate::enum_scalar::{
     generate_enum_scalar_harness, EnumCapability, EnumScalarHarness, EnumScalarOutcome,
     EnumScalarRefusal, EnumScalarRequest,
 };
-pub use kani::identity::EnumScalarIdentity;
+pub use kani::generate::float_scalar::{
+    generate_float_scalar_harness, FloatCapability, FloatScalarHarness, FloatScalarOutcome,
+    FloatScalarRefusal, FloatScalarRequest,
+};
+pub use kani::identity::{EnumScalarIdentity, FloatScalarIdentity};
 pub use kani::output::diagnostics::{
     KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
 };
@@ -325,13 +329,15 @@ pub use replay::frame::{
 };
 pub use replay::function::{
     replay_counterexample, replay_counterexample_through, replay_enum_witness,
-    replay_falsification, DependencyLock, DependencyLockError, EvidenceFailureCause,
-    FunctionPacketError, LockedSource, PacketClaimMember, ProvidedDocument, ReplayInputs,
-    ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_falsification, replay_float_witness, DependencyLock, DependencyLockError,
+    EvidenceFailureCause, FunctionPacketError, LockedSource, PacketClaimMember, ProvidedDocument,
+    ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
+    SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::scalar::{
-    decode_enum_falsification, decode_scalar_falsification, EnumWitness, SCALAR_PLAYBACK_BYTES,
+    decode_enum_falsification, decode_float_falsification, decode_scalar_falsification,
+    EnumWitness, FloatWitness, SCALAR_PLAYBACK_BYTES,
 };
 pub use replay::state_clause::graph::{GraphReplayAddress, GraphReplayInputs, GraphWitness};
 pub use replay::state_clause::invariant::{InvariantReplayInputs, StateClauseHarness};

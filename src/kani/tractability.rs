@@ -178,12 +178,16 @@ pub struct TractabilityRow {
     /// required.
     #[serde(deserialize_with = "required")]
     pub peak_bytes: Option<u64>,
-    /// The Kani version the probe ran under.
-    pub kani_version: String,
-    /// The CBMC version the probe ran under.
-    pub cbmc_version: String,
-    /// The solver version the probe ran under.
-    pub solver_version: String,
+    /// The Kani version the probe ran under, when the row records one. Optional: a row recorded
+    /// without tool versions (QSL-406, EA-49) loads, and a version never selects a row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kani_version: Option<String>,
+    /// The CBMC version the probe ran under, when the row records one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cbmc_version: Option<String>,
+    /// The solver version the probe ran under, when the row records one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solver_version: Option<String>,
     /// The generator version the probe ran against.
     pub generator_version: String,
     /// The kernel version the probe ran against.

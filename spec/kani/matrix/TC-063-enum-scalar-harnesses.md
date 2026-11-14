@@ -70,4 +70,4 @@ classification and receive no proof credit.
 
 ## Status
 
-PARTIAL (IR-262): every step runs in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani, including the owner replay of a decoded counterexample. The remaining narrowing is stated in the FR-049 Status: AC-8's refused-sibling clause is tested across separate generations, and AC-9's byte-identity covers Boolean, integer, text and sequence nodes. Enum has no IR-1526 refusal row because it verifies.
+PARTIAL (IR-262): every step runs in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani, including the owner replay of a decoded counterexample. The remaining narrowing is stated in the FR-049 Status: AC-9's byte-identity covers Boolean, integer, text, sequence and float nodes. Enum has no IR-1526 refusal row because it verifies.

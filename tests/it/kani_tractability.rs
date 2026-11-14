@@ -393,6 +393,32 @@ fn tc_070_a_named_table_that_does_not_load_fails_the_request() {
     assert_eq!(harness_count(&absent), 1);
 }
 
+/// FR-056-AC-4: a row that records no tool version still refuses, and the refusal carries the row
+/// as it is, with no version.
+#[trace("FR-056-AC-4", "TC-070")]
+#[test]
+fn tc_070_a_version_free_row_refuses_and_the_refusal_names_the_row_as_recorded() {
+    let directory = TemporaryDirectory::new("ir1526-version-free");
+    let mut bad = row_json(&[MUL], 21, "not_tractable");
+    for field in ["kani_version", "cbmc_version", "solver_version"] {
+        bad.as_object_mut().expect("a row object").remove(field);
+    }
+    let path = write_table(&directory, "table.json", std::slice::from_ref(&bad));
+    let (wide, wide_clause) = package(1 << 20, 1 << 20, "other * offset + 3 <= 100");
+    let wide_claim = crate::common::v2_claim::claim_for(&wide, &wide_clause);
+    let items = [item(&wide, &wide_clause, &wide_claim)];
+    let outcome = negotiate_with(&items, &options(&path)).expect("negotiates");
+    let expected_row: TractabilityRow = serde_json::from_value(bad).unwrap();
+    assert_eq!(expected_row.kani_version, None);
+    let ObligationDisposition::Unsupported {
+        reason: UnsupportedObligation::V2ClauseNotTractable { row, .. },
+    } = disposition(&outcome, 0)
+    else {
+        panic!("a version-free row refuses: {:?}", disposition(&outcome, 0));
+    };
+    assert_eq!(**row, expected_row);
+}
+
 /// FR-056-AC-4: a clause with a current `not_tractable` row for its operation at or below its
 /// width is refused with the typed reason and no harness; a sibling keeps its harness; an
 /// operator the V2 path refuses keeps its own reason.
@@ -433,8 +459,8 @@ fn tc_070_a_measured_bad_row_refuses_the_clause_before_generation() {
         }
     );
     // The row carries the Kani, CBMC, solver, generator and kernel versions.
-    assert_eq!(expected_row.kani_version, "0.68.0");
-    assert_eq!(expected_row.cbmc_version, "6.11.0");
+    assert_eq!(expected_row.kani_version.as_deref(), Some("0.68.0"));
+    assert_eq!(expected_row.cbmc_version.as_deref(), Some("6.11.0"));
     assert_eq!(expected_row.generator_version, GENERATOR_VERSION);
     assert_eq!(expected_row.kernel_version, KERNEL_VERSION);
     assert!(matches!(
@@ -1054,7 +1080,7 @@ fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
         TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
             .expect("the docs file loads");
     assert_eq!(general_scalar_table(), from_file);
-    assert_eq!(from_file.rows().len(), 2);
+    assert_eq!(from_file.rows().len(), 7);
 }
 
 /// A request whose launcher and crate do not exist: any attempt to run it would be a different
@@ -1119,9 +1145,9 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
         row.max_operand_bits, 2,
         "the smallest add width observed to time out"
     );
-    assert_eq!(row.kani_version, "0.68.0");
-    assert_eq!(row.cbmc_version, "6.11.0");
-    assert_eq!(row.solver_version, "cadical-3.0.0");
+    assert_eq!(row.kani_version.as_deref(), Some("0.68.0"));
+    assert_eq!(row.cbmc_version.as_deref(), Some("6.11.0"));
+    assert_eq!(row.solver_version.as_deref(), Some("cadical-3.0.0"));
     assert_eq!(row.generator_version, GENERATOR_VERSION);
     assert_eq!(row.kernel_version, KERNEL_VERSION);
 

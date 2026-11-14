@@ -390,7 +390,7 @@ fn literal_form(term: &CheckedTerm) -> Option<String> {
 }
 
 /// Classify only the owner's literal and reference variants.
-pub(super) fn operand_form<Body: GraphBody>(
+pub(crate) fn operand_form<Body: GraphBody>(
     graph: &Graph<'_, Body>,
     term: &CheckedTerm,
 ) -> Option<String> {
@@ -454,7 +454,7 @@ fn is_bounded_domain<Body>(node: &CheckedSemanticNodeV2<Body>) -> bool {
 
 /// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
 /// A literal, a reference typed by a scalar type, or any other term has none.
-fn operand_own_bound<'g, Body: GraphBody>(
+pub(crate) fn operand_own_bound<'g, Body: GraphBody>(
     graph: &Graph<'g, Body>,
     term: &CheckedTerm,
 ) -> Option<&'g CheckedSemanticNodeV2<Body>> {

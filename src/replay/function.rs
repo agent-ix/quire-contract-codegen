@@ -1719,6 +1719,48 @@ pub fn replay_enum_witness(
     ])
 }
 
+/// Replays a decoded float comparison counterexample through the owner route: the selected QSL
+/// function is evaluated by [`qsl_replay::replay`] over the exact bit patterns the witness names,
+/// each as `WitnessValue::Float32` or `WitnessValue::Float64` bound by its parameter name, and its
+/// Boolean result is returned for the caller to compare with the harness's expectation.
+///
+/// # Errors
+///
+/// [`SpineReplayError`] when a declared parameter has no witness value, QSL refuses a value or the
+/// request, or the function result is not a Boolean.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
+pub fn replay_float_witness(
+    package: &ReplayPackage,
+    witness: &crate::replay::scalar::FloatWitness,
+) -> Result<bool, SpineReplayError> {
+    let arguments = package
+        .parameters()
+        .into_iter()
+        .map(|parameter| {
+            let (_, bits) = witness
+                .operands
+                .iter()
+                .find(|(name, _)| name == parameter.argument)
+                .ok_or_else(|| SpineReplayError::UnboundArgument {
+                    argument: parameter.argument.to_owned(),
+                })?;
+            match witness.width.as_str() {
+                "float32" => u32::try_from(*bits)
+                    .map(WitnessValue::Float32)
+                    .map_err(|_| SpineReplayError::UnsupportedWitnessValue {
+                        argument: parameter.argument.to_owned(),
+                    }),
+                "float64" => Ok(WitnessValue::Float64(*bits)),
+                _ => Err(SpineReplayError::UnsupportedWitnessValue {
+                    argument: parameter.argument.to_owned(),
+                }),
+            }
+        })
+        .collect::<Result<Vec<_>, SpineReplayError>>()?;
+    package.evaluate_boolean_over(arguments)
+}
+
 /// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
 /// the `violation` category reproduces the backend's falsification; every other settlement is
 /// evidence failure, carrying QSL's disagreement cause when it has one.

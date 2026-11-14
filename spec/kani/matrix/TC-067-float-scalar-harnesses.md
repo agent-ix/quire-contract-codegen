@@ -11,11 +11,10 @@ relationships:
 ## Description
 
 Verify [FR-053](../functional/FR-053-float-scalar-harnesses.md) through admitted float
-packages (conditional on the quire-exact float carrier, IR-1446; the Contract IR float
-`requires_bound` ruling, IR-69, for the upstream half of the unpinned-operand refusal;
-and, for `sqrt` and `fma`, the FR-014 derivation of IR-1502, which is delivered; the first two are not),
-public CG generation, installed proof execution and owner replay. This case is planned;
-FR-014 oracle agreement does not establish Kani acceptance. Execute generated proofs only
+packages (over the quire-exact float carrier, IR-1446, for the comparisons whose quire-exact harnesses
+are Verified; the arithmetic identities are refused as not tractable, and the Contract IR float
+`requires_bound` ruling, IR-69, would make the unpinned-operand refusal upstream),
+public CG generation, installed proof execution and owner replay. FR-014 oracle agreement does not establish Kani acceptance. Execute generated proofs only
 with the authorized runner and budget. The control points named in FR-053's Behavior
 section (`Z+`, `Z-`, `ONE`, `QN1`, `SN1`, `T1` through `T4`, `M1` and the others) are
 used by name below.
@@ -65,11 +64,13 @@ used by name below.
    invalid operation under `exact` complete with their flag. Assert no `Undefined` or
    comparison `Refused` control exists, that `DistinctIeeeWidths` has no harness control,
    and inspect the harness for no outcome-based assume (AC-5).
-6. Remove the carrier and assert `OperationNotRendered` (`NoRenderer`, no prerequisite
-   name). Present `sqrt` and `fma` without the FR-014 extension and assert
-   `OperationNotDerivable`. Exercise an unsupported operand form, an absent native
-   expression and a float composite leaf beside a supported sibling and assert total
-   accounting and the leaf's `ShadowFamilyNotBuilt` (AC-6).
+6. Request each arithmetic identity beside a supported comparison in one routed request and
+   assert the typed `float.<op>.not_kani_tractable` refusal with no harness, the supported
+   sibling unchanged from its solo generation, and total accounting. Exercise an unsupported
+   operand form beside a supported sibling and assert its named disposition. A float leaf of a
+   composite keeps FR-015's `ShadowFamilyNotBuilt`; the float row rewrites only the
+   `OperationNotRendered` record of a float-row identity, and no control for the composite leaf
+   runs here (AC-6).
 7. Run the healthy harness through the approved bounded production path with its complete
    ordered options and an unwind above the carrier's loop bound. Verify all checks and
    exactly one final cover. Separately force an unsatisfied cover, a failed unwind (an
@@ -109,29 +110,24 @@ used by name below.
     `i64` to `u64` conversion fails. Record an unavailable route as an open dependency
     (AC-11).
 12. Inspect the run record for operation and source association, width, rounding mode,
-    correspondence, ordered physical bindings, argv, unwind bound and loop bounds, tool
-    versions, target, dependency cohort including the carrier, limits, observed peak memory
+    correspondence, ordered physical bindings, argv, unwind bound and loop bounds, every
+    option (no tool versions, QSL-406 and EA-49), target, dependency cohort including the carrier, limits, observed peak memory
     per width, operation and rounding mode, checks, cover, playback, exit and terminal
     classification (AC-12).
-13. On the host, first assert every control point's expected result against the shipped
-    owner. Then run the carrier's `cfg(kani)` replacement of `evaluate_ieee` and
-    `compare_ieee` and the shipped owner functions over the step 2 enumeration and the AC-13
-    boundary family for every supported operation, width and rounding mode, at zero, exact
-    and short budgets, and assert equal outcome, bits, flags, provenance, ordered charges,
-    denied next charge and counters. Confirm the carrier makes its replacement callable from
-    the host build (P1). For `nearest-even`, compare the non-NaN results with Rust's `f32`
-    and `f64` operators, `sqrt` and `mul_add`. Mutate the replacement's ordering, charge
-    sequence, flags, provenance, rounding step, sticky shift and operand classification (each
-    must fail this differential and the proof against the expected side), and mutate the
-    bit-pattern decode shared by both sides (it fails only this differential) (AC-13). This step cannot run until
-    IR-1446 supplies the host-callable replacement.
-    The result covers the enumerated and boundary inputs, not every operand pair.
-
-14. Inspect the call graph of each supported operation's expected side and assert the
-    bit-pattern decode is the only function it shares with the carrier's `cfg(kani)`
-    replacement. Mutate the expected side to call the replacement's rounding step and then its
-    operand classification; each must fail the inspection while still passing the "not a second
-    call of the oracle" check of step 1 (AC-14).
+13. On the host, first assert every comparison control point's expected result against the
+    shipped owner. Then run the carrier's native comparisons and the shipped `compare_ieee` over
+    the step 2 enumeration and the control points for every comparison and width, at zero, exact
+    and short budgets of every counter a comparison charges, and assert equal outcome, meter,
+    denied charge point and consumed counters, and that distinct widths are ill-typed before any
+    charge (AC-4, AC-13). The result covers the enumerated and boundary inputs, not every operand
+    pair. The arithmetic differential (rounding, flags, provenance, the arithmetic mutants and the
+    comparison with Rust's operators) has no harness to accompany and is settled by the refusal
+    ruling.
+14. Inspect the expected side of each comparison harness and assert no statement of it names a
+    carrier function, the bit-pattern decode or the owner's path. Mutate the expected side to call
+    the native comparison, then the carrier's classification, then read the operand from the
+    carrier; each must fail the inspection while the harness still compares against the oracle
+    (AC-14).
 
 ## Expected Results
 
@@ -141,7 +137,11 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 
 ## Status
 
-PLANNED: all fourteen FR-053 criteria are unimplemented and untagged. No missing carrier
-capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation
-(IR-1502, now delivered), replay route or generated-proof result is waived. No width, operation or rounding
-mode is known to verify within a request's ceilings.
+PARTIAL (IR-260): steps 1 to 5, 7, 8 and 11 to 14 run for the three comparisons, and step 6 for the refusals and the supported sibling, at both widths in
+`tests/it/float_scalar_harness.rs`, with installed-Kani verdicts and owner replay of a decoded
+counterexample (`docs/qualification/ir260-float-scalar-kani-measurements.md`). Step 3 runs the
+operand `requires-bound` and the unreadable-rounding refusal on hand-edited Contract IR. The hand-edited package cannot be routed (Contract IR lowers it to an empty lowered set, so no admitted routing input exists), so the routed mapping to the `requires-bound` disposition is covered at the `FloatScalarRefusal::into_disposition` seam only. Step 7 runs
+the healthy proof and a forced unsatisfied cover; its other forced failures are the shared runner's
+(`tests/it/terminal_map.rs`). Arithmetic is dispositioned not tractable (typed refusal, no
+harness), so the arithmetic parts of steps 1, 3, 4, 5, 9, 10, 13 and 14 settle as refusals only; steps 9 and
+10 have no comparison part and run nothing, and the composite-leaf control of step 6 is not run. The status of each criterion is in the FR-053 Status.

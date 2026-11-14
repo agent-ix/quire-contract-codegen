@@ -11,6 +11,8 @@ pub(crate) mod collection;
 pub(crate) mod graph;
 // The enum scalar comparison family (FR-049).
 pub(crate) mod enum_scalar;
+// The IEEE float scalar comparison family (FR-053).
+pub(crate) mod float_scalar;
 // The finite state-method family.
 pub(crate) mod constrained;
 // The bounded-Kani corpus family.

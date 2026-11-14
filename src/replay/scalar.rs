@@ -141,6 +141,23 @@ fn validate_schema(
     if identity.arguments.len() != arity {
         return Err(failure("cg_scalar_witness_schema_arity_mismatch", module));
     }
+    if let Some(float_scalar) = &identity.float_scalar {
+        let (minimum, maximum) = match float_scalar.width.as_str() {
+            "float32" => (0, i64::from(u32::MAX)),
+            "float64" => (i64::MIN, i64::MAX),
+            _ => (1, 0),
+        };
+        let bound = identity
+            .arguments
+            .iter()
+            .all(|argument| argument.minimum == minimum && argument.maximum == maximum);
+        if minimum > maximum || !bound || float_scalar.operator != identity.operation_identity {
+            return Err(failure(
+                "cg_scalar_witness_schema_float_mismatch",
+                &float_scalar.operator,
+            ));
+        }
+    }
     if let Some(enum_scalar) = &identity.enum_scalar {
         let count = i64::try_from(enum_scalar.members.len()).unwrap_or(i64::MAX);
         let bound = identity
@@ -191,10 +208,13 @@ fn validate_schema(
 }
 
 /// Operand count of the persisted scalar schema: an enum identity carries exactly one physical
-/// `i64` index per comparison operand, every other identity follows the integer profile.
+/// `i64` index per comparison operand, a float identity one `i64` bit pattern per operand, every other identity follows the integer profile.
 fn scalar_operand_count(identity: &ScalarObligationIdentity) -> Option<usize> {
     if identity.enum_scalar.is_some() {
         return Some(2);
+    }
+    if let Some(float_scalar) = &identity.float_scalar {
+        return Some(float_scalar.operands.len());
     }
     integer_scalar_operand_count(&identity.operation_identity)
 }
@@ -265,5 +285,56 @@ pub fn decode_enum_falsification(
         right_index,
         left_member: member(left_index)?,
         right_member: member(right_index)?,
+    })
+}
+
+/// One decoded float comparison counterexample: each operand parameter's exact bit pattern.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FloatWitness {
+    /// Comparison operator identity.
+    pub operator: String,
+    /// Operand width, `float32` or `float64`.
+    pub width: String,
+    /// Each operand as the QSL parameter name and its bit pattern, in operand order. A `float32`
+    /// pattern is below `2^32`; a `float64` pattern is the drawn `i64` reinterpreted, never
+    /// converted through a host float or a checked signed conversion.
+    pub operands: Vec<(String, u64)>,
+}
+
+/// Decodes a float comparison counterexample into the bit patterns it names.
+///
+/// Reuses the scalar draw checks (one `i64` per operand, comment agreement, the width's range), so
+/// an out-of-range, missing, duplicate or foreign binding is refused with the scalar refusal codes.
+///
+/// # Errors
+///
+/// Every `decode_scalar_falsification` refusal, plus `cg_scalar_witness_float_identity_missing`
+/// for an identity that is not a float comparison.
+pub fn decode_float_falsification(
+    identity: &ScalarObligationIdentity,
+    playback: &Playback<'_>,
+) -> Result<FloatWitness, DecodeFailure> {
+    let float_scalar = identity.float_scalar.as_ref().ok_or_else(|| {
+        DecodeFailure::new(
+            "cg_scalar_witness_float_identity_missing",
+            identity.harness_symbol.as_str(),
+            &identity.operation_identity,
+        )
+    })?;
+    let values = decode_scalar_falsification(identity, playback)?;
+    Ok(FloatWitness {
+        operator: float_scalar.operator.clone(),
+        width: float_scalar.width.clone(),
+        operands: identity
+            .arguments
+            .iter()
+            .zip(values)
+            .map(|(argument, value)| {
+                (
+                    argument.identifier.clone(),
+                    u64::from_ne_bytes(value.to_ne_bytes()),
+                )
+            })
+            .collect(),
     })
 }
