@@ -2,8 +2,9 @@
 
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
-    generate_enum_scalar_harness, EnumCapability, EnumScalarHarness, EnumScalarOutcome,
-    EnumScalarRefusal, EnumScalarRequest, KaniRunOutcome,
+    decode_enum_falsification, generate_enum_scalar_harness, parse_assertion_playback,
+    EnumCapability, EnumScalarHarness, EnumScalarOutcome, EnumScalarRefusal, EnumScalarRequest,
+    KaniRunOutcome,
 };
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
@@ -43,11 +44,24 @@ impl Corpus {
     }
 
     fn outcome(&self, function: &str, with_context: bool) -> EnumScalarOutcome {
+        self.outcome_with(
+            function,
+            with_context,
+            crate::common::proof_ceilings::proof_ceilings(),
+        )
+    }
+
+    fn outcome_with(
+        &self,
+        function: &str,
+        with_context: bool,
+        ceilings: quire_contract_codegen::ProofCeilings,
+    ) -> EnumScalarOutcome {
         generate_enum_scalar_harness(&EnumScalarRequest {
             source: &self.package,
             context: with_context.then(|| self.compiled.context()),
             node_id: &self.node(function),
-            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            ceilings,
             unwind: 1,
             requirement_occurrence: None,
             has_path_condition: false,
@@ -373,6 +387,111 @@ fn the_record_retains_declaration_operator_encoding_unwind_and_options() {
         .contains(&"--unwind".to_owned()));
 }
 
+// ---- witness decode (FR-049-AC-10) ----
+
+fn enum_transcript(harness: &EnumScalarHarness, draws: &[i64]) -> String {
+    super::scalar_playback::transcript(&harness.harness.identity, draws)
+}
+
+fn decode(
+    harness: &EnumScalarHarness,
+    transcript: &str,
+) -> Result<quire_contract_codegen::EnumWitness, quire_contract_codegen::DecodeFailure> {
+    let identity = &harness.harness.identity;
+    let playback = parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .map_err(quire_contract_codegen::DecodeFailure::from)?;
+    decode_enum_falsification(identity, &playback)
+}
+
+/// Each enum operand is one physical `i64` binding, grouped to its parameter with the declaration
+/// and member bounds, and a valid pair decodes to the declared members at those positions.
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+fn a_valid_binding_pair_decodes_to_the_declared_members() {
+    let corpus = corpus();
+    let generated = corpus.harness("lt");
+    let identity = &generated.harness.identity;
+    assert_eq!(
+        identity
+            .arguments
+            .iter()
+            .map(|a| (a.identifier.as_str(), a.minimum, a.maximum))
+            .collect::<Vec<_>>(),
+        [("left", 0, 2), ("right", 0, 2)]
+    );
+    let witness = decode(&generated, &enum_transcript(&generated, &[2, 0])).expect("a witness");
+    assert_eq!((witness.left_index, witness.right_index), (2, 0));
+    assert_eq!(
+        (witness.left_member.as_str(), witness.right_member.as_str()),
+        ("HIGH", "LOW")
+    );
+    assert_eq!(witness.operator, "quire.op.enum.lt");
+}
+
+/// An out-of-range, missing, duplicated or foreign binding is refused with a typed cause and
+/// never mapped to a member.
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+fn perturbed_bindings_are_refused_with_typed_causes() {
+    let corpus = corpus();
+    let generated = corpus.harness("lt");
+    for (draws, code) in [
+        (&[3_i64, 0][..], "cg_scalar_witness_operand_out_of_domain"),
+        (&[0, -1][..], "cg_scalar_witness_operand_out_of_domain"),
+        (&[1][..], "kani_witness_arity_mismatch"),
+        (&[0, 1, 2][..], "kani_witness_arity_mismatch"),
+    ] {
+        let error = decode(&generated, &enum_transcript(&generated, draws))
+            .expect_err("a perturbed binding must refuse");
+        assert_eq!(error.code, code, "{draws:?}");
+    }
+    let foreign = enum_transcript(&generated, &[0, 1]).replace(
+        generated.harness.identity.harness_symbol.as_str(),
+        "another_harness",
+    );
+    let error = decode(&generated, &foreign).expect_err("a foreign harness binding must refuse");
+    assert_eq!(error.code, "cg_witness_harness_identity_mismatch");
+    let narrow = enum_transcript(&generated, &[0, 1]).replacen(
+        "vec![0, 0, 0, 0, 0, 0, 0, 0]",
+        "vec![0, 0, 0, 0]",
+        1,
+    );
+    let error = decode(&generated, &narrow).expect_err("a narrow binding must refuse");
+    assert_eq!(error.code, "kani_witness_width_mismatch");
+    let mut integer = generated.harness.identity.clone();
+    integer.enum_scalar = None;
+    let text = enum_transcript(&generated, &[0, 1]);
+    let playback = parse_assertion_playback(
+        &text,
+        integer.harness_symbol.as_str(),
+        integer.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("parses");
+    let error = decode_enum_falsification(&integer, &playback)
+        .expect_err("an identity without an enum schema is not an enum witness");
+    assert_eq!(error.code, "cg_scalar_witness_enum_identity_missing");
+}
+
+/// A persisted enum schema whose bounds disagree with its member list is refused before any draw.
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+fn an_enum_schema_with_bounds_off_the_member_list_is_refused() {
+    let corpus = corpus();
+    let mut generated = corpus.harness("lt");
+    generated.harness.identity.arguments[1].maximum = 5;
+    let error = decode(&generated, &enum_transcript(&generated, &[0, 1]))
+        .expect_err("a widened bound must refuse");
+    assert_eq!(error.code, "cg_scalar_witness_schema_enum_mismatch");
+}
+
 // ---- installed Kani lane ----
 
 /// Run `function`'s harness, with `site` replaced by `with` when a mutation is given.
@@ -382,21 +501,13 @@ fn run(
     mutation: Option<(&str, &str)>,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
     let corpus = corpus();
-    let mut generated = corpus.harness(function);
+    let (mut harness, manifest) = corpus.routed_harness(function);
     if let Some((site, with)) = mutation {
-        assert_eq!(
-            generated.harness.rust.contents.matches(site).count(),
-            1,
-            "{site}"
-        );
-        generated.harness.rust.contents = generated.harness.rust.contents.replace(site, with);
+        assert_eq!(harness.rust.contents.matches(site).count(), 1, "{site}");
+        harness.rust.contents = harness.rust.contents.replace(site, with);
     }
     let started = std::time::Instant::now();
-    let evidence = crate::kani_obligations::run_scalar_under_real_kani(
-        name,
-        &generated.harness,
-        &generated.artifacts[0],
-    );
+    let evidence = crate::kani_obligations::run_scalar_under_real_kani(name, &harness, &manifest);
     eprintln!(
         "ENUMVERDICT {name} outcome={:?} wall_ms={} unwind={} solver={:?} argv={:?}",
         evidence.outcome,
@@ -580,8 +691,8 @@ fn the_routed_path_generates_enum_nodes_and_leaves_other_families_byte_identical
         output(&admitted, 0),
         "another family is unchanged"
     );
-    for index in 1..4 {
-        let (record, harness) = kani_parts(&legacy.items[index].output);
+    for (index, item) in legacy.items.iter().enumerate().take(4).skip(1) {
+        let (record, harness) = kani_parts(&item.output);
         assert!(harness.is_none());
         assert!(
             matches!(
@@ -618,4 +729,188 @@ fn two_enum_nodes_of_one_operator_in_one_request_do_not_collide() {
         })
         .collect::<Vec<_>>();
     assert_ne!(symbols[0], symbols[1]);
+}
+
+/// The counterexample of a falsified mutant decodes to declared members, and replaying them
+/// through the unmutated operator disagrees with the mutant's expected value.
+#[trace("TC-063", "FR-049-AC-5")]
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn kani_a_falsifying_counterexample_decodes_and_replays_against_the_declared_operator() {
+    let corpus = corpus();
+    let generated = corpus.harness("lt");
+    let evidence = run(
+        "enum-replay",
+        "lt",
+        Some((
+            "rt::ComparisonOperator::Less",
+            "rt::ComparisonOperator::LessOrEqual",
+        )),
+    );
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the mutant must falsify: {evidence:?}");
+    };
+    let witness = decode(&generated, &counterexample).expect("the counterexample decodes");
+    assert_eq!(
+        witness.left_index, witness.right_index,
+        "only equal members distinguish < from <="
+    );
+    assert!(!(witness.left_index < witness.right_index));
+}
+
+// ---- runner classification bound to the enum harness (FR-049-AC-7, FR-049-AC-11) ----
+
+/// Runs the enum harness through the runner against a stand-in launcher running `body`.
+#[cfg(unix)]
+fn run_with_launcher(
+    name: &str,
+    body: &str,
+    ceilings: quire_contract_codegen::ProofCeilings,
+) -> quire_contract_codegen::KaniExecutionEvidence {
+    use std::os::unix::fs::PermissionsExt;
+
+    let corpus = corpus();
+    let EnumScalarOutcome::Supported(generated) = corpus.outcome_with("lt", true, ceilings) else {
+        panic!("lt must be supported");
+    };
+    let scratch = crate::kani_obligations::write_scalar_crate(
+        name,
+        &generated.artifacts[0],
+        &generated.harness.rust.contents,
+    );
+    let directory = &scratch.path;
+    std::fs::create_dir_all(directory.join("target")).unwrap();
+    let launcher = directory.join("cargo-kani");
+    std::fs::write(
+        &launcher,
+        format!("#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\n{body}"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let cancel = quire_exact::Cancel::new();
+    quire_contract_codegen::execute_kani_obligation(&quire_contract_codegen::KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &quire_contract_codegen::KaniInstallation::new(launcher),
+        harness: (&generated.harness).into(),
+        crate_directory: directory,
+        target_directory: &directory.join("target"),
+        home_directory: None,
+    })
+    .unwrap_or_else(|refusal| panic!("{refusal}"))
+}
+
+/// The enum harness's single non-vacuity cover is what the classifier counts: with every other
+/// check holding, an unsatisfiable cover is `CoverUnsatisfied`, an absent cover summary and an
+/// exhausted unwinding check are inconclusive, and a satisfied cover verifies.
+#[trace("TC-063", "FR-049-AC-7")]
+#[test]
+fn the_classifier_reads_the_enum_harness_cover_as_unsatisfied_missing_or_unwound() {
+    let corpus = corpus();
+    let generated = corpus.harness("lt");
+    let covers = generated
+        .harness
+        .rust
+        .contents
+        .matches("kani::cover!(")
+        .count();
+    assert_eq!(covers, 1);
+    let check = |status: &str, category: &str| {
+        serde_json::json!({
+            "id": 1, "status": status, "category": category,
+            "location": { "file": "src/lib.rs", "line": "10", "column": "5" },
+        })
+    };
+    let classify = |status: &str, checks: Vec<serde_json::Value>| {
+        let report = serde_json::to_vec(&serde_json::json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": { "results": [{
+                "harness_id": "h", "status": status, "checks": checks
+            }] }
+        }))
+        .unwrap();
+        quire_contract_codegen::classify_kani_run(status == "Success", Some(&report), None, None)
+            .unwrap()
+            .outcome
+    };
+    let with_cover = |cover: &str| vec![check("Success", "assertion"), check(cover, "cover")];
+    assert_eq!(
+        classify("Success", with_cover("Satisfied")),
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(
+        classify("Success", with_cover("Unsatisfiable")),
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
+    );
+    assert_eq!(
+        classify("Success", vec![check("Success", "assertion")]),
+        KaniRunOutcome::Inconclusive {
+            reason: quire_contract_codegen::KaniInconclusiveReason::MissingCoverSummary
+        }
+    );
+    assert_eq!(
+        classify(
+            "Failure",
+            vec![
+                check("Failure", "unwind"),
+                check("Success", "assertion"),
+                check("Satisfied", "cover")
+            ]
+        ),
+        KaniRunOutcome::Inconclusive {
+            reason: quire_contract_codegen::KaniInconclusiveReason::UnwindBoundExhausted
+        }
+    );
+}
+
+/// A launcher that never concludes inside the harness's wall clock is `TimedOut` with an
+/// `Incomplete` terminal value, and one that dies without a report is `NoVerdict` with `Failed`;
+/// neither is ever `Verified`, for the enum harness the runner executes.
+#[trace("TC-063", "FR-049-AC-7")]
+#[trace("TC-063", "FR-049-AC-11")]
+#[cfg(unix)]
+#[test]
+fn a_timeout_and_a_missing_verdict_settle_the_enum_harness_inconclusive() {
+    use quire_contract_codegen::{run_terminal_value, KaniInconclusiveReason};
+    let timed = run_with_launcher(
+        "enum-timeout",
+        "exec sleep 30\n",
+        crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            std::time::Duration::from_millis(300),
+        ),
+    );
+    assert_eq!(
+        timed.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::TimedOut
+        }
+    );
+    assert_eq!(
+        run_terminal_value(&timed, None).unwrap(),
+        qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::TimedOut)
+    );
+    assert_eq!(
+        timed.ceilings.wall_clock,
+        std::time::Duration::from_millis(300)
+    );
+    let silent = run_with_launcher(
+        "enum-no-verdict",
+        "printf 'Out of memory\\n' >&2\nexit 1\n",
+        crate::common::proof_ceilings::proof_ceilings(),
+    );
+    assert_eq!(
+        silent.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    );
+    assert_eq!(
+        run_terminal_value(&silent, None).unwrap(),
+        qsl_replay::TerminalValue::Failed
+    );
+    assert_eq!(silent.unwind, 1);
+    assert_eq!(silent.solver, quire_contract_codegen::KaniSolver::Cadical);
 }

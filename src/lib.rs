@@ -330,7 +330,9 @@ pub use replay::function::{
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
-pub use replay::scalar::{decode_scalar_falsification, SCALAR_PLAYBACK_BYTES};
+pub use replay::scalar::{
+    decode_enum_falsification, decode_scalar_falsification, EnumWitness, SCALAR_PLAYBACK_BYTES,
+};
 pub use replay::state_clause::graph::{GraphReplayAddress, GraphReplayInputs, GraphWitness};
 pub use replay::state_clause::invariant::{InvariantReplayInputs, StateClauseHarness};
 pub use replay::state_clause::{

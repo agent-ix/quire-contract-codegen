@@ -70,4 +70,4 @@ classification and receive no proof credit.
 
 ## Status
 
-PARTIAL (IR-262): steps 1 to 5 and 7 run in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani. Steps 6, 8 and 9 are not run; see the FR-049 Status.
+PARTIAL (IR-262): every step runs in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani, except the owner replay of a counterexample (`qsl_replay::ScalarOperation` has no enum comparison; owner quire-spec-language) and AC-11's tool versions and target (the runner evidence has no such field; owner CG runner). Enum has no IR-1526 refusal row because it verifies. See the FR-049 Status.

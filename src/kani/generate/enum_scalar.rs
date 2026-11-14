@@ -902,7 +902,7 @@ function same using v(a: Color, b: Color): Boolean pure { a = b }\n";
             let source = format!(
                 "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nenum Color {{ RED, GREEN }}\nordered enum Level {{ LOW, MID }}\nfunction f using v(a: {}, b: {}): Boolean pure {{ {body} }}\n",
                 if body == "a < b" { "Color" } else { "Level" },
-                if body == "a < b" { "Color" } else { "Color" },
+                "Color",
             );
             let compiled = compile_admitted(
                 CompileUnit {

@@ -175,17 +175,39 @@ unavailable the item is `unsupported` with no harness.
 PARTIAL (IR-262). The generator `generate_enum_scalar_harness` (src/kani/generate/enum_scalar.rs)
 settles an `enum` comparison node to a harness over `NativeEnum` carriers built with
 `from_index`, or to a typed refusal, from a genuine QSL source admitted through Contract IR and
-the owner's admitted context. Tagged and passing: AC-1, AC-2, AC-3 (carrier admission, minted
-identity, generator-mint and reorder controls), AC-4 (assertion shape; an exhausted meter is
-Falsified under installed Kani 0.68.0, `--solver cadical`, unwind 1), AC-5 and AC-6 (healthy
-harnesses Verified, every mutant Falsified with playback, in the ignored Kani lane of
-`tests/it/enum_scalar_harness.rs`; measurements in
+the owner's admitted context. `generate_routed_admitted` carries that context into the routed
+route, so an enum node settles to a harness (or to `EnumComparisonNotRendered` with a named
+capability) instead of `OperationNotRendered`; `generate_routed` and `generate_routed_native` pass no
+context and every other family's records and identities stay byte-identical (tested).
+
+Tagged and passing: AC-1, AC-2, AC-3 (carrier admission, minted identity, generator-mint through
+the generation path, reorder, zero-member, u32-overflow and missing-declaration capabilities),
+AC-4 (assertion shape; an exhausted meter is Falsified under installed Kani 0.68.0, `--solver
+cadical`, unwind 1), AC-5 and AC-6 (healthy harnesses Verified, every mutant Falsified with
+playback, in the ignored Kani lane of `tests/it/enum_scalar_harness.rs`; measurements in
 `docs/qualification/ir262-enum-scalar-kani-measurements.md`), AC-7 (one cover, last; the
-unsatisfied-cover, timeout, memory and missing-verdict classifications are the existing runner's
-and are not re-driven here), AC-8 (named unsupported with no context; ill-typed causes at
-`check_typed`) and AC-9 (a non-enum node is not an enum comparison). Not done: the routed
-`generate_routed` path still settles an enum node `OperationNotRendered` because the routed
-inputs carry no owner-admitted context; AC-10 (single physical binding in the shared symbolic
-ABI, witness decode and replay) and the owner-route replay of AC-5; AC-11 records the declaration,
-members, ordered flag, operator, encoding, unwind and options in the harness record but not
-tool versions, target, limits or terminal outcome beyond what the runner's evidence carries.
+unsatisfied-cover, missing-cover-summary and unwind classifications are bound to the enum
+harness' cover count, and a timeout and a missing verdict are driven through the runner against
+the enum harness with their terminal values), AC-8, AC-9, AC-10 (one `i64` index per operand
+with declaration, member list and bounds in the identity; `decode_enum_falsification` decodes a
+valid pair to its declared members and refuses out-of-range, missing, extra, foreign-harness,
+narrow and bound-mismatched bindings with typed causes) and the terminal-outcome part of AC-11
+(`run_terminal_value` over the enum evidence).
+
+Tractability: enum has no refusal row in the IR-1526 table because it verifies (seconds, about
+0.3 GB healthy); that table lists only shapes that do not.
+
+QSL refuses the ill-typed sources (an ordering over an unordered enum, operands of different
+enums) before Contract IR, so no ill-typed enum node reaches CG from source; the CG refusal for
+them is exercised on the carrier (`check_typed`) and a QSL test asserts the source refusal.
+
+Not done, with owner:
+
+- Owner replay of an enum counterexample under AC-5 and AC-10's "replays as the declaration's
+  member": `qsl_replay::ScalarOperation` has only `Add`, `Subtract`, `Multiply` and `Negate`, so
+  the owner replay route cannot take an enum comparison. Owner: quire-spec-language `qsl-replay`
+  (a comparison operation over declared members). The counterexample is decoded to members and
+  replayed against the declared operator in CG only.
+- AC-11 tool versions and target: `KaniExecutionEvidence` carries the argv, unwind, solver,
+  ceilings, memory, checks, exit code and outcome for every family, but no tool version or
+  target field. Owner: the CG runner evidence (all families, not an enum row).
