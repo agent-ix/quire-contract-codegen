@@ -8,7 +8,7 @@ use std::{num::NonZeroU64, time::Duration};
 
 use quire_canonical::FixedShape;
 use quire_contract_model::{
-    CheckedNodeId, ClauseRef, ContractSourceV1, DependencyIdentity, SourceSpan,
+    CheckedNodeId, CheckedOccurrence, ClauseRef, ContractSourceV1, DependencyIdentity, SourceSpan,
 };
 use serde::{Deserialize, Serialize};
 
@@ -757,6 +757,9 @@ pub struct GraphObligationIdentity {
     pub package: ContractSourceV1,
     /// The state clause containing the claim.
     pub clause_id: CheckedNodeId,
+    /// The occurrence of the clause node the claim names: a structure declared under two clause
+    /// names is one node with two occurrences, and each is its own claim.
+    pub occurrence: CheckedOccurrence,
     /// The admitted invariant, precondition or postcondition form.
     pub kind: ObligationKind,
     /// Argument positions from the clause condition to the reachability application.

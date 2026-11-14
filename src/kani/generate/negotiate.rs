@@ -78,8 +78,8 @@ use crate::kani::generate::graph::{
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
-    CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
+    CheckedNodeId, CheckedNodeTag, CheckedOccurrence, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
 };
 
 use qsl_replay::ObligationIdentity;
@@ -477,6 +477,7 @@ fn negotiate_integer_policy(
                             ObligationDisposition::Unsupported {
                                 reason: graph_refusal(
                                     &harness.identity.clause_id,
+                                    &harness.identity.occurrence,
                                     &harness.identity.argument_path,
                                     crate::kani::generate::outcome::GraphUnsupportedReason::HarnessSymbolCollision,
                                 ),
@@ -757,6 +758,7 @@ enum ItemIdentity {
     Graph {
         package: ContractSourceV1,
         clause: CheckedNodeId,
+        occurrence: CheckedOccurrence,
         path: Vec<usize>,
     },
     V2Clause {
@@ -969,10 +971,12 @@ fn classify<'a>(
         ),
         ObligationItem::GraphClaim {
             package,
-            clause_id,
+            node_id,
+            occurrence,
             argument_path,
         } => classify_graph(
-            clause_id,
+            node_id,
+            occurrence,
             argument_path,
             checked_lookup(checked_lookups, package),
         ),
@@ -1202,22 +1206,29 @@ fn classify_collection<'a>(
 
 fn classify_graph<'a>(
     clause: &'a CheckedNodeId,
+    occurrence: &'a CheckedOccurrence,
     path: &'a [usize],
     lookup: &mut CheckedLookup<'a>,
 ) -> ItemState {
     let package = lookup.package;
-    let outcome = match lower_graph(package, clause, path) {
+    let outcome = match lower_graph(package, clause, occurrence, path) {
         Ok(lowered) => Outcome::LoweredGraph(Box::new(lowered)),
         Err(GraphRefusal::RequiresBound(bound)) => Outcome::RequiresBound(bound),
         Err(GraphRefusal::Unsupported(reason)) => {
-            Outcome::Unsupported(graph_refusal(clause, path, reason))
+            Outcome::Unsupported(graph_refusal(clause, occurrence, path, reason))
         }
     };
     ItemState {
         kind: graph_kind(package, clause),
         subject: ObligationSubject::CheckedNode {
             node_id: clause.clone(),
-            source_map: lookup.occurrences(clause),
+            source_map: lookup
+                .occurrences(clause)
+                .into_iter()
+                .filter(|entry| {
+                    entry.role == occurrence.role && entry.ordinal == occurrence.ordinal
+                })
+                .collect(),
         },
         identity: Some(ItemIdentity::Graph {
             package: ContractSourceV1 {
@@ -1225,6 +1236,7 @@ fn classify_graph<'a>(
                 lock: package.lock().clone(),
             },
             clause: clause.clone(),
+            occurrence: occurrence.clone(),
             path: path.to_vec(),
         }),
         outcome,

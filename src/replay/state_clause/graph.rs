@@ -18,7 +18,7 @@ use qsl_replay::{
     SelectedAnchor, SelectedObject, StateClauseCounterexample, WitnessPacket, WitnessValue,
 };
 use quire_canonical::FixedShape;
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedNodeId, CheckedOccurrence, CheckedPackageV2};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -89,6 +89,10 @@ pub struct GraphReplayInputs<'a> {
     /// only a decoded playback of the harness sets it, so a caller cannot replay a graph Kani
     /// never drew.
     witness: Option<GraphWitness>,
+    /// The occurrence of the clause node the decoded harness was keyed by; set with the witness.
+    /// A structure declared under two clause names is one node, so the selected clause must also
+    /// be this occurrence.
+    occurrence: Option<CheckedOccurrence>,
 }
 
 #[derive(Serialize, FixedShape)]
@@ -145,6 +149,7 @@ impl<'a> GraphReplayInputs<'a> {
             anchor,
             snapshot_label,
             witness: None,
+            occurrence: None,
         }
     }
 
@@ -283,6 +288,7 @@ impl<'a> GraphReplayInputs<'a> {
             edges,
             forward: identity.edge.forward,
         });
+        self.occurrence = Some(identity.occurrence.clone());
         Ok(())
     }
 }
@@ -318,6 +324,7 @@ impl StateClauseReplay {
             anchor,
             snapshot_label,
             witness,
+            occurrence,
         } = inputs;
         let witness = witness.ok_or(StateClauseReplayError::MissingField {
             field: "playback".to_owned(),
@@ -341,6 +348,12 @@ impl StateClauseReplay {
             .and_then(checked_node_key)
             .as_ref()
             != Some(&site.node)
+        {
+            return Err(StateClauseReplayError::ClauseSelectionMismatch);
+        }
+        // The harness is keyed by one occurrence of the clause node; the named clause must be it.
+        if occurrence
+            .is_some_and(|occurrence| site.occurrence.origin().ordinal() != occurrence.ordinal)
         {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }

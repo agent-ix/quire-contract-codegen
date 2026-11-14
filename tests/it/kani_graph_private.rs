@@ -9,6 +9,13 @@
 //! reachability): the negated claim must reproduce as a violation, and each source mutant, whose
 //! authored clause holds natively, must settle as a verdict disagreement.
 //!
+//! IR-805 slice E adds the multi-reachability controls: the transitivity claim over a `{0,3}` end
+//! (`TRANSITIVITY`), whose three reachability applications are quantifier-bound, is `Verified` by
+//! the unmutated harness, its harness mutant (the transitive closure removed, so reachability is
+//! the selected edges only) is Falsified and the unchanged authored clause holds natively on the
+//! decoded graph, and its claim mutant (the conclusion reversed) is Falsified and QSL reproduces
+//! the violation.
+//!
 //! There is NO wrong-role mutant. The harness draws one end only, so a closure that follows
 //! another role cannot be expressed by editing it, and a closure that follows no edge is the
 //! rejected-self-loop mutant again. AC-106's "another field or role" clause is NOT evidenced.
@@ -39,8 +46,8 @@ use qsl_replay::{
     DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedOccurrence, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult,
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
@@ -118,6 +125,7 @@ fn domain_document() -> Vec<u8> {
 struct Authored {
     package: CheckedPackageV2,
     clause: CheckedNodeId,
+    occurrence: CheckedOccurrence,
     source: String,
     domain: Vec<u8>,
 }
@@ -150,17 +158,17 @@ fn authored(condition: &str, maximum: u64) -> Authored {
         panic!("Contract IR admits the authored package")
     };
     let package = *package;
-    let clause = package
+    let node = package
         .graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "state_clause")
-        .expect("a state clause")
-        .node_id
-        .clone();
+        .expect("a state clause");
+    let (clause, occurrence) = (node.node_id.clone(), node.occurrences[0].clone());
     Authored {
         package,
         clause,
+        occurrence,
         source,
         domain,
     }
@@ -174,7 +182,8 @@ fn harness(authored: &Authored, path: &[usize]) -> KaniGraphObligationHarness {
         ceilings: proof_ceilings_with_wall_clock(Duration::from_secs(1800)),
         items: &[ObligationItem::GraphClaim {
             package: &authored.package,
-            clause_id: &authored.clause,
+            node_id: &authored.clause,
+            occurrence: &authored.occurrence,
             argument_path: path,
         }],
         subject_path: "crate::graph_subject",
@@ -735,4 +744,73 @@ fn real_kani_healthy_controls_verify_on_the_slice_b_fixture() {
             "{label}"
         );
     }
+}
+
+/// The transitivity claim over the `{0,3}` unique `kids` end at population 3, written with three
+/// quantifier-bound objects. The harness closure is transitive, so the healthy harness verifies.
+const TRANSITIVITY: &str = "forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : (reaches(a, b, kids) and reaches(b, c, kids)) implies reaches(a, c, kids))))";
+
+/// `reaches(a, c)`: the conclusion application, by argument path through the three binders.
+const CONCLUSION: [usize; 4] = [1, 1, 1, 1];
+
+/// The conclusion reversed, `reaches(c, a)`: a claim mutant that a chain graph violates.
+const REVERSED: &str = "forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : (reaches(a, b, kids) and reaches(b, c, kids)) implies reaches(c, a, kids))))";
+
+/// Healthy transitivity: a `{0,3}` end admits both reachable and unreachable graphs, and the claim
+/// is false on a harness whose reachability is not transitive, so `Verified` carries meaning.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_healthy_transitivity_verifies_over_a_zero_to_three_end() {
+    let authored = authored(TRANSITIVITY, 3);
+    let healthy = harness(&authored, &CONCLUSION);
+    assert_eq!(healthy.identity.edge.upper, 3);
+    assert!(
+        matches!(
+            run_outcome(&healthy, "healthy-transitivity"),
+            KaniRunOutcome::Verified
+        ),
+        "healthy transitivity"
+    );
+}
+
+/// Harness mutant: the closure step is removed, so reachability is the selected edges only and a
+/// two-step path with no direct edge falsifies transitivity. The authored clause is unchanged, and
+/// QSL's replay of it on the decoded graph holds (the native closure is transitive), so the
+/// verdicts disagree and the spurious counterexample is the detection.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_transitivity_without_closure_mutant_falsifies_and_qsl_replay_disagrees() {
+    let authored = authored(TRANSITIVITY, 3);
+    let healthy = harness(&authored, &CONCLUSION);
+    let mutant = mutated(
+        &healthy,
+        "paths[from][to] = paths[from][to] || (paths[from][via] && paths[via][to]);",
+        "paths[from][to] = paths[from][to];",
+    );
+    let counterexample = run_falsified(&mutant, "transitivity-no-closure");
+    let (witness, result) = replay(&authored, &mutant, &counterexample, &relationship("kids"));
+    // A path of two edges with no direct edge: some object reaches another through a third.
+    let edge = |from: usize, to: usize| witness.edges[from].contains(&to);
+    assert!(
+        (0..witness.objects).any(|a| (0..witness.objects)
+            .any(|b| (0..witness.objects).any(|c| edge(a, b) && edge(b, c) && !edge(a, c)))),
+        "{witness:?}"
+    );
+    assert_clause_holds(&result);
+}
+
+/// Claim mutant: the conclusion is reversed, so the authored clause itself is false on a chain
+/// graph. Kani falsifies the unmutated harness over the mutated claim, and QSL replays that
+/// mutant's own authored clause on the decoded graph and reproduces the violation.
+#[trace("TC-025", "FR-015-AC-106")]
+#[test]
+#[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
+fn real_kani_reversed_transitivity_claim_falsifies_and_qsl_replay_reproduces_it() {
+    let authored = authored(REVERSED, 3);
+    let healthy = harness(&authored, &CONCLUSION);
+    let counterexample = run_falsified(&healthy, "transitivity-reversed");
+    let (_, result) = replay(&authored, &healthy, &counterexample, &relationship("kids"));
+    assert_reproduced(&result);
 }

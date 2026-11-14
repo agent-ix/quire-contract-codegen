@@ -4,9 +4,9 @@
 
 use qsl_replay::ObligationIdentity;
 use quire_contract_model::{
-    CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
-    CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
-    ContractPackageV1,
+    CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedOccurrence,
+    CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2,
+    CheckedSourceMapEntry, ContractPackageV1,
 };
 use serde::{Serialize, Serializer};
 
@@ -136,8 +136,12 @@ pub enum ObligationItem<'a> {
     GraphClaim {
         /// The admitted package.
         package: &'a CheckedPackageV2,
-        /// The state clause containing the application.
-        clause_id: &'a CheckedNodeId,
+        /// The state clause node containing the application. Two clauses with one structure are
+        /// one node, so the node alone does not name a claim.
+        node_id: &'a CheckedNodeId,
+        /// Which source occurrence of that node the claim is. A node with two occurrences (one
+        /// structure declared under two clause names) yields two items.
+        occurrence: &'a CheckedOccurrence,
         /// Argument positions from the clause condition to the application; the condition
         /// itself has the empty path.
         argument_path: &'a [usize],
@@ -389,6 +393,8 @@ pub enum UnsupportedObligation {
     GraphClaimNotRendered {
         /// The state clause containing the claim.
         clause_id: CheckedNodeId,
+        /// The occurrence of that clause node the claim names.
+        occurrence: CheckedOccurrence,
         /// Argument path identifying the application within the condition.
         argument_path: Vec<usize>,
         /// Exact refusal ground.
