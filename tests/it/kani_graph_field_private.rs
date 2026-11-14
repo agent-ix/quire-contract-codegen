@@ -38,7 +38,7 @@ fn field(name: &str, lower: u64, upper: u64, ordered: bool, unique: bool, presen
 }
 
 /// A `Node` whose only fields are reference edges: `next` (`Reference`), `maybe` (`Option`),
-/// `many` (a `Sequence` of zero to two) and `none` (a `Sequence` of zero to zero), and one
+/// `many` (a `Sequence` of zero to two) and `empty` (a `Sequence` of zero to zero), and one
 /// operation to anchor on. An object with no other field needs no value this replay path would
 /// have to invent.
 fn domain() -> Vec<u8> {
@@ -65,7 +65,7 @@ fn domain() -> Vec<u8> {
                 field("next", 1, 1, false, true, "required"),
                 field("maybe", 1, 1, false, true, "optional"),
                 field("many", 0, 2, true, false, "required"),
-                field("none", 0, 0, true, false, "required")
+                field("empty", 0, 0, true, false, "required")
             ],
             "relationships": [],
             "operations": [{
@@ -97,8 +97,8 @@ fn every_object_has_an_edge(end: &str) -> String {
     )
 }
 
-/// The claim's reachability application sits under both binders: the `exists` body.
-const EVERY_OBJECT_PATH: [usize; 3] = [1, 1, 1];
+/// The claim's reachability application, by argument path through the `forall` and `exists` binders.
+const EVERY_OBJECT_PATH: [usize; 2] = [1, 1];
 
 fn assert_verified(authored: &Authored, path: &[usize], label: &str) {
     let healthy = harness(authored, path);
@@ -220,15 +220,15 @@ fn real_kani_the_field_multiplicity_decides_the_every_object_claim() {
 }
 
 /// Zero-length mutant: every object reaches itself, so an isolated `start = target` reads
-/// reachable and `not reaches(self, self, none)` fails over a field that never holds an edge. The
+/// reachable and `not reaches(self, self, empty)` fails over the always-empty field. The
 /// authored clause holds natively.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 #[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
 fn real_kani_zero_length_path_mutant_falsifies_a_field_claim_and_qsl_replay_disagrees() {
-    let authored = authored("not reaches(self, self, none)", 3);
+    let authored = authored("not reaches(self, self, empty)", 3);
     let healthy = harness(&authored, &[0]);
-    assert_verified(&authored, &[0], "field-none-healthy");
+    assert_verified(&authored, &[0], "field-empty-healthy");
     let mutant = mutated(
         &healthy,
         "let mut paths = [[false; 3]; 3];",
