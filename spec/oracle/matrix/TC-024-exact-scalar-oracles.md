@@ -598,3 +598,27 @@ quire-integration IR-842.
 Expected result: the four identities derive, generate and agree with the owner;
 unrelated identities keep their refusals. The tests are `tests/it/ieee_sqrt_fma.rs` and
 the sqrt/fma controls of `src/oracle/scalar/derive/tests.rs`.
+
+## Integer remainder derivation (IR-854)
+
+This extension verifies FR-014-AC-81. It supplies CG-to-owner agreement evidence
+only; the Kani row for `rem` is FR-057 and TC-071. This section is planned and
+grants no execution credit until its tests run.
+
+1. Through the public QSL facade, emit `x rem y` under each of the truncating,
+   floor and Euclidean `integer_division` selections over finite operand
+   bounds, admit the bytes through Contract IR's strict reader, and derive the
+   node. Assert a derived, `ir_confirmed` remainder descriptor carrying the
+   selected profile, and the identity round-trip.
+2. With no result bound, assert the inferred interval `[0, max(B - 1, 0)]`
+   (Euclidean) or `[-max(B - 1, 0), max(B - 1, 0)]` (truncating, floor), with
+   only real operand-bound ids in `checked_bounds`. Present a node with no law
+   and one with two laws and assert `LawNotDerivable`.
+3. Compile the generated crate and evaluate the oracle over the FR-014-AC-81
+   grid, comparing outcome kind, value and refusal member with direct
+   quire-exact `divide(.., DivisionMember::Remainder, ..)` evaluation,
+   including a zero divisor and `i64::MIN rem -1`.
+4. Mutation controls: render `rem` as `modulo`, and with
+   `DivisionMember::Quotient`; each must fail step 3. Assert that
+   `quire.op.integer.rem` is no longer in the refused-identity list and that
+   every other refused identity keeps its refusal.

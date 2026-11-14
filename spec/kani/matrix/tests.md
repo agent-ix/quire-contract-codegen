@@ -10,7 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-057 | FR-057-AC-1 through FR-057-AC-12 | TC-071 | 🚧 PLANNED (IR-854): no `div` or `mod` scalar Kani harness; a `div` claim settles `OperationNotRendered`. The native route needs a kernel-checked native division plan that quire-exact main lacks. No verdict is claimed for any shape; FR-057-AC-7 to AC-9 need installed-Kani measurements. TC-071 has not run. |
+| FR-057 | FR-057-AC-1 through FR-057-AC-12 | TC-071 | 🚧 PLANNED (IR-854, IR-269 MVP row): no `div`, `rem` or `mod` scalar Kani harness; a `div` claim settles `OperationNotRendered` and `rem` is `Underived` until FR-014-AC-81. The native-route verdict (AC-7) is blocked by IR-1541 (quire-exact native division plan). No verdict is claimed for any shape; FR-057-AC-7 to AC-9 need installed-Kani measurements. TC-071 has not run. |
 | FR-056 | FR-056-AC-1 through FR-056-AC-13 | TC-070 | 🚧 PLANNED (IR-1526): no tractability decider, table or corpus; only FR-056-AC-13 needs an installed Kani run; TC-070 controls have not run. |
 | FR-055 | FR-055-AC-1 through FR-055-AC-10 | TC-069 | 🚧 PLANNED (IR-1437): no `kani-mutations` target in CG; TC-069 has not run. |
 | FR-054 | FR-054-AC-1 through FR-054-AC-23 | TC-068 | 🚧 PLANNED (IR-1448): no option clause Kani harness; the scratch probe of the encoding is `docs/qualification/ir1448-kani-option-probe.md` and is not CG evidence; TC-068 controls have not run. |
@@ -41,7 +41,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-53, FR-015-AC-58 | TC-025 | ⚠️ V1 bundle-only evidence is historical; AC-53/58 remain open for surviving emitters. Keep the `kani_generation` filter with V2 tests under NFR-006-AC-4. |
 | FR-015 | FR-015-AC-55 | TC-023 | ✅ Covered by a nonignored tagged test of the corpus harness's final `kani::cover!` after its assertion; other tagged controls are ignored |
-| FR-015 | FR-015-AC-57 | TC-023 | 🚧 Tagged only by ignored tests of real-Kani corpus classification and corpus playback replay (`tc_023_real_corpus_playback_replays_through_its_qsl_source`); no running-test coverage credit; the arithmetic family excludes division and modulo until FR-057 (IR-854) |
+| FR-015 | FR-015-AC-57 | TC-023 | 🚧 Tagged only by ignored tests of real-Kani corpus classification and corpus playback replay (`tc_023_real_corpus_playback_replays_through_its_qsl_source`); no running-test coverage credit; the arithmetic family excludes division, remainder and modulo, whose V2 replacement is FR-057 (IR-854) |
 | FR-015 | FR-015-AC-51, FR-015-AC-52 | TC-023 | 🚧 Untagged in the computed matrix; profile-mismatch refusal and profile-revision context still need tagged verification |
 | FR-015 | FR-015-AC-82 through FR-015-AC-83, FR-015-AC-86 through FR-015-AC-94 | TC-023 | 🚧 Partial: the computed matrix tags AC-82, AC-83, AC-86, AC-88, AC-91 and AC-94; the retired finite-input arithmetic checks supply no V2 proof credit, while AC-87, AC-89, AC-90, AC-92 and AC-93 remain untagged. The graph corpus path remains live; this AC-110 slice deletes the collection corpus arm and lowerer, with its real-Kani acceptance evidence still pending. |
 | FR-015 | FR-015-AC-95 | TC-023 | 🚧 Planned: this AC-110 slice deletes the collection corpus path, but its exact-head real-Kani evidence remains pending. The end state still requires AC-111 graph retirement and its one-generator V2 replacement; generation still exports the bounded-corpus API. |

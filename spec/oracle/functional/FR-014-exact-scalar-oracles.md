@@ -173,13 +173,14 @@ exactly the names of its form, once each:
 A bare literal member, a missing or duplicate name and an unlisted name are each
 an unreadable bound.
 
-For `integer.div` and `integer.mod` with a plain Integer result and no narrowing
+For `integer.div`, `integer.rem` and `integer.mod` with a plain Integer result and no narrowing
 consumer, absence of a result bound does not prevent generation when both
 operands have finite integer bounds (a canonical integer literal is a singleton
 bound). CG shall derive a result interval from those operands: let `A` be the
 largest absolute dividend endpoint and `B` the largest absolute divisor
-endpoint. Every admitted division profile uses `[-A, A]`; Euclidean modulo uses
-`[0, B - 1]` when `B > 0`. A zero-only divisor uses `[0, 0]` for the descriptor
+endpoint. Every admitted division profile uses `[-A, A]` for `div`; Euclidean modulo
+and the Euclidean `rem` use `[0, B - 1]` when `B > 0`; the truncating and floor
+`rem` use `[-(B - 1), B - 1]` when `B > 0` (planned, FR-014-AC-81). A zero-only divisor uses `[0, 0]` for the descriptor
 and keeps the runtime's `Undefined(DivisionByZero)` outcome. The result bound
 checks only the exposed result, not operand membership. Both operand bounds
 must be finite even though the formula needs only one operand's magnitude;
@@ -276,7 +277,7 @@ test that walks every descriptor through both and cannot omit an
   (`rational.div`: `IntegerDivide` when both operands are integers, `Divide`
   when both are rationals; the IEEE comparisons: the operand width);
 - `operation.laws`, whose `definition.identity` selects the division profile
-  of `integer.div`;
+  of `integer.div` and of `integer.rem` (planned, FR-014-AC-81);
 - `operation.mode`, whose rounding value must equal the rounding of the bound
   the operation is read against;
 - the one reachable bound of the needed form on the node's result type, read by
@@ -284,7 +285,7 @@ test that walks every descriptor through both and cannot omit an
   or decimal domain, the IEEE rounding, the text bounds or the decimal target.
 
 The derivable operations are integer `add`, `sub`, `mul`, `negate`, `div`,
-`mod`, `eq` and `ne`; the Boolean `and`, `or`, `not`, `implies`, `eq` and `ne`;
+`mod`, `rem` (planned, FR-014-AC-81), `eq` and `ne`; the Boolean `and`, `or`, `not`, `implies`, `eq` and `ne`;
 rational `add`, `sub`, `mul`, `negate` and `div` (both operands
 integers, or both rationals); `lt`, `le`, `gt` and `ge` over integers,
 rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
@@ -295,7 +296,8 @@ rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
 `quire.op.quantity.convert`, whose `type_argument` retains either an exact
 unit target or a bounded carried quantity target with its placement mode
 (FR-014-AC-48 and FR-014-AC-62..65). Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
-are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
+are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`
+(until FR-014-AC-81 lands; IR-854),
 `ieee.from_exact`, `ieee.to_rational`, `ieee.float32.negate`, `ieee.float64.negate`, `numeric.narrow`,
 `rational.narrow` and `text.size` (each read against the operation catalog).
 
@@ -735,6 +737,7 @@ otherwise.
 | FR-014-AC-78 | Derivation of an admitted `sqrt` or `fma` node whose mode differs from its `float_rounding` bound's rounding returns `mode_not_derivable`, and derivation of one with a missing, repeated or unreadable `float_rounding` bound returns the same `MissingBound`, `AmbiguousBound` or `UnreadableBound` refusal IEEE `add` returns. | Test (TC-024) |
 | FR-014-AC-79 | A descriptor for a `sqrt` or `fma` operation presented against a node of a different shape (wrong semantic form such as `add`'s `binary` node, wrong body operator, wrong operand count, a different float width or a non-float operand, or a wrong result type) is refused at CG's defensive seam as `FormMismatch`, `BodyMismatch`, `OperandTypeMismatch` or `ResultTypeMismatch`, with no oracle; the Contract IR strict reader refuses wrong arity, a cross-width or non-float operand and a wrong `fma` result family as `ill_typed` or `operator-ineligible` before CG receives the package, and that refusal is tested at the Contract IR boundary and not claimed by CG. | Test (TC-024) |
 | FR-014-AC-80 | `quire.op.ieee.from_exact`, `quire.op.ieee.to_rational`, `quire.op.ieee.float32.negate` and `quire.op.ieee.float64.negate` keep the `OperationNotDerivable` refusal. | Test (TC-024) |
+| FR-014-AC-81 | PLANNED (IR-854). `quire.op.integer.rem` is derivable like `quire.op.integer.mod`, with one difference: it carries exactly one `integer_division` law selecting its `DivisionProfile` (read as for `div`). Derivation of an admitted `rem` node returns a remainder descriptor carrying that profile and the node's integer domain, and the generated oracle calls `rt::divide(rt::DivisionProfile::<profile>, rt::DivisionMember::Remainder, left, right, &domain, meter)`. A zero divisor is `Undefined(DivisionByZero)`; a remainder outside the domain is `Refused(DivisionOutOfDomain { member: Remainder })`. An unnarrowed plain Integer result with finite operand bounds infers `[0, max(B - 1, 0)]` (Euclidean) or `[-max(B - 1, 0), max(B - 1, 0)]` (truncating, floor), under AC-21's rules and refusals. A missing law or two laws refuse `LawNotDerivable` naming the identity. `rem` leaves the refused-identity list (`tc_024_the_refused_catalogue_identities_have_no_family` drops it), and the descriptor and identity round-trip covers the new descriptor. Over a grid that includes `-7 rem 2` (`-1` truncating, `1` floor, `1` Euclidean), `-7 rem -2` (`-1`, `-1`, `1`), `i64::MIN rem -1` (`0`) and a zero divisor, the generated oracle's outcomes equal direct quire-exact `divide(.., Remainder, ..)` evaluation. Mutants: rendering `rem` as `modulo`, or with `DivisionMember::Quotient`, fail the grid. The underivable-sibling fixtures that use `rem` today (TC-024's refused-identity list, TC-033's FR-022-AC-11 sibling) move to an identity that is still refused. | Test (TC-024) |
 
 ## Dependencies
 
