@@ -2,17 +2,18 @@
 //! -105, -107, -108).
 //!
 //! The population extent comes only from `select_population` on the claim's typed population
-//! selector, and the edge multiplicity only from the typed relationship-end accessor. No caller
-//! bound, inferred population or reduced domain stands in for either. The harness carries every
+//! selector, and the edge multiplicity only from the typed relationship-end accessor or, for a
+//! field-edge claim, from the field's `CheckedMemberType`. No caller bound, inferred population
+//! or reduced domain stands in for either. The harness carries every
 //! count, degree and target as a native `i64`; it never builds a general-route `rt::Integer`.
 use quire_contract_model::selected_population::{
     select_population, CheckedSelectedPopulation, CheckedSelectedPopulationOutcome as Population,
     CheckedSelectedPopulationSource,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrence, CheckedPackageV2, CheckedReachesPopulationError,
-    CheckedRelationshipEnd, CheckedRelationshipEndError, CheckedTerm, ContractSourceV1,
-    StateClauseKind,
+    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedOccurrence,
+    CheckedOperationMember, CheckedPackageV2, CheckedReachesPopulationError,
+    CheckedRelationshipEndError, CheckedTerm, ContractSourceV1, StateClauseKind,
 };
 
 use crate::{
@@ -47,6 +48,20 @@ impl From<Reason> for GraphRefusal {
     fn from(reason: Reason) -> Self {
         Self::Unsupported(reason)
     }
+}
+
+/// The edge a reachability application follows, from either form: a relationship end's typed
+/// multiplicity or a field's `CheckedMemberType`.
+struct Edge {
+    /// The relationship declaration, or the object type that declares the field.
+    declaration: CheckedNodeId,
+    /// The field's name; `None` for a relationship end.
+    field: Option<Box<str>>,
+    forward: bool,
+    lower: u64,
+    upper: Option<u64>,
+    ordered: bool,
+    unique: bool,
 }
 
 /// A claim whose population and edge domains are both finite and admitted.
@@ -226,7 +241,7 @@ pub(super) fn lower_graph(
     let (population, end) = domain_of(package, application)?;
     let upper = end
         .upper
-        .ok_or_else(|| GraphRefusal::RequiresBound(end.relationship.clone()))?;
+        .ok_or_else(|| GraphRefusal::RequiresBound(end.declaration.clone()))?;
     let maximum =
         population
             .maximum
@@ -272,7 +287,8 @@ pub(super) fn lower_graph(
         object_type: population.object_type,
         maximum,
         edge: GraphEdgeIdentity {
-            declaration: end.relationship,
+            declaration: end.declaration,
+            field: end.field,
             forward: end.forward,
             lower: end.lower,
             upper,
@@ -283,13 +299,13 @@ pub(super) fn lower_graph(
     })
 }
 
-/// The population and destination end one reachability application names. A `reaches_field`
-/// application is a reachability application but names no population the owner accessor can
-/// read: it refuses as `NotReachesApplication`, never a guessed same-type population.
+/// The population and edge one reachability application names. A relationship-end application
+/// takes its edge from the typed end accessor; a `reaches_field` application from the field's
+/// `CheckedMemberType`. Neither ever guesses a population.
 fn domain_of(
     package: &CheckedPackageV2,
     application: &CheckedNodeId,
-) -> Result<(CheckedSelectedPopulation, CheckedRelationshipEnd), GraphRefusal> {
+) -> Result<(CheckedSelectedPopulation, Edge), GraphRefusal> {
     let selector = package.reaches_population(application).map_err(|error| {
         Reason::PopulationAccessorRefused {
             refusal: match error {
@@ -307,6 +323,37 @@ fn domain_of(
         CheckedSelectedPopulationSource::Admitted { package, selector }
     });
     let population = finite_population(select_population(source))?;
+    let edge = match field_member(package, application) {
+        Some((declaration, name)) => field_edge(package, &population, declaration, name)?,
+        None => relationship_edge(package, &population, application)?,
+    };
+    Ok((population, edge))
+}
+
+/// The declaring type and name of a `reaches_field` application's field member.
+fn field_member<'a>(
+    package: &'a CheckedPackageV2,
+    application: &CheckedNodeId,
+) -> Option<(&'a CheckedNodeId, &'a str)> {
+    let CheckedTerm::Application { operation, .. } = package.term(application)? else {
+        return None;
+    };
+    if operation.identity() != Some("quire.op.model.reaches_field") {
+        return None;
+    }
+    match operation.read().ok()?.member? {
+        CheckedOperationMember::Field {
+            declaration, name, ..
+        } => Some((declaration, name)),
+        _ => None,
+    }
+}
+
+fn relationship_edge(
+    package: &CheckedPackageV2,
+    population: &CheckedSelectedPopulation,
+    application: &CheckedNodeId,
+) -> Result<Edge, GraphRefusal> {
     let end =
         package
             .relationship_end(application)
@@ -322,7 +369,73 @@ fn domain_of(
     if !same_node(package, &end.destination_type, &population.object_type) {
         return Err(Reason::PopulationTypeMismatch.into());
     }
-    Ok((population, end))
+    Ok(Edge {
+        declaration: end.relationship,
+        field: None,
+        forward: end.forward,
+        lower: end.lower,
+        upper: end.upper,
+        ordered: end.ordered,
+        unique: end.unique,
+    })
+}
+
+/// The edge a `Reference`, `Option<Reference>` or bounded `Collection<Reference>` field follows,
+/// every one drawn from the population of the field's own object type.
+fn field_edge(
+    package: &CheckedPackageV2,
+    population: &CheckedSelectedPopulation,
+    declaration: &CheckedNodeId,
+    name: &str,
+) -> Result<Edge, GraphRefusal> {
+    let fields = package
+        .model_object_fields(declaration)
+        .map_err(|_| Reason::FieldNotAdmitted)?;
+    let member_type = fields
+        .field(name)
+        .and_then(|field| field.member_type())
+        .ok_or(Reason::FieldNotAdmitted)?;
+    let (target, lower, upper, ordered, unique) = match member_type {
+        CheckedMemberType::Reference(target) => (target, 1, Some(1), false, true),
+        CheckedMemberType::Option(element) => match &**element {
+            CheckedMemberType::Reference(target) => (target, 0, Some(1), false, true),
+            _ => return Err(Reason::FieldEdgeNotReference.into()),
+        },
+        CheckedMemberType::Collection {
+            kind,
+            element,
+            bounds,
+        } => {
+            let CheckedMemberType::Reference(target) = &**element else {
+                return Err(Reason::FieldEdgeNotReference.into());
+            };
+            let (lower, upper) = bounds.map_or((0, None), |(lower, upper)| (lower, Some(upper)));
+            let ordered = matches!(
+                kind,
+                CheckedCollectionKind::Sequence | CheckedCollectionKind::OrderedSet
+            );
+            let unique = matches!(
+                kind,
+                CheckedCollectionKind::Set | CheckedCollectionKind::OrderedSet
+            );
+            (target, lower, upper, ordered, unique)
+        }
+        _ => return Err(Reason::FieldEdgeNotReference.into()),
+    };
+    if !same_node(package, target, &population.object_type)
+        || !same_node(package, declaration, &population.object_type)
+    {
+        return Err(Reason::PopulationTypeMismatch.into());
+    }
+    Ok(Edge {
+        declaration: declaration.clone(),
+        field: Some(name.into()),
+        forward: true,
+        lower,
+        upper,
+        ordered,
+        unique,
+    })
 }
 
 /// The named `name`/`level` literal of a parameter node's aggregate body.
@@ -345,7 +458,7 @@ struct Shape<'a> {
     package: &'a CheckedPackageV2,
     parameters: &'a [CheckedTerm],
     population: &'a CheckedSelectedPopulation,
-    end: &'a CheckedRelationshipEnd,
+    end: &'a Edge,
     binders: Vec<(String, u64)>,
 }
 
@@ -401,7 +514,8 @@ impl Shape<'_> {
         let unsupported = || GraphRefusal::from(Reason::UnsupportedClaimShape);
         let (population, end) = domain_of(self.package, id).map_err(|_| unsupported())?;
         if !same_node(self.package, &population.binding, &self.population.binding)
-            || !same_node(self.package, &end.relationship, &self.end.relationship)
+            || !same_node(self.package, &end.declaration, &self.end.declaration)
+            || end.field != self.end.field
             || end.forward != self.end.forward
         {
             return Err(unsupported());

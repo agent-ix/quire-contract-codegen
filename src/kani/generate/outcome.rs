@@ -658,8 +658,14 @@ pub enum GraphUnsupportedReason {
     },
     /// The condition or operands cannot be encoded faithfully.
     UnsupportedClaimShape,
-    /// The population's object type is not the selected end's destination type.
+    /// The population's object type is not the selected edge's source and destination type.
     PopulationTypeMismatch,
+    /// A `reaches_field` application's field is absent from the declaring type's admitted model
+    /// fields, or has no member type.
+    FieldNotAdmitted,
+    /// A `reaches_field` application's field is not a `Reference`, `Option` of a `Reference` or
+    /// `Collection` of `Reference` elements.
+    FieldEdgeNotReference,
     /// A precondition or postcondition graph claim: no operation-clause harness is defined for
     /// graph claims, so it settles `unsupported` rather than render invariant semantics.
     OperationClauseNotSupported,
@@ -694,8 +700,8 @@ pub enum GraphUnsupportedReason {
 pub enum GraphAccessorRefusal {
     /// The application node is absent from the graph.
     UnknownNode,
-    /// The node is not a `quire.op.model.reaches` application (a `reaches_field` application
-    /// is one: its population link and edge accessor are not part of this slice).
+    /// The node is not a `quire.op.model.reaches` or `quire.op.model.reaches_field`
+    /// application.
     NotReachesApplication,
     /// The application's population no longer resolves.
     UnresolvedPopulation,

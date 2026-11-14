@@ -19,7 +19,8 @@ use qsl_replay::{
 };
 use quire_canonical::FixedShape;
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageV2,
+    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedOccurrence,
+    CheckedOccurrenceRole, CheckedPackageV2,
 };
 use quire_exact::Origin;
 use serde::Serialize;
@@ -96,6 +97,8 @@ pub struct GraphReplayInputs<'a> {
     /// A structure declared under two clause names is one node, so the selected clause must also
     /// be this occurrence.
     occurrence: Option<CheckedOccurrence>,
+    /// The field and declaring type a field-edge harness followed; set with the witness.
+    field: Option<(CheckedNodeId, String)>,
 }
 
 #[derive(Serialize, FixedShape)]
@@ -153,6 +156,7 @@ impl<'a> GraphReplayInputs<'a> {
             snapshot_label,
             witness: None,
             occurrence: None,
+            field: None,
         }
     }
 
@@ -292,6 +296,11 @@ impl<'a> GraphReplayInputs<'a> {
             forward: identity.edge.forward,
         });
         self.occurrence = Some(identity.occurrence.clone());
+        self.field = identity
+            .edge
+            .field
+            .as_ref()
+            .map(|name| (identity.edge.declaration.clone(), name.to_string()));
         Ok(())
     }
 }
@@ -318,6 +327,52 @@ fn key(index: usize) -> String {
     format!("n{index}")
 }
 
+/// The snapshot value of the followed field for every object: the drawn targets spelled as the
+/// field's `CheckedMemberType` states them. A field-edge claim keeps each edge in its source
+/// object's own field, so the snapshot carries no relationship entry and holds exactly that one
+/// field per object; an object type with further fields needs values this path does not invent,
+/// and QSL refuses the snapshot.
+fn field_values(
+    package: &CheckedPackageV2,
+    declaration: &CheckedNodeId,
+    name: &str,
+    witness: &GraphWitness,
+    population: &str,
+) -> Result<Vec<serde_json::Value>, StateClauseReplayError> {
+    let reference =
+        |to: usize| serde_json::json!({"reference": {"population": population, "key": key(to)}});
+    let member_type = package
+        .model_object_fields(declaration)
+        .ok()
+        .and_then(|fields| {
+            fields
+                .field(name)
+                .and_then(|field| field.member_type().cloned())
+        })
+        .ok_or_else(not_in_domain)?;
+    witness
+        .edges
+        .iter()
+        .map(|targets| match (&member_type, targets.as_slice()) {
+            (CheckedMemberType::Reference(_), [to]) => Ok(reference(*to)),
+            (CheckedMemberType::Option(_), []) => Ok(serde_json::json!({"absent": {}})),
+            (CheckedMemberType::Option(_), [to]) => {
+                Ok(serde_json::json!({"present": reference(*to)}))
+            }
+            (CheckedMemberType::Collection { kind, .. }, targets) => {
+                let kind = match kind {
+                    CheckedCollectionKind::Sequence => "sequence",
+                    CheckedCollectionKind::Set => "set",
+                    CheckedCollectionKind::Bag => "bag",
+                    CheckedCollectionKind::OrderedSet => "ordered-set",
+                };
+                Ok(serde_json::json!({kind: targets.iter().map(|to| reference(*to)).collect::<Vec<_>>()}))
+            }
+            _ => Err(not_in_domain()),
+        })
+        .collect()
+}
+
 impl StateClauseReplay {
     /// Compiles the proved unit against its domain packages, locates the invariant by its declared
     /// name, builds the one current snapshot of the decoded graph and builds the request and the
@@ -342,6 +397,7 @@ impl StateClauseReplay {
             snapshot_label,
             witness,
             occurrence,
+            field,
         } = inputs;
         let witness = witness.ok_or(StateClauseReplayError::MissingField {
             field: "playback".to_owned(),
@@ -407,37 +463,65 @@ impl StateClauseReplay {
                 }
             })
             .collect();
-        let document = GraphSnapshotDocument {
-            format: "quire.state.snapshot/v1",
-            identity: (&snapshot_label).into(),
-            observation: "current",
-            anchor: AnchorMember {
-                kind: match anchor.kind {
-                    AnchorKind::Initialization => "initialization",
-                    AnchorKind::Handler => "handler",
-                },
-                name: anchor.name.clone(),
+        let anchor_member = AnchorMember {
+            kind: match anchor.kind {
+                AnchorKind::Initialization => "initialization",
+                AnchorKind::Handler => "handler",
             },
-            model,
-            populations: vec![SnapshotPopulation {
-                population: address.population.clone(),
-                complete: true,
-                objects: (0..witness.objects)
-                    .map(|index| SnapshotObject {
-                        key: key(index),
-                        object_type: address.object_type.clone(),
-                        fields: BTreeMap::new(),
-                    })
-                    .collect(),
-            }],
-            relationships: vec![RelationshipEntry {
-                relationship: address.relationship.clone(),
-                complete: true,
-                instances,
-            }],
+            name: anchor.name.clone(),
         };
-        let snapshot = encode_document(&document)
-            .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
+        let snapshot = match field {
+            Some((declaration, name)) => {
+                let values =
+                    field_values(package, &declaration, &name, &witness, &address.population)?;
+                let document = serde_json::json!({
+                    "format": "quire.state.snapshot/v1",
+                    "identity": serde_json::to_value(IdentityMember::from(&snapshot_label))
+                        .map_err(|_| StateClauseReplayError::GraphWitnessNotInDomain)?,
+                    "observation": "current",
+                    "anchor": {"kind": anchor_member.kind, "name": anchor_member.name},
+                    "model": serde_json::to_value(&model)
+                        .map_err(|_| StateClauseReplayError::GraphWitnessNotInDomain)?,
+                    "populations": [{
+                        "population": address.population,
+                        "complete": true,
+                        "objects": values.into_iter().enumerate().map(|(index, value)| {
+                            serde_json::json!({
+                                "key": key(index),
+                                "type": address.object_type,
+                                "fields": {name.clone(): value},
+                            })
+                        }).collect::<Vec<_>>(),
+                    }],
+                    "relationships": [],
+                });
+                encode_document(&document)
+            }
+            None => encode_document(&GraphSnapshotDocument {
+                format: "quire.state.snapshot/v1",
+                identity: (&snapshot_label).into(),
+                observation: "current",
+                anchor: anchor_member,
+                model,
+                populations: vec![SnapshotPopulation {
+                    population: address.population.clone(),
+                    complete: true,
+                    objects: (0..witness.objects)
+                        .map(|index| SnapshotObject {
+                            key: key(index),
+                            object_type: address.object_type.clone(),
+                            fields: BTreeMap::new(),
+                        })
+                        .collect(),
+                }],
+                relationships: vec![RelationshipEntry {
+                    relationship: address.relationship.clone(),
+                    complete: true,
+                    instances,
+                }],
+            }),
+        }
+        .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
 
         let selected =
             QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;

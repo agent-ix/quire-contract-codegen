@@ -734,6 +734,10 @@ pub enum CollectionKindIdentity {
 pub struct GraphEdgeIdentity {
     /// Relationship declaration that owns the selected end.
     pub declaration: CheckedNodeId,
+    /// The followed field's name for a `reaches_field` claim, whose `declaration` is then the
+    /// object type that declares it; absent for a relationship end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<Box<str>>,
     /// Whether the application names the source end's role, so the destination is the target
     /// end; with the declaration this selects the one end.
     pub forward: bool,
