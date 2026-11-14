@@ -3,8 +3,10 @@
 //!
 //! QSL emits every package through its public `call_site` facade from native source and a
 //! test-authored domain document; no Contract IR package wire is constructed here. Slice A covers
-//! the relationship-end form. A `reaches_field` application has no population link the owner
-//! accessor can read, so it refuses typed `unsupported` (`NotReachesApplication`).
+//! the relationship-end form; slice D adds the `reaches_field` form over `Reference`, `Option`
+//! and bounded `Collection` fields. A field-edge claim generates a harness only when QSL linked
+//! its application to the population of the edge type (QSL-1904); a package without the link
+//! refuses typed, and the field-edge tests below assert whichever side the QSL under test is on.
 
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
@@ -280,6 +282,10 @@ fn relationship_domains_use_the_population_and_the_typed_destination_multiplicit
             (lower, upper, unique),
             "{edge}"
         );
+        // A relationship end's identity bytes are unchanged by the field-edge form: no `field` key.
+        let serialized = serde_json::to_value(found).unwrap();
+        assert!(serialized.get("field").is_none(), "{edge}: {serialized}");
+        assert_eq!(serialized["upper"], upper, "{edge}");
         let source = &harness.rust.contents;
         assert!(
             source.contains("object_count >= 0_i64 && object_count <= 3_i64"),
@@ -328,33 +334,130 @@ fn a_claim_without_a_population_settles_unsupported_naming_it() {
     ));
 }
 
+/// The `reaches_field` application of a field-edge fixture.
+fn field_application(package: &CheckedPackageV2) -> CheckedNodeId {
+    package
+        .resolved_graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            matches!(&node.body, CheckedTerm::Application { operation, .. }
+                if operation.identity() == Some("quire.op.model.reaches_field"))
+        })
+        .expect("the claim lowers to a field-edge application")
+        .node_id
+        .clone()
+}
+
+/// Whether QSL linked the field-edge application to its population (QSL-1904).
+fn links_population(package: &CheckedPackageV2) -> bool {
+    matches!(
+        package.reaches_population(&field_application(package)),
+        Ok(Some(_))
+    )
+}
+
+/// The field-edge harness, or `None` after asserting the typed refusal a package without the
+/// population link settles: the generator never guesses a population for the field's type.
+fn emitted_field(authored: &Authored, path: &[usize]) -> Option<KaniGraphObligationHarness> {
+    if links_population(&authored.package) {
+        return Some(emitted(&authored.package, path));
+    }
+    let refusal = disposition(&authored.package, path, 8);
+    // The IR in the lock predates the field-edge form of `reaches_population`, so it refuses the
+    // application itself. An IR that accepts it refuses an unlinked application as
+    // `PopulationUnavailable`: that change fails this assertion, and the lock bump then states
+    // the new reason here on purpose.
+    assert!(
+        refused_with(
+            &refusal,
+            &GraphUnsupportedReason::PopulationAccessorRefused {
+                refusal: GraphAccessorRefusal::NotReachesApplication
+            }
+        ),
+        "{refusal:?}"
+    );
+    None
+}
+
+#[trace("TC-025", "FR-015-AC-98")]
+#[trace("TC-025", "FR-015-AC-105")]
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn field_edge_domains_use_the_population_and_the_member_type_multiplicity() {
+    // `next` is a `Reference` (exactly one target), `maybe` an `Option` (none or one) and
+    // `many` a bounded `Sequence` (zero to two, repeats allowed).
+    for (field, lower, upper, unique, ordered) in [
+        ("next", 1, 1, true, false),
+        ("maybe", 0, 1, true, false),
+        ("many", 0, 2, false, true),
+    ] {
+        let authored = fixture(&format!("not reaches(self, self, {field})"));
+        let Some(harness) = emitted_field(&authored, &[0]) else {
+            return;
+        };
+        assert_eq!(harness.identity.maximum_population, 3, "{field}");
+        let edge = &harness.identity.edge;
+        assert_eq!(
+            (
+                edge.field.as_deref(),
+                edge.lower,
+                edge.upper,
+                edge.unique,
+                edge.ordered,
+                edge.forward
+            ),
+            (Some(field), lower, upper, unique, ordered, true),
+            "{field}"
+        );
+        let source = &harness.rust.contents;
+        assert!(
+            source.contains("object_count >= 0_i64 && object_count <= 3_i64"),
+            "{field}: {source}"
+        );
+        assert!(source.contains(&format!("degree_0 >= {lower}")), "{field}");
+        assert!(
+            source.contains(&format!("degree_0 <= {upper}_i64")) || upper == 1,
+            "{field}"
+        );
+        assert_eq!(
+            source.contains("edge_0_1 != edge_0_0"),
+            unique && upper > 1,
+            "{field}: uniqueness assumptions follow the member type"
+        );
+        assert!(!source.contains("rt::Integer") && !source.contains("Integer::"));
+    }
+}
+
+#[trace("TC-025", "FR-015-AC-100")]
+#[test]
+fn the_followed_field_changes_the_harness_identity_and_equal_inputs_regenerate_it() {
+    let harness =
+        |field: &str| emitted_field(&fixture(&format!("not reaches(self, self, {field})")), &[0]);
+    let Some(next) = harness("next") else {
+        return;
+    };
+    let maybe = harness("maybe").expect("the same QSL links every field");
+    let many = harness("many").expect("the same QSL links every field");
+    let again = harness("next").expect("the same QSL links every field");
+    assert_eq!(next.rust, again.rust);
+    assert_eq!(next.identity, again.identity);
+    for other in [&maybe, &many] {
+        assert_ne!(next.identity.harness_symbol, other.identity.harness_symbol);
+        assert_ne!(next.identity.edge, other.identity.edge);
+        assert_ne!(next.rust.contents, other.rust.contents);
+    }
+    assert_ne!(maybe.identity.harness_symbol, many.identity.harness_symbol);
+}
+
 #[trace("TC-025", "FR-015-AC-107")]
 #[trace("TC-025", "FR-015-AC-108")]
 #[test]
-fn field_edge_forms_refuse_typed_not_reaches_application_and_location_comes_first() {
+fn a_field_edge_claim_is_located_first_and_one_field_per_claim() {
     for edge in ["next", "maybe", "many"] {
         let authored = fixture(&format!("not reaches(self, self, {edge})"));
-        let field = authored
-            .package
-            .resolved_graph()
-            .nodes
-            .iter()
-            .find(|node| {
-                matches!(&node.body, CheckedTerm::Application { operation, .. }
-                    if operation.identity() == Some("quire.op.model.reaches_field"))
-            })
-            .unwrap_or_else(|| panic!("{edge} lowers to a field-edge application"));
-        assert!(matches!(&field.body, CheckedTerm::Application { .. }));
-        assert!(
-            refused_with(
-                &disposition(&authored.package, &[0], 8),
-                &GraphUnsupportedReason::PopulationAccessorRefused {
-                    refusal: GraphAccessorRefusal::NotReachesApplication
-                }
-            ),
-            "{edge}"
-        );
-        // A path that names no reachability application is refused by location first.
+        // A path that names no reachability application is refused by location first, whether
+        // or not the package links the population.
         assert!(
             refused_with(
                 &disposition(&authored.package, &[1], 8),
@@ -363,6 +466,39 @@ fn field_edge_forms_refuse_typed_not_reaches_application_and_location_comes_firs
             "{edge}"
         );
     }
+    // A condition over two fields is a claim shape the one-edge encoding cannot express.
+    let authored = fixture("not reaches(self, self, next) and not reaches(self, self, maybe)");
+    if links_population(&authored.package) {
+        assert!(refused_with(
+            &disposition(&authored.package, &[0, 0], 8),
+            &GraphUnsupportedReason::UnsupportedClaimShape
+        ));
+    }
+}
+
+/// A population-typed field QSL checks as a reachability edge is `Reference`, `Option` or a
+/// collection of references; QSL refuses any other field before a package exists, so the
+/// generator's `FieldEdgeNotReference` refusal is reachable only through a package QSL does not
+/// emit.
+#[trace("TC-025", "FR-015-AC-108")]
+#[test]
+fn qsl_refuses_a_scalar_collection_field_edge_before_a_package_exists() {
+    let error = match try_authored_with(
+        &document(),
+        &[declaration(
+            "invariant",
+            "Graph",
+            "not reaches(self, self, items)",
+        )],
+        &bound_line(Some(3)),
+    ) {
+        Ok(_) => panic!("a scalar field admits no reachability package"),
+        Err(error) => error,
+    };
+    assert!(
+        error.contains("IllTyped") && error.contains("operator-ineligible"),
+        "{error}"
+    );
 }
 
 #[trace("TC-025", "FR-015-AC-107")]
@@ -764,10 +900,10 @@ fn dispositions_at(
     )
 }
 
-/// A field-edge and a relationship-end reachability in one condition are two items. The
-/// relationship-end item at position 0 is refused because the condition names a second
-/// application (`UnsupportedClaimShape`), and the field-edge item at position 1 settles by its own
-/// accessor refusal: neither disposition follows from the other.
+/// A field-edge and a relationship-end reachability in one condition are two items. Each
+/// names a different edge than its sibling, so each is refused as a claim shape the one-edge
+/// encoding cannot express (or, without the population link, by the field item's own typed
+/// refusal): neither disposition follows from the other.
 #[trace("TC-025", "FR-015-AC-107")]
 #[trace("TC-025", "FR-015-AC-108")]
 #[test]
@@ -788,12 +924,19 @@ fn a_field_edge_and_a_relationship_end_reachability_are_separate_items() {
         &dispositions[0],
         &GraphUnsupportedReason::UnsupportedClaimShape
     ));
-    assert!(refused_with(
-        &dispositions[1],
-        &GraphUnsupportedReason::PopulationAccessorRefused {
-            refusal: GraphAccessorRefusal::NotReachesApplication
-        }
-    ));
+    if links_population(&authored.package) {
+        assert!(refused_with(
+            &dispositions[1],
+            &GraphUnsupportedReason::UnsupportedClaimShape
+        ));
+    } else {
+        assert!(refused_with(
+            &dispositions[1],
+            &GraphUnsupportedReason::PopulationAccessorRefused {
+                refusal: GraphAccessorRefusal::NotReachesApplication
+            }
+        ));
+    }
     assert!(refused_with(
         &dispositions[2],
         &GraphUnsupportedReason::MissingClaim

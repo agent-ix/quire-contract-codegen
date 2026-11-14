@@ -19,7 +19,8 @@ use qsl_replay::{
 };
 use quire_canonical::FixedShape;
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageV2,
+    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedOccurrence,
+    CheckedOccurrenceRole, CheckedPackageV2,
 };
 use quire_exact::Origin;
 use serde::Serialize;
@@ -31,7 +32,7 @@ use super::{
     StateClauseHarnessMember, StateClauseReplay, StateClauseReplayError,
 };
 use crate::{
-    core::ir::node_key::checked_node_key,
+    core::{canonical::preimage_value, ir::node_key::checked_node_key},
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{KaniGraphObligationHarness, ObligationBinding, GRAPH_ASSERTION_MESSAGE},
@@ -96,6 +97,8 @@ pub struct GraphReplayInputs<'a> {
     /// A structure declared under two clause names is one node, so the selected clause must also
     /// be this occurrence.
     occurrence: Option<CheckedOccurrence>,
+    /// The field and declaring type a field-edge harness followed; set with the witness.
+    field: Option<(CheckedNodeId, String)>,
 }
 
 #[derive(Serialize, FixedShape)]
@@ -153,6 +156,7 @@ impl<'a> GraphReplayInputs<'a> {
             snapshot_label,
             witness: None,
             occurrence: None,
+            field: None,
         }
     }
 
@@ -167,6 +171,18 @@ impl<'a> GraphReplayInputs<'a> {
     #[cfg(test)]
     pub(crate) fn with_witness(&mut self, witness: GraphWitness) {
         self.witness = Some(witness);
+    }
+
+    /// Test seam: as [`Self::with_witness`], for a witness of the field `name` of `declaration`.
+    #[cfg(test)]
+    pub(crate) fn with_field_witness(
+        &mut self,
+        witness: GraphWitness,
+        declaration: CheckedNodeId,
+        name: &str,
+    ) {
+        self.witness = Some(witness);
+        self.field = Some((declaration, name.to_owned()));
     }
 
     /// Decodes a parsed falsified graph harness playback into the graph it drew. The slots are
@@ -292,6 +308,11 @@ impl<'a> GraphReplayInputs<'a> {
             forward: identity.edge.forward,
         });
         self.occurrence = Some(identity.occurrence.clone());
+        self.field = identity
+            .edge
+            .field
+            .as_ref()
+            .map(|name| (identity.edge.declaration.clone(), name.to_string()));
         Ok(())
     }
 }
@@ -314,8 +335,73 @@ fn names_occurrence(origin: &Origin, occurrence: &CheckedOccurrence) -> bool {
     origin.role().as_str() == role && origin.ordinal() == occurrence.ordinal
 }
 
+fn document_encode(cause: crate::core::canonical::DigestError) -> StateClauseReplayError {
+    StateClauseReplayError::Document(DocumentError::Encode(cause))
+}
+
 fn key(index: usize) -> String {
     format!("n{index}")
+}
+
+/// The snapshot fields of every object: the followed field holds the drawn targets spelled as its
+/// `CheckedMemberType` states them (a field-edge claim keeps each edge in its source object's own
+/// field, so the snapshot carries no relationship entry), and every other reference field holds a
+/// neutral value the claim cannot read (the first object, no value, an empty collection). A field
+/// of another type needs a value this path does not invent: the replay is refused.
+fn field_values(
+    package: &CheckedPackageV2,
+    declaration: &CheckedNodeId,
+    name: &str,
+    witness: &GraphWitness,
+    population: &str,
+) -> Result<Vec<serde_json::Map<String, serde_json::Value>>, StateClauseReplayError> {
+    let reference =
+        |to: usize| serde_json::json!({"reference": {"population": population, "key": key(to)}});
+    let collection = |kind: &CheckedCollectionKind, targets: &[usize]| {
+        let kind = match kind {
+            CheckedCollectionKind::Sequence => "sequence",
+            CheckedCollectionKind::Set => "set",
+            CheckedCollectionKind::Bag => "bag",
+            CheckedCollectionKind::OrderedSet => "ordered-set",
+        };
+        serde_json::json!({kind: targets.iter().map(|to| reference(*to)).collect::<Vec<_>>()})
+    };
+    let fields = package
+        .model_object_fields(declaration)
+        .map_err(|_| not_in_domain())?;
+    witness
+        .edges
+        .iter()
+        .map(|targets| {
+            fields
+                .fields()
+                .iter()
+                .map(|field| {
+                    let member_type = field.member_type().ok_or_else(not_in_domain)?;
+                    let followed = field.name() == name;
+                    let value = match (member_type, followed, targets.as_slice()) {
+                        (CheckedMemberType::Reference(_), true, [to]) => reference(*to),
+                        (CheckedMemberType::Reference(_), false, _) => reference(0),
+                        (CheckedMemberType::Option(_), true, [to]) => {
+                            serde_json::json!({"present": reference(*to)})
+                        }
+                        (CheckedMemberType::Option(_), true, [])
+                        | (CheckedMemberType::Option(_), false, _) => {
+                            serde_json::json!({"absent": {}})
+                        }
+                        (CheckedMemberType::Collection { kind, .. }, true, targets) => {
+                            collection(kind, targets)
+                        }
+                        (CheckedMemberType::Collection { kind, .. }, false, _) => {
+                            collection(kind, &[])
+                        }
+                        _ => return Err(not_in_domain()),
+                    };
+                    Ok((field.name().to_owned(), value))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 impl StateClauseReplay {
@@ -342,6 +428,7 @@ impl StateClauseReplay {
             snapshot_label,
             witness,
             occurrence,
+            field,
         } = inputs;
         let witness = witness.ok_or(StateClauseReplayError::MissingField {
             field: "playback".to_owned(),
@@ -407,37 +494,63 @@ impl StateClauseReplay {
                 }
             })
             .collect();
-        let document = GraphSnapshotDocument {
-            format: "quire.state.snapshot/v1",
-            identity: (&snapshot_label).into(),
-            observation: "current",
-            anchor: AnchorMember {
-                kind: match anchor.kind {
-                    AnchorKind::Initialization => "initialization",
-                    AnchorKind::Handler => "handler",
-                },
-                name: anchor.name.clone(),
+        let anchor_member = AnchorMember {
+            kind: match anchor.kind {
+                AnchorKind::Initialization => "initialization",
+                AnchorKind::Handler => "handler",
             },
-            model,
-            populations: vec![SnapshotPopulation {
-                population: address.population.clone(),
-                complete: true,
-                objects: (0..witness.objects)
-                    .map(|index| SnapshotObject {
-                        key: key(index),
-                        object_type: address.object_type.clone(),
-                        fields: BTreeMap::new(),
-                    })
-                    .collect(),
-            }],
-            relationships: vec![RelationshipEntry {
-                relationship: address.relationship.clone(),
-                complete: true,
-                instances,
-            }],
+            name: anchor.name.clone(),
         };
-        let snapshot = encode_document(&document)
-            .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
+        let snapshot = match field {
+            Some((declaration, name)) => {
+                let values =
+                    field_values(package, &declaration, &name, &witness, &address.population)?;
+                let document = serde_json::json!({
+                    "format": "quire.state.snapshot/v1",
+                    "identity": preimage_value(&IdentityMember::from(&snapshot_label)).map_err(document_encode)?,
+                    "observation": "current",
+                    "anchor": {"kind": anchor_member.kind, "name": anchor_member.name},
+                    "model": preimage_value(&model).map_err(document_encode)?,
+                    "populations": [{
+                        "population": address.population,
+                        "complete": true,
+                        "objects": values.into_iter().enumerate().map(|(index, value)| {
+                            serde_json::json!({
+                                "key": key(index),
+                                "type": address.object_type,
+                                "fields": value,
+                            })
+                        }).collect::<Vec<_>>(),
+                    }],
+                    "relationships": [],
+                });
+                encode_document(&document)
+            }
+            None => encode_document(&GraphSnapshotDocument {
+                format: "quire.state.snapshot/v1",
+                identity: (&snapshot_label).into(),
+                observation: "current",
+                anchor: anchor_member,
+                model,
+                populations: vec![SnapshotPopulation {
+                    population: address.population.clone(),
+                    complete: true,
+                    objects: (0..witness.objects)
+                        .map(|index| SnapshotObject {
+                            key: key(index),
+                            object_type: address.object_type.clone(),
+                            fields: BTreeMap::new(),
+                        })
+                        .collect(),
+                }],
+                relationships: vec![RelationshipEntry {
+                    relationship: address.relationship.clone(),
+                    complete: true,
+                    instances,
+                }],
+            }),
+        }
+        .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
 
         let selected =
             QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;

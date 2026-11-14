@@ -21,6 +21,10 @@ mod kani_render_private;
 mod kani_graph_private;
 
 #[cfg(test)]
+#[path = "../tests/it/kani_graph_field_private.rs"]
+mod kani_graph_field_private;
+
+#[cfg(test)]
 #[path = "../tests/it/kani_graph_domain_private.rs"]
 mod kani_graph_domain_private;
 

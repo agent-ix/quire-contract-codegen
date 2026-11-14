@@ -53,14 +53,14 @@ use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf, time::Duration};
 
-const DOMAIN: &str = "ir268.test/domain";
-const NODE: &str = "ix://ir268.test/domain/Node";
-const POPULATION: &str = "ix://ir268.test/domain/CollectionNodes";
-const SOURCE: &str = "ix://ir268.test/spec";
-const AUTHORITY: &str = "agent-ix";
-const UNIT: &str = "graph.native";
+pub(crate) const DOMAIN: &str = "ir268.test/domain";
+pub(crate) const NODE: &str = "ix://ir268.test/domain/Node";
+pub(crate) const POPULATION: &str = "ix://ir268.test/domain/CollectionNodes";
+pub(crate) const SOURCE: &str = "ix://ir268.test/spec";
+pub(crate) const AUTHORITY: &str = "agent-ix";
+pub(crate) const UNIT: &str = "graph.native";
 
-fn generated(identity: &str) -> Value {
+pub(crate) fn generated(identity: &str) -> Value {
     json!({"generated": {"generatorIdentity": SOURCE, "generatorVersion": "1.0.0",
                           "inputIdentities": [identity]}})
 }
@@ -128,8 +128,8 @@ pub(crate) struct Authored {
     pub(crate) clause: CheckedNodeId,
     pub(crate) occurrence: CheckedOccurrence,
     occurrences: Vec<CheckedOccurrence>,
-    source: String,
-    domain: Vec<u8>,
+    pub(crate) source: String,
+    pub(crate) domain: Vec<u8>,
 }
 
 pub(crate) fn authored(condition: &str, maximum: u64) -> Authored {
@@ -138,7 +138,16 @@ pub(crate) fn authored(condition: &str, maximum: u64) -> Authored {
 
 /// One structure declared under every name: a single clause node with one occurrence per name.
 fn authored_named(condition: &str, maximum: u64, names: &[&str]) -> Authored {
-    let domain = domain_document();
+    authored_over(domain_document(), condition, maximum, names)
+}
+
+/// As `authored_named`, over a caller-supplied domain package document.
+pub(crate) fn authored_over(
+    domain: Vec<u8>,
+    condition: &str,
+    maximum: u64,
+    names: &[&str],
+) -> Authored {
     let invariants: String = names
         .iter()
         .map(|name| format!("invariant {name} using v on M::Node at current {{ {condition} }}\n"))
@@ -218,7 +227,7 @@ fn harness_at(
 }
 
 /// The harness with `from` replaced by `to` exactly once, sealed as a generated harness.
-fn mutated(
+pub(crate) fn mutated(
     healthy: &KaniGraphObligationHarness,
     from: &str,
     to: &str,
@@ -318,7 +327,7 @@ pub(crate) fn run_outcome(harness: &KaniGraphObligationHarness, label: &str) -> 
     evidence.outcome
 }
 
-fn scalar_limits() -> ScalarLimits {
+pub(crate) fn scalar_limits() -> ScalarLimits {
     let seed = 1_000_000;
     ScalarLimits {
         integer_bits: seed,
@@ -334,12 +343,15 @@ fn scalar_limits() -> ScalarLimits {
     }
 }
 
-const UNBOUNDED: WitnessDecodeLimits = WitnessDecodeLimits {
+pub(crate) const UNBOUNDED: WitnessDecodeLimits = WitnessDecodeLimits {
     bytes: usize::MAX,
     values: usize::MAX,
 };
 
-fn graph_inputs<'a>(authored: &'a Authored, relationship: &str) -> GraphReplayInputs<'a> {
+pub(crate) fn graph_inputs<'a>(
+    authored: &'a Authored,
+    relationship: &str,
+) -> GraphReplayInputs<'a> {
     graph_inputs_for(authored, relationship, "Graph")
 }
 
@@ -391,7 +403,7 @@ fn graph_inputs_for<'a>(
 
 /// Decodes the counterexample into the drawn graph and replays the authored clause over it
 /// through `qsl_replay`.
-fn replay(
+pub(crate) fn replay(
     authored: &Authored,
     harness: &KaniGraphObligationHarness,
     counterexample: &str,
@@ -443,7 +455,7 @@ fn relationship(name: &str) -> String {
     format!("ix://ir268.test/domain/relationship/Node-{name}")
 }
 
-fn settled(
+pub(crate) fn settled(
     result: &qsl_replay::StateClauseReplayResult,
 ) -> (WitnessSettlement, Category, Option<DisagreementCause>) {
     let ReplayResult::Witness(arm) = result.result() else {
@@ -456,7 +468,7 @@ fn settled(
     )
 }
 
-fn assert_reproduced(result: &qsl_replay::StateClauseReplayResult) {
+pub(crate) fn assert_reproduced(result: &qsl_replay::StateClauseReplayResult) {
     assert_eq!(
         settled(result),
         (
@@ -468,7 +480,7 @@ fn assert_reproduced(result: &qsl_replay::StateClauseReplayResult) {
 }
 
 /// The authored clause holds on the replayed graph: the harness and the clause disagree.
-fn assert_clause_holds(result: &qsl_replay::StateClauseReplayResult) {
+pub(crate) fn assert_clause_holds(result: &qsl_replay::StateClauseReplayResult) {
     let (settlement, category, cause) = settled(result);
     assert_eq!(settlement, WitnessSettlement::Inconclusive);
     assert_eq!(category, Category::Success);
@@ -800,19 +812,19 @@ fn real_kani_healthy_controls_verify_on_the_slice_b_fixture() {
 /// Transitivity of one end at population 3, written with three quantifier-bound objects. It holds
 /// on every graph, whatever the edge draw, so `Verified` evidences the harness closure and the
 /// claim's lowering, not the `{0,3}` degree and target draws.
-fn transitivity(end: &str) -> String {
+pub(crate) fn transitivity(end: &str) -> String {
     format!("forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : (reaches(a, b, {end}) and reaches(b, c, {end})) implies reaches(a, c, {end}))))")
 }
 
 /// `reaches(a, c)`: the conclusion application, by argument path through the three binders.
-const CONCLUSION: [usize; 4] = [1, 1, 1, 1];
+pub(crate) const CONCLUSION: [usize; 4] = [1, 1, 1, 1];
 
 /// The conclusion reversed, `reaches(c, a)`: a claim mutant that a chain graph violates.
-fn reversed(end: &str) -> String {
+pub(crate) fn reversed(end: &str) -> String {
     format!("forall(a in M::CollectionNodes : forall(b in M::CollectionNodes : forall(c in M::CollectionNodes : (reaches(a, b, {end}) and reaches(b, c, {end})) implies reaches(c, a, {end}))))")
 }
 
-const CLOSURE_STEP: &str =
+pub(crate) const CLOSURE_STEP: &str =
     "paths[from][to] = paths[from][to] || (paths[from][via] && paths[via][to]);";
 
 fn verified_transitivity(end: &str) {

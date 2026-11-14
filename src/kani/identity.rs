@@ -732,8 +732,13 @@ pub enum CollectionKindIdentity {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphEdgeIdentity {
-    /// Relationship declaration that owns the selected end.
+    /// The relationship declaration that owns the selected end, or, for a `reaches_field` claim,
+    /// the object type that declares the followed field.
     pub declaration: CheckedNodeId,
+    /// The followed field's name for a `reaches_field` claim; absent for a relationship end, so a
+    /// relationship end's serialized identity carries no `field` key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<Box<str>>,
     /// Whether the application names the source end's role, so the destination is the target
     /// end; with the declaration this selects the one end.
     pub forward: bool,
