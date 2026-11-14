@@ -159,7 +159,7 @@ fn authored(condition: &str, maximum: u64) -> Authored {
     };
     let package = *package;
     let node = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "state_clause")
@@ -640,7 +640,7 @@ fn decode_falsification_refuses_every_playback_the_harness_could_not_draw() {
     // A harness of another clause is refused.
     let other_node = authored
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .map(|node| &node.node_id)

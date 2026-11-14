@@ -162,7 +162,7 @@ fn fixture(condition: &str) -> Authored {
 
 fn clause(package: &CheckedPackageV2) -> CheckedNodeId {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() == "state_clause")
@@ -174,7 +174,7 @@ fn clause(package: &CheckedPackageV2) -> CheckedNodeId {
 /// Every source occurrence of one clause node, in package order.
 fn occurrences(package: &CheckedPackageV2, clause: &CheckedNodeId) -> Vec<CheckedOccurrence> {
     package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| &node.node_id == clause)
@@ -336,7 +336,7 @@ fn field_edge_forms_refuse_typed_not_reaches_application_and_location_comes_firs
         let authored = fixture(&format!("not reaches(self, self, {edge})"));
         let field = authored
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| {
@@ -382,7 +382,7 @@ fn locations_refuse_without_a_harness_and_never_cross_clauses() {
     // A node that is not a state clause cannot hold a claim.
     let other = authored
         .package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .find(|node| node.semantic_form.as_ref() != "state_clause")
@@ -1103,7 +1103,7 @@ fn one_node_under_two_clauses_is_two_items_with_different_identities() {
     );
     let package = &authored.package;
     let clauses: Vec<_> = package
-        .graph()
+        .resolved_graph()
         .nodes
         .iter()
         .filter(|node| node.semantic_form.as_ref() == "state_clause")
@@ -1156,24 +1156,31 @@ fn one_node_under_two_clauses_is_two_items_with_different_identities() {
     assert_ne!(first, second);
     assert_ne!(first.harness_symbol, second.harness_symbol);
 
-    // The same node and occurrence twice is a duplicate; an occurrence the node does not carry
-    // names no claim.
-    let repeated = [&ordinals[0], &ordinals[0]];
-    let (dispositions, _) = dispositions_at(
-        package,
-        &[
-            (&shared_id, repeated[0], &[0]),
-            (&shared_id, repeated[1], &[0]),
-        ],
-    );
+    // The same node, occurrence and path twice is a duplicate item, which rejects the request.
+    let repeated: Vec<ObligationItem<'_>> = (0..2)
+        .map(|_| ObligationItem::GraphClaim {
+            package,
+            node_id: &shared_id,
+            occurrence: &ordinals[0],
+            argument_path: &[0],
+        })
+        .collect();
+    let KaniObligationOutcome::Rejected { records } =
+        negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: ceilings(),
+            items: &repeated,
+            subject_path: "crate::graph_subject",
+            unwind: 8,
+        })
+        .unwrap()
+    else {
+        panic!("a repeated claim rejects the request")
+    };
     assert!(matches!(
-        dispositions[0],
-        ObligationDisposition::Supported { .. }
-    ));
-    assert!(matches!(
-        dispositions[1],
+        records[1].disposition,
         ObligationDisposition::InvalidRequest { .. }
     ));
+    // An occurrence the node does not carry names no claim.
     let absent = CheckedOccurrence {
         role: ordinals[0].role.clone(),
         ordinal: 99,

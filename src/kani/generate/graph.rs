@@ -170,9 +170,10 @@ pub(super) fn lower_graph(
     path: &[usize],
 ) -> Result<LoweredGraph, GraphRefusal> {
     let missing = || GraphRefusal::Unsupported(Reason::MissingClaim);
-    // The claim is keyed by the node and one of its own occurrences: an occurrence the node does
-    // not carry names no claim.
-    let is_state_clause = package.graph().nodes.iter().any(|node| {
+    // The claim is keyed by the document-held node id (the form the source map and every report
+    // name a node by; the slot form of two clauses can coincide) and one of the node's own
+    // occurrences: an occurrence the node does not carry names no claim.
+    let is_state_clause = package.resolved_graph().nodes.iter().any(|node| {
         &node.node_id == clause
             && &*node.node_tag == "state"
             && &*node.semantic_form == "state_clause"
@@ -363,18 +364,12 @@ impl Shape<'_> {
         }
         let node = self
             .package
-            .graph()
+            .resolved_graph()
             .nodes
             .iter()
             .find(|node| same_node(self.package, &node.node_id, target))
             .filter(|node| &*node.semantic_form == "parameter")
-            .filter(|node| {
-                same_node(
-                    self.package,
-                    &node.semantic_type,
-                    &self.population.object_type,
-                )
-            })
+            .filter(|node| self.references_population_type(&node.semantic_type))
             .ok_or_else(unsupported)?;
         let body = self.package.term(&node.node_id).ok_or_else(unsupported)?;
         let name = parameter_member(body, "name").ok_or_else(unsupported)?;
@@ -386,6 +381,19 @@ impl Shape<'_> {
             .position(|(bound, at)| bound == name && *at == level)
             .map(Operand::Bound)
             .ok_or_else(unsupported)
+    }
+
+    /// Whether a binder's type is a reference to the population's object type.
+    fn references_population_type(&self, reference_type: &CheckedNodeId) -> bool {
+        matches!(
+            self.package.term(reference_type),
+            Some(CheckedTerm::Aggregate { members })
+                if matches!(
+                    members.as_slice(),
+                    [CheckedTerm::Reference { target }]
+                        if same_node(self.package, target, &self.population.object_type)
+                )
+        )
     }
 
     /// A reachability application over the selected population and end, or the shape refusal.
