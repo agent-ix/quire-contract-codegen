@@ -29,7 +29,8 @@ use crate::{
         ScalarIntegerRepresentation, ScalarObligationArgument, ScalarObligationIdentity,
     },
     oracle::checked_graph::CheckedGraph,
-    oracle::equality::{owner_enum, OwnerEnum, OwnerEnumRefusal},
+    oracle::equality::admitted::{owner_enum, OwnerEnum, OwnerEnumRefusal},
+    oracle::scalar::EXACT_SCALAR_CRATE_NAME,
 };
 
 /// One enum comparison to prove.
@@ -446,7 +447,7 @@ fn render_text(
         harness,
         artifacts: vec![Artifact::new(
             "Cargo.toml",
-            crate::core::profile::oracle_crate_manifest(crate::EXACT_SCALAR_CRATE_NAME),
+            crate::core::profile::oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME),
         )],
     })
 }

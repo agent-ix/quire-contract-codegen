@@ -172,6 +172,20 @@ unavailable the item is `unsupported` with no harness.
 
 ## Status
 
-PLANNED (IR-1438). This specification supplies no implementation, generated
-proof or acceptance credit. All eleven criteria remain planned and untagged until
-actual implementation and verification.
+PARTIAL (IR-262). The generator `generate_enum_scalar_harness` (src/kani/generate/enum_scalar.rs)
+settles an `enum` comparison node to a harness over `NativeEnum` carriers built with
+`from_index`, or to a typed refusal, from a genuine QSL source admitted through Contract IR and
+the owner's admitted context. Tagged and passing: AC-1, AC-2, AC-3 (carrier admission, minted
+identity, generator-mint and reorder controls), AC-4 (assertion shape; an exhausted meter is
+Falsified under installed Kani 0.68.0, `--solver cadical`, unwind 1), AC-5 and AC-6 (healthy
+harnesses Verified, every mutant Falsified with playback, in the ignored Kani lane of
+`tests/it/enum_scalar_harness.rs`; measurements in
+`docs/qualification/ir262-enum-scalar-kani-measurements.md`), AC-7 (one cover, last; the
+unsatisfied-cover, timeout, memory and missing-verdict classifications are the existing runner's
+and are not re-driven here), AC-8 (named unsupported with no context; ill-typed causes at
+`check_typed`) and AC-9 (a non-enum node is not an enum comparison). Not done: the routed
+`generate_routed` path still settles an enum node `OperationNotRendered` because the routed
+inputs carry no owner-admitted context; AC-10 (single physical binding in the shared symbolic
+ABI, witness decode and replay) and the owner-route replay of AC-5; AC-11 records the declaration,
+members, ordered flag, operator, encoding, unwind and options in the harness record but not
+tool versions, target, limits or terminal outcome beyond what the runner's evidence carries.

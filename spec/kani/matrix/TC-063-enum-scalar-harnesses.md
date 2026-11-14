@@ -70,4 +70,4 @@ classification and receive no proof credit.
 
 ## Status
 
-PLANNED (IR-1438): all eleven FR-049 criteria are unimplemented and untagged.
+PARTIAL (IR-262): steps 1 to 5 and 7 run in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani. Steps 6, 8 and 9 are not run; see the FR-049 Status.

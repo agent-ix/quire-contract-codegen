@@ -106,8 +106,7 @@ use quire_semantic_value::declaration::{
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-mod admitted;
-pub(crate) use admitted::{owner_enum, OwnerEnum, OwnerEnumRefusal};
+pub(crate) mod admitted;
 mod resolution;
 #[cfg(test)]
 mod union_tests;
