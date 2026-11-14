@@ -157,3 +157,17 @@ oracle, since the native oracle has no `rt::IntegerArithmetic` call.
 `kani_generation_real_v2_scalar_verifies` previously never reached its argument-vector assertion
 (it timed out first). That assertion counted one launcher argument after the options, but the
 launcher always appends `-Z unstable-options --export-json <path>`; it now states the exact vector.
+
+## IEEE float arithmetic rows (IR-260)
+
+The table also holds five rows for the IEEE float arithmetic identities, with `max_operand_bits` 32
+(the `binary32` width, so both widths are covered): `add` and `sub` together, `mul`, `div`, `sqrt`
+and `fma`, each at `float32` and `float64`, `not_tractable`, 600 s, no peak recorded. The basis is
+quire-exact FR-405's table rows (no `exact` or directed-spelling harness, and no `div`, `sqrt` or
+`fma` harness, reached a verdict within 600 s) and is detailed in
+`ir260-float-scalar-kani-measurements.md`. Kani's symbolic `f32` division is bit-wrong at
+`0x800000A9 / 0x9C873333` (the correct result is `0x1BA00000`), which is why the `div` row has no
+host-division reference. The float clause carries no integer operand width, so the decider's width
+match does not select these rows; the refusal of a float arithmetic node is made at generation by
+the float row (FR-053), with a named capability and no harness, and these rows are its measured
+record.

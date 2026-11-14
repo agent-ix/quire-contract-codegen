@@ -30,5 +30,92 @@
     "solver_version": "cadical-3.0.0",
     "generator_version": "0.1.0",
     "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.ieee.float32.add",
+      "quire.op.ieee.float64.add",
+      "quire.op.ieee.float32.sub",
+      "quire.op.ieee.float64.sub"
+    ],
+    "route": "general",
+    "max_operand_bits": 32,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical-3.0.0",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.ieee.float32.mul",
+      "quire.op.ieee.float64.mul"
+    ],
+    "route": "general",
+    "max_operand_bits": 32,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical-3.0.0",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.ieee.float32.div",
+      "quire.op.ieee.float64.div"
+    ],
+    "route": "general",
+    "max_operand_bits": 32,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical-3.0.0",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.ieee.float32.sqrt",
+      "quire.op.ieee.float64.sqrt"
+    ],
+    "route": "general",
+    "max_operand_bits": 32,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical-3.0.0",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
+  },
+  {
+    "operation_ids": [
+      "quire.op.ieee.float32.fma",
+      "quire.op.ieee.float64.fma"
+    ],
+    "route": "general",
+    "max_operand_bits": 32,
+    "collection_bound": null,
+    "verdict": "not_tractable",
+    "wall_seconds": 600,
+    "peak_bytes": null,
+    "kani_version": "0.68.0",
+    "cbmc_version": "6.11.0",
+    "solver_version": "cadical-3.0.0",
+    "generator_version": "0.1.0",
+    "kernel_version": 1
   }
 ]

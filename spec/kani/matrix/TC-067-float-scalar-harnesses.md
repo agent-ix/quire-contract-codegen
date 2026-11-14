@@ -109,8 +109,8 @@ used by name below.
     `i64` to `u64` conversion fails. Record an unavailable route as an open dependency
     (AC-11).
 12. Inspect the run record for operation and source association, width, rounding mode,
-    correspondence, ordered physical bindings, argv, unwind bound and loop bounds, tool
-    versions, target, dependency cohort including the carrier, limits, observed peak memory
+    correspondence, ordered physical bindings, argv, unwind bound and loop bounds, every
+    option (no tool versions, QSL-406 and EA-49), target, dependency cohort including the carrier, limits, observed peak memory
     per width, operation and rounding mode, checks, cover, playback, exit and terminal
     classification (AC-12).
 13. On the host, first assert every control point's expected result against the shipped
@@ -141,7 +141,10 @@ run, IR-260 remains unaccepted regardless of oracle agreement.
 
 ## Status
 
-PLANNED: all fourteen FR-053 criteria are unimplemented and untagged. No missing carrier
-capability (IR-1446), Contract IR ruling (IR-69), FR-014 `sqrt` and `fma` derivation
-(IR-1502, now delivered), replay route or generated-proof result is waived. No width, operation or rounding
-mode is known to verify within a request's ceilings.
+PARTIAL (IR-260): steps 1, 2, 4 to 8, 11 and 12 run for the three comparisons at both widths in
+`tests/it/float_scalar_harness.rs`, with installed-Kani verdicts and owner replay of a decoded
+counterexample (`docs/qualification/ir260-float-scalar-kani-measurements.md`). Arithmetic is
+dispositioned not tractable (typed refusal, no harness), so the arithmetic parts of steps 1, 3 and 9
+settle as refusals only. Steps 13 (host differential) and 14 (call-graph inspection) are not run, and
+step 10's `requires_bound` half depends on IR-69. The status of each criterion is in the FR-053
+Status.

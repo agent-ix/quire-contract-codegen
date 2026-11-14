@@ -1054,7 +1054,7 @@ fn tc_070_the_embedded_general_route_table_is_the_docs_file() {
         TractabilityTable::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GENERAL_SCALAR_TABLE))
             .expect("the docs file loads");
     assert_eq!(general_scalar_table(), from_file);
-    assert_eq!(from_file.rows().len(), 2);
+    assert_eq!(from_file.rows().len(), 7);
 }
 
 /// A request whose launcher and crate do not exist: any attempt to run it would be a different
