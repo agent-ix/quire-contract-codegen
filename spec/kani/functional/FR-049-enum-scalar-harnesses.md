@@ -79,14 +79,19 @@ The index to member mapping is the declared member order of the admitted
 declaration. Operand indices are drawn independently, covering equal, unequal
 and every ordered pair.
 
-The harness SHALL build each operand through the owner's checked member
-identity for its index.
+The harness SHALL build each operand with the owner's `from_member` over the
+owner-admitted `EnumShape` and the checked member at its index. `from_member`
+refuses a member the shape does not admit at that position with the typed
+refusal `MemberNotInShape`, so a minted identity (same position, different key)
+never reaches an operand. The proof's carrier holds the member's rank, the
+member count, the ordered flag and an opaque declaration tag, so the `eq` and
+`ne` proofs are over rank only.
 
 The harness SHALL NOT mint, rename or reorder members.
 
 When asserting, the harness SHALL compare the oracle's `Outcome<bool>` against
 a native expression of the operator over the two indices: `==`, `!=`, `<`,
-`<=`, `>`, `>=` respectively. Equality and inequality follow member identity;
+`<=`, `>`, `>=` respectively. Equality and inequality are over rank;
 ordering follows declared position and applies to an `ordered enum` only.
 
 The harness SHALL require `Completed` with the native Boolean. `Incomplete` is
@@ -136,10 +141,10 @@ unavailable the item is `unsupported` with no harness.
 | --- | --- | --- |
 | FR-049-AC-1 | For `eq` and `ne` over an admitted enum declaration of at least three members, and for each of `lt`, `le`, `gt` and `ge` over an `ordered enum` of at least three members, CG generates one harness whose oracle is FR-014's generated enum comparison and whose expected value is the native operator over indices. Oracle and native sides come from the same admitted node and retain its source association. | Test |
 | FR-049-AC-2 | The symbolic domain is exactly the declared members: each operand index is an `i64` constrained to `0..member_count`, every ordered pair is reachable and no out-of-range index is reachable. Admitting one extra index, dropping the last member or fixing one operand to a constant fails the correspondence check. | Test |
-| FR-049-AC-3 | Operand values are built from the owner's checked member identities in declared order. A minted member identity (same position, different key) makes the `eq` or `ne` proof fail; a member list reordered relative to the declaration makes the ordering proofs over an `ordered enum` fail. Ordering operators are not claimed to detect a minted identity, since they compare position. | Test |
+| FR-049-AC-3 | Operands are built with `from_member` from the owner's checked members of the admitted `EnumShape`, in declared order. A minted member identity (same position, different key) is refused at construction with `MemberNotInShape`, before any proof, and yields no operand; the `eq` and `ne` proofs are over rank only and make no claim about minted identity. A member list reordered relative to the declaration makes the ordering proofs over an `ordered enum` fail. The ordering operators compare position and are not claimed to detect a minted identity. | Test |
 | FR-049-AC-4 | The assertion requires `Completed` with the native Boolean and no assumption depends on the oracle outcome. A control producing `Incomplete` keeps that typed outcome and cannot become `Verified`. A path reaching `OracleStop::IllTyped` is non-`Verified` and retains its cause. | Test |
 | FR-049-AC-5 | The healthy comparison receives `Verified` only from a successful proof with every check and the completion cover satisfied. Each mutant of AC-6 produces a failed assertion with solver playback of in-domain indices, and replay through the owner route reproduces the disagreement. | Test |
-| FR-049-AC-6 | Mutants fail the operator that can detect them: `lt` rendered as `le` (and the converse) fails `lt` and `le`; `gt` as `ge` (and the converse) fails `gt` and `ge`; `eq` as `ne` (and the converse) fails `eq` and `ne`; reversed ordering fails `lt`, `le`, `gt` and `ge`; a minted identity fails `eq` and `ne`. | Test |
+| FR-049-AC-6 | Mutants fail the operator that can detect them: `lt` rendered as `le` (and the converse) fails `lt` and `le`; `gt` as `ge` (and the converse) fails `gt` and `ge`; `eq` as `ne` (and the converse) fails `eq` and `ne`; reversed ordering fails `lt`, `le`, `gt` and `ge`; a minted identity is not a proof mutant: it is refused at construction with `MemberNotInShape`, which a refusal test asserts. | Test |
 | FR-049-AC-7 | Each emitted enum harness has exactly one completion cover after all assertions. An unsatisfied or unreported cover, failed unwind, timeout, memory exhaustion or missing verdict cannot yield `Verified`; classifications retain FR-017 and FR-029 distinctions. | Test |
 | FR-049-AC-8 | An ordering operator over an unordered declaration and operands of different declarations are each refused with the typed ill-typed cause, source association and no harness. An incomplete member list or ordered flag is `unsupported` naming the enum. Every requested item has exactly one disposition under FR-039 and a refused item does not alter a supported sibling. | Test |
 | FR-049-AC-9 | A leaf or member of any other family (text, rational, decimal, quantity, float, sequence, set, bag, ordered set) keeps its existing disposition, and an enum leaf inside a composite keeps the composite's `ShadowFamilyNotBuilt` disposition. | Test |
