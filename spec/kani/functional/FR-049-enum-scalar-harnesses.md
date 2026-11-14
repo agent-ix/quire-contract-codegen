@@ -201,8 +201,10 @@ Tagged and passing:
   are bound to the enum harness' cover count, and a timeout and a missing verdict are driven
   through the runner against the enum harness with their terminal values.
 - AC-8: named unsupported capabilities and the typed ill-typed cause on the carrier (the QSL
-  source refusal is asserted by code). A refused item leaving a supported sibling unchanged is
-  tested across separate generations, not within one routed request.
+  source refusal is asserted by code). One routed request holds two enum nodes of the same
+  operator, one carrying a path condition: it is refused with the named capability
+  `enum.path_condition` and no harness, and the supported siblings are generated exactly as they
+  are alone.
 - AC-9: the routed output of a Boolean, an integer comparison, a text equality and a sequence
   equality node is byte-identical with and without the admitted context. Decimal, rational,
   quantity, float, set, bag, ordered-set and enum-in-composite nodes are not exercised by this

@@ -11,7 +11,7 @@ use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use super::admitted_enum_equality::application;
 use super::admitted_enum_equality::checked;
 use super::admitted_enum_fixture::compile;
-use super::routed_generation::{admitted_routing_input, kani_parts, route};
+use super::routed_generation::{admitted_routing_input_with_context_roots, kani_parts, route};
 
 const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
 profile v = \"quire.value.complete/v1\";\n\
@@ -25,6 +25,7 @@ function eq using v(a: Level, b: Level): Boolean pure { a = b }\n\
 function ne using v(a: Level, b: Level): Boolean pure { a != b }\n\
 function color_eq using v(a: Color, b: Color): Boolean pure { a = b }\n\
 function color_ne using v(a: Color, b: Color): Boolean pure { a != b }\n\
+function guarded_lt using v(flag: Boolean, a: Level, b: Level): Boolean pure { if flag then a < b else false }\n\
 function not_enum using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a < b }\n\
 function bool_and using v(a: Boolean, b: Boolean): Boolean pure { a and b }\n\
 function text_eq using v(a: Text[0, 16; nfc], b: Text[0, 16; nfc]): Boolean pure { a = b }\n\
@@ -78,16 +79,46 @@ impl Corpus {
         functions: &[&str],
         admitted: bool,
     ) -> quire_contract_codegen::RoutedGeneration {
+        self.routed_guarded(functions, admitted, None)
+    }
+
+    /// As [`Self::routed`]; the item at the given position carries the path condition
+    /// `parameter holds`, with the parameter's node a context root of the package.
+    fn routed_guarded(
+        &self,
+        functions: &[&str],
+        admitted: bool,
+        guarded: Option<(usize, &str)>,
+    ) -> quire_contract_codegen::RoutedGeneration {
+        let guard_node = guarded.map(|(_, parameter)| {
+            self.package
+                .resolved_graph()
+                .nodes
+                .iter()
+                .find(|node| {
+                    node.semantic_form.as_ref() == "parameter"
+                        && format!("{:?}", node.body).contains(&format!("value: \"{parameter}\""))
+                })
+                .expect("the guard parameter node")
+                .node_id
+                .clone()
+        });
         let items = functions
             .iter()
             .enumerate()
             .map(|(index, function)| route(index, &self.node(function)))
             .collect::<Vec<_>>();
-        let input = admitted_routing_input(&self.package, &items);
+        let roots = match (&guard_node, guarded) {
+            (Some(node), Some((position, _))) => vec![(position, node.clone())],
+            _ => Vec::new(),
+        };
+        let input = admitted_routing_input_with_context_roots(&self.package, &items, &roots);
         let mut records = std::collections::BTreeMap::new();
         let items = items
             .into_iter()
-            .zip(&input.positions)
+            .zip(input.positions.iter().filter(|position| {
+                matches!(position, quire_contract_codegen::ContractRequestPosition::DriverItem { .. })
+            }))
             .map(|(item, position)| {
                 let quire_contract_codegen::ContractRequestPosition::DriverItem {
                     result_selection,
@@ -111,6 +142,30 @@ impl Corpus {
                     role: quire_contract_model::CheckedOccurrenceRole::Expression,
                     ordinal,
                 };
+                let path_condition = match (&guard_node, guarded) {
+                    (Some(node), Some((position, _))) if position == item.request_index => {
+                        let ordinal = self
+                            .package
+                            .source_map()
+                            .iter()
+                            .find(|entry| {
+                                &entry.node_id == node
+                                    && entry.role
+                                        == quire_contract_model::CheckedOccurrenceRole::Expression
+                            })
+                            .expect("the guard has an expression occurrence")
+                            .ordinal;
+                        vec![quire_contract_codegen::RequirementGuard {
+                            occurrence: quire_contract_codegen::RequirementOccurrence {
+                                node_id: node.clone(),
+                                role: quire_contract_model::CheckedOccurrenceRole::Expression,
+                                ordinal,
+                            },
+                            holds: true,
+                        }]
+                    }
+                    _ => Vec::new(),
+                };
                 let result_bound = self
                     .package
                     .resolved_graph()
@@ -125,7 +180,7 @@ impl Corpus {
                     quire_contract_codegen::RequirementRecordInput {
                         result_bound: result_bound.clone(),
                         conversion_context: None,
-                        path_condition: Vec::new(),
+                        path_condition: path_condition.clone(),
                     },
                 );
                 item.with_scalar_selection(&input.package, result_selection.clone())
@@ -133,7 +188,7 @@ impl Corpus {
                         occurrence,
                         result_bound,
                         conversion_context: None,
-                        path_condition: Vec::new(),
+                        path_condition,
                     })
             })
             .collect::<Vec<_>>();
@@ -919,6 +974,47 @@ fn two_enum_nodes_of_one_operator_in_one_request_do_not_collide() {
         })
         .collect::<Vec<_>>();
     assert_ne!(symbols[0], symbols[1]);
+}
+
+/// One routed request holds an enum comparison that settles to a harness, a second enum node of
+/// the same operator that carries a path condition and is refused with a named capability, and a
+/// further enum comparison that still settles: the refused sibling leaves the supported ones
+/// exactly as they are generated alone.
+#[trace("TC-063", "FR-049-AC-8")]
+#[test]
+fn a_refused_enum_sibling_in_one_request_leaves_the_supported_enum_nodes_unchanged() {
+    let corpus = corpus();
+    let mixed = corpus.routed_guarded(&["lt", "guarded_lt", "le"], true, Some((1, "flag")));
+    let alone = corpus.routed(&["lt", "le"], true);
+    let (first, first_harness) = kani_parts(&mixed.items[0].output);
+    assert!(matches!(
+        first.disposition,
+        quire_contract_codegen::ObligationDisposition::Supported { .. }
+    ));
+    let (refused, refused_harness) = kani_parts(&mixed.items[1].output);
+    assert!(refused_harness.is_none(), "a refused sibling has no harness");
+    let quire_contract_codegen::ObligationDisposition::Unsupported {
+        reason:
+            quire_contract_codegen::UnsupportedObligation::EnumComparisonNotRendered {
+                cause, ..
+            },
+    } = &refused.disposition
+    else {
+        panic!("the guarded enum node is refused: {:?}", refused.disposition);
+    };
+    assert_eq!(cause, EnumCapability::PathCondition.name());
+    let (third, third_harness) = kani_parts(&mixed.items[2].output);
+    assert!(matches!(
+        third.disposition,
+        quire_contract_codegen::ObligationDisposition::Supported { .. }
+    ));
+    // Each supported node is generated as it is alone: same record, same harness text.
+    assert_eq!(mixed.items[0].output, alone.items[0].output);
+    assert_eq!(
+        third_harness.expect("le generates").rust,
+        kani_parts(&alone.items[1].output).1.expect("le generates").rust
+    );
+    assert_eq!(first_harness.expect("lt generates").identity.operation_identity, "quire.op.enum.lt");
 }
 
 /// The counterexample of a falsified mutant is decoded to declared members and replayed through

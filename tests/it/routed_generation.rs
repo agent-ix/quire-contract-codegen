@@ -147,13 +147,34 @@ pub(crate) fn admitted_routing_input<'a>(
     checked: &'a CheckedPackageV2,
     routed: &[RoutedGenerationItem],
 ) -> AdmittedRoutingInput<'a> {
-    admitted_routing_input_with_limits(checked, routed, CheckedPackageReadLimits::bounded())
+    admitted_routing_input_with_limits(
+        checked,
+        routed,
+        CheckedPackageReadLimits::bounded(),
+        &[],
+    )
+}
+
+/// As [`admitted_routing_input`], with each `(request index, node)` of `context_roots` lowered as a
+/// context root of that driver item, so a path-condition guard's node is a root of its item.
+pub(crate) fn admitted_routing_input_with_context_roots<'a>(
+    checked: &'a CheckedPackageV2,
+    routed: &[RoutedGenerationItem],
+    context_roots: &[(usize, CheckedNodeId)],
+) -> AdmittedRoutingInput<'a> {
+    admitted_routing_input_with_limits(
+        checked,
+        routed,
+        CheckedPackageReadLimits::bounded(),
+        context_roots,
+    )
 }
 
 fn admitted_routing_input_with_limits<'a>(
     checked: &'a CheckedPackageV2,
     routed: &[RoutedGenerationItem],
     read_limits: CheckedPackageReadLimits,
+    context_roots: &[(usize, CheckedNodeId)],
 ) -> AdmittedRoutingInput<'a> {
     let mut requested = routed
         .iter()
@@ -174,7 +195,7 @@ fn admitted_routing_input_with_limits<'a>(
     }
     let mut roots = Vec::new();
     let mut positions = Vec::new();
-    for node_id in requested {
+    for (request_index, node_id) in requested.into_iter().enumerate() {
         let application = checked.source_map().iter().find(|source| {
             source.node_id == node_id && source.role == CheckedOccurrenceRole::Expression
         });
@@ -219,6 +240,12 @@ fn admitted_routing_input_with_limits<'a>(
             roots.push(conversion.node_id.clone());
             positions.push(ContractRequestPosition::ContextRoot {
                 node_id: conversion.node_id.clone(),
+            });
+        }
+        for (_, root) in context_roots.iter().filter(|(index, _)| *index == request_index) {
+            roots.push(root.clone());
+            positions.push(ContractRequestPosition::ContextRoot {
+                node_id: root.clone(),
             });
         }
     }
@@ -1872,7 +1899,7 @@ fn route_qsl_functions(
         .enumerate()
         .map(|(index, function)| route(index, &qsl_function_application(package, function)))
         .collect::<Vec<_>>();
-    let input = admitted_routing_input_with_limits(package, &routed, read_limits);
+    let input = admitted_routing_input_with_limits(package, &routed, read_limits, &[]);
     generate_routed(
         input.source,
         &input.package,
