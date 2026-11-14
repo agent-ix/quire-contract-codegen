@@ -26,12 +26,14 @@ proofs only with the authorized runner and budget.
    every ordered pair reachable, no out-of-range `i64` index. Apply mutations
    adding an index, dropping the last member and fixing one operand; each must
    fail the correspondence check (AC-2).
-3. Inspect operand construction with `from_member` from the owner's checked
-   members of the admitted `EnumShape`, in declared order. Present a minted
-   identity (same position, different key) and assert `from_member` refuses it
-   with `MemberNotInShape` and no operand is built (refusal test, not a proof
-   failure); mutate to a reordered member list and assert the ordering
-   operators over the ordered enum fail (AC-3).
+3. Inspect generation: `from_member` runs over the owner route's admitted
+   `EnumShape` and checked members in declared order, and the shape passed is
+   compared with the owner-admitted one; inside the proof operands come from
+   `from_index`. Present a minted identity and assert `MemberNotInShape` and no
+   harness (FR-407-AC-3 owns the refusal itself). Mutate the generator to emit
+   a renamed key in both its shape and its members and assert the comparison
+   with the owner-admitted shape fails. Mutate to a reordered member list and
+   assert the ordering operators over the ordered enum fail (AC-3).
 4. Inspect assertions and assumptions: completion required, no outcome-based
    assume. Exercise a reachable `Incomplete` outcome and assert it keeps its
    typed outcome; force the `OracleStop::IllTyped` path and assert a
@@ -39,9 +41,8 @@ proofs only with the authorized runner and budget.
 5. Run the healthy harnesses through the approved bounded path with full
    ordered options; verify all checks and exactly one final cover. Run the
    mutants, each against the operator that can detect it: `lt`/`le` swaps,
-   `gt`/`ge` swaps, `eq`/`ne` swaps, reversed ordering. A minted identity is
-   not run as a proof mutant; step 3 covers its refusal (AC-6). Retain failed checks and playback and replay the in-domain indices through
-   the owner route (AC-5, AC-6).
+   `gt`/`ge` swaps, `eq`/`ne` swaps, reversed ordering. Retain failed checks
+   and playback and replay the in-domain indices through the owner route (AC-5, AC-6).
 6. Check separate controls for unsatisfied cover, failed unwind, timeout,
    memory exhaustion and missing verdict; none may be `Verified` (AC-7).
 7. Request an ordering operator over the unordered enum, operands of different
