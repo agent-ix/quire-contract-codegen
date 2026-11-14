@@ -117,7 +117,10 @@ impl Corpus {
         let items = items
             .into_iter()
             .zip(input.positions.iter().filter(|position| {
-                matches!(position, quire_contract_codegen::ContractRequestPosition::DriverItem { .. })
+                matches!(
+                    position,
+                    quire_contract_codegen::ContractRequestPosition::DriverItem { .. }
+                )
             }))
             .map(|(item, position)| {
                 let quire_contract_codegen::ContractRequestPosition::DriverItem {
@@ -992,15 +995,19 @@ fn a_refused_enum_sibling_in_one_request_leaves_the_supported_enum_nodes_unchang
         quire_contract_codegen::ObligationDisposition::Supported { .. }
     ));
     let (refused, refused_harness) = kani_parts(&mixed.items[1].output);
-    assert!(refused_harness.is_none(), "a refused sibling has no harness");
+    assert!(
+        refused_harness.is_none(),
+        "a refused sibling has no harness"
+    );
     let quire_contract_codegen::ObligationDisposition::Unsupported {
         reason:
-            quire_contract_codegen::UnsupportedObligation::EnumComparisonNotRendered {
-                cause, ..
-            },
+            quire_contract_codegen::UnsupportedObligation::EnumComparisonNotRendered { cause, .. },
     } = &refused.disposition
     else {
-        panic!("the guarded enum node is refused: {:?}", refused.disposition);
+        panic!(
+            "the guarded enum node is refused: {:?}",
+            refused.disposition
+        );
     };
     assert_eq!(cause, EnumCapability::PathCondition.name());
     let (third, third_harness) = kani_parts(&mixed.items[2].output);
@@ -1012,9 +1019,18 @@ fn a_refused_enum_sibling_in_one_request_leaves_the_supported_enum_nodes_unchang
     assert_eq!(mixed.items[0].output, alone.items[0].output);
     assert_eq!(
         third_harness.expect("le generates").rust,
-        kani_parts(&alone.items[1].output).1.expect("le generates").rust
+        kani_parts(&alone.items[1].output)
+            .1
+            .expect("le generates")
+            .rust
     );
-    assert_eq!(first_harness.expect("lt generates").identity.operation_identity, "quire.op.enum.lt");
+    assert_eq!(
+        first_harness
+            .expect("lt generates")
+            .identity
+            .operation_identity,
+        "quire.op.enum.lt"
+    );
 }
 
 /// The counterexample of a falsified mutant is decoded to declared members and replayed through

@@ -390,7 +390,7 @@ fn literal_form(term: &CheckedTerm) -> Option<String> {
 }
 
 /// Classify only the owner's literal and reference variants.
-pub(super) fn operand_form<Body: GraphBody>(
+pub(crate) fn operand_form<Body: GraphBody>(
     graph: &Graph<'_, Body>,
     term: &CheckedTerm,
 ) -> Option<String> {

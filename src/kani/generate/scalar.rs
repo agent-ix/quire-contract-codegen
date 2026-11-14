@@ -833,6 +833,7 @@ pub(super) fn render_scalar(
             .map(|input| input.identity.clone())
             .collect(),
         enum_scalar: None,
+        float_scalar: None,
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
@@ -962,6 +963,7 @@ fn render_boolean_implies(
             .map(|input| input.identity.clone())
             .collect(),
         enum_scalar: None,
+        float_scalar: None,
         solver: spec.solver(),
         unwind: spec.unwind(),
         options: spec.options().to_vec(),
@@ -1126,6 +1128,7 @@ mod {module} {{\n\
         path_condition: Vec::new(),
         guard_inputs: Vec::new(),
         enum_scalar: None,
+        float_scalar: None,
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,

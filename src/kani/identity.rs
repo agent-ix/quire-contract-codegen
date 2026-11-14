@@ -673,6 +673,9 @@ pub struct ScalarObligationIdentity {
     /// The enum declaration and comparison behind an enum scalar harness (FR-049).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enum_scalar: Option<EnumScalarIdentity>,
+    /// The float comparison behind a float scalar harness (FR-053).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub float_scalar: Option<FloatScalarIdentity>,
     /// Solver.
     pub solver: KaniSolver,
     /// Loop unwind bound.
@@ -701,6 +704,21 @@ pub struct EnumScalarIdentity {
     /// The comparison's catalogued operation identity.
     pub operator: String,
     /// The operand encoding: one `i64` index per operand into `members`.
+    pub encoding: String,
+}
+
+/// The float comparison a float scalar harness proves (FR-053): the operation, the width and the
+/// two parameter nodes it draws, in operand order, each as one `i64` bit pattern.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FloatScalarIdentity {
+    /// The comparison's catalogued operation identity.
+    pub operator: String,
+    /// The operand width, `float32` or `float64`.
+    pub width: String,
+    /// The operand parameter nodes, left then right.
+    pub operands: Vec<CheckedNodeId>,
+    /// The operand encoding.
     pub encoding: String,
 }
 

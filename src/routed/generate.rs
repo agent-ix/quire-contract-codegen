@@ -826,6 +826,7 @@ fn generate_kani(
             mut scalar_harnesses,
             ..
         } => {
+            settle_float_items(source, context, group, &mut records, &mut scalar_harnesses);
             if let Some(admitted) = admitted_context {
                 settle_enum_items(
                     source,
@@ -875,6 +876,67 @@ fn generate_kani(
     }
     let outputs = route_records(records, group, &mut harnesses)?;
     Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
+}
+
+/// Replaces the `OperationNotRendered` record of each float comparison and arithmetic item with its
+/// FR-053 disposition: a supported record and harness for a comparison, or a typed refusal naming
+/// its capability with no harness. A record of any other disposition or family is left exactly as
+/// negotiation produced it.
+fn settle_float_items(
+    source: &quire_contract_model::CheckedPackageV2,
+    context: KaniGenerationContext<'_>,
+    group: &[&RoutedGenerationItem],
+    records: &mut [ObligationRecord],
+    harnesses: &mut Vec<KaniScalarObligationHarness>,
+) {
+    use crate::kani::generate::{
+        float_scalar::{
+            generate_float_scalar_harness, is_float_row_identity, FloatScalarOutcome,
+            FloatScalarRequest,
+        },
+        outcome::UnsupportedObligation,
+    };
+    let mut ordinal = 0;
+    for (record, item) in records.iter_mut().zip(group) {
+        let ObligationDisposition::Unsupported {
+            reason:
+                UnsupportedObligation::OperationNotRendered {
+                    operation_identity, ..
+                },
+        } = &record.disposition
+        else {
+            continue;
+        };
+        if !is_float_row_identity(operation_identity) {
+            continue;
+        }
+        let outcome = generate_float_scalar_harness(&FloatScalarRequest {
+            source,
+            node_id: &item.node_id,
+            ceilings: context.ceilings,
+            unwind: context.unwind,
+            requirement_occurrence: item.requirement.as_ref().map(|r| &r.occurrence),
+            has_path_condition: item
+                .requirement
+                .as_ref()
+                .is_some_and(|r| !r.path_condition.is_empty()),
+            ordinal,
+        });
+        match outcome {
+            FloatScalarOutcome::Supported(generated) => {
+                ordinal += 1;
+                record.disposition = ObligationDisposition::Supported {
+                    harness_symbol: generated.harness.identity.harness_symbol.clone(),
+                };
+                harnesses.push(generated.harness);
+            }
+            FloatScalarOutcome::Refused(refusal) => {
+                record.disposition = ObligationDisposition::Unsupported {
+                    reason: refusal.into_unsupported(),
+                };
+            }
+        }
+    }
 }
 
 /// Replaces the `OperationNotRendered` record of each enum comparison item with its FR-049
@@ -1233,6 +1295,7 @@ mod tests {
                 path_condition: Vec::new(),
                 guard_inputs: Vec::new(),
                 enum_scalar: None,
+                float_scalar: None,
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),

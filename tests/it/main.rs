@@ -73,6 +73,7 @@ mod exact_function_agreement;
 mod exact_function_generation;
 mod exact_scalar_agreement;
 mod exact_scalar_generation;
+mod float_scalar_harness;
 mod frame_claim_gap;
 mod generated_headers;
 mod harness_generation;

@@ -399,6 +399,16 @@ pub enum UnsupportedObligation {
         /// The owner's or generator's reason.
         detail: String,
     },
+    /// A float operation has no harness: it is an arithmetic operation that is not a supported
+    /// row, or its operands are not drawn parameters (FR-053).
+    FloatOperationNotRendered {
+        /// The refusal's stable name: a capability name.
+        cause: String,
+        /// The operation identity the item names.
+        operation: String,
+        /// The measured row or reason.
+        detail: String,
+    },
     /// A graph claim has no faithful symbolic encoding.
     GraphClaimNotRendered {
         /// The state clause containing the claim.

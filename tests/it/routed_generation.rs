@@ -102,7 +102,7 @@ pub(crate) struct AdmittedRoutingInput<'a> {
     pub(crate) positions: Vec<ContractRequestPosition>,
 }
 
-fn generate_routed(
+pub(crate) fn generate_routed(
     source: &CheckedPackageV2,
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],
@@ -147,12 +147,7 @@ pub(crate) fn admitted_routing_input<'a>(
     checked: &'a CheckedPackageV2,
     routed: &[RoutedGenerationItem],
 ) -> AdmittedRoutingInput<'a> {
-    admitted_routing_input_with_limits(
-        checked,
-        routed,
-        CheckedPackageReadLimits::bounded(),
-        &[],
-    )
+    admitted_routing_input_with_limits(checked, routed, CheckedPackageReadLimits::bounded(), &[])
 }
 
 /// As [`admitted_routing_input`], with each `(request index, node)` of `context_roots` lowered as a
@@ -242,7 +237,10 @@ fn admitted_routing_input_with_limits<'a>(
                 node_id: conversion.node_id.clone(),
             });
         }
-        for (_, root) in context_roots.iter().filter(|(index, _)| *index == request_index) {
+        for (_, root) in context_roots
+            .iter()
+            .filter(|(index, _)| *index == request_index)
+        {
             roots.push(root.clone());
             positions.push(ContractRequestPosition::ContextRoot {
                 node_id: root.clone(),
