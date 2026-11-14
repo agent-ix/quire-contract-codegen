@@ -411,14 +411,7 @@ fn render_text(
 ) -> Result<EnumScalarHarness, UnsupportedObligation> {
     let ordered = declaration.shape.is_ordered();
     let expr = |text: String| ExprText::new(text);
-    let stem = format!(
-        "kob_scalar_{}",
-        crate::kani::abi::readable_component(
-            operation_identity
-                .strip_prefix("quire.op.")
-                .unwrap_or(operation_identity)
-        )
-    );
+    let stem = super::scalar::scalar_stem(operation_identity);
     let stem = if request.ordinal == 0 {
         stem
     } else {
@@ -470,6 +463,37 @@ fn render_text(
         mutable: false,
         init: Init::Expression(expr(format!("left {native} right"))?),
     }));
+    // Each way the comparison can stop short of `Completed` gets its own assertion, so the
+    // failing check names the typed outcome (Incomplete, or the ill-typed cause) instead of
+    // folding it into a disagreement.
+    for (name, pattern, message) in [
+        (
+            "incomplete",
+            "Ok(rt::Outcome::Incomplete(_))",
+            "the comparison stopped Incomplete, which is never a verified agreement",
+        ),
+        (
+            "unordered",
+            "Err(rt::IllTyped { cause: rt::IllTypedCause::UnorderedEnumOrdering })",
+            "the comparison was ill-typed: UnorderedEnumOrdering",
+        ),
+        (
+            "distinct",
+            "Err(rt::IllTyped { cause: rt::IllTypedCause::DistinctEnumDeclarations })",
+            "the comparison was ill-typed: DistinctEnumDeclarations",
+        ),
+    ] {
+        body.push(Statement::Let(LetBinding {
+            name: name.to_owned(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(expr(format!("matches!(&outcome, {pattern})"))?),
+        }));
+        body.push(Statement::Assert {
+            condition: expr(format!("!{name}"))?,
+            message: message.to_owned(),
+        });
+    }
     body.push(Statement::Let(LetBinding {
         name: "sound".to_owned(),
         ty: None,
@@ -898,7 +922,10 @@ function same using v(a: Color, b: Color): Boolean pure { a = b }\n";
     #[trace("TC-063", "FR-049-AC-8")]
     #[test]
     fn qsl_refuses_the_ill_typed_sources_before_cg() {
-        for body in ["a < b", "a = b"] {
+        for (body, cause) in [
+            ("a < b", "IllTyped(OperatorIneligible)"),
+            ("a = b", "IllTyped(TypeMismatch)"),
+        ] {
             let source = format!(
                 "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nenum Color {{ RED, GREEN }}\nordered enum Level {{ LOW, MID }}\nfunction f using v(a: {}, b: {}): Boolean pure {{ {body} }}\n",
                 if body == "a < b" { "Color" } else { "Level" },
@@ -916,8 +943,10 @@ function same using v(a: Color, b: Color): Boolean pure { a = b }\n";
                 StageLimits::default(),
                 ReplayLimits::default(),
             );
-            eprintln!("QSLILL {body}: ok={}", compiled.is_ok());
-            assert!(compiled.is_err(), "{body}");
+            let refusal = compiled.expect_err("QSL refuses the source");
+            let text = format!("{refusal:?}");
+            assert!(text.contains("Package(Check"), "{body}: {text}");
+            assert!(text.contains(cause), "{body} refuses with {cause}: {text}");
         }
     }
 }

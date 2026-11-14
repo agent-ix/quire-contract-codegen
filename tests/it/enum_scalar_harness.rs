@@ -25,7 +25,10 @@ function eq using v(a: Level, b: Level): Boolean pure { a = b }\n\
 function ne using v(a: Level, b: Level): Boolean pure { a != b }\n\
 function color_eq using v(a: Color, b: Color): Boolean pure { a = b }\n\
 function color_ne using v(a: Color, b: Color): Boolean pure { a != b }\n\
-function not_enum using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a < b }\n";
+function not_enum using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a < b }\n\
+function bool_and using v(a: Boolean, b: Boolean): Boolean pure { a and b }\n\
+function text_eq using v(a: Text[0, 16; nfc], b: Text[0, 16; nfc]): Boolean pure { a = b }\n\
+function seq_eq using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { a = b }\n";
 
 struct Corpus {
     compiled: qsl_replay::AdmittedCompilation,
@@ -218,9 +221,7 @@ fn proof_body(harness: &EnumScalarHarness) -> &str {
 #[test]
 fn every_operator_generates_one_native_carrier_harness_from_its_node() {
     let corpus = corpus();
-    let mut cases =
-        OPERATORS.map(|(function, identity, native)| (function, identity, native, true));
-    cases[4].3 = true;
+    let cases = OPERATORS.map(|(function, identity, native)| (function, identity, native, true));
     let colors = [
         ("color_eq", "quire.op.enum.eq", "=="),
         ("color_ne", "quire.op.enum.ne", "!="),
@@ -275,15 +276,44 @@ fn the_symbolic_domain_is_exactly_the_declared_members() {
             [("left", 0, count - 1), ("right", 0, count - 1)]
         );
         let proof = proof_body(&generated);
-        for operand in ["left", "right"] {
-            let bound = format!(
-                "kani::assume({operand} >= 0_i64 && {operand} <= {}_i64);",
-                count - 1
-            );
-            assert_eq!(proof.matches(&bound).count(), 1, "{proof}");
+        assert!(domain_corresponds(proof, count), "{proof}");
+        // Each way the symbolic domain can stop matching the member list is caught by the same
+        // correspondence check: one extra index, the last member dropped, a constant operand.
+        let widened = proof.replacen(
+            &format!("left <= {}_i64", count - 1),
+            &format!("left <= {count}_i64"),
+            1,
+        );
+        let dropped = proof.replacen(
+            &format!("right <= {}_i64", count - 1),
+            &format!("right <= {}_i64", count - 2),
+            1,
+        );
+        let constant = proof.replacen("let left: i64 = kani::any();", "let left: i64 = 1;", 1);
+        for (name, mutant) in [
+            ("extra index", widened),
+            ("dropped member", dropped),
+            ("constant operand", constant),
+        ] {
+            assert_ne!(mutant, proof, "{name} changes the harness");
+            assert!(!domain_corresponds(&mutant, count), "{name} is caught");
         }
-        assert_eq!(proof.matches("kani::any()").count(), 2);
     }
+}
+
+/// The correspondence check of FR-049-AC-2: both operands are drawn symbolically and each is
+/// bounded to exactly the indices of the declared members.
+fn domain_corresponds(proof: &str, count: i64) -> bool {
+    proof.matches("kani::any()").count() == 2
+        && ["left", "right"].iter().all(|operand| {
+            proof
+                .matches(&format!(
+                    "kani::assume({operand} >= 0_i64 && {operand} <= {}_i64);",
+                    count - 1
+                ))
+                .count()
+                == 1
+        })
 }
 
 /// The harness assumes nothing about the comparison outcome and requires `Completed`.
@@ -492,6 +522,128 @@ fn an_enum_schema_with_bounds_off_the_member_list_is_refused() {
     assert_eq!(error.code, "cg_scalar_witness_schema_enum_mismatch");
 }
 
+// ---- owner replay (FR-049-AC-5, FR-049-AC-10) ----
+
+/// The selected corpus function recompiled by QSL's replay facade, as the owner route holds it.
+fn owner_package(function: &str) -> quire_contract_codegen::ReplayPackage {
+    let unlimited = qsl_replay::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    };
+    quire_contract_codegen::ReplayPackage::new(
+        quire_contract_codegen::ReplayInputs {
+            decode_limits: quire_contract_codegen::WitnessDecodeLimits {
+                bytes: 1 << 20,
+                values: 16,
+            },
+            package_name: "admitted-enums".to_owned(),
+            source: quire_contract_codegen::LockedSource {
+                authority: "test".to_owned(),
+                identity: "admitted-enums.native".to_owned(),
+                bytes: SOURCE.as_bytes().to_vec(),
+            },
+            dependencies: Vec::new(),
+            accounting_limits: unlimited,
+            stage_limits: std::collections::BTreeMap::from([(
+                "s1.input_bytes".to_owned(),
+                qsl_replay::DEFAULT_REPLAY_INPUT_BYTES,
+            )]),
+            supplied_limits: None,
+            declared_domains: Vec::new(),
+            replay_limits: qsl_replay::ReplayLimits::default(),
+        },
+        function,
+    )
+    .expect("the owner package recompiles the corpus source")
+}
+
+/// The owner's key for the declaration an enum harness's operands are declared with.
+fn owner_declaration(corpus: &Corpus, generated: &EnumScalarHarness) -> qsl_replay::NodeKey {
+    let wanted = &generated
+        .harness
+        .identity
+        .enum_scalar
+        .as_ref()
+        .expect("an enum identity")
+        .qualified_name;
+    corpus
+        .compiled
+        .context()
+        .enums()
+        .find(|item| {
+            item.qualified_name()
+                .iter()
+                .map(|part| part.as_str())
+                .eq(wanted.iter().map(String::as_str))
+        })
+        .expect("the owner declares the enum")
+        .key()
+        .clone()
+}
+
+/// Decodes `draws` against `function`'s enum harness and replays the members through the owner.
+fn owner_result(function: &str, draws: &[i64]) -> (quire_contract_codegen::EnumWitness, bool) {
+    let corpus = corpus();
+    let generated = corpus.harness(function);
+    let witness = decode(&generated, &enum_transcript(&generated, draws)).expect("decodes");
+    let owner = quire_contract_codegen::replay_enum_witness(
+        &owner_package(function),
+        &owner_declaration(&corpus, &generated),
+        &witness,
+    )
+    .expect("the owner route evaluates the members");
+    (witness, owner)
+}
+
+/// A decoded counterexample is replayed through `qsl_replay` over the declaration's members, and
+/// the owner's result is the native operator over the ranks, whichever the operator and order.
+#[trace("TC-063", "FR-049-AC-5")]
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+fn a_decoded_witness_replays_through_the_owner_route_as_the_declared_members() {
+    for (function, native) in [
+        ("lt", (|l, r| l < r) as fn(i64, i64) -> bool),
+        ("le", |l, r| l <= r),
+        ("gt", |l, r| l > r),
+        ("ge", |l, r| l >= r),
+        ("eq", |l, r| l == r),
+        ("ne", |l, r| l != r),
+    ] {
+        for (left, right) in [(0, 2), (2, 0), (1, 1)] {
+            let (witness, owner) = owner_result(function, &[left, right]);
+            assert_eq!((witness.left_index, witness.right_index), (left, right));
+            assert_eq!(owner, native(left, right), "{function}({left}, {right})");
+        }
+    }
+    let (witness, owner) = owner_result("color_eq", &[0, 0]);
+    assert_eq!(witness.left_member, witness.right_member);
+    assert!(owner, "the unordered enum's equal members compare equal");
+}
+
+/// A member the owner does not declare is refused by the owner route and yields no result.
+#[trace("TC-063", "FR-049-AC-10")]
+#[test]
+fn a_member_the_owner_does_not_declare_is_refused_by_the_owner_route() {
+    let corpus = corpus();
+    let generated = corpus.harness("lt");
+    let mut witness = decode(&generated, &enum_transcript(&generated, &[0, 1])).expect("decodes");
+    witness.left_member = "NOT_A_MEMBER".to_owned();
+    let refusal = quire_contract_codegen::replay_enum_witness(
+        &owner_package("lt"),
+        &owner_declaration(&corpus, &generated),
+        &witness,
+    );
+    assert!(refusal.is_err(), "{refusal:?}");
+}
+
 // ---- installed Kani lane ----
 
 /// Run `function`'s harness, with `site` replaced by `with` when a mutation is given.
@@ -503,7 +655,7 @@ fn run(
     let corpus = corpus();
     let (mut harness, manifest) = corpus.routed_harness(function);
     if let Some((site, with)) = mutation {
-        assert_eq!(harness.rust.contents.matches(site).count(), 1, "{site}");
+        assert!(harness.rust.contents.contains(site), "{site}");
         harness.rust.contents = harness.rust.contents.replace(site, with);
     }
     let started = std::time::Instant::now();
@@ -658,18 +810,56 @@ fn kani_reversed_ordering_is_falsified_for_ge() {
     falsified("ge", "enum-mut-rev-ge", "left >= right", "right >= left");
 }
 
-/// A comparison that stops (`Incomplete`) is never `Verified`: an exhausted work budget fails the
-/// assertion that requires `Completed`.
+/// A comparison that stops (`Incomplete`) is never `Verified`, and the failing check names the
+/// `Incomplete` outcome rather than a disagreement with the native result.
 #[trace("TC-063", "FR-049-AC-4")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn kani_an_incomplete_comparison_is_not_verified() {
-    falsified(
-        "lt",
+    let evidence = run(
         "enum-incomplete",
-        "work_units: u64::MAX,",
-        "work_units: 0,",
+        "lt",
+        Some(("work_units: u64::MAX,", "work_units: 0,")),
     );
+    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
+        panic!("an Incomplete comparison must not verify: {evidence:?}");
+    };
+    assert!(
+        counterexample.contains("stopped Incomplete"),
+        "the Incomplete type is the failing check: {counterexample}"
+    );
+}
+
+/// A run-time `Err(IllTyped)` is never `Verified` and the failing check names its cause.
+#[trace("TC-063", "FR-049-AC-4")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn kani_an_ill_typed_comparison_is_not_verified_and_keeps_its_cause() {
+    for (name, function, site, with, cause) in [
+        (
+            "enum-ill-unordered",
+            "lt",
+            "from_index(0_u64, true,",
+            "from_index(0_u64, false,",
+            "UnorderedEnumOrdering",
+        ),
+        (
+            "enum-ill-distinct",
+            "eq",
+            "right_carrier = rt::NativeEnum::from_index(0_u64,",
+            "right_carrier = rt::NativeEnum::from_index(1_u64,",
+            "DistinctEnumDeclarations",
+        ),
+    ] {
+        let evidence = run(name, function, Some((site, with)));
+        let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
+            panic!("{name} must not verify: {evidence:?}");
+        };
+        assert!(
+            counterexample.contains(cause),
+            "{name} keeps {cause}: {counterexample}"
+        );
+    }
 }
 
 /// An enum comparison node routed through `generate_routed_admitted` is generated per FR-049, the
@@ -680,18 +870,18 @@ fn kani_an_incomplete_comparison_is_not_verified() {
 #[test]
 fn the_routed_path_generates_enum_nodes_and_leaves_other_families_byte_identical() {
     let corpus = corpus();
-    let functions = ["not_enum", "lt", "eq", "color_eq"];
+    let functions = [
+        "not_enum", "bool_and", "text_eq", "seq_eq", "lt", "eq", "color_eq",
+    ];
     let legacy = corpus.routed(&functions, false);
     let admitted = corpus.routed(&functions, true);
-    let output = |generation: &quire_contract_codegen::RoutedGeneration, index: usize| {
-        generation.items[index].output.clone()
-    };
-    assert_eq!(
-        output(&legacy, 0),
-        output(&admitted, 0),
-        "another family is unchanged"
-    );
-    for (index, item) in legacy.items.iter().enumerate().take(4).skip(1) {
+    for (index, function) in functions.iter().enumerate().take(4) {
+        assert_eq!(
+            legacy.items[index].output, admitted.items[index].output,
+            "{function}: another family is unchanged"
+        );
+    }
+    for (index, item) in legacy.items.iter().enumerate().skip(4) {
         let (record, harness) = kani_parts(&item.output);
         assert!(harness.is_none());
         assert!(
@@ -715,7 +905,7 @@ fn the_routed_path_generates_enum_nodes_and_leaves_other_families_byte_identical
 }
 
 /// Two enum nodes of the same operator in one routed request keep distinct harness names.
-#[trace("TC-063", "FR-049-AC-8")]
+#[trace("TC-063", "FR-049-AC-1")]
 #[test]
 fn two_enum_nodes_of_one_operator_in_one_request_do_not_collide() {
     let corpus = corpus();
@@ -731,13 +921,14 @@ fn two_enum_nodes_of_one_operator_in_one_request_do_not_collide() {
     assert_ne!(symbols[0], symbols[1]);
 }
 
-/// The counterexample of a falsified mutant decodes to declared members, and replaying them
-/// through the unmutated operator disagrees with the mutant's expected value.
+/// The counterexample of a falsified mutant is decoded to declared members and replayed through
+/// the owner route: the owner's result is the native one, so the mutant's disagreement with the
+/// native operator is reproduced against the declared semantics.
 #[trace("TC-063", "FR-049-AC-5")]
 #[trace("TC-063", "FR-049-AC-10")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn kani_a_falsifying_counterexample_decodes_and_replays_against_the_declared_operator() {
+fn kani_a_falsifying_counterexample_replays_through_the_owner_route() {
     let corpus = corpus();
     let generated = corpus.harness("lt");
     let evidence = run(
@@ -756,7 +947,16 @@ fn kani_a_falsifying_counterexample_decodes_and_replays_against_the_declared_ope
         witness.left_index, witness.right_index,
         "only equal members distinguish < from <="
     );
-    assert!(!(witness.left_index < witness.right_index));
+    let owner = quire_contract_codegen::replay_enum_witness(
+        &owner_package("lt"),
+        &owner_declaration(&corpus, &generated),
+        &witness,
+    )
+    .expect("the owner route evaluates the members");
+    assert!(
+        !owner,
+        "the owner says lt(m, m) is false; the mutant claimed true"
+    );
 }
 
 // ---- runner classification bound to the enum harness (FR-049-AC-7, FR-049-AC-11) ----
@@ -913,4 +1113,12 @@ fn a_timeout_and_a_missing_verdict_settle_the_enum_harness_inconclusive() {
     );
     assert_eq!(silent.unwind, 1);
     assert_eq!(silent.solver, quire_contract_codegen::KaniSolver::Cadical);
+}
+
+/// One extra index makes the carrier constructor reject the draw, so Kani falsifies it.
+#[trace("TC-063", "FR-049-AC-2")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn kani_one_extra_index_is_falsified() {
+    falsified("lt", "enum-extra-index", "left <= 2_i64", "left <= 3_i64");
 }

@@ -111,7 +111,6 @@ pub enum SpineReplayError {
     /// A witness-sourced request settled on the input arm.
     WrongArm,
     /// An input-sourced function evaluation returned no Boolean value.
-    #[cfg(test)]
     NoInputValue,
     /// The typed harness identity was created from a different QSL package/site.
     #[cfg(test)]
@@ -145,7 +144,6 @@ impl fmt::Display for SpineReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Refused(refusal) => write!(f, "the replay was refused: {refusal}"),
             Self::WrongArm => f.write_str("a witness-sourced request settled on the input arm"),
-            #[cfg(test)]
             Self::NoInputValue => f.write_str("the QSL input evaluation returned no Boolean value"),
             #[cfg(test)]
             Self::PackageIdentity => {
@@ -209,14 +207,14 @@ pub fn replay_falsification(
 ///
 /// [`MalformedTranscript`] when `qsl-replay` does not admit the rendered block, as when a field
 /// holds a delimiter.
-pub(crate) fn render_witness(
+pub(crate) fn render_witness<T: fmt::Display>(
     harness: &str,
     check_text: &str,
-    bindings: &[(&str, i128)],
+    bindings: &[(&str, T)],
 ) -> Result<Witness, MalformedTranscript> {
     let bindings = bindings
         .iter()
-        .map(|(name, integer)| format!("{name}={integer}"))
+        .map(|(name, value)| format!("{name}={value}"))
         .collect::<Vec<_>>();
     Witness::parse(format!(
         "<<<assertion|{harness}|{check_text}|{}>>>",
@@ -253,11 +251,17 @@ fn replay_falsification_through(
                     argument: argument.clone(),
                 })?;
             let parameter = &parameters[position];
-            let integer = match value {
-                WitnessValue::Integer(integer) => *integer,
-                WitnessValue::Boolean(boolean) => i128::from(*boolean),
+            let text = match value {
+                WitnessValue::Integer(integer) => integer.to_string(),
+                WitnessValue::Boolean(boolean) => i128::from(*boolean).to_string(),
+                // A declared enum member travels as QSL's canonical witness value text, which
+                // the executor reads back against the parameter's own declaration.
+                WitnessValue::Enum { .. } => value.to_value_text().map_err(|_| {
+                    SpineReplayError::UnsupportedWitnessValue {
+                        argument: argument.clone(),
+                    }
+                })?,
                 WitnessValue::ExactInteger(_)
-                | WitnessValue::Enum { .. }
                 | WitnessValue::Text(_)
                 | WitnessValue::String(_)
                 | WitnessValue::Uuid(_)
@@ -281,7 +285,7 @@ fn replay_falsification_through(
                     })
                 }
             };
-            Ok((position, parameter.node_id, integer))
+            Ok((position, parameter.node_id, text))
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;
     // QSL joins function witness entries by parameter node id and requires ascending id order,
@@ -289,7 +293,7 @@ fn replay_falsification_through(
     bindings.sort_unstable_by_key(|binding| binding.0);
     let bindings = bindings
         .into_iter()
-        .map(|(_, name, integer)| (name, integer))
+        .map(|(_, name, text)| (name, text))
         .collect::<Vec<_>>();
     let witness = render_witness(harness, check_text, &bindings)?;
     let request = request(EnvelopeSource::Witness(witness))?;
@@ -839,6 +843,61 @@ impl ReplayPackage {
             ReplayResult::Input(result) => match result.value() {
                 Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
                 None => Err(SpineReplayError::NoInputValue),
+            },
+            ReplayResult::Witness(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_) => Err(SpineReplayError::WrongArm),
+        }
+    }
+
+    /// Evaluates the selected function over positional `arguments` through the owner's `Input`
+    /// arm and returns its Boolean result. This is semantic evaluation by QSL, not backend
+    /// evidence: the arguments name the function's parameters in declaration order, and an enum
+    /// argument is a [`WitnessValue::Enum`] the executor checks against the parameter's own
+    /// declaration.
+    ///
+    /// # Errors
+    ///
+    /// [`SpineReplayError`] when an argument has no parameter, the executor refuses the request,
+    /// or the evaluation returns no Boolean.
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
+    pub fn evaluate_boolean_over(
+        &self,
+        arguments: Vec<WitnessValue>,
+    ) -> Result<bool, SpineReplayError> {
+        let mut declared = self.site.site.parameters.iter().collect::<Vec<_>>();
+        declared.sort_unstable_by(|left, right| left.1.cmp(&right.1));
+        if declared.len() != arguments.len() {
+            return Err(SpineReplayError::UnboundArgument {
+                argument: format!(
+                    "{} arguments for {} parameters",
+                    arguments.len(),
+                    declared.len()
+                ),
+            });
+        }
+        let assignments = declared
+            .into_iter()
+            .zip(arguments)
+            .map(|((_, node), value)| CanonicalAssignment {
+                parameter: node.clone(),
+                value,
+            })
+            .collect();
+        let request = self.inputs.wire(
+            self.raw_package.clone(),
+            RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
+            ReplaySource::Input(assignments),
+            ObligationIdentity::new(self.site.site.function.clone(), None, 0),
+            &[],
+        );
+        match self.replay_request_through(request, |request| {
+            replay(request, self.inputs.replay_limits)
+        })? {
+            ReplayResult::Input(result) => match result.value() {
+                Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
+                _ => Err(SpineReplayError::NoInputValue),
             },
             ReplayResult::Witness(_)
             | ReplayResult::ObservedTemporal(_)
@@ -1416,8 +1475,9 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::Identity(_)
             | SpineReplayError::Packet(_)
             | SpineReplayError::DependencySelectionMismatch(_) => Self::CgDefect,
+            SpineReplayError::NoInputValue => Self::CgDefect,
             #[cfg(test)]
-            SpineReplayError::NoInputValue | SpineReplayError::PackageIdentity => Self::CgDefect,
+            SpineReplayError::PackageIdentity => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
         }
     }
@@ -1633,6 +1693,32 @@ pub fn replay_counterexample_through(
     ))
 }
 
+/// Replays a decoded enum comparison counterexample through the owner route: the selected QSL
+/// function is evaluated by [`qsl_replay::replay`] over the two declared members the witness
+/// names, and its Boolean result is returned for the caller to compare with the harness's
+/// expectation. `declaration` is the owner's key for the enum the operands are declared with.
+///
+/// # Errors
+///
+/// [`SpineReplayError`] when QSL refuses a member or the request, or the function result is not
+/// a Boolean.
+// Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+#[allow(clippy::result_large_err)]
+pub fn replay_enum_witness(
+    package: &ReplayPackage,
+    declaration: &NodeKey,
+    witness: &crate::replay::scalar::EnumWitness,
+) -> Result<bool, SpineReplayError> {
+    let member = |name: &str| WitnessValue::Enum {
+        declaration: declaration.clone(),
+        member: name.to_owned(),
+    };
+    package.evaluate_boolean_over(vec![
+        member(&witness.left_member),
+        member(&witness.right_member),
+    ])
+}
+
 /// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
 /// the `violation` category reproduces the backend's falsification; every other settlement is
 /// evidence failure, carrying QSL's disagreement cause when it has one.
@@ -1760,6 +1846,75 @@ mod tests {
         package_from_source(UNIT, "f")
     }
 
+    /// A declared enum member reaches the owner executor as the transcript entry QSL's canonical
+    /// value text gives it, not as an unsupported value.
+    #[trace("TC-063", "FR-049-AC-10")]
+    #[test]
+    // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
+    #[allow(clippy::result_large_err)]
+    fn an_enum_witness_value_is_rendered_into_the_transcript() {
+        let package = package_from_source(
+            "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n\
+             ordered enum Level { LOW, MID }\n\
+             function lt using v(a: Level, b: Level): Boolean pure { a < b }\n",
+            "lt",
+        );
+        let declaration = package.site.site.function.clone();
+        let value = WitnessValue::Enum {
+            declaration,
+            member: "MID".to_owned(),
+        };
+        let values = package
+            .parameters()
+            .iter()
+            .map(|parameter| (parameter.argument.to_owned(), value.clone()))
+            .collect::<Vec<_>>();
+        let mut seen = None;
+        let outcome = replay_falsification_through(
+            "h",
+            "c",
+            &values,
+            &package.parameters(),
+            |source| {
+                Ok(package.inputs.wire(
+                    package.raw_package.clone(),
+                    RequestTargetWire::function(
+                        package.selection.clone(),
+                        package.site.site.declaration.clone(),
+                    ),
+                    source.into(),
+                    ObligationIdentity::new(package.site.site.function.clone(), None, 0),
+                    &[],
+                ))
+            },
+            &mut |wire| {
+                seen = Some(wire);
+                Err(SpineReplayError::WrongArm)
+            },
+        );
+        assert!(matches!(outcome, Err(SpineReplayError::WrongArm)));
+        let ReplaySource::Witness(witness) = seen.expect("the request was built").source else {
+            panic!("a witness source");
+        };
+        let text = value.to_value_text().expect("the member has value text");
+        assert!(
+            witness.transcript().contains(&format!("={text}")),
+            "{witness:?}"
+        );
+        let refused = replay_falsification_through(
+            "h",
+            "c",
+            &[("a".to_owned(), WitnessValue::Text("x".to_owned()))],
+            &package.parameters(),
+            |_| Err(SpineReplayError::WrongArm),
+            &mut |_| Err(SpineReplayError::WrongArm),
+        );
+        assert!(matches!(
+            refused,
+            Err(SpineReplayError::UnsupportedWitnessValue { .. })
+        ));
+    }
+
     fn binding(identifier: &str) -> ObligationBinding {
         ObligationBinding {
             identifier: identifier.to_owned(),
@@ -1790,7 +1945,7 @@ mod tests {
             backend: Some(BACKEND_IDENTITY.to_owned()),
             trace_position: Some(None),
             source: Some(EnvelopeSource::Witness(
-                render_witness("function_fixture", "falsified", &[])
+                render_witness::<i128>("function_fixture", "falsified", &[])
                     .expect("the fixture witness renders"),
             )),
             family_payload: Some(NoPayload),
@@ -2122,7 +2277,8 @@ mod tests {
 
         let mut wrong_arm = packet.clone();
         wrong_arm.source = Some(EnvelopeSource::Witness(
-            render_witness("value_fixture", "falsified", &[]).expect("the fixture witness renders"),
+            render_witness::<i128>("value_fixture", "falsified", &[])
+                .expect("the fixture witness renders"),
         ));
         assert!(matches!(
             refused(wrong_arm),

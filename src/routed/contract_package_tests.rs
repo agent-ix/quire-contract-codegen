@@ -2022,14 +2022,7 @@ mod tests {
     }
 
     /// A scalar caller must select its own checked application occurrence.
-    #[trace(
-        "FR-039-AC-2",
-        "FR-049-AC-1",
-        "TC-053",
-        "TC-001",
-        "NFR-002-AC-1",
-        "NFR-002-AC-2"
-    )]
+    #[trace("FR-039-AC-2", "TC-053", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
     #[test]
     fn scalar_own_result_without_conversion_differs_from_not_applicable() {
         use crate::oracle::claim::ClaimDisposition;
@@ -2100,8 +2093,6 @@ mod tests {
     /// RR-16 supplies two result contexts for one semantic add key.
     #[trace(
         "FR-039-AC-2",
-        "FR-049-AC-1",
-        "FR-049-AC-5",
         "FR-019-AC-43",
         "FR-019-AC-44",
         "FR-022-AC-23",
@@ -2809,7 +2800,7 @@ mod tests {
         (checked, admitted, positions, expression)
     }
 
-    #[trace("FR-039-AC-2", "FR-049-AC-1", "TC-053")]
+    #[trace("FR-039-AC-2", "TC-053")]
     #[test]
     fn scalar_selected_occurrence_refusals_preserve_generated_sibling() {
         use crate::oracle::claim::ClaimDisposition;
@@ -2883,7 +2874,7 @@ mod tests {
         }
     }
 
-    #[trace("FR-039-AC-7", "FR-039-AC-11", "FR-049-AC-1", "TC-053")]
+    #[trace("FR-039-AC-7", "FR-039-AC-11", "TC-053")]
     #[test]
     fn scalar_selected_occurrences_remain_package_local() {
         use crate::oracle::claim::ClaimDisposition;

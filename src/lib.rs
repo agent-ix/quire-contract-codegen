@@ -324,10 +324,10 @@ pub use replay::frame::{
     SelectedFrameItem, SelectedFrameTarget, SelectedTargetMember,
 };
 pub use replay::function::{
-    replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
-    DependencyLockError, EvidenceFailureCause, FunctionPacketError, LockedSource,
-    PacketClaimMember, ProvidedDocument, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_counterexample, replay_counterexample_through, replay_enum_witness,
+    replay_falsification, DependencyLock, DependencyLockError, EvidenceFailureCause,
+    FunctionPacketError, LockedSource, PacketClaimMember, ProvidedDocument, ReplayInputs,
+    ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::scalar::{
