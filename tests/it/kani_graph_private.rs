@@ -13,8 +13,8 @@
 //! (`TRANSITIVITY`), whose three reachability applications are quantifier-bound, is `Verified` by
 //! the unmutated harness, its harness mutant (the transitive closure removed, so reachability is
 //! the selected edges only) is Falsified and the unchanged authored clause holds natively on the
-//! decoded graph, and its claim mutant (the conclusion reversed) is Falsified and QSL reproduces
-//! the violation.
+//! decoded graph, and its claim mutant (the conclusion reversed) is Falsified and QSL reaches the
+//! same `Violation` verdict (its evaluated-witness settlement is not reached; see that test).
 //!
 //! There is NO wrong-role mutant. The harness draws one end only, so a closure that follows
 //! another role cannot be expressed by editing it, and a closure that follows no edge is the
@@ -803,14 +803,35 @@ fn real_kani_transitivity_without_closure_mutant_falsifies_and_qsl_replay_disagr
 
 /// Claim mutant: the conclusion is reversed, so the authored clause itself is false on a chain
 /// graph. Kani falsifies the unmutated harness over the mutated claim, and QSL replays that
-/// mutant's own authored clause on the decoded graph and reproduces the violation.
+/// mutant's own authored clause on the decoded graph and reaches the same `Violation` verdict.
+/// The clause is universally quantified, so QSL also derives a separating witness (the binder
+/// objects that violate it) that the harness's playback does not carry: the settlement is
+/// `Inconclusive` with a witness cause (`given` absent, `derived` present), not
+/// `ReproducedWithEvaluatedWitness`. Verdict agreement is evidenced; the evaluated-witness
+/// settlement for a quantified claim is not.
 #[trace("TC-025", "FR-015-AC-106")]
 #[test]
 #[ignore = "real Kani qualification: run serially inside the flock and the 24G scope"]
-fn real_kani_reversed_transitivity_claim_falsifies_and_qsl_replay_reproduces_it() {
+fn real_kani_reversed_transitivity_claim_falsifies_and_qsl_replay_agrees_on_the_verdict() {
     let authored = authored(REVERSED, 3);
     let healthy = harness(&authored, &CONCLUSION);
     let counterexample = run_falsified(&healthy, "transitivity-reversed");
     let (_, result) = replay(&authored, &healthy, &counterexample, &relationship("kids"));
-    assert_reproduced(&result);
+    let (settlement, category, cause) = settled(&result);
+    assert_eq!(settlement, WitnessSettlement::Inconclusive);
+    assert_eq!(category, Category::Violation);
+    let Some(DisagreementCause::Witness {
+        proved,
+        replayed,
+        given: None,
+        derived: Some(_),
+        ..
+    }) = cause
+    else {
+        panic!("a witness-cause disagreement with only the derived witness: {cause:?}")
+    };
+    assert_eq!(
+        (proved.category(), replayed.category()),
+        (Category::Violation, Category::Violation)
+    );
 }
