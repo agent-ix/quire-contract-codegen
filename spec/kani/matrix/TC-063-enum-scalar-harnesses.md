@@ -13,7 +13,7 @@ relationships:
 Verify [FR-049](../functional/FR-049-enum-scalar-harnesses.md) through an
 admitted package with enum declarations (eq/ne over any declaration, ordering over an `ordered enum`), public CG generation, installed proof
 execution and owner replay. This case is planned; the existing native enum
-comparison oracle checks do not establish proof acceptance. Execute generated
+comparison checks do not establish proof acceptance. Execute generated
 proofs only with the authorized runner and budget.
 
 ## Test Procedure
@@ -21,7 +21,7 @@ proofs only with the authorized runner and budget.
 1. Admit a package with an `ordered enum` of at least three members and an
    unordered enum declaration. Request `eq` and `ne` for both, and `lt`, `le`,
    `gt`, `ge` for the ordered enum. Retain source association and inspect that
-   oracle and native expression derive from the same node (AC-1).
+   the comparison and native expression derive from the same node (AC-1).
 2. Independently enumerate member pairs and compare with the harness domain:
    every ordered pair reachable, no out-of-range `i64` index. Apply mutations
    adding an index, dropping the last member and fixing one operand; each must
@@ -36,7 +36,7 @@ proofs only with the authorized runner and budget.
    assert the ordering operators over the ordered enum fail (AC-3).
 4. Inspect assertions and assumptions: completion required, no outcome-based
    assume. Exercise a reachable `Incomplete` outcome and assert it keeps its
-   typed outcome; force the `OracleStop::IllTyped` path and assert a
+   typed outcome; force the comparison's `Err(IllTyped)` path and assert a
    non-`Verified` outcome retaining the cause (AC-4).
 5. Run the healthy harnesses through the approved bounded path with full
    ordered options; verify all checks and exactly one final cover. Run the

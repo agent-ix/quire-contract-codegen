@@ -51,3 +51,19 @@ still name the owner `compare_enum` oracle. Two high, one medium, two low.
 | TC-063 step 5 | examined | A minted identity is not run as a proof mutant; step 3 covers its refusal (AC-6). |
 | quire-exact FR-407 | context_only | Behavior 4 (`from_member` refuses `MemberNotInShape` when `shape.rank(member.variant())` is not `Some(member.rank())`), Behavior 8 (rank-only Boolean), Relationship to CG FR-049 (Limitation). |
 | FR-049-AC-2, AC-4, AC-7..AC-11 | context_only | Unchanged; read for consistency with the amendment. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | Stale-oracle text survives the FND-002 fix. The Dependencies bullet still says FR-014 "owns enum comparison semantics and the generated oracle; this requirement adds only the bounded proof row over it", which contradicts the Description and AC-1 (the generated side is quire-exact's `compare_native_enum`, FR-407). AC-4 still says "the oracle outcome" and "a path reaching `OracleStop::IllTyped`", the Description says the causes are "surfaced as `OracleStop::IllTyped`", and TC-063 steps 1 and 4 still say "oracle" and force "the `OracleStop::IllTyped` path", while Behavior now says "the comparison's `Err(IllTyped)`". `OracleStop` is the FR-014 oracle wrapper. Scenario: an implementer reads Dependencies and AC-4 as requiring the harness to route through FR-014's oracle (the heap `compare_enum` path), or a test author finds no `OracleStop` path when the harness calls `compare_native_enum` directly, so AC-4's last sentence cannot be exercised as written. The FR-014 `depends_on` edge itself is still right (the checked member list and ordered flag come from the owner route through FR-014); the bullet text and the `OracleStop` naming are what need changing. | spec/kani/functional/FR-049-enum-scalar-harnesses.md:46,153,164-166; spec/kani/matrix/TC-063-enum-scalar-harnesses.md:24,39 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix 5d7793c1: Behavior requires CG to use the owner-admitted `EnumShape` as supplied; AC-3 adds a generator-mint mutant (renamed key in both shape and members) that fails the comparison with the owner-admitted shape; TC-063 step 3 runs that mutant and cites FR-407-AC-3 for the refusal itself. The check is CG-side against the owner route's own shape, so step 3 can fail on a CG mint. |
+| FND-002 | fixed | Fix 5d7793c1: Description, Outputs, AC-1 and Behavior now name `compare_native_enum` over `NativeEnum` carriers (FR-407) as the generated side; `compare_enum` no longer appears. Residual stale-oracle text in Dependencies, AC-4 and TC-063 recorded separately as FND-006. |
+| FND-003 | fixed | Fix 5d7793c1: `from_member` runs at generation time; inside the proof operands are built with `from_index(tag, ordered, index, count)`, so the proof holds no variant list or heap value. AC-3 matches. |
+| FND-004 | fixed | Fix 5d7793c1: AC-6's minted-identity clause removed (the refusal lives in AC-3 only); TC-063 step 5 no longer traces the refusal to AC-6 and its long line is wrapped. |
+| FND-005 | fixed | Fix 5d7793c1: frontmatter adds `references ix://agent-ix/quire-exact/FR-407`; the Description names quire-exact as owner of the carrier, its construction and comparison. |
