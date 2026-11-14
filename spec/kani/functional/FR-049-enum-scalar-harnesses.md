@@ -157,7 +157,7 @@ unavailable the item is `unsupported` with no harness.
 | FR-049-AC-8 | An ordering operator over an unordered declaration and operands of different declarations are each refused with the typed ill-typed cause, source association and no harness. An incomplete member list or ordered flag is `unsupported` naming the enum. Every requested item has exactly one disposition under FR-039 and a refused item does not alter a supported sibling. | Test |
 | FR-049-AC-9 | A leaf or member of any other family (text, rational, decimal, quantity, float, sequence, set, bag, ordered set) keeps its existing disposition, and an enum leaf inside a composite keeps the composite's `ShadowFamilyNotBuilt` disposition. | Test |
 | FR-049-AC-10 | Each supported enum operand has exactly one `i64` physical binding grouped to its original parameter with declaration, member list and bounds. Playback decodes with the existing I64 width/comment checks and limits; an out-of-range index, or a missing, duplicate or foreign binding, refuses with a typed cause and no replay, and a valid index replays as the declaration's member at that position. Boolean and integer controls are unchanged. | Test |
-| FR-049-AC-11 | Run evidence records the selected node and source association, declaration identity, ordered member list and ordered flag, operator, encoding, actual subject and full ordered backend arguments, every unwind and option, target harness, limits, raw checks and cover, playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. | Test |
+| FR-049-AC-11 | Run evidence records the selected node and source association, declaration identity, ordered member list and ordered flag, operator, encoding, actual subject and full ordered backend arguments, every unwind and option, target, limits, raw checks and cover, playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. | Test |
 
 ## Dependencies
 
@@ -212,7 +212,7 @@ Tagged and passing:
   out-of-range, missing, extra, foreign-harness, narrow and bound-mismatched bindings with typed
   causes; the owner route evaluates the decoded members, and refuses a member it does not declare.
 - AC-11: the record and run evidence carry the node and source association, declaration, member
-  list and ordered flag, operator, encoding, argv, every unwind and option, target harness,
+  list and ordered flag, operator, encoding, argv, every unwind and option, target,
   limits, checks and cover, exit code and the typed terminal outcome. Tool versions are not
   required (QSL-406, EA-49).
 

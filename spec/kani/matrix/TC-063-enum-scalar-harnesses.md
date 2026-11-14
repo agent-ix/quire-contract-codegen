@@ -57,9 +57,9 @@ proofs only with the authorized runner and budget.
    no replay; assert an in-range index replays as the member at that position
    (AC-10).
 9. Inspect the run record for node and declaration identity, ordered members and
-   ordered flag, operator, encoding, full argv with unwind options, tool
-   versions, target, limits, checks, cover, playback, exit and terminal outcome
-   (AC-11).
+   ordered flag, operator, encoding, full argv with unwind options, target,
+   limits, checks, cover, playback, exit and terminal outcome (AC-11); tool
+   versions are not required.
 
 ## Expected Results
 

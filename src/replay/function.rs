@@ -1846,13 +1846,17 @@ mod tests {
         package_from_source(UNIT, "f")
     }
 
-    /// A declared enum member reaches the owner executor as the transcript entry QSL's canonical
-    /// value text gives it, not as an unsupported value.
+    /// The witness-arm adapter renders a declared enum member as the transcript entry QSL's
+    /// canonical value text gives it, not as an unsupported value. This checks the rendering and
+    /// the refusal of other kinds only: the declaration key here is a stand-in, so QSL's reading
+    /// of a real declaration is covered by the integration test
+    /// `a_decoded_witness_replays_through_the_owner_route_as_the_declared_members`, which sends
+    /// the owner's own declaration key through `qsl_replay::replay`.
     #[trace("TC-063", "FR-049-AC-10")]
     #[test]
     // Retain complete dependency mismatch fields inline; boxing adds a fallible allocation.
     #[allow(clippy::result_large_err)]
-    fn an_enum_witness_value_is_rendered_into_the_transcript() {
+    fn an_enum_witness_value_is_rendered_into_the_transcript_text() {
         let package = package_from_source(
             "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n\
              ordered enum Level { LOW, MID }\n\
