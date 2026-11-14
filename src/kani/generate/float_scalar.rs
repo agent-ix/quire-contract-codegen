@@ -142,7 +142,7 @@ impl FloatCapability {
 
 impl FloatScalarRefusal {
     /// The unsupported disposition of a refused float operation, retaining its named capability.
-    pub(crate) fn into_disposition(self) -> ObligationDisposition {
+    pub fn into_disposition(self) -> ObligationDisposition {
         match self {
             Self::RequiresBound { unbounded_type } => {
                 ObligationDisposition::RequiresBound { unbounded_type }

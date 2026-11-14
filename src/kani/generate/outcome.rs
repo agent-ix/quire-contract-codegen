@@ -332,7 +332,7 @@ pub enum UnsupportedObligation {
         width_bits: u32,
         /// The route of the refused clause, the one the matching row measured.
         route: crate::kani::tractability::IntegerRoute,
-        /// The measured row, with its Kani, CBMC, solver, generator and kernel versions.
+        /// The measured row as recorded, with the tool versions it records, if any, and its generator and kernel versions.
         row: Box<crate::kani::tractability::TractabilityRow>,
     },
     /// A surviving renderer could not assemble or serialize a harness after admitting its item.
