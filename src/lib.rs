@@ -193,6 +193,11 @@ pub use kani::classify::{
     KaniRunOutcome, StateClausePlaybackError,
 };
 pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
+pub use kani::generate::enum_scalar::{
+    generate_enum_scalar_harness, EnumCapability, EnumScalarHarness, EnumScalarOutcome,
+    EnumScalarRefusal, EnumScalarRequest,
+};
+pub use kani::identity::EnumScalarIdentity;
 pub use kani::output::diagnostics::{
     KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
 };

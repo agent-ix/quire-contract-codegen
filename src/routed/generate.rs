@@ -1130,6 +1130,7 @@ mod tests {
                 requirement_occurrence: None,
                 path_condition: Vec::new(),
                 guard_inputs: Vec::new(),
+                enum_scalar: None,
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),

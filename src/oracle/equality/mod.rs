@@ -107,6 +107,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod admitted;
+pub(crate) use admitted::{owner_enum, OwnerEnum, OwnerEnumRefusal};
 mod resolution;
 #[cfg(test)]
 mod union_tests;

@@ -290,3 +290,94 @@ mod tests {
         }
     }
 }
+
+/// The owner-admitted enum behind one declaration node: the shape the owner route admitted, each
+/// checked member of it in declared order, and the declaration facts a harness records.
+#[derive(Clone)]
+pub(crate) struct OwnerEnum {
+    pub(crate) node: CheckedNodeId,
+    pub(crate) shape: EnumShape,
+    pub(crate) members: Vec<quire_exact::EnumMember>,
+    pub(crate) qualified: Vec<String>,
+    pub(crate) cases: Vec<String>,
+}
+
+/// Why the owner route supplied no enum declaration.
+#[derive(Debug)]
+pub(crate) enum OwnerEnumRefusal {
+    /// No admitted context accompanied the request.
+    NoContext,
+    /// The context, the IR declaration or the owner lookup did not admit the declaration.
+    NotAdmitted(String),
+}
+
+/// Resolve `node`, an `enum` declaration of `graph`, through the owner's admitted context.
+pub(crate) fn owner_enum(
+    admitted: Option<&AdmittedContext>,
+    graph: &crate::oracle::checked_graph::CheckedGraph<'_, quire_contract_model::CheckedTerm>,
+    node: &CheckedNodeId,
+) -> Result<OwnerEnum, OwnerEnumRefusal> {
+    let context = admitted.ok_or(OwnerEnumRefusal::NoContext)?;
+    let declaration = graph.node(node).ok_or_else(|| {
+        OwnerEnumRefusal::NotAdmitted("the type node is not in the package".to_owned())
+    })?;
+    let mut closure = TypeClosure {
+        node_keys: graph.node_keys(),
+        ..TypeClosure::default()
+    };
+    let resolved =
+        resolve_enum(context, &mut closure, declaration, graph.term(node)).map_err(|error| {
+            OwnerEnumRefusal::NotAdmitted(match error {
+                ItemCheckError::Refusal(refusal) => format!("{refusal:?}"),
+                ItemCheckError::Generation(error) => format!("{error:?}"),
+            })
+        })?;
+    let ValueType::Enum(shape) = &resolved else {
+        return Err(OwnerEnumRefusal::NotAdmitted(
+            "the declaration did not resolve to an enum".to_owned(),
+        ));
+    };
+    let shape = shape.clone();
+    let key = admitted_key(&closure, node)
+        .map_err(|error| OwnerEnumRefusal::NotAdmitted(format!("{error:?}")))?;
+    let actual = context
+        .enum_declaration(&key)
+        .map_err(|error| OwnerEnumRefusal::NotAdmitted(format!("{error:?}")))?;
+    let owner_declaration = EnumDeclaration::new(
+        actual.key().clone(),
+        actual.is_ordered(),
+        actual
+            .cases()
+            .iter()
+            .map(|case| case.case().as_str().to_owned())
+            .collect(),
+    )
+    .map_err(|error| OwnerEnumRefusal::NotAdmitted(format!("{error:?}")))?;
+    let mut members = Vec::with_capacity(actual.cases().len());
+    for (position, case) in actual.cases().iter().enumerate() {
+        let selected = context
+            .enum_case(&key, case.case())
+            .map_err(|error| OwnerEnumRefusal::NotAdmitted(format!("{error:?}")))?;
+        let value = owner_declaration
+            .member(selected.case().as_str(), selected.key().clone())
+            .map_err(|error| OwnerEnumRefusal::NotAdmitted(format!("{error:?}")))?;
+        let rank = u32::try_from(position)
+            .map_err(|_| OwnerEnumRefusal::NotAdmitted("member rank exceeds u32".to_owned()))?;
+        members.push(quire_exact::EnumMember::new(value.variant(), rank));
+    }
+    Ok(OwnerEnum {
+        node: node.clone(),
+        shape,
+        members,
+        qualified: actual
+            .qualified_name()
+            .iter()
+            .map(|part| part.as_str().to_owned())
+            .collect(),
+        cases: actual
+            .cases()
+            .iter()
+            .map(|case| case.case().as_str().to_owned())
+            .collect(),
+    })
+}
