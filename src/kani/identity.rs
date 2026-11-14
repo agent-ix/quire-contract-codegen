@@ -670,6 +670,9 @@ pub struct ScalarObligationIdentity {
     /// The guard inputs drawn after the operands, in draw order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub guard_inputs: Vec<ScalarGuardInput>,
+    /// The enum declaration and comparison behind an enum scalar harness (FR-049).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enum_scalar: Option<EnumScalarIdentity>,
     /// Solver.
     pub solver: KaniSolver,
     /// Loop unwind bound.
@@ -679,6 +682,26 @@ pub struct ScalarObligationIdentity {
     /// The witness vector: the proof vector with `-Z concrete-playback` before `--harness` and
     /// `--concrete-playback print` last.
     pub witness_options: Vec<String>,
+}
+
+/// The enum declaration an enum scalar harness draws its operands from (FR-049): the owner's
+/// declaration node and qualified name, its ordered flag and declared member order, the
+/// comparison operator and the symbolic encoding of each operand.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumScalarIdentity {
+    /// The admitted enum declaration node.
+    pub declaration: CheckedNodeId,
+    /// The declaration's qualified name.
+    pub qualified_name: Vec<String>,
+    /// Whether the declaration is an `ordered enum`.
+    pub ordered: bool,
+    /// The declared member names, in declared order.
+    pub members: Vec<String>,
+    /// The comparison's catalogued operation identity.
+    pub operator: String,
+    /// The operand encoding: one `i64` index per operand into `members`.
+    pub encoding: String,
 }
 
 /// Exact predicate forms the bounded-collection Kani renderer preserves from an admitted QSL

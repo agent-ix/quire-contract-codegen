@@ -41,9 +41,9 @@ pub fn decode_scalar_falsification(
 ) -> Result<Vec<i64>, DecodeFailure> {
     // An operation outside the integer profile has no persisted schema to check; its refusal
     // follows the byte ceiling and the harness identity.
-    let arity = integer_scalar_operand_count(&identity.operation_identity);
-    if arity.is_some() {
-        validate_schema(identity)?;
+    let arity = scalar_operand_count(identity);
+    if let Some(arity) = arity {
+        validate_schema(identity, arity)?;
     }
     let harness = identity.harness_symbol.as_str();
     let module = identity.module_symbol.as_str();
@@ -131,18 +131,28 @@ pub fn decode_scalar_falsification(
     Ok(values)
 }
 
-fn validate_schema(identity: &ScalarObligationIdentity) -> Result<usize, DecodeFailure> {
+fn validate_schema(
+    identity: &ScalarObligationIdentity,
+    arity: usize,
+) -> Result<usize, DecodeFailure> {
     let harness = identity.harness_symbol.as_str();
     let module = identity.module_symbol.as_str();
     let failure = |code, context: &str| DecodeFailure::new(code, harness, context);
-    let arity = integer_scalar_operand_count(&identity.operation_identity).ok_or_else(|| {
-        failure(
-            "cg_scalar_witness_operation_unsupported",
-            &identity.operation_identity,
-        )
-    })?;
     if identity.arguments.len() != arity {
         return Err(failure("cg_scalar_witness_schema_arity_mismatch", module));
+    }
+    if let Some(enum_scalar) = &identity.enum_scalar {
+        let count = i64::try_from(enum_scalar.members.len()).unwrap_or(i64::MAX);
+        let bound = identity
+            .arguments
+            .iter()
+            .all(|argument| argument.minimum == 0 && argument.maximum == count - 1);
+        if count == 0 || !bound || enum_scalar.operator != identity.operation_identity {
+            return Err(failure(
+                "cg_scalar_witness_schema_enum_mismatch",
+                &enum_scalar.qualified_name.join("::"),
+            ));
+        }
     }
     let mut seen = BTreeSet::new();
     for argument in &identity.arguments {
@@ -178,4 +188,82 @@ fn validate_schema(identity: &ScalarObligationIdentity) -> Result<usize, DecodeF
         }
     }
     Ok(arity)
+}
+
+/// Operand count of the persisted scalar schema: an enum identity carries exactly one physical
+/// `i64` index per comparison operand, every other identity follows the integer profile.
+fn scalar_operand_count(identity: &ScalarObligationIdentity) -> Option<usize> {
+    if identity.enum_scalar.is_some() {
+        return Some(2);
+    }
+    integer_scalar_operand_count(&identity.operation_identity)
+}
+
+/// One decoded enum comparison counterexample: each operand's declared member.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumWitness {
+    /// Declaration node the members belong to.
+    pub declaration: quire_contract_model::CheckedNodeId,
+    /// Comparison operator identity.
+    pub operator: String,
+    /// Left operand rank in the declared member order.
+    pub left_index: i64,
+    /// Right operand rank in the declared member order.
+    pub right_index: i64,
+    /// Left operand member node.
+    pub left_member: String,
+    /// Right operand member node.
+    pub right_member: String,
+}
+
+/// Decodes an enum comparison counterexample into the declared members it names.
+///
+/// Reuses the scalar draw checks (one `i64` per operand, comment agreement, range
+/// `0..member count`), so an out-of-range, missing, duplicate or foreign binding is refused with
+/// the scalar refusal codes and never maps to a member.
+///
+/// # Errors
+///
+/// Every `decode_scalar_falsification` refusal, plus `cg_scalar_witness_enum_identity_missing`
+/// for an identity that is not an enum comparison.
+pub fn decode_enum_falsification(
+    identity: &ScalarObligationIdentity,
+    playback: &Playback<'_>,
+) -> Result<EnumWitness, DecodeFailure> {
+    let enum_scalar = identity.enum_scalar.as_ref().ok_or_else(|| {
+        DecodeFailure::new(
+            "cg_scalar_witness_enum_identity_missing",
+            identity.harness_symbol.as_str(),
+            &identity.operation_identity,
+        )
+    })?;
+    let values = decode_scalar_falsification(identity, playback)?;
+    let member = |index: i64| {
+        usize::try_from(index)
+            .ok()
+            .and_then(|position| enum_scalar.members.get(position))
+            .cloned()
+            .ok_or_else(|| {
+                DecodeFailure::new(
+                    "cg_scalar_witness_operand_out_of_domain",
+                    identity.harness_symbol.as_str(),
+                    &enum_scalar.qualified_name.join("::"),
+                )
+            })
+    };
+    let [left_index, right_index] = values[..] else {
+        return Err(DecodeFailure::new(
+            "kani_witness_arity_mismatch",
+            identity.harness_symbol.as_str(),
+            &enum_scalar.qualified_name.join("::"),
+        ));
+    };
+    Ok(EnumWitness {
+        declaration: enum_scalar.declaration.clone(),
+        operator: enum_scalar.operator.clone(),
+        left_index,
+        right_index,
+        left_member: member(left_index)?,
+        right_member: member(right_index)?,
+    })
 }

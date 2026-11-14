@@ -389,6 +389,16 @@ pub enum UnsupportedObligation {
         /// The domains the IR does carry.
         derived_domains: Vec<DerivedDomain>,
     },
+    /// An enum comparison has no harness: the owner route supplies no exact finite encoding of
+    /// its declaration (FR-049), or the harness generator refused it.
+    EnumComparisonNotRendered {
+        /// The refusal's stable name: a capability name or an ill-typed cause.
+        cause: String,
+        /// The enum the item names, when it names one.
+        enum_name: String,
+        /// The owner's or generator's reason.
+        detail: String,
+    },
     /// A graph claim has no faithful symbolic encoding.
     GraphClaimNotRendered {
         /// The state clause containing the claim.

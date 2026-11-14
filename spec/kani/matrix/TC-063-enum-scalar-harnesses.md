@@ -57,9 +57,9 @@ proofs only with the authorized runner and budget.
    no replay; assert an in-range index replays as the member at that position
    (AC-10).
 9. Inspect the run record for node and declaration identity, ordered members and
-   ordered flag, operator, encoding, full argv with unwind options, tool
-   versions, target, limits, checks, cover, playback, exit and terminal outcome
-   (AC-11).
+   ordered flag, operator, encoding, full argv with unwind options, target,
+   limits, checks, cover, playback, exit and terminal outcome (AC-11); tool
+   versions are not required.
 
 ## Expected Results
 
@@ -70,4 +70,4 @@ classification and receive no proof credit.
 
 ## Status
 
-PLANNED (IR-1438): all eleven FR-049 criteria are unimplemented and untagged.
+PARTIAL (IR-262): every step runs in `tests/it/enum_scalar_harness.rs`, step 5 under installed Kani, including the owner replay of a decoded counterexample. The remaining narrowing is stated in the FR-049 Status: AC-8's refused-sibling clause is tested across separate generations, and AC-9's byte-identity covers Boolean, integer, text and sequence nodes. Enum has no IR-1526 refusal row because it verifies.

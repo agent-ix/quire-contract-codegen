@@ -157,7 +157,7 @@ unavailable the item is `unsupported` with no harness.
 | FR-049-AC-8 | An ordering operator over an unordered declaration and operands of different declarations are each refused with the typed ill-typed cause, source association and no harness. An incomplete member list or ordered flag is `unsupported` naming the enum. Every requested item has exactly one disposition under FR-039 and a refused item does not alter a supported sibling. | Test |
 | FR-049-AC-9 | A leaf or member of any other family (text, rational, decimal, quantity, float, sequence, set, bag, ordered set) keeps its existing disposition, and an enum leaf inside a composite keeps the composite's `ShadowFamilyNotBuilt` disposition. | Test |
 | FR-049-AC-10 | Each supported enum operand has exactly one `i64` physical binding grouped to its original parameter with declaration, member list and bounds. Playback decodes with the existing I64 width/comment checks and limits; an out-of-range index, or a missing, duplicate or foreign binding, refuses with a typed cause and no replay, and a valid index replays as the declaration's member at that position. Boolean and integer controls are unchanged. | Test |
-| FR-049-AC-11 | Run evidence records the selected node and source association, declaration identity, ordered member list and ordered flag, operator, encoding, actual subject and full ordered backend arguments, every unwind and option, tool versions, target, limits, raw checks and cover, playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. | Test |
+| FR-049-AC-11 | Run evidence records the selected node and source association, declaration identity, ordered member list and ordered flag, operator, encoding, actual subject and full ordered backend arguments, every unwind and option, target, limits, raw checks and cover, playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. | Test |
 
 ## Dependencies
 
@@ -172,6 +172,53 @@ unavailable the item is `unsupported` with no harness.
 
 ## Status
 
-PLANNED (IR-1438). This specification supplies no implementation, generated
-proof or acceptance credit. All eleven criteria remain planned and untagged until
-actual implementation and verification.
+PARTIAL (IR-262). The generator `generate_enum_scalar_harness` (src/kani/generate/enum_scalar.rs)
+settles an `enum` comparison node to a harness over `NativeEnum` carriers built with
+`from_index`, or to a typed refusal, from a genuine QSL source admitted through Contract IR and
+the owner's admitted context. `generate_routed_admitted` carries that context into the routed
+route, so an enum node settles to a harness (or to `EnumComparisonNotRendered` with a named
+capability) instead of `OperationNotRendered`; `generate_routed` and `generate_routed_native` pass no
+context. The owner replay route is available: `replay_enum_witness` evaluates the selected QSL
+function through `qsl_replay::replay` over the declared members (`WitnessValue::Enum`), and
+the function-replay adapter passes `WitnessValue::Enum` entries as QSL's canonical value text.
+
+Tagged and passing:
+
+- AC-1, AC-3 (carrier admission, minted identity, generator-mint through the generation path,
+  reorder, zero-member, u32-overflow and missing-declaration capabilities).
+- AC-2: the correspondence check (both operands drawn symbolically over exactly the member
+  indices) rejects the extra-index, dropped-member and constant-operand mutants; the extra-index
+  mutant is also Falsified under installed Kani.
+- AC-4: the assertion is split so each non-`Completed` outcome names itself. An exhausted meter
+  is Falsified naming `Incomplete`; a run-time `Err(IllTyped)` is Falsified naming
+  `UnorderedEnumOrdering` or `DistinctEnumDeclarations`. Installed Kani 0.68.0, `--solver
+  cadical`, unwind 1.
+- AC-5 and AC-6: healthy harnesses Verified and every mutant Falsified with playback, in the
+  ignored Kani lane of `tests/it/enum_scalar_harness.rs`; a falsifying counterexample is decoded
+  to members and replayed through the owner route, whose result is the native one. Measurements
+  are in `docs/qualification/ir262-enum-scalar-kani-measurements.md`.
+- AC-7: one cover, last; the unsatisfied-cover, missing-cover-summary and unwind classifications
+  are bound to the enum harness' cover count, and a timeout and a missing verdict are driven
+  through the runner against the enum harness with their terminal values.
+- AC-8: named unsupported capabilities and the typed ill-typed cause on the carrier (the QSL
+  source refusal is asserted by code). A refused item leaving a supported sibling unchanged is
+  tested across separate generations, not within one routed request.
+- AC-9: the routed output of a Boolean, an integer comparison, a text equality and a sequence
+  equality node is byte-identical with and without the admitted context. Decimal, rational,
+  quantity, float, set, bag, ordered-set and enum-in-composite nodes are not exercised by this
+  row's tests.
+- AC-10: one `i64` index per operand with declaration, member list and bounds in the identity;
+  `decode_enum_falsification` decodes a valid pair to its declared members and refuses
+  out-of-range, missing, extra, foreign-harness, narrow and bound-mismatched bindings with typed
+  causes; the owner route evaluates the decoded members, and refuses a member it does not declare.
+- AC-11: the record and run evidence carry the node and source association, declaration, member
+  list and ordered flag, operator, encoding, argv, every unwind and option, target,
+  limits, checks and cover, exit code and the typed terminal outcome. Tool versions are not
+  required (QSL-406, EA-49).
+
+Tractability: enum has no refusal row in the IR-1526 table because it verifies (seconds, about
+0.3 GB healthy); that table lists only shapes that do not.
+
+QSL refuses the ill-typed sources (an ordering over an unordered enum with `OperatorIneligible`,
+operands of different enums with `TypeMismatch`) before Contract IR, so no ill-typed enum node
+reaches CG from source; the CG refusal for them is exercised on the carrier (`check_typed`).

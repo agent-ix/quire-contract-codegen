@@ -9,6 +9,8 @@ pub(crate) mod clause;
 pub(crate) mod collection;
 // Symbolic graph claims at exact state-clause argument paths.
 pub(crate) mod graph;
+// The enum scalar comparison family (FR-049).
+pub(crate) mod enum_scalar;
 // The finite state-method family.
 pub(crate) mod constrained;
 // The bounded-Kani corpus family.

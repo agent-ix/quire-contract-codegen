@@ -261,6 +261,7 @@ pub(crate) fn scalar_source_fixture(
         requirement_occurrence: None,
         path_condition: Vec::new(),
         guard_inputs: Vec::new(),
+        enum_scalar: None,
         solver: KaniSolver::Cadical,
         unwind: 3,
         options: vec![

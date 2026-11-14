@@ -193,6 +193,11 @@ pub use kani::classify::{
     KaniRunOutcome, StateClausePlaybackError,
 };
 pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
+pub use kani::generate::enum_scalar::{
+    generate_enum_scalar_harness, EnumCapability, EnumScalarHarness, EnumScalarOutcome,
+    EnumScalarRefusal, EnumScalarRequest,
+};
+pub use kani::identity::EnumScalarIdentity;
 pub use kani::output::diagnostics::{
     KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
 };
@@ -238,9 +243,9 @@ pub use routed::capability::{
     BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use routed::generate::{
-    generate_routed, generate_routed_native, GenerationContexts, KaniGenerationContext, KindOutput,
-    RoutedGeneration, RoutedGenerationError, RoutedGenerationItem, RoutedItemConstructionError,
-    RoutedItemOutput,
+    generate_routed, generate_routed_admitted, generate_routed_native, GenerationContexts,
+    KaniGenerationContext, KindOutput, RoutedGeneration, RoutedGenerationError,
+    RoutedGenerationItem, RoutedItemConstructionError, RoutedItemOutput,
 };
 pub use strategy::harness::{
     generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest,
@@ -319,13 +324,15 @@ pub use replay::frame::{
     SelectedFrameItem, SelectedFrameTarget, SelectedTargetMember,
 };
 pub use replay::function::{
-    replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
-    DependencyLockError, EvidenceFailureCause, FunctionPacketError, LockedSource,
-    PacketClaimMember, ProvidedDocument, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_counterexample, replay_counterexample_through, replay_enum_witness,
+    replay_falsification, DependencyLock, DependencyLockError, EvidenceFailureCause,
+    FunctionPacketError, LockedSource, PacketClaimMember, ProvidedDocument, ReplayInputs,
+    ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
-pub use replay::scalar::{decode_scalar_falsification, SCALAR_PLAYBACK_BYTES};
+pub use replay::scalar::{
+    decode_enum_falsification, decode_scalar_falsification, EnumWitness, SCALAR_PLAYBACK_BYTES,
+};
 pub use replay::state_clause::graph::{GraphReplayAddress, GraphReplayInputs, GraphWitness};
 pub use replay::state_clause::invariant::{InvariantReplayInputs, StateClauseHarness};
 pub use replay::state_clause::{

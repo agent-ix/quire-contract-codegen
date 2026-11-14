@@ -339,7 +339,31 @@ pub fn generate_routed(
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
-    generate_routed_with_integer_policy(source, package, positions, routed, contexts, false)
+    generate_routed_with_integer_policy(source, package, positions, routed, contexts, false, None)
+}
+
+/// Generate routed Kani scalar claims with the owner route's admitted context, so an enum
+/// comparison node is generated per FR-049 instead of settling `OperationNotRendered`. Every other
+/// family and every record it produces is as [`generate_routed`] (or, with `native`, as
+/// [`generate_routed_native`]) produces it.
+pub fn generate_routed_admitted(
+    source: &quire_contract_model::CheckedPackageV2,
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
+    routed: &[RoutedGenerationItem],
+    contexts: &GenerationContexts<'_>,
+    admitted: &qsl_replay::AdmittedContext,
+    native: bool,
+) -> Result<RoutedGeneration, RoutedGenerationError> {
+    generate_routed_with_integer_policy(
+        source,
+        package,
+        positions,
+        routed,
+        contexts,
+        native,
+        Some(admitted),
+    )
 }
 
 /// Generate routed Kani scalar claims with the kernel-admitted native integer
@@ -351,7 +375,7 @@ pub fn generate_routed_native(
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
-    generate_routed_with_integer_policy(source, package, positions, routed, contexts, true)
+    generate_routed_with_integer_policy(source, package, positions, routed, contexts, true, None)
 }
 
 fn generate_routed_with_integer_policy(
@@ -361,6 +385,7 @@ fn generate_routed_with_integer_policy(
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
     native: bool,
+    admitted_context: Option<&qsl_replay::AdmittedContext>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
     let mut ordered = routed.iter().collect::<Vec<_>>();
     ordered.sort_by(|a, b| {
@@ -484,8 +509,15 @@ fn generate_routed_with_integer_policy(
         }
         let arm = match &kind {
             BackendKind::Kani => {
-                let (arm, kani_claim_map, kani_artifacts) =
-                    generate_kani(source, package, positions, &group, contexts, native)?;
+                let (arm, kani_claim_map, kani_artifacts) = generate_kani(
+                    source,
+                    package,
+                    positions,
+                    &group,
+                    contexts,
+                    native,
+                    admitted_context,
+                )?;
                 claim_map = Some(kani_claim_map);
                 oracle_artifacts = Some(kani_artifacts);
                 arm
@@ -706,6 +738,7 @@ fn generate_kani(
     group: &[&RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
     native: bool,
+    admitted_context: Option<&qsl_replay::AdmittedContext>,
 ) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
     let Some(context) = contexts.kani else {
         return Err(RoutedGenerationError::MissingKindContext {
@@ -789,10 +822,20 @@ fn generate_kani(
     // position. So `records` and `group` pair one to one; a position outside `group` is refused.
     let (records, mut harnesses, rejected) = match outcome {
         KaniObligationOutcome::Emitted {
-            records,
-            scalar_harnesses,
+            mut records,
+            mut scalar_harnesses,
             ..
         } => {
+            if let Some(admitted) = admitted_context {
+                settle_enum_items(
+                    source,
+                    admitted,
+                    context,
+                    group,
+                    &mut records,
+                    &mut scalar_harnesses,
+                );
+            }
             if native {
                 let mut selections = BTreeMap::new();
                 for ((record, claim_index), item) in records.iter().zip(&claim_indexes).zip(&items)
@@ -832,6 +875,65 @@ fn generate_kani(
     }
     let outputs = route_records(records, group, &mut harnesses)?;
     Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
+}
+
+/// Replaces the `OperationNotRendered` record of each enum comparison item with its FR-049
+/// disposition: a supported record and harness, or a typed refusal with no harness. A record of
+/// any other disposition or family is left exactly as negotiation produced it.
+fn settle_enum_items(
+    source: &quire_contract_model::CheckedPackageV2,
+    admitted: &qsl_replay::AdmittedContext,
+    context: KaniGenerationContext<'_>,
+    group: &[&RoutedGenerationItem],
+    records: &mut [ObligationRecord],
+    harnesses: &mut Vec<KaniScalarObligationHarness>,
+) {
+    use crate::kani::generate::{
+        enum_scalar::{generate_enum_scalar_harness, EnumScalarOutcome, EnumScalarRequest},
+        outcome::UnsupportedObligation,
+    };
+    let mut ordinal = 0;
+    for (record, item) in records.iter_mut().zip(group) {
+        let ObligationDisposition::Unsupported {
+            reason:
+                UnsupportedObligation::OperationNotRendered {
+                    operation_identity, ..
+                },
+        } = &record.disposition
+        else {
+            continue;
+        };
+        if !operation_identity.starts_with("quire.op.enum.") {
+            continue;
+        }
+        let outcome = generate_enum_scalar_harness(&EnumScalarRequest {
+            source,
+            context: Some(admitted),
+            node_id: &item.node_id,
+            ceilings: context.ceilings,
+            unwind: context.unwind,
+            requirement_occurrence: item.requirement.as_ref().map(|r| &r.occurrence),
+            has_path_condition: item
+                .requirement
+                .as_ref()
+                .is_some_and(|r| !r.path_condition.is_empty()),
+            ordinal,
+        });
+        match outcome {
+            EnumScalarOutcome::Supported(generated) => {
+                ordinal += 1;
+                record.disposition = ObligationDisposition::Supported {
+                    harness_symbol: generated.harness.identity.harness_symbol.clone(),
+                };
+                harnesses.push(generated.harness);
+            }
+            EnumScalarOutcome::Refused(refusal) => {
+                record.disposition = ObligationDisposition::Unsupported {
+                    reason: refusal.into_unsupported(),
+                };
+            }
+        }
+    }
 }
 
 /// Pairs FR-015's records with `group`, rewrites every record's positions into the driver's
@@ -1130,6 +1232,7 @@ mod tests {
                 requirement_occurrence: None,
                 path_condition: Vec::new(),
                 guard_inputs: Vec::new(),
+                enum_scalar: None,
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),
