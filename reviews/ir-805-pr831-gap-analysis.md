@@ -58,3 +58,11 @@ carrier-representation evidence (SR-17940486709564847047976 FND-002).
 | FR-015 AC-106 clarification (D, G, carrier, mutants) | examined | "Neither D nor its expected endpoints may be obtained from the generated harness, the mutated bound, or the generator's mutated lowering result." |
 | TC-025 domain-control paragraph | examined | "Run three separate mutants against the unchanged original expected domain, candidate carrier and clause evaluation rules" |
 | FR-015-AC-99 | context_only | status edit only: "graph proof controls are AC-106 (PARTIAL, IR-805)" |
+
+## Dispositions
+
+Round 1, fix commit 5f550fc3.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | The artifacts are still not retained. The gap is now stated plainly and consistently in three places: FR-015-AC-106 ("run artifacts ... are not retained, so only the verdicts, walls and memory above are recorded and each run must be repeated to inspect them"), TC-025 ("that retention is an open gap") and the tests.md row. AC-106 stays PARTIAL, so no credit is overclaimed. Accepted as an honestly stated open gap within the PARTIAL status. |

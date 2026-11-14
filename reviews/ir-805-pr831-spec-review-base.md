@@ -50,3 +50,13 @@ The findings are wording and consistency defects only.
 | TC-025 graph-family status | examined | "slice C is delivered for the relationship-end form (the domain oracle, healthy pass, boundary probes and the three pure-bound mutants ...)" |
 | TC-025 IR-939 paragraph | examined | "For FR-015-AC-106's separate domain controls (IR-939, slice C of IR-805: delivered for the relationship-end form in `tests/it/kani_graph_domain_private.rs`; the field-edge form is slice D)" |
 | tests.md FR-015 graph row | examined | "slice C (domain conformance and completeness oracle, ...) is delivered, and it pends slice D" |
+
+## Dispositions
+
+Round 1, fix commit 5f550fc3.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The tests.md label now reads "Partial (IR-805 slices A, B, C and E)". |
+| FND-002 | fixed | TC-025 now has the separator ("kani-gate`); slice C is delivered"). The stale AC-107 claim now reads "AC-107's one-node-under-two-clauses clause is evidenced as its row states" in both TC-025 and tests.md. |
+| FND-003 | fixed | AC-106 now states that the candidate "is confined to the carrier's box (count at most 5, operands and targets below 5, degrees at most 4)", and it cites the box test. |

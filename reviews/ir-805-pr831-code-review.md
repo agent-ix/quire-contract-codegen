@@ -85,3 +85,19 @@ The findings are:
 | projected / the_expected_domain_matches_the_package_projections | examined | `select_population` + `relationship_end` vs `End::declared()` |
 | kani_graph_private visibility changes | examined | `pub(crate)` on `Authored`, `authored`, `harness`, `run_falsified`, `run_outcome` |
 | src/lib.rs module wiring | examined | `#[cfg(test)] #[path = "../tests/it/kani_graph_domain_private.rs"] mod kani_graph_domain_private;` |
+
+## Dispositions
+
+Round 1, fix commit 5f550fc3 (`git diff 284ced6c..5f550fc3`). The commit changes no file under
+`src/`, so the production renderer and the generated harness text are unchanged; only the test file,
+the spec prose and `reviews/` changed. At 5f550fc3: the native tests pass 8/8, and the installed-Kani
+controls pass 10/10 (Kani 0.68.0, 108.77 s, under flock in a 24G scope). `quire trace --file
+tests/it/kani_graph_domain_private.rs` binds all 10 `real_kani_*` tests to FR-015-AC-106 and TC-025.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The macro is removed. All ten tests are written out, each with its own `#[trace("TC-025", "FR-015-AC-106")]`, and quire trace now lists all ten as verifying claims. |
+| FND-002 | fixed | New test `the_carrier_box_contains_every_sampler_range_and_the_authored_domain` reads each draw's inclusive range from the healthy and all three mutant samplers' emitted range assumptions and asserts it lies inside the carrier box. It also checks the authored `D` against the box. A `-1` or widened draw would fail it, so it is a real oracle. The doc and test name were corrected (`..._assumes_only_carrier_slots`). |
+| FND-003 | fixed | `observe` now panics on any non-empty statement it does not recognise before `let degrees = `, the first statement after the constraints. |
+| FND-004 | fixed | Renamed to `uniqueness_and_dangling_targets_are_part_of_both_membership_predicates`, and added `the_native_domain_predicate_enforces_a_nonzero_lower_bound`, which states that it exercises the native predicate only. |
+| FND-005 | fixed | The AC-106 evidence now says the padding check is "a sampled check, not exhaustive over the box". |
