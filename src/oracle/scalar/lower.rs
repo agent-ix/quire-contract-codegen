@@ -454,7 +454,7 @@ fn is_bounded_domain<Body>(node: &CheckedSemanticNodeV2<Body>) -> bool {
 
 /// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
 /// A literal, a reference typed by a scalar type, or any other term has none.
-fn operand_own_bound<'g, Body: GraphBody>(
+pub(crate) fn operand_own_bound<'g, Body: GraphBody>(
     graph: &Graph<'g, Body>,
     term: &CheckedTerm,
 ) -> Option<&'g CheckedSemanticNodeV2<Body>> {

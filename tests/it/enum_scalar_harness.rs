@@ -98,8 +98,9 @@ impl Corpus {
                 .nodes
                 .iter()
                 .find(|node| {
-                    node.semantic_form.as_ref() == "parameter"
-                        && format!("{:?}", node.body).contains(&format!("value: \"{parameter}\""))
+                    self.package
+                        .parameter_declaration(&node.node_id)
+                        .is_ok_and(|declaration| &*declaration.name == parameter)
                 })
                 .expect("the guard parameter node")
                 .node_id

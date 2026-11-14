@@ -931,9 +931,7 @@ fn settle_float_items(
                 harnesses.push(generated.harness);
             }
             FloatScalarOutcome::Refused(refusal) => {
-                record.disposition = ObligationDisposition::Unsupported {
-                    reason: refusal.into_unsupported(),
-                };
+                record.disposition = refusal.into_disposition();
             }
         }
     }

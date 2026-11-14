@@ -160,14 +160,27 @@ launcher always appends `-Z unstable-options --export-json <path>`; it now state
 
 ## IEEE float arithmetic rows (IR-260)
 
-The table also holds five rows for the IEEE float arithmetic identities, with `max_operand_bits` 32
-(the `binary32` width, so both widths are covered): `add` and `sub` together, `mul`, `div`, `sqrt`
-and `fma`, each at `float32` and `float64`, `not_tractable`, 600 s, no peak recorded. The basis is
-quire-exact FR-405's table rows (no `exact` or directed-spelling harness, and no `div`, `sqrt` or
-`fma` harness, reached a verdict within 600 s) and is detailed in
-`ir260-float-scalar-kani-measurements.md`. Kani's symbolic `f32` division is bit-wrong at
-`0x800000A9 / 0x9C873333` (the correct result is `0x1BA00000`), which is why the `div` row has no
-host-division reference. The float clause carries no integer operand width, so the decider's width
-match does not select these rows; the refusal of a float arithmetic node is made at generation by
-the float row (FR-053), with a named capability and no harness, and these rows are its measured
-record.
+The table also holds five rows for the IEEE float arithmetic identities: `add` and `sub` together,
+`mul`, `div`, `sqrt` and `fma`, each at `float32` and `float64`, `not_tractable`, 600 s. They are a
+record of the measurement and not a mechanism: the decider does not select them, because a float
+clause carries no integer operand width, and the refusal of a float arithmetic node is made at
+generation by the float row (FR-053) with the named capability `float.<op>.not_kani_tractable` and
+no harness.
+
+- `peak_bytes` is the largest peak memory among the row's non-Verified quire-exact harnesses, taken
+  from quire-exact TC-953's evidence record (the scope's cgroup `memory.peak` of an executed run
+  that ended at the 600 s timeout): `add`/`sub` 22906421248 (`sub` Binary64 `exact`), `mul`
+  23159287808 (Binary64 `exact`), `div` 22179082240 (Binary64 `exact`), `sqrt` 21968105472 (Binary64
+  `exact`) and `fma` 22985097216 (Binary64 `nearest-even`). They exceed the 16 GiB ceiling of CG
+  FR-028; under TC-953's 24 GiB scope they ended as timeouts.
+- `max_operand_bits` 32 is nominal. A float clause has no integer width; 32 is the smallest operand
+  width at which a harness of the row did not finish (the `exact` and directed `binary32` harnesses
+  of `add`, `sub`, `mul` and `div`, and every `binary32` harness of `sqrt` and `fma`). It does not
+  say that every spelling at `binary32` timed out: the `nearest-even` harnesses of `add`, `sub` and
+  `mul` at `binary32` are Verified, and the row is refused because an arithmetic operation is a
+  supported row only when all three of its harnesses are (quire-exact FR-405 Behavior 15).
+- The rows carry no Kani, CBMC or solver version: the versions are optional in the table schema,
+  and none is recorded for this evidence (QSL-406, EA-49).
+
+Kani's symbolic `f32` division is bit-wrong at `0x800000A9 / 0x9C873333` (the correct result is
+`0x1BA00000`), which is why the `div` row has no host-division reference.

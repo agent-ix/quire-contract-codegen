@@ -433,8 +433,8 @@ fn tc_070_a_measured_bad_row_refuses_the_clause_before_generation() {
         }
     );
     // The row carries the Kani, CBMC, solver, generator and kernel versions.
-    assert_eq!(expected_row.kani_version, "0.68.0");
-    assert_eq!(expected_row.cbmc_version, "6.11.0");
+    assert_eq!(expected_row.kani_version.as_deref(), Some("0.68.0"));
+    assert_eq!(expected_row.cbmc_version.as_deref(), Some("6.11.0"));
     assert_eq!(expected_row.generator_version, GENERATOR_VERSION);
     assert_eq!(expected_row.kernel_version, KERNEL_VERSION);
     assert!(matches!(
@@ -1119,9 +1119,9 @@ fn tc_070_a_general_route_scalar_harness_is_refused_before_kani_with_its_row() {
         row.max_operand_bits, 2,
         "the smallest add width observed to time out"
     );
-    assert_eq!(row.kani_version, "0.68.0");
-    assert_eq!(row.cbmc_version, "6.11.0");
-    assert_eq!(row.solver_version, "cadical-3.0.0");
+    assert_eq!(row.kani_version.as_deref(), Some("0.68.0"));
+    assert_eq!(row.cbmc_version.as_deref(), Some("6.11.0"));
+    assert_eq!(row.solver_version.as_deref(), Some("cadical-3.0.0"));
     assert_eq!(row.generator_version, GENERATOR_VERSION);
     assert_eq!(row.kernel_version, KERNEL_VERSION);
 

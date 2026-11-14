@@ -22,7 +22,9 @@ width, and `convert` to `Rational` (its `qsl-replay` tests `compile_ieee_profile
 under `qsl-replay/tests/fixtures/ieee_float`). A float ordering operator lowers to three
 `numeric_equal` nodes and one `total_order`, so it is not one row node. A float literal enters as a
 bit-constructor value node and is not a drawn parameter: this row refuses such an operand with
-`float.operand_not_parameter`. The `ir260-float-source` branch of QSL (a commutativity case through
+`float.literal_operand`, and an expression operand with `float.operand_not_parameter`. QSL types a
+bare `Float64` as `exact`-pinned, so an operand with no `float_rounding` bound is only reachable as
+hand-edited Contract IR. The `ir260-float-source` branch of QSL (a commutativity case through
 `convert<Rational[...]>(a + b)`) is not on QSL main, and its operation is float addition, which this
 row refuses. The QSL-948 source admission the ticket comments name has therefore landed for the
 comparison case run here; no synthetic IR is used anywhere in this evidence.
@@ -49,6 +51,10 @@ expected side that reads the bit patterns directly (an exponent and fraction cla
 | numeric_equal float32, expected side with a reflexive NaN | Falsified (counterexample) | 28.0 | 5106 |
 | numeric_equal float64 asked as bit_identical, decoded and replayed through the owner route | Falsified (counterexample) | 18.8 | 3132 |
 
+| comparison mutants c, e, f, g, h, i, j, k, l, m of FR-053-AC-8, ten expected-side replacements in one test | each Falsified (counterexample) | 236.9 (ten runs) | 5539 (the test's scope) |
+| run evidence of numeric_equal float32 (target, every option, unwind, solver, limits, checks, one satisfied cover, no version key) | Verified | 6.8 | 712 |
+| numeric_equal float32 with its cover forced unreachable | `CoverUnsatisfied` (0 of 1), not Verified | 3.2 | 348 |
+
 Each mutant asserts that the replaced text occurs in the routed harness and that the replacement
 changed it. The replayed counterexample is decoded to exact `u64` bit patterns and evaluated by QSL's
 `replay` over `WitnessValue::Float64`; the owner's answer is numeric equality and differs from the
@@ -70,6 +76,6 @@ Kani symbolic `f32` division finding. Kani's model of the host `f32` division is
 the operands `0x800000A9 / 0x9C873333` it returns a value other than the hardware's and the
 correctly rounded `0x1BA00000`. A host `/` is therefore not usable as the expected side of a `div`
 harness, and the bracketing of the quotient in exact integers that quire-exact's `div` harnesses use
-is solver-bound (no `div` verdict at either width). This is recorded against IR-260 and IR-1526: the
-`div` row in the tractability table, and the refusal detail of `float.div.not_kani_tractable`, carry
-it.
+is solver-bound (no `div` verdict at either width). The finding is recorded in this document, in
+the `div` row of the tractability table and in the refusal detail of
+`float.div.not_kani_tractable`.

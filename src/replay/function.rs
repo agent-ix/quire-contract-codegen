@@ -1751,7 +1751,10 @@ pub fn replay_float_witness(
                     .map_err(|_| SpineReplayError::UnsupportedWitnessValue {
                         argument: parameter.argument.to_owned(),
                     }),
-                _ => Ok(WitnessValue::Float64(*bits)),
+                "float64" => Ok(WitnessValue::Float64(*bits)),
+                _ => Err(SpineReplayError::UnsupportedWitnessValue {
+                    argument: parameter.argument.to_owned(),
+                }),
             }
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;

@@ -12,7 +12,7 @@
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedTerm};
 
 use super::{
-    outcome::UnsupportedObligation,
+    outcome::{ObligationDisposition, UnsupportedObligation},
     record::{harness_path, record},
     render,
     spec::{Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, ProofKind, Statement},
@@ -25,7 +25,10 @@ use crate::{
         ScalarIntegerRepresentation, ScalarObligationArgument, ScalarObligationIdentity,
     },
     oracle::checked_graph::CheckedGraph,
-    oracle::scalar::{lower::operand_form, EXACT_SCALAR_CRATE_NAME},
+    oracle::scalar::{
+        lower::{operand_form, operand_own_bound},
+        EXACT_SCALAR_CRATE_NAME,
+    },
 };
 
 /// One float operation to prove.
@@ -69,6 +72,12 @@ pub struct FloatScalarHarness {
 pub enum FloatScalarRefusal {
     /// The node is not a float operation of this row; its family keeps its own disposition.
     NotFloatOperation,
+    /// An operand's type reaches no `float_rounding` bound (FR-053-AC-3): `requires-bound`,
+    /// naming the operand's type node, with no harness.
+    RequiresBound {
+        /// The operand's type node, which no `float_rounding` bound types.
+        unbounded_type: CheckedNodeId,
+    },
     /// The operation has no harness for the named capability.
     Unsupported {
         /// The capability the item lacks.
@@ -97,12 +106,14 @@ pub enum FloatCapability {
     SqrtNotTractable,
     /// `fma`: no harness of any spelling returned a verdict.
     FmaNotTractable,
-    /// A float literal operand: the row draws parameters only.
+    /// A float literal operand (FR-053-AC-1 `FloatLiteralOperand`): the row draws parameters only.
     LiteralOperand,
-    /// An operand that is not a parameter of the function.
+    /// An operand that is neither a parameter nor a literal (FR-015 `OperandNotSupported`).
     OperandNotParameter,
     /// The two operands are the same parameter: replay needs one value per named parameter.
     SameParameterOperand,
+    /// An operand's `float_rounding` bound is present but unreadable (FR-014-AC-16).
+    RoundingUnreadable,
     /// The operand forms are not one float width.
     OperandForm,
     /// The routed item has a path condition, which a float harness does not lower.
@@ -122,6 +133,7 @@ impl FloatCapability {
             Self::LiteralOperand => "float.literal_operand",
             Self::OperandNotParameter => "float.operand_not_parameter",
             Self::SameParameterOperand => "float.same_parameter_operand",
+            Self::RoundingUnreadable => "float.rounding_unreadable",
             Self::OperandForm => "float.operand_form",
             Self::PathCondition => "float.path_condition",
         }
@@ -130,8 +142,22 @@ impl FloatCapability {
 
 impl FloatScalarRefusal {
     /// The unsupported disposition of a refused float operation, retaining its named capability.
-    pub(crate) fn into_unsupported(self) -> UnsupportedObligation {
+    pub(crate) fn into_disposition(self) -> ObligationDisposition {
+        match self {
+            Self::RequiresBound { unbounded_type } => {
+                ObligationDisposition::RequiresBound { unbounded_type }
+            }
+            other => ObligationDisposition::Unsupported {
+                reason: other.into_unsupported(),
+            },
+        }
+    }
+
+    fn into_unsupported(self) -> UnsupportedObligation {
         let (cause, operation, detail) = match self {
+            Self::RequiresBound { .. } => {
+                ("requires_bound".to_owned(), String::new(), String::new())
+            }
             Self::NotFloatOperation => (
                 "not_float_operation".to_owned(),
                 String::new(),
@@ -315,20 +341,55 @@ fn settle(request: &FloatScalarRequest<'_>) -> Result<FloatScalarHarness, FloatS
         ));
     }
     let operand = |term: &CheckedTerm| -> Result<Operand, FloatScalarRefusal> {
-        let CheckedTerm::Reference { target } = term else {
-            return Err(unsupported(
-                FloatCapability::LiteralOperand,
-                identity,
-                "the row draws parameters only; a float literal is not a drawn operand",
-            ));
-        };
-        let declaration = request.source.parameter_declaration(target).map_err(|_| {
+        let literal = unsupported(
+            FloatCapability::LiteralOperand,
+            identity,
+            "the row draws parameters only; a float literal is not a drawn operand",
+        );
+        let not_parameter = || {
             unsupported(
                 FloatCapability::OperandNotParameter,
                 identity,
-                "an operand that is not a parameter of the function is not drawn",
+                "an operand that is neither a parameter of the function nor a literal is not drawn",
             )
-        })?;
+        };
+        let CheckedTerm::Reference { target } = term else {
+            return Err(if matches!(term, CheckedTerm::Literal { .. }) {
+                literal
+            } else {
+                not_parameter()
+            });
+        };
+        let Ok(declaration) = request.source.parameter_declaration(target) else {
+            // A float literal arrives as a reference to a bit-constructor value node.
+            let is_literal = graph
+                .term(target)
+                .is_some_and(|body| matches!(body, CheckedTerm::Literal { .. }));
+            return Err(if is_literal { literal } else { not_parameter() });
+        };
+        // FR-053-AC-3, the operand half: CG's own check until the Contract IR ruling (IR-69)
+        // covers floats. The operand's type must reach a `float_rounding` bound.
+        match operand_own_bound(&graph, term) {
+            Some(bound) => {
+                let readable = matches!(&bound.body, CheckedTerm::Aggregate { members }
+                    if crate::core::ir::scalar_bounds::read_float_rounding(members).is_some());
+                if !readable {
+                    return Err(unsupported(
+                        FloatCapability::RoundingUnreadable,
+                        identity,
+                        "the operand's float_rounding bound is present but unreadable",
+                    ));
+                }
+            }
+            None => {
+                let typed = graph
+                    .node(target)
+                    .map_or_else(|| target.clone(), |node| node.semantic_type.clone());
+                return Err(FloatScalarRefusal::RequiresBound {
+                    unbounded_type: typed,
+                });
+            }
+        }
         let form = operand_form(&graph, term).unwrap_or_default();
         Ok(Operand {
             name: declaration.name.to_string(),
